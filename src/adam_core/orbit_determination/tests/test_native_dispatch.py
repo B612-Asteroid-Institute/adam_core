@@ -1,9 +1,12 @@
-"""Fused OD must preserve custom model and fitter behavior."""
+"""Core-owned OD dispatch must preserve custom model and fitter behavior."""
+
+from pathlib import Path
 
 import numpy.testing as npt
 import pytest
 
 import adam_core
+from adam_core import _rust_native
 from adam_core.coordinates import CoordinateCovariances
 from adam_core.orbit_determination.native_orbit_fitter import NativeOrbitFitter
 from adam_core.orbit_determination.observation_uncertainty import (
@@ -144,6 +147,63 @@ class CustomHookReached(Exception):
     pass
 
 
+class CapsuleWiringReached(Exception):
+    pass
+
+
+@pytest.mark.parametrize("entrypoint", ["full_od", "run_od"])
+def test_distinct_iod_and_refinement_capsules_are_obtained_and_forwarded(
+    observations, monkeypatch, entrypoint
+):
+    from adam_core.propagator import NativeBackend
+
+    requested = []
+    iod_token = object()
+    refinement_token = object()
+
+    class IodProvider(TwoBodyPropagator):
+        native_backend = NativeBackend(
+            "test.iod", "1.2.3-rc.4", frozenset({"propagator_capsule"})
+        )
+
+        def propagator_capsule(self):
+            requested.append("iod")
+            return iod_token
+
+    class RefinementProvider(TwoBodyPropagator):
+        native_backend = NativeBackend(
+            "test.refinement", "2.0.0-beta.2", frozenset({"propagator_capsule"})
+        )
+
+        def propagator_capsule(self):
+            requested.append("refinement")
+            return refinement_token
+
+    def assert_wiring(refinement_descriptor, *args, iod_propagator=None, **kwargs):
+        assert refinement_descriptor[:3] == (
+            refinement_token,
+            "test.refinement",
+            "2.0.0-beta.2",
+        )
+        assert iod_propagator[:3] == (iod_token, "test.iod", "1.2.3-rc.4")
+        assert refinement_descriptor[0] is not iod_propagator[0]
+        raise CapsuleWiringReached
+
+    monkeypatch.setattr(
+        _rust_native,
+        "full_od_ipc" if entrypoint == "full_od" else "run_od_ipc",
+        assert_wiring,
+    )
+    fitter = NativeOrbitFitter(IodProvider(), iod_rchi2_threshold=1e6)
+    refinement = RefinementProvider()
+    with pytest.raises(CapsuleWiringReached):
+        if entrypoint == "full_od":
+            fitter.full_od("capsule-spy", observations, refinement)
+        else:
+            run_od(observations, fitter, None, propagator=refinement)
+    assert requested == ["refinement", "iod"]
+
+
 @pytest.mark.parametrize("hook", ["full_od", "initial_fit", "refine_fit"])
 @pytest.mark.parametrize("entrypoint", ["run_od", "full_od"])
 @pytest.mark.parametrize("override_kind", ["subclass", "instance", "further_subclass"])
@@ -242,9 +302,33 @@ def test_dispatch_requires_a_declared_backend():
     descriptor = native_propagator(base)
     assert descriptor[1:] == (
         "adam_core.two_body.external",
-        adam_core.__version__,
+        _rust_native.two_body_propagator_semver(),
         True,
     )
+
+
+def test_source_checkout_uses_canonical_native_semver_without_version_module(
+    monkeypatch,
+):
+    from adam_core.orbit_determination._native_dispatch import native_propagator
+    from adam_core.propagator import NativeBackend
+
+    assert not Path(adam_core.__file__).with_name("_version.py").exists()
+    monkeypatch.setattr(adam_core, "__version__", "1.2.3rc4")
+    monkeypatch.setattr(
+        _rust_native, "two_body_propagator_semver", lambda: "1.2.3-rc.4"
+    )
+
+    class PrereleaseProvider(TwoBodyPropagator):
+        native_backend = NativeBackend(
+            "test.prerelease",
+            _rust_native.two_body_propagator_semver(),
+            frozenset({"propagator_capsule"}),
+        )
+
+    descriptor = native_propagator(PrereleaseProvider())
+    assert descriptor[2] == "1.2.3-rc.4"
+    assert descriptor[2] != adam_core.__version__
 
 
 def test_native_backend_rejects_algorithm_work_units():
@@ -331,7 +415,7 @@ class CapsuleTwoBody(TwoBodyPropagator):
 
     native_backend = _NativeBackend(
         name="adam_core.two_body.external",
-        version=adam_core.__version__,
+        version=_rust_native.two_body_propagator_semver(),
         work_units=frozenset({"propagator_capsule"}),
     )
     ephemeris_calls = 0

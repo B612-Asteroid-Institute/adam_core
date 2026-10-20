@@ -6,7 +6,7 @@ import numpy.testing as npt
 import pyarrow as pa
 import pytest
 
-import adam_core
+from adam_core import _rust_native
 
 try:
     from adam_core.propagator.adam_pyoorb import PYOORBPropagator
@@ -55,7 +55,7 @@ class TwoBodyPropagator(Propagator):
     two_body_dynamics = True
     native_backend = NativeBackend(
         name="adam_core.two_body.external",
-        version=adam_core.__version__,
+        version=_rust_native.two_body_propagator_semver(),
         work_units=frozenset({"propagator_capsule"}),
     )
 
@@ -398,113 +398,12 @@ def test_fit_least_squares_uses_assist_capsule(pure_iod_orbit):
     assert np.all(np.isfinite(fitted_orbit.coordinates.values))
 
 
-class TestFusedWhitenedFit:
-    """
-    Two instances of the capsule-backed two-body provider produce the same
-    minimum, covariance, statistics and members through adam-core's canonical
-    native fit driver.
-    """
-
-    def _fits(self, observations, **kwargs):
-        guess = make_initial_guess()
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", RuntimeWarning)
-            expected = fit_least_squares(
-                guess, observations, TwoBodyPropagator(), **kwargs
-            )
-            fused = fit_least_squares(
-                guess, observations, NativeTwoBodyPropagator(), **kwargs
-            )
-        return expected, fused
-
-    @staticmethod
-    def _assert_orbit_parity(expected, fused, state_rtol, cov_rtol):
-        npt.assert_allclose(
-            fused.coordinates.values,
-            expected.coordinates.values,
-            rtol=state_rtol,
-            atol=1e-13,
-        )
-        npt.assert_allclose(
-            fused.coordinates.covariance.to_matrix(),
-            expected.coordinates.covariance.to_matrix(),
-            rtol=cov_rtol,
-        )
-        for column in ("chi2", "reduced_chi2", "arc_length"):
-            npt.assert_allclose(
-                getattr(fused, column)[0].as_py(),
-                getattr(expected, column)[0].as_py(),
-                rtol=1e-7,
-            )
-        assert fused.num_obs[0].as_py() == expected.num_obs[0].as_py()
-        assert fused.success[0].as_py()
-
-    def test_analytic_matches_scipy(self):
-        observations = make_synthetic_observations()
-        (expected, expected_members), (fused, fused_members) = self._fits(observations)
-        self._assert_orbit_parity(expected, fused, state_rtol=1e-9, cov_rtol=1e-6)
-        npt.assert_allclose(
-            fused_members.residuals.to_array(),
-            expected_members.residuals.to_array(),
-            rtol=1e-6,
-            atol=1e-10,
-        )
-        # Per-observation chi2 of sub-sigma residuals resolves the ~3e-10 deg
-        # difference between the Python and Rust two-body ephemeris pipelines.
-        npt.assert_allclose(
-            fused_members.residuals.chi2.to_numpy(zero_copy_only=False),
-            expected_members.residuals.chi2.to_numpy(zero_copy_only=False),
-            rtol=1e-4,
-            atol=1e-6,
-        )
-        assert fused_members.weight.to_pylist() == [1.0] * len(observations)
-        assert fused_members.outlier.to_pylist() == [False] * len(observations)
-        assert fused_members.solution.to_pylist() == [True] * len(observations)
-        assert fused_members.obs_id.to_pylist() == observations.id.to_pylist()
-
-    @pytest.mark.parametrize("jacobian", ["central", "2-point"])
-    def test_finite_difference_jacobians_match_scipy(self, jacobian):
-        observations = make_synthetic_observations()
-        (expected, _), (fused, _) = self._fits(observations, jacobian=jacobian)
-        # Finite-difference noise differs between the two implementations;
-        # the minimum agrees far better than the covariance.
-        self._assert_orbit_parity(expected, fused, state_rtol=1e-7, cov_rtol=5e-3)
-
-    def test_ignore_matches_scipy(self):
-        observations = make_synthetic_observations()
-        ignore = observations.id.to_pylist()[-3:]
-        (expected, expected_members), (fused, fused_members) = self._fits(
-            observations, ignore=ignore
-        )
-        self._assert_orbit_parity(expected, fused, state_rtol=1e-9, cov_rtol=1e-6)
-        assert fused.num_obs[0].as_py() == len(observations) - 3
-        assert fused_members.outlier.to_pylist() == expected_members.outlier.to_pylist()
-        assert (
-            fused_members.solution.to_pylist() == expected_members.solution.to_pylist()
-        )
-        assert fused_members.weight.to_pylist() == expected_members.weight.to_pylist()
-
-    def test_huber_matches_scipy(self):
-        observations = make_synthetic_observations()
-        lat = observations.coordinates.lat.to_numpy(zero_copy_only=False).copy()
-        lat[7] += 12.0 * SIGMA_ARCSEC / 3600.0
-        observations = observations.set_column("coordinates.lat", pa.array(lat))
-        (expected, expected_members), (fused, fused_members) = self._fits(
-            observations, loss="huber"
-        )
-        # Different optimizers converge to the same M-estimate to solver
-        # tolerance; the covariance follows the solution.
-        self._assert_orbit_parity(expected, fused, state_rtol=1e-7, cov_rtol=1e-4)
-        npt.assert_allclose(
-            fused_members.weight.to_numpy(zero_copy_only=False),
-            expected_members.weight.to_numpy(zero_copy_only=False),
-            atol=1e-5,
-        )
-        assert fused_members.weight[7].as_py() < 0.5
+class TestCapsuleWhitenedFitFacade:
+    """Python validation around the single capsule-backed core fit driver."""
 
     def test_unsupported_solver_kwargs_raise(self):
         observations = make_synthetic_observations()
-        propagator = NativeTwoBodyPropagator()
+        propagator = TwoBodyPropagator()
         with pytest.raises(ValueError, match="x_scale=1.0"):
             fit_least_squares(
                 make_initial_guess(), observations, propagator, x_scale=1.0
@@ -515,8 +414,8 @@ class TestFusedWhitenedFit:
         assert len(fitted) == 1
 
 
-class TestFusedIterativeFit:
-    """Repeated capsule-backed worst-residual loops are deterministic."""
+class TestCapsuleIterativeFitFacade:
+    """Python validation around the capsule-backed worst-residual driver."""
 
     @staticmethod
     def _with_outlier(index: int, sigmas: float):
@@ -525,47 +424,13 @@ class TestFusedIterativeFit:
         lat[index] += sigmas * SIGMA_ARCSEC / 3600.0
         return observations.set_column("coordinates.lat", pa.array(lat))
 
-    def test_matches_python_loop(self):
-        observations = self._with_outlier(9, 12.0)
-        settings = dict(rchi2_threshold=2.0, min_obs=6, contamination_percentage=20.0)
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", RuntimeWarning)
-            expected, expected_members = iterative_fit(
-                make_initial_guess(), observations, TwoBodyPropagator(), **settings
-            )
-            fused, fused_members = iterative_fit(
-                make_initial_guess(),
-                observations,
-                NativeTwoBodyPropagator(),
-                **settings,
-            )
-        assert fused_members.outlier.to_pylist() == expected_members.outlier.to_pylist()
-        assert fused_members.outlier.to_pylist()[9] is True
-        assert (
-            fused_members.solution.to_pylist() == expected_members.solution.to_pylist()
-        )
-        assert fused_members.weight.to_pylist() == expected_members.weight.to_pylist()
-        npt.assert_allclose(
-            fused.coordinates.values, expected.coordinates.values, rtol=1e-9, atol=1e-13
-        )
-        npt.assert_allclose(
-            fused.coordinates.covariance.to_matrix(),
-            expected.coordinates.covariance.to_matrix(),
-            rtol=1e-6,
-        )
-        assert fused.num_obs[0].as_py() == expected.num_obs[0].as_py() == 24
-        npt.assert_allclose(
-            fused.reduced_chi2[0].as_py(), expected.reduced_chi2[0].as_py(), rtol=1e-7
-        )
-        assert fused.success[0].as_py()
-
     def test_unsupported_solver_kwargs_raise(self):
         observations = self._with_outlier(9, 12.0)
         with pytest.raises(ValueError, match="x_scale=1.0"):
             iterative_fit(
                 make_initial_guess(),
                 observations,
-                NativeTwoBodyPropagator(),
+                TwoBodyPropagator(),
                 x_scale=1.0,
             )
 

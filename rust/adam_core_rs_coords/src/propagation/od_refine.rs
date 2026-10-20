@@ -574,6 +574,7 @@ fn analytic_jacobian_terms<T: OriginTranslationProvider>(
 // ---------------------------------------------------------------------------
 
 /// `JᵀJ` and `Jᵀf` of a `(rows, 6)` row-major Jacobian.
+#[allow(clippy::needless_range_loop)]
 fn normal_equations(jac: &[f64], f: &[f64]) -> ([[f64; 6]; 6], [f64; 6]) {
     let rows = f.len();
     let mut a = [[0.0_f64; 6]; 6];
@@ -3465,8 +3466,8 @@ mod tests {
             .fold(0.0, f64::max)
     }
 
-    /// Deterministic non-Keplerian predictor used to preserve the retired
-    /// closed-form callback oracles without crossing into Python:
+    /// Deterministic non-Keplerian predictor porting the retired Python
+    /// closed-form oracle behavior entirely into Rust:
     /// `prediction = base + A * (state - truth)`.
     struct LinearPredictor {
         base: Vec<[f64; 6]>,
@@ -3549,11 +3550,73 @@ mod tests {
         std::array::from_fn(|index| inverse[index])
     }
 
-    fn expected_linear_covariance(fixture: &LinearFixture, selected: &[bool]) -> [f64; 36] {
+    fn linear_normal_matrix(fixture: &LinearFixture, selected: &[bool]) -> [[f64; 6]; 6] {
         let mut normal = [[0.0_f64; 6]; 6];
         for (row, row_normal) in fixture.normal_rows.iter().enumerate() {
             if selected[row] {
                 add_normal(&mut normal, row_normal);
+            }
+        }
+        normal
+    }
+
+    fn expected_linear_covariance(fixture: &LinearFixture, selected: &[bool]) -> [f64; 36] {
+        invert_normal(&linear_normal_matrix(fixture, selected))
+    }
+
+    fn assert_normal_times_covariance_is_identity(
+        normal: &[[f64; 6]; 6],
+        covariance: &[f64; 36],
+        tolerance: f64,
+    ) {
+        for i in 0..6 {
+            for j in 0..6 {
+                let product: f64 = (0..6).map(|k| normal[i][k] * covariance[k * 6 + j]).sum();
+                let expected = if i == j { 1.0 } else { 0.0 };
+                assert!(
+                    (product - expected).abs() < tolerance,
+                    "(normal * covariance)[{i},{j}] = {product}"
+                );
+            }
+        }
+    }
+
+    fn central_jacobian_with_relative_step(
+        problem: &WhitenedProblem<'_>,
+        state: &[f64; 6],
+        relative_step: f64,
+    ) -> Vec<f64> {
+        let mut states = Vec::with_capacity(12);
+        let mut steps = [0.0_f64; 6];
+        for axis in 0..6 {
+            let step = relative_step * state[axis].abs().max(1e-3);
+            steps[axis] = step;
+            let mut plus = *state;
+            let mut minus = *state;
+            plus[axis] += step;
+            minus[axis] -= step;
+            states.push(plus);
+            states.push(minus);
+        }
+        let batch = problem.residuals(&states).unwrap().unwrap();
+        let rows = 2 * problem.m;
+        let mut jacobian = vec![0.0_f64; rows * 6];
+        for axis in 0..6 {
+            for row in 0..rows {
+                jacobian[row * 6 + axis] =
+                    (batch[2 * axis][row] - batch[2 * axis + 1][row]) / (2.0 * steps[axis]);
+            }
+        }
+        jacobian
+    }
+
+    fn covariance_from_unweighted_jacobian(jacobian: &[f64]) -> [f64; 36] {
+        let mut normal = [[0.0_f64; 6]; 6];
+        for row in jacobian.chunks_exact(6) {
+            for i in 0..6 {
+                for j in 0..6 {
+                    normal[i][j] += row[i] * row[j];
+                }
             }
         }
         invert_normal(&normal)
@@ -3665,7 +3728,9 @@ mod tests {
     #[test]
     fn linear_predictor_recovers_exact_wls_covariance_and_unit_quadratic_probe() {
         let fixture = linear_fixture(0.0);
-        let expected = expected_linear_covariance(&fixture, &[true; NUM_OBS]);
+        let selected = [true; NUM_OBS];
+        let normal = linear_normal_matrix(&fixture, &selected);
+        let expected = invert_normal(&normal);
         let config = WhitenedFitConfig {
             jacobian: JacobianMethod::Central,
             ..WhitenedFitConfig::default()
@@ -3689,6 +3754,7 @@ mod tests {
             "{}",
             max_relative_difference(&fit.covariance, &expected)
         );
+        assert_normal_times_covariance_is_identity(&normal, &fit.covariance, 2e-6);
 
         let problem = linear_problem(&fixture, &config);
         let residuals = problem.residuals_one(&TRUTH_STATE).unwrap();
@@ -3756,7 +3822,7 @@ mod tests {
     }
 
     #[test]
-    fn linear_predictor_huber_covariance_removes_tail_and_probe_uses_robust_cost() {
+    fn linear_predictor_huber_bounds_influence_reports_exact_weights_and_robust_covariance() {
         const OUTLIER: usize = 3;
         const OUTLIER_SIGMAS: f64 = 20.0;
         let mut fixture = linear_fixture(0.0);
@@ -3776,6 +3842,21 @@ mod tests {
             f_scale: 1.345,
             ..WhitenedFitConfig::default()
         };
+        let linear = fit_orbit_whitened_with(
+            &fixture.predictor,
+            &orbit(TRUTH_STATE),
+            &fixture.observed,
+            &observers(),
+            &[false; NUM_OBS],
+            &WhitenedFitConfig {
+                jacobian: JacobianMethod::Central,
+                validate_covariance: false,
+                ..WhitenedFitConfig::default()
+            },
+            &NoopProvider,
+            &ZeroTranslationProvider,
+        )
+        .unwrap();
         let fit = fit_orbit_whitened_with(
             &fixture.predictor,
             &orbit(TRUTH_STATE),
@@ -3790,6 +3871,23 @@ mod tests {
         assert!(fit.converged, "status {}", fit.status_code);
         assert!(fit.warnings.is_empty(), "{:?}", fit.warnings);
         assert!(fit.weights[OUTLIER] < 0.2, "{:?}", fit.weights);
+        assert!(fit.evaluation.outlier.iter().all(|flag| !flag));
+
+        let clean_normal = linear_normal_matrix(&fixture, &[true; NUM_OBS]);
+        let shift = |state: &[f64; 6]| {
+            let delta: [f64; 6] = std::array::from_fn(|axis| state[axis] - TRUTH_STATE[axis]);
+            let quadratic: f64 = (0..6)
+                .flat_map(|i| (0..6).map(move |j| delta[i] * clean_normal[i][j] * delta[j]))
+                .sum();
+            quadratic.max(0.0).sqrt()
+        };
+        let linear_shift = shift(&linear.state);
+        let huber_shift = shift(&fit.state);
+        assert!(linear_shift > 1.0, "linear shift = {linear_shift}");
+        assert!(
+            huber_shift < 0.3 * linear_shift,
+            "Huber shift {huber_shift} was not bounded relative to {linear_shift}"
+        );
 
         let tail_component = 2 * OUTLIER + 1;
         let mut normal = [[0.0_f64; 6]; 6];
@@ -3809,6 +3907,22 @@ mod tests {
         let problem = linear_problem(&fixture, &config);
         let residuals = problem.residuals_one(&fit.state).unwrap();
         assert!(residuals[tail_component].abs() > config.f_scale);
+        for row in 0..NUM_OBS {
+            let expected_component_weight = |residual: f64| {
+                if residual.abs() <= config.f_scale {
+                    1.0
+                } else {
+                    config.f_scale / residual.abs()
+                }
+            };
+            let expected = expected_component_weight(residuals[2 * row])
+                .min(expected_component_weight(residuals[2 * row + 1]));
+            assert!(
+                (fit.weights[row] - expected).abs() < 1e-12,
+                "weight[{row}]={} expected {expected}",
+                fit.weights[row]
+            );
+        }
         let delta = weak_direction_delta_cost(
             &problem,
             &fit.state,
@@ -3819,6 +3933,29 @@ mod tests {
         .unwrap()
         .unwrap();
         assert!((delta - 1.0).abs() < 1e-3, "{delta}");
+    }
+
+    #[test]
+    fn linear_predictor_central_step_covariance_is_stable_against_closed_form() {
+        let fixture = linear_fixture(0.4);
+        let expected = expected_linear_covariance(&fixture, &[true; NUM_OBS]);
+        let problem = linear_problem(
+            &fixture,
+            &WhitenedFitConfig {
+                jacobian: JacobianMethod::Central,
+                ..WhitenedFitConfig::default()
+            },
+        );
+        for relative_step in [0.5e-6, 1.0e-6, 2.0e-6] {
+            let jacobian =
+                central_jacobian_with_relative_step(&problem, &TRUTH_STATE, relative_step);
+            let covariance = covariance_from_unweighted_jacobian(&jacobian);
+            assert!(
+                max_relative_difference(&covariance, &expected) < 2e-6,
+                "relative step {relative_step}: {}",
+                max_relative_difference(&covariance, &expected)
+            );
+        }
     }
 
     fn add_linear_observation_offset(
@@ -6392,6 +6529,7 @@ mod tests {
     }
 
     struct StageCountingPredictor<'a> {
+        stage: &'static str,
         inner: &'a dyn SphericalPredictor,
         calls: std::cell::Cell<usize>,
         states: std::cell::Cell<usize>,
@@ -6432,7 +6570,9 @@ mod tests {
         }
 
         fn backend(&self) -> super::super::BackendIdentity {
-            self.inner.backend()
+            let mut identity = self.inner.backend();
+            identity.name = format!("test.stage.{}", self.stage);
+            identity
         }
     }
 
@@ -6448,11 +6588,13 @@ mod tests {
             translation_provider: &ZeroTranslationProvider,
         };
         let iod_predictor = StageCountingPredictor {
+            stage: "iod",
             inner: &inner,
             calls: std::cell::Cell::new(0),
             states: std::cell::Cell::new(0),
         };
         let refinement_predictor = StageCountingPredictor {
+            stage: "refinement",
             inner: &inner,
             calls: std::cell::Cell::new(0),
             states: std::cell::Cell::new(0),
@@ -6469,6 +6611,8 @@ mod tests {
             RefinementConfig::Cmc2003(loop_config) => loop_config.fit,
             RefinementConfig::WorstResidual(loop_config) => loop_config.fit,
         };
+        assert_eq!(iod_predictor.backend().name, "test.stage.iod");
+        assert_eq!(refinement_predictor.backend().name, "test.stage.refinement");
 
         let iod = run_iod_with(
             &iod_predictor,
@@ -6487,7 +6631,7 @@ mod tests {
             .seed_orbit()
             .unwrap()
             .expect("configured IOD found a seed");
-        let iod_calls = iod_predictor.calls.get();
+        let iod_evidence = (iod_predictor.calls.get(), iod_predictor.states.get());
 
         let refined = refine_with(
             &refinement_predictor,
@@ -6500,8 +6644,16 @@ mod tests {
         )
         .unwrap();
         assert!(refined.fit.converged);
-        assert_eq!(iod_predictor.calls.get(), iod_calls);
-        assert!(refinement_predictor.calls.get() > 0);
+        assert_eq!(
+            (iod_predictor.calls.get(), iod_predictor.states.get()),
+            iod_evidence
+        );
+        let refinement_evidence = (
+            refinement_predictor.calls.get(),
+            refinement_predictor.states.get(),
+        );
+        assert!(refinement_evidence.0 > 0);
+        assert_ne!(iod_evidence, refinement_evidence);
 
         iod_predictor.reset();
         refinement_predictor.reset();
@@ -6518,8 +6670,18 @@ mod tests {
         assert!(full.refined.is_some());
         assert_eq!(full.iod.triplets_tried, iod.triplets_tried);
         assert_eq!(full.iod.candidates.len(), iod.candidates.len());
-        assert!(iod_predictor.calls.get() > 0);
-        assert!(refinement_predictor.calls.get() > 0);
+        assert_eq!(
+            (iod_predictor.calls.get(), iod_predictor.states.get()),
+            iod_evidence
+        );
+        assert_eq!(
+            (
+                refinement_predictor.calls.get(),
+                refinement_predictor.states.get(),
+            ),
+            refinement_evidence
+        );
+        assert_eq!(full.refined.as_ref().unwrap().fit.state, refined.fit.state);
 
         iod_predictor.reset();
         refinement_predictor.reset();
@@ -6542,8 +6704,21 @@ mod tests {
         assert!(!run.models_changed);
         assert!(run.full_od.refined.is_some());
         assert_eq!(run.full_od.iod.triplets_tried, iod.triplets_tried);
-        assert!(iod_predictor.calls.get() > 0);
-        assert!(refinement_predictor.calls.get() > 0);
+        assert_eq!(
+            (iod_predictor.calls.get(), iod_predictor.states.get()),
+            iod_evidence
+        );
+        assert_eq!(
+            (
+                refinement_predictor.calls.get(),
+                refinement_predictor.states.get(),
+            ),
+            refinement_evidence
+        );
+        assert_eq!(
+            run.full_od.refined.as_ref().unwrap().fit.state,
+            refined.fit.state
+        );
     }
 
     #[test]

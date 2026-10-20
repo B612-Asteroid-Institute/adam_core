@@ -86,55 +86,6 @@ def two_body_arc_empty():
     return OrbitDeterminationObservations.empty()
 
 
-@pytest.mark.parametrize("entry", ["full_od_ipc", "run_od_ipc"])
-def test_native_driver_accepts_an_explicit_iod_capsule_argument(
-    two_body_arc, entry: str  # noqa: F811
-) -> None:
-    from .._native_dispatch import native_propagator
-
-    iod_propagator = native_propagator(TwoBodyPropagator())
-    refine_propagator = native_propagator(NativeTwoBodyPropagator())
-    _, observed_ipc, observers_ipc = _native_problem(
-        _placeholder_orbit(two_body_arc), two_body_arc
-    )
-    iod_settings = {"min_obs": 6, "rchi2_threshold": 1e4}
-    if entry == "full_od_ipc":
-        output = _rust_native.full_od_ipc(
-            refine_propagator,
-            observed_ipc,
-            observers_ipc,
-            iod_settings=iod_settings,
-            fit_settings={"validate_covariance": False},
-            iod_propagator=iod_propagator,
-        )
-    else:
-        output = _rust_native.run_od_ipc(
-            refine_propagator,
-            observed_ipc,
-            observers_ipc,
-            two_body_arc.observers.code.to_pylist(),
-            two_body_arc.photometry.band.to_pylist(),
-            two_body_arc.astcat.to_pylist(),
-            iod_settings=iod_settings,
-            fit_settings={"validate_covariance": False},
-            iod_propagator=iod_propagator,
-        )
-    assert output["found"] and output["iod"]["corrections_run"] >= 1
-    single = _rust_native.full_od_ipc(
-        refine_propagator,
-        observed_ipc,
-        observers_ipc,
-        iod_settings=iod_settings,
-        fit_settings={"validate_covariance": False},
-    )
-    npt.assert_allclose(
-        np.asarray(output["fit"]["state"]),
-        np.asarray(single["fit"]["state"]),
-        rtol=0,
-        atol=1e-12,
-    )
-
-
 def test_fitter_initial_fit_runs_iod_on_the_configured_class(
     two_body_arc,  # noqa: F811
 ) -> None:

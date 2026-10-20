@@ -5,6 +5,7 @@ import json
 import pytest
 
 import adam_core
+from adam_core import _rust_native
 from adam_core.orbit_determination import NativeOrbitFitter, OdProvenance
 from adam_core.orbit_determination.observation_uncertainty import (
     PerformanceWeightedModel,
@@ -90,13 +91,13 @@ def test_provenance_reports_distinct_declared_iod_and_refinement_identities():
 
     class IodProvider(NativeTwoBodyPropagator):
         native_backend = NativeBackend(
-            "iod-stage", adam_core.__version__, frozenset({"propagator_capsule"})
+            "iod-stage", "1.2.3-rc.4", frozenset({"propagator_capsule"})
         )
 
     class RefinementProvider(NativeTwoBodyPropagator):
         native_backend = NativeBackend(
             "refinement-stage",
-            adam_core.__version__,
+            "2.0.0-beta.2",
             frozenset({"propagator_capsule"}),
         )
 
@@ -116,13 +117,13 @@ def test_provenance_reports_distinct_declared_iod_and_refinement_identities():
         route="composed",
     )
     record = _record(stamped)
-    assert record["iod_backend"] == f"iod-stage {adam_core.__version__}"
-    assert record["refinement_backend"] == (f"refinement-stage {adam_core.__version__}")
+    assert record["iod_backend"] == "iod-stage 1.2.3-rc.4"
+    assert record["refinement_backend"] == "refinement-stage 2.0.0-beta.2"
 
 
 def test_backend_identity_names_declared_and_python_backends():
     assert backend_identity(NativeTwoBodyPropagator()) == (
-        f"adam_core.two_body.external {adam_core.__version__}"
+        f"adam_core.two_body.external {_rust_native.two_body_propagator_semver()}"
     )
     assert backend_identity(NativeTwoBodyPropagator) == backend_identity(
         NativeTwoBodyPropagator()

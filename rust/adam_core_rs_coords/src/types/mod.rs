@@ -1280,6 +1280,29 @@ mod tests {
     }
 
     #[test]
+    fn non_gravitational_activity_requires_a_nonzero_acceleration_coefficient() {
+        let batch = NonGravitationalParametersBatch {
+            source: vec![Some("source-only".to_string()), Some("zero".to_string())],
+            a1: vec![None, Some(0.0)],
+            a2: vec![None, None],
+            a3: vec![None, None],
+            aln: vec![Some(1.0), Some(1.0)],
+            nk: vec![Some(0.0), Some(0.0)],
+            nm: vec![Some(2.0), Some(2.0)],
+            nn: vec![Some(5.093), Some(5.093)],
+            r0: vec![Some(1.0), Some(1.0)],
+        };
+        assert!(!batch.row(0).is_active());
+        assert!(!batch.row(1).is_active());
+        assert!(!batch.has_values());
+
+        let mut active = batch;
+        active.a2[1] = Some(-1e-12);
+        assert!(active.row(1).is_active());
+        assert!(active.has_values());
+    }
+
+    #[test]
     fn orbit_variant_batch_can_export_orbit_batch_view() {
         let coords = CoordinateBatch::cartesian(
             vec![[1.0, 2.0, 3.0, 0.1, 0.2, 0.3]; 1],

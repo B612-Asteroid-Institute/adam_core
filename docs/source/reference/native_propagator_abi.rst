@@ -23,11 +23,15 @@ Discovery and identity
 ----------------------
 
 A Python propagator declares ``NativeBackend(name, version,
-work_units=frozenset({"propagator_capsule"}))``. Its ``propagator_capsule()``
-returns a ``PyCapsule`` named exactly ``adam_core.propagator.v2``. Adam-core
-retains the capsule for the complete native call and compares the declaration's
-name, version and two-body declaration with the immutable identity in the
-table. Constructing ``NativeBackend`` with an algorithm work unit (rather than
+work_units=frozenset({"propagator_capsule"}))``. ``version`` is the canonical
+Cargo SemVer exported by that provider's native extension (for example
+``provider_native.propagator_semver()``), not the Python distribution's PEP
+440-normalized ``__version__``. Thus a native ``1.2.3-rc.4`` remains exactly
+that spelling even when Python package metadata says ``1.2.3rc4``. Its
+``propagator_capsule()`` returns a ``PyCapsule`` named exactly
+``adam_core.propagator.v2``. Adam-core retains the capsule for the complete
+native call and compares the declaration's name, native SemVer and two-body
+declaration with the immutable identity in the table. Constructing ``NativeBackend`` with an algorithm work unit (rather than
 only ``propagator_capsule``), or with an empty identity field, raises
 ``ValueError``. Empty or mismatched capsule identities fail before propagation.
 Subclasses that override propagation or the capsule method need a new
@@ -49,20 +53,26 @@ STM slot. Requests similarly require ``PROPAGATE_REQUEST_V2_MIN_SIZE`` or
 ``PROPAGATE_STM_REQUEST_V2_MIN_SIZE``. A larger structure is accepted and the
 unknown suffix is ignored; a shorter prefix is rejected before any omitted
 field is read. Existing prefix fields must never be reordered or retyped.
-ABI v2 is defined for 64-bit extension processes. Its frozen prefix sizes are
-``EXTERNAL_PROPAGATOR_V2_MIN_SIZE = 72``,
+ABI v2 uses the process target's C pointer/``size_t`` layout; provider and
+consumer necessarily share that target because their extensions are loaded in
+one process. The exported prefix constants are computed as the exact end of the
+last required field, and compile-time assertions prove that the copied
+``repr(C)`` prefix ends there without unread tail padding. On 64-bit targets the
+frozen values are ``EXTERNAL_PROPAGATOR_V2_MIN_SIZE = 72``,
 ``EXTERNAL_PROPAGATOR_V2_STM_SIZE = 80``,
 ``PROPAGATE_REQUEST_V2_MIN_SIZE = 168`` and
-``PROPAGATE_STM_REQUEST_V2_MIN_SIZE = 112`` bytes. Providers must compile
-against the exact exported v2 definitions and constants, not copy an inferred
-Rust layout.
+``PROPAGATE_STM_REQUEST_V2_MIN_SIZE = 112`` bytes. Generic adam-core Rust APIs
+remain available on every supported target. Providers must compile against the
+exact exported v2 definitions and target-specific constants, not copy an
+inferred layout.
 
 Capabilities
 ------------
 
-``capabilities`` is a bit set. Unknown bits are rejected rather than ignored,
-so a provider cannot accidentally request semantics this consumer does not
-implement:
+``capabilities`` is a bit set. Unknown bits advertise optional future
+provider support and are ignored by older consumers. Known bits retain their
+specified fail-closed validation, so a provider cannot omit semantics required
+by the current request:
 
 * ``EXTERNAL_PROPAGATOR_CAP_THREAD_SAFE`` is mandatory. All callbacks and the
   context they reference may be used concurrently from arbitrary native
@@ -82,9 +92,14 @@ implement:
   closed instead of dropping active non-gravitational acceleration when this
   bit is absent.
 
-The current state-fitting API consumes state STMs. Parameter-partial support
-must be introduced as an appended callback plus a new capability bit; it must
-not be smuggled into the state STM layout.
+The current state-fitting API consumes state STMs. The v2 STM request carries
+the fixed non-gravitational row but **does not carry physical parameters**.
+A provider whose physical fields affect its state variational equations must
+not advertise v2 STM support for such inputs; adam-core must use central
+finite differences through full propagation instead. Parameter-partial or
+physical-parameter-aware STM support requires an appended request/callback plus
+a new known capability bit; it must not be smuggled into the v2 state STM
+layout.
 
 Propagation request
 -------------------
@@ -117,10 +132,13 @@ same optional ``PhysicalParametersBatch`` that an in-process ``Propagator``
 receives; these values may affect provider physics and are preserved on output.
 A non-null non-gravitational pointer has
 ``n_orbits * EXTERNAL_NON_GRAVITATIONAL_WIDTH`` values in the order listed
-above. Providers must apply the complete active row consistently in propagation
-and in any derivatives they advertise. Adam-core carries both typed batches
-through every candidate, finite-difference batch, rejection refit and returned
-``FittedOrbits`` table.
+above. Before encoding nulls as NaN, the adam-core consumer rejects every
+present non-finite physical or non-gravitational value; ``Some(NaN)`` can never
+silently become null. On the provider side NaN remains the specified null
+sentinel. Providers must apply the complete active non-gravitational row
+consistently in propagation and in any derivatives they advertise. Adam-core
+carries both typed batches through every candidate, finite-difference batch,
+rejection refit and returned ``FittedOrbits`` table.
 
 All non-empty input and output arrays, including the error buffer, must occupy
 non-overlapping address ranges and must have the lengths implied by the request.

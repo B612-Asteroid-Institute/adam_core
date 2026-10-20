@@ -12,7 +12,8 @@ This file contains notable changes in adam-core
   callbacks and provider-owned OD work units are no longer supported. The v2
   capsule intentionally rejects the provisional v1 layout. Its frozen table
   and request prefixes negotiate append-only structure sizes and capabilities,
-  reject unknown capability bits and non-zero advertised reserved words, verify
+  ignore optional unknown capability bits for forward negotiation, reject
+  non-zero advertised reserved words, verify
   backend identity, retain the capsule context for each native workflow,
   require thread-safe no-unwind callbacks, preserve stable optional per-row
   failure codes, fail closed on unsupported
@@ -23,6 +24,13 @@ This file contains notable changes in adam-core
   users keep
   composing the generic adam-core algorithms directly with concrete
   ``Propagator`` implementations. See `docs/source/reference/native_propagator_abi.rst`.
+
+- **Breaking Rust API:** `PropagationError` adds `RowFailure`, `Backend` and
+  `BackendProtocol`; exhaustive downstream matches must handle candidate-local
+  numerical failures separately from fatal provider and ABI/protocol failures.
+  This unreleased contract does not claim 0.6.x compatibility: the eventual
+  adam-core release version and compatible adam-assist dependency floor remain
+  to be settled, and released adam-assist 0.5.0 does not implement this v2 ABI.
 
 - ``FittedOrbits`` now includes nullable ``physical_parameters`` and
   ``non_gravitational_parameters`` columns so fitted and candidate orbits do

@@ -1564,9 +1564,17 @@ fn run_od_2body_ipc<'py>(
     )
 }
 
+/// Canonical Cargo SemVer embedded in adam-core's native two-body provider.
+/// Provider declarations compare this native spelling (including `-rc.N`),
+/// never the Python distribution's independently normalized PEP 440 version.
+#[pyfunction]
+pub fn two_body_propagator_semver() -> &'static str {
+    env!("CARGO_PKG_VERSION")
+}
+
 /// adam-core's two-body propagator as an external-propagator capsule: the
-/// reference implementation of the ABI plugins expose (and a test double of
-/// the external route). The capsule owns the propagator; its pointer is the
+/// reference implementation of the provider ABI (and a test double of the
+/// external route). The capsule owns the propagator; its pointer is the
 /// table's address.
 #[pyfunction]
 pub fn two_body_propagator_capsule(py: Python<'_>) -> PyResult<Bound<'_, PyCapsule>> {
@@ -1579,6 +1587,7 @@ pub fn two_body_propagator_capsule(py: Python<'_>) -> PyResult<Bound<'_, PyCapsu
 }
 
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_function(wrap_pyfunction!(two_body_propagator_semver, m)?)?;
     m.add_function(wrap_pyfunction!(two_body_propagator_capsule, m)?)?;
     m.add_function(wrap_pyfunction!(fit_orbit_whitened_ipc, m)?)?;
     m.add_function(wrap_pyfunction!(fit_orbit_whitened_2body_ipc, m)?)?;

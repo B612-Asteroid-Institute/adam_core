@@ -45,7 +45,7 @@ from ..od_orchestration import (
 )
 from ..orbit_fitter import OrbitFitter
 from ..veres2017 import SIGMA_TABLE_PACKAGE, SigmaFillModel
-from .test_differential_correction import NativeTwoBodyPropagator, TwoBodyPropagator
+from .test_differential_correction import TwoBodyPropagator
 from .test_observation_uncertainty import make_bias_table, make_observations
 from .test_observatory_bias_model_wiring import (
     UNUSED_PROPAGATOR,
@@ -827,11 +827,8 @@ def test_run_od_default_models_missing_bias_dat_alone_is_file_not_found(
     assert fitter.received == []
 
 
-class TestFusedRunOd:
-    """
-    `run_od` on a Rust-backed propagator (``run_od`` work unit) is the Python
-    composition's twin: same models, same IOD + refinement, same provenance.
-    """
+class TestCoreRunOdRoutes:
+    """Native model fusion and explicit core stage composition agree."""
 
     @staticmethod
     def _models(observations):
@@ -862,37 +859,45 @@ class TestFusedRunOd:
     def _fitter(**kwargs):
         return NativeOrbitFitter(TwoBodyPropagator(), iod_rchi2_threshold=1e6, **kwargs)
 
+    @staticmethod
+    def _composed_fitter(**kwargs):
+        class ExplicitStageComposition(NativeOrbitFitter):
+            def full_od(self, object_id, observations, propagator):
+                return super().full_od(object_id, observations, propagator)
+
+        return ExplicitStageComposition(
+            TwoBodyPropagator(), iod_rchi2_threshold=1e6, **kwargs
+        )
+
     def _run(self, observations, models, **fitter_kwargs):
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", RuntimeWarning)
             expected = run_od(
                 observations,
-                self._fitter(**fitter_kwargs),
+                self._composed_fitter(**fitter_kwargs),
                 models,
                 propagator=TwoBodyPropagator(),
-                object_id="twin",
+                object_id="route-parity",
             )
             fused = run_od(
                 observations,
                 self._fitter(**fitter_kwargs),
                 models,
-                propagator=NativeTwoBodyPropagator(),
-                object_id="twin",
+                propagator=TwoBodyPropagator(),
+                object_id="route-parity",
             )
         return expected, fused
 
     @staticmethod
-    def _assert_twins(expected, fused):
+    def _assert_route_parity(composed, native):
         (expected_orbit, expected_members), (fused_orbit, fused_members) = (
-            expected,
-            fused,
+            composed,
+            native,
         )
         assert len(fused_orbit) == len(expected_orbit) == 1
-        assert fused_orbit.object_id.to_pylist() == ["twin"]
-        # The two pipelines start from different IOD seeds (Rust vs Python
-        # Gauss) and their optimizers stop at slightly different points along
-        # the flat along-track valley of a 21-day arc, so the composed result
-        # agrees to solver tolerance rather than to the 1e-9 of a shared start.
+        assert fused_orbit.object_id.to_pylist() == ["route-parity"]
+        assert expected_orbit.provenance.route.to_pylist() == ["composed"]
+        assert fused_orbit.provenance.route.to_pylist() == ["fused"]
         npt.assert_allclose(
             fused_orbit.coordinates.values,
             expected_orbit.coordinates.values,
@@ -924,43 +929,13 @@ class TestFusedRunOd:
                     atol=1e-15,
                 )
 
-    def test_native_route_runs_iod_on_the_configured_propagator(
-        self, two_body_observations
-    ) -> None:
-        class OtherTwoBodyPropagator(TwoBodyPropagator):
-            pass
-
-        propagator = NativeTwoBodyPropagator()
-        matching = NativeOrbitFitter(propagator, iod_rchi2_threshold=1e6)
-        iod_instance = OtherTwoBodyPropagator()
-        other_fitter = NativeOrbitFitter(iod_instance, iod_rchi2_threshold=1e6)
-
-        assert matching.fused_propagator_matches(propagator)
-        assert matching.iod_propagator_for(propagator) is None
-        assert not other_fitter.fused_propagator_matches(propagator)
-        assert other_fitter.iod_propagator_for(propagator) is iod_instance
-
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", RuntimeWarning)
-            same, _ = run_od(
-                two_body_observations, matching, None, propagator=propagator
-            )
-            distinct, _ = run_od(
-                two_body_observations, other_fitter, None, propagator=propagator
-            )
-            direct, _ = other_fitter.full_od("x", two_body_observations, propagator)
-        assert len(same) == len(distinct) == len(direct) == 1
-        npt.assert_allclose(
-            distinct.coordinates.values, same.coordinates.values, rtol=0, atol=1e-12
-        )
-
     def test_object_id_none_is_null_on_both_routes(self, two_body_observations) -> None:
         """Neither route leaks the opaque backend identifier into object_id."""
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", RuntimeWarning)
             composed, _ = run_od(
                 two_body_observations,
-                self._fitter(),
+                self._composed_fitter(),
                 None,
                 propagator=TwoBodyPropagator(),
             )
@@ -968,7 +943,7 @@ class TestFusedRunOd:
                 two_body_observations,
                 self._fitter(),
                 None,
-                propagator=NativeTwoBodyPropagator(),
+                propagator=TwoBodyPropagator(),
             )
         assert len(composed) == len(fused) == 1
         assert composed.object_id.to_pylist() == [None]
@@ -976,9 +951,9 @@ class TestFusedRunOd:
 
     def test_models_and_cmc2003_refinement(self, two_body_observations) -> None:
         models = self._models(two_body_observations)
-        expected, fused = self._run(two_body_observations, models)
-        self._assert_twins(expected, fused)
-        _, members = fused
+        composed, native = self._run(two_body_observations, models)
+        self._assert_route_parity(composed, native)
+        _, members = native
         # The station covariance was added: used sigmas exceed the originals.
         assert np.all(
             members.used_astrometry.sigma_lon.to_numpy(zero_copy_only=False)
@@ -988,11 +963,11 @@ class TestFusedRunOd:
     def test_no_models_and_worst_residual_refinement(
         self, two_body_observations
     ) -> None:
-        expected, fused = self._run(
+        composed, native = self._run(
             two_body_observations, None, outlier_rejection="worst_residual"
         )
-        self._assert_twins(expected, fused)
-        _, members = fused
+        self._assert_route_parity(composed, native)
+        _, members = native
         assert members.used_astrometry.lon.to_pylist() == (
             members.original_astrometry.lon.to_pylist()
         )
@@ -1008,7 +983,7 @@ class TestFusedRunOd:
                     CoordinateCovariances.from_matrix(covariances),
                 )
 
-        propagator = NativeTwoBodyPropagator()
+        propagator = TwoBodyPropagator()
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", RuntimeWarning)
             fitted, members = run_od(

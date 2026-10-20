@@ -1002,16 +1002,18 @@ where
         let mut partials = vec![[[0.0_f64; 6]; 2]; n];
         for index in 0..6 {
             let plus = &perturbed[index * n * 6..(index + 1) * n * 6];
-            let columns;
-            let denom;
-            if config.use_central_difference {
+            let (columns, denom) = if config.use_central_difference {
                 let minus = &perturbed[(6 + index) * n * 6..(6 + index + 1) * n * 6];
-                columns = residual_lon_lat_columns(plus, minus, n);
-                denom = 2.0 * d_per_param[index];
+                (
+                    residual_lon_lat_columns(plus, minus, n),
+                    2.0 * d_per_param[index],
+                )
             } else {
-                columns = residual_lon_lat_columns(plus, &nominal, n);
-                denom = d_per_param[index];
-            }
+                (
+                    residual_lon_lat_columns(plus, &nominal, n),
+                    d_per_param[index],
+                )
+            };
             for row in 0..n {
                 partials[row][0][index] = columns[row * 2] / denom;
                 partials[row][1][index] = columns[row * 2 + 1] / denom;
