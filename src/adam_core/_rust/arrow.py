@@ -16,6 +16,9 @@ surface and exercised today:
   ``coordinates.time.scale``) and the ``adam_core_*`` schema keys the Rust codec
   reads. ``adam_core.orbits.arrow_bridge`` imports these so the mapping lives in
   one place.
+* :func:`contiguous_record_batch` -- the input wrapper that turns a (possibly
+  sliced) quivr table into one RecordBatch the Rust nested decoders read
+  correctly.
 * :func:`table_from_record_batch` -- generic output wrapper used by every
   surface to turn a Rust ``RecordBatch`` into its quivr ``Table``.
 * :func:`ensure_spice_backend` -- idempotent SPICE + MPC-obscodes setup that
@@ -60,6 +63,29 @@ def stamp_adam_core_metadata(
         }
     )
     return table.replace_schema_metadata(metadata)
+
+
+def contiguous_record_batch(table: pa.Table) -> pa.RecordBatch:
+    """One ``RecordBatch`` of ``table`` whose arrays all start at offset 0.
+
+    Slicing a quivr table (``table[i:j]``) keeps Arrow arrays whose ``offset``
+    points into the parent's buffers. The Rust nested-schema decoders
+    (``OrbitBatch``, ``ObserverBatch``, ``OrbitVariantBatch`` and the
+    trajectory / porkchop batches) read nested struct children from the start
+    of those buffers, so a sliced table used to cross as its parent's first
+    rows (``propagate_2body(orbits[1:2], ...)`` propagated row 0). Every
+    offset array is rebuilt with ``pa.concat_arrays`` so the batch carries the
+    sliced rows themselves; flat primitive columns honour offsets either way
+    and are passed through untouched. This is the single input half of the
+    canonical crossing for table-shaped inputs.
+    """
+    arrays = []
+    for column in table.columns:
+        array = column.combine_chunks()
+        if array.offset != 0:
+            array = pa.concat_arrays([array])
+        arrays.append(array)
+    return pa.RecordBatch.from_arrays(arrays, schema=table.schema)
 
 
 def to_quivr_metadata(table: pa.Table) -> pa.Table:

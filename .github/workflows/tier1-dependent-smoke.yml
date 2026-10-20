@@ -34,7 +34,10 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: B612-Asteroid-Institute/adam-assist
-          ref: 8c95fdfcaf2df68e7dc1b5c7ee540f938103bb8b
+          # adam-assist 0.5.0 pairing + the native OD propagator (capsule and
+          # STMs) this branch's Rust API requires: branch
+          # pairing/adam-assist-0.5.0-native-od-core-pr217 (8c95fdf + 2 commits).
+          ref: c06164a18e8d90d8bf83d7ab58e479dc97e1be41
           path: dependent
       - name: Build reference propagator in the Core test environment
         env:

@@ -753,7 +753,7 @@ fn origins_share_single_origin(left: &OriginArray, right: &OriginArray) -> bool 
         && right.origins.iter().all(|origin| origin == first)
 }
 
-fn is_sun_origin(origin: &OriginId) -> bool {
+pub(crate) fn is_sun_origin(origin: &OriginId) -> bool {
     match origin {
         OriginId::Naif(10) => true,
         OriginId::Named(code) => code == "SUN",
