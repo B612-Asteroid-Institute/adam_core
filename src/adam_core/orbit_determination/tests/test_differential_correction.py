@@ -27,8 +27,6 @@ from ..differential_correction import (
     _analytic_jacobian,
     _analytic_jacobian_terms,
     _observation_whitening_matrices,
-    _validated_covariance,
-    _weak_direction_delta_chi2,
     fit_least_squares,
     iterative_fit,
     residual_function,
@@ -216,88 +214,6 @@ def make_initial_guess() -> Orbits:
     )
 
 
-class LinearPropagator:
-    """
-    Fake propagator whose predicted angles are an exact linear function of
-    the state: pred_i(x) = obs_i + [A (x - x_star)]_i. The weighted
-    least-squares solution is x_star exactly, with covariance
-    inv(A^T Sigma^-1 A), computable by hand.
-
-    Only duck-type compatible with residual_function / evaluate_orbits
-    (implements generate_ephemeris only). All latitudes must be ~0 so that
-    the cos(latitude) correction is the identity.
-    """
-
-    def __init__(
-        self,
-        observations: OrbitDeterminationObservations,
-        design_matrix: np.ndarray,
-        x_star: np.ndarray,
-    ):
-        self.lon_obs = observations.coordinates.lon.to_numpy(zero_copy_only=False)
-        self.lat_obs = observations.coordinates.lat.to_numpy(zero_copy_only=False)
-        self.times = observations.coordinates.time
-        self.codes = observations.observers.code.to_pylist()
-        self.design_matrix = design_matrix
-        self.x_star = x_star
-
-    def generate_ephemeris(self, orbits, observers, max_processes=1):
-        state = orbits.coordinates.values[0]
-        offsets = (self.design_matrix @ (state - self.x_star)).reshape(-1, 2)
-        n = len(self.lon_obs)
-        return Ephemeris.from_kwargs(
-            orbit_id=[orbits.orbit_id[0].as_py()] * n,
-            object_id=[orbits.object_id[0].as_py()] * n,
-            coordinates=SphericalCoordinates.from_kwargs(
-                lon=self.lon_obs + offsets[:, 0],
-                lat=self.lat_obs + offsets[:, 1],
-                time=self.times,
-                origin=Origin.from_kwargs(code=self.codes),
-                frame="equatorial",
-            ),
-        )
-
-
-def make_linear_problem(n_obs: int = 12, seed: int = 7):
-    """Legacy Python-callback fixture, retained as a behavioral oracle."""
-    pytest.skip("Python prediction callbacks are not supported by native OD")
-    rng = np.random.default_rng(seed)
-    times = Timestamp.from_mjd(EPOCH_MJD_TDB + np.linspace(0, 30, n_obs), scale="tdb")
-    sigma_lon_deg = rng.uniform(0.3, 1.0, n_obs) / 3600.0
-    sigma_lat_deg = rng.uniform(0.3, 1.0, n_obs) / 3600.0
-    covariances = np.full((n_obs, 6, 6), np.nan)
-    covariances[:, 1, 1] = sigma_lon_deg**2
-    covariances[:, 2, 2] = sigma_lat_deg**2
-
-    observations = OrbitDeterminationObservations.from_kwargs(
-        id=[f"lin-{i:03d}" for i in range(n_obs)],
-        coordinates=SphericalCoordinates.from_kwargs(
-            lon=10.0 + 0.01 * np.arange(n_obs),
-            lat=np.zeros(n_obs),
-            time=times,
-            covariance=CoordinateCovariances.from_matrix(covariances),
-            origin=Origin.from_kwargs(code=["500"] * n_obs),
-            frame="equatorial",
-        ),
-        observers=Observers.from_code("500", times),
-        photometry=OrbitDeterminationPhotometry.from_kwargs(
-            mag=[None] * n_obs, rmsmag=[None] * n_obs, band=[None] * n_obs
-        ),
-    )
-
-    x_star = TRUTH_STATE.copy()
-    # Angular sensitivity ~arcsec-per-1e-6-au so the problem is well scaled
-    design_matrix = rng.normal(0.0, 300.0, (2 * n_obs, 6))
-    propagator = LinearPropagator(observations, design_matrix, x_star)
-
-    sigma_flat = np.empty(2 * n_obs)
-    sigma_flat[0::2] = sigma_lon_deg
-    sigma_flat[1::2] = sigma_lat_deg
-    whitened_design = design_matrix / sigma_flat[:, None]
-    expected_covariance = np.linalg.inv(whitened_design.T @ whitened_design)
-    return observations, propagator, x_star, expected_covariance
-
-
 @pytest.fixture(scope="module")
 def two_body_setup():
     observations = make_synthetic_observations()
@@ -355,38 +271,6 @@ class TestWhitenedResiduals:
         )
         with pytest.raises(ValueError, match="positive-definite"):
             _observation_whitening_matrices(observations)
-
-
-class TestSyntheticLinearCovariance:
-    def test_covariance_matches_weighted_least_squares(self):
-        # On an exactly linear problem the fitted covariance must equal the
-        # hand-computed weighted least-squares covariance inv(A^T Sigma^-1 A),
-        # and the weak-direction consistency check must pass silently.
-        observations, propagator, x_star, expected = make_linear_problem()
-        initial = make_initial_guess()
-        with warnings.catch_warnings():
-            warnings.simplefilter("error", RuntimeWarning)
-            fitted, _ = fit_least_squares(
-                initial, observations, propagator, jacobian="central"
-            )
-        state = np.concatenate([fitted.coordinates.r[0], fitted.coordinates.v[0]])
-        npt.assert_allclose(state, x_star, atol=1e-12)
-        npt.assert_allclose(
-            fitted.coordinates.covariance.to_matrix()[0], expected, rtol=1e-6
-        )
-
-    def test_probe_measures_unity_on_quadratic_surface(self):
-        observations, propagator, x_star, expected = make_linear_problem()
-        residuals = residual_function(x_star, EPOCH_MJD_TDB, observations, propagator)
-        delta_chi2 = _weak_direction_delta_chi2(
-            x_star,
-            EPOCH_MJD_TDB,
-            observations,
-            propagator,
-            expected,
-            float(residuals @ residuals),
-        )
-        npt.assert_allclose(delta_chi2, 1.0, rtol=1e-6)
 
 
 class TestAnalyticJacobian:
@@ -453,63 +337,6 @@ class TestFitLeastSquares2Body:
                 chi2_displaced.append(residuals_displaced @ residuals_displaced)
             delta_chi2 = 0.5 * sum(chi2_displaced) - chi2_0
             npt.assert_allclose(delta_chi2, k**2, rtol=0.25)
-
-
-class TestValidatedCovariance:
-    def test_trustworthy_covariance_passes_silently(self):
-        observations, propagator, x_star, expected = make_linear_problem()
-        residuals = residual_function(x_star, EPOCH_MJD_TDB, observations, propagator)
-        with warnings.catch_warnings():
-            warnings.simplefilter("error", RuntimeWarning)
-            result = _validated_covariance(
-                expected,
-                "central",
-                x_star,
-                EPOCH_MJD_TDB,
-                observations,
-                propagator,
-                float(residuals @ residuals),
-            )
-        npt.assert_array_equal(result, expected)
-
-    def test_conditioning_warning_for_fd_covariance(self):
-        # A covariance whose weak axis disagrees with the chi2 surface (here:
-        # fabricated by construction, 100x too narrow) must trigger the
-        # finite-difference conditioning warning in the legacy path.
-        observations, propagator, x_star, expected = make_linear_problem()
-        residuals = residual_function(x_star, EPOCH_MJD_TDB, observations, propagator)
-        fabricated = expected / 100.0
-        with pytest.warns(RuntimeWarning, match="noise floor"):
-            result = _validated_covariance(
-                fabricated,
-                "2-point",
-                x_star,
-                EPOCH_MJD_TDB,
-                observations,
-                propagator,
-                float(residuals @ residuals),
-            )
-        # Legacy path only warns; the covariance is returned unchanged
-        npt.assert_array_equal(result, fabricated)
-
-    def test_analytic_failure_falls_back_to_central_difference(self):
-        # When the (nominally analytic) covariance fails the probe, the
-        # analytic path recomputes it from central differences — here exact,
-        # so the fallback recovers the true weighted least-squares covariance.
-        observations, propagator, x_star, expected = make_linear_problem()
-        residuals = residual_function(x_star, EPOCH_MJD_TDB, observations, propagator)
-        fabricated = expected / 100.0
-        with pytest.warns(RuntimeWarning, match="central-difference"):
-            result = _validated_covariance(
-                fabricated,
-                "analytic",
-                x_star,
-                EPOCH_MJD_TDB,
-                observations,
-                propagator,
-                float(residuals @ residuals),
-            )
-        npt.assert_allclose(result, expected, rtol=1e-6)
 
 
 class TestFitLeastSquaresValidation:

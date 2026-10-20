@@ -340,8 +340,9 @@ in a later release.
    * - OD with a Python-only propagator (predictions through
        ``generate_ephemeris``)
      - Not supported: OD runs natively and raises ``TypeError``. Use
-       adam-core's two-body propagator or a native backend that declares an
-       external propagator (adam-assist >= 0.5's ``ASSISTPropagator``)
+       adam-core's two-body propagator or a compatible native provider whose
+       ``NativeBackend`` declares only ``propagator_capsule``. Released
+       adam-assist 0.5.0 predates the v2 capsule and is not compatible.
 
 ``run_od``, ``run_iod``, ``refine``, ``initial_orbit_determination``,
 ``evaluate_orbits``, ``cmc2003_fit_detailed`` and the ``OrbitFitter``
@@ -408,9 +409,9 @@ inside the built-in fitting stages.
 The refinement solver (``refine``) minimizes the whitened (lon, lat) residuals with
 an exact two-body Jacobian (Rust autodiff) and validates the covariance along
 its weakest direction, so line-of-sight uncertainties are no longer fabricated
-by finite differences. Pass ``jacobian="2-point"`` to reach a propagator's
-fused Rust Gauss-Newton work unit with the legacy forward-difference
-covariance.
+by finite differences. Pass ``jacobian="2-point"`` to make adam-core's Rust Gauss-Newton driver
+use the legacy forward-difference covariance through the same propagation
+capsule.
 
 Solver budgets
 ~~~~~~~~~~~~~~

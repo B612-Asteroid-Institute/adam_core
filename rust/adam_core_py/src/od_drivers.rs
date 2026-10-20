@@ -28,7 +28,7 @@ use adam_core_rs_coords::propagation::adapter::{
 };
 use adam_core_rs_coords::propagation::{
     AstrometrySnapshot, Cmc2003FitConfig, CorrectionConfig, CovariancePropagation,
-    EphemerisOptions, EpochPolicy, ExternalPropagator, ExternalPropagatorV1, FullOdConfig,
+    EphemerisOptions, EpochPolicy, ExternalPropagator, ExternalPropagatorV2, FullOdConfig,
     FullOdOutput, IodAcceptance, IodCandidate, IodConfig, IodResult, IterativeFitConfig,
     JacobianMethod, ObservationSelectionMethod, PrefitScope, PropagationOptions,
     PropagationResultValue, RangingConfig, RangingResult, RangingSample, RefinementConfig,
@@ -601,8 +601,8 @@ impl PySource {
                 "expected a {EXTERNAL_PROPAGATOR_CAPSULE:?} capsule, got {name:?}"
             )));
         }
-        let raw = capsule.pointer() as *const ExternalPropagatorV1;
-        // SAFETY: a capsule of this name holds an `ExternalPropagatorV1`
+        let raw = capsule.pointer() as *const ExternalPropagatorV2;
+        // SAFETY: a capsule of this name holds an `ExternalPropagatorV2`
         // whose context lives as long as the capsule, retained by `_capsule`.
         let propagator = unsafe { ExternalPropagator::from_raw(raw) }.map_err(od_error)?;
         if let Some((expected_name, expected_version, expected_two_body)) = expected_identity {

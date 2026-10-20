@@ -1,8 +1,8 @@
 //! Backend-generic whitened-residual differential correction (the Rust
 //! orchestration behind `adam_core.orbit_determination.fit_least_squares`).
 //!
-//! [`fit_orbit_whitened_barycentric`] runs the complete public work unit in
-//! one crossing, generic over the [`Propagator`] trait like the drivers in
+//! [`fit_orbit_whitened_barycentric`] runs the complete core-owned fit in
+//! one call, generic over the [`Propagator`] trait like the drivers in
 //! `od.rs`: residuals are the whitened (cos-lat corrected, inverse-Cholesky
 //! scaled) angular residuals predicted through the backend-generic
 //! barycentric ephemeris workflow; the Jacobian is either the exact 2-body
@@ -12,7 +12,8 @@
 //! reweighted, scipy's `least_squares` scaling convention); the covariance is
 //! `inv(JᵀJ)` of the robust-cost Jacobian, validated by the weak-direction
 //! probe with the central-difference fallback; and the final
-//! `evaluate_orbits`-style pass over the full observation set is fused in.
+//! `evaluate_orbits`-style pass over the full observation set is part of the
+//! same adam-core workflow.
 //!
 //! The optimizer is the trust-region Gauss-Newton method of scipy's
 //! `least_squares(method="trf", x_scale="jac")` without bounds, the solver
@@ -387,7 +388,7 @@ impl<'a> WhitenedProblem<'a> {
     fn residuals_one(&self, state: &[f64; 6]) -> PropagationResultValue<Vec<f64>> {
         self.residuals(&[*state])?
             .map(|mut batch| batch.swap_remove(0))
-            .map_err(PropagationError::Backend)
+            .map_err(PropagationError::RowFailure)
     }
 
     /// `(2M, 6)` row-major Jacobian of the whitened residual vector.
@@ -406,7 +407,7 @@ impl<'a> WhitenedProblem<'a> {
                     )
                 })?;
                 whitened_2body_jacobian(*state, self.epoch_mjd_tdb, terms, &self.two_body)
-                    .map_err(PropagationError::Backend)
+                    .map_err(PropagationError::RowFailure)
             }
             JacobianMethod::Propagator => {
                 let terms = self.analytic_terms.as_ref().ok_or_else(|| {
@@ -446,7 +447,7 @@ impl<'a> WhitenedProblem<'a> {
                     terms,
                     &self.two_body,
                 )
-                .map_err(PropagationError::Backend)
+                .map_err(PropagationError::RowFailure)
             }
             JacobianMethod::Central => {
                 // h_k = 1e-6 * max(|x_k|, 1e-3): `_central_difference_jacobian`.
@@ -464,7 +465,7 @@ impl<'a> WhitenedProblem<'a> {
                 }
                 let batch = self
                     .residuals(&states)?
-                    .map_err(PropagationError::Backend)?;
+                    .map_err(PropagationError::RowFailure)?;
                 let rows = 2 * self.m;
                 let mut jac = vec![0.0_f64; rows * 6];
                 for k in 0..6 {
@@ -490,7 +491,7 @@ impl<'a> WhitenedProblem<'a> {
                 }
                 let batch = self
                     .residuals(&states)?
-                    .map_err(PropagationError::Backend)?;
+                    .map_err(PropagationError::RowFailure)?;
                 let rows = 2 * self.m;
                 let mut jac = vec![0.0_f64; rows * 6];
                 for k in 0..6 {
@@ -1146,8 +1147,7 @@ fn weak_direction_delta_cost(
 /// trial prediction, non-finite probe residuals) are warnings that leave
 /// the covariance unvalidated. A backend error (`PropagationError`) raised
 /// while predicting the probe displacement propagates like one raised by
-/// any other prediction: on the callback route it carries the Python
-/// exception, which the next prediction would otherwise clear.
+/// any other prediction. Only an in-band row failure is a rejected trial.
 fn validated_covariance(
     problem: &WhitenedProblem<'_>,
     covariance: [f64; 36],
@@ -2093,12 +2093,11 @@ fn stage_fit<T: OriginTranslationProvider>(
         translation_provider,
     ) {
         Ok(output) => output,
-        // A failed prediction is local to this candidate.
-        Err(
-            err @ (PropagationError::Backend(_)
-            | PropagationError::BackendProtocol(_)
-            | PropagationError::ThreadPool(_)),
-        ) => return Ok(Err(format!("prediction failed: {err}"))),
+        // Only a failed row returned in-band by an otherwise successful
+        // propagation request is local to this candidate.
+        Err(err @ PropagationError::RowFailure(_)) => {
+            return Ok(Err(format!("prediction failed: {err}")))
+        }
         Err(err) => return Err(err),
     };
     // The stage is judged on the objective it minimized: the plain reduced
@@ -2608,11 +2607,7 @@ fn correct_candidates<T: OriginTranslationProvider>(
                     translation_provider,
                 ) {
                     Ok(rejected) => rejected.fit,
-                    Err(
-                        err @ (PropagationError::Backend(_)
-                        | PropagationError::BackendProtocol(_)
-                        | PropagationError::ThreadPool(_)),
-                    ) => {
+                    Err(err @ PropagationError::RowFailure(_)) => {
                         note = Some(format!(
                             "whole-arc rejection failed at stage {stages}: {err}"
                         ));

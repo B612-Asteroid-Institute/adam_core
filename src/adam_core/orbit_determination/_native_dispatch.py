@@ -113,7 +113,7 @@ def native_work_unit(propagator: object, name: str):
 
 def native_propagator(propagator: object):
     """What the Rust drivers receive for ``propagator``: the external-
-    propagator capsule (``adam_core.propagator.v1``) when its `NativeBackend`
+    propagator capsule (``adam_core.propagator.v2``) when its `NativeBackend`
     declares the ``propagator_capsule`` work unit, so every OD stage runs
     natively with its dynamics (no Python call per prediction). None stays
     None (adam-core's two-body propagator).

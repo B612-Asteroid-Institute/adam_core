@@ -32,15 +32,23 @@ def _record(orbits) -> dict:
     }
 
 
-@pytest.mark.parametrize(
-    "propagator_class, route",
-    [(TwoBodyPropagator, "composed"), (NativeTwoBodyPropagator, "fused")],
-)
-def test_run_od_records_provenance(propagator_class, route):
+@pytest.mark.parametrize("route", ["composed", "fused"])
+def test_run_od_records_provenance(route):
     observations = make_synthetic_observations()
-    model = PerformanceWeightedModel(
-        make_bias_table([{"obs_code": "500", "chi2_per_obs": 1.0}])
+    table = make_bias_table([{"obs_code": "500", "chi2_per_obs": 1.0}])
+
+    class PythonCompositionModel(PerformanceWeightedModel):
+        """Same model arithmetic, but an override deliberately disables fusion."""
+
+        def apply(self, observations):
+            return super().apply(observations)
+
+    model = (
+        PythonCompositionModel(table)
+        if route == "composed"
+        else PerformanceWeightedModel(table)
     )
+    propagator_class = NativeTwoBodyPropagator
     orbits, members = run_od(
         observations,
         NativeOrbitFitter(propagator_class()),
@@ -57,7 +65,9 @@ def test_run_od_records_provenance(propagator_class, route):
     assert set(settings) == {"iod", "refinement", "fit"}
     assert settings["iod"]["acceptance"] == "corrected"
     (descriptor,) = json.loads(record["models"])
-    assert descriptor["type"].endswith("PerformanceWeightedModel")
+    assert descriptor["type"].endswith(
+        "PythonCompositionModel" if route == "composed" else "PerformanceWeightedModel"
+    )
     assert all(len(h) == 64 for h in descriptor["tables_sha256"].values())
     # The IOD's ambiguity reaches the final orbit on both routes.
     assert record["iod_ambiguous"] is False and record["iod_alternatives"] == 0
@@ -68,13 +78,17 @@ def test_run_od_records_provenance(propagator_class, route):
 
 def test_backend_identity_names_declared_and_python_backends():
     assert backend_identity(NativeTwoBodyPropagator()) == (
-        "adam_core.tests.native_two_body 0"
+        "adam_core.two_body.external 0.6.1"
     )
     assert backend_identity(NativeTwoBodyPropagator) == backend_identity(
         NativeTwoBodyPropagator()
     )
-    python = backend_identity(TwoBodyPropagator())
-    assert python.startswith("python:") and "TwoBodyPropagator" in python
+
+    class PythonOnly(TwoBodyPropagator):
+        native_backend = None
+
+    python = backend_identity(PythonOnly())
+    assert python.startswith("python:") and "PythonOnly" in python
     assert backend_identity(None) is None
 
 

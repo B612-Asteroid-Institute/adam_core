@@ -413,7 +413,6 @@ def _check_bad_capsule():
         fit_least_squares(make_initial_guess(), make_synthetic_observations(), Wrong())
 
 
-@pytest.mark.native_only
 def test_python_propagators_are_refused():
     """Orbit determination never calls back into Python per prediction: a
     propagator without a native backend is refused with a clear error; the

@@ -8,16 +8,30 @@ This file contains notable changes in adam-core
 
 - Orbit determination now owns every IOD, least-squares, rejection, linkage
   and ``run_od`` loop in adam-core. Separately built propagators contribute
-  only a private batched ``adam_core.propagator.v1`` capsule; Python prediction
-  callbacks and provider-owned OD work units are no longer supported. The v1
-  table and requests now negotiate structure size and capabilities, verify
+  only a private batched ``adam_core.propagator.v2`` capsule; Python prediction
+  callbacks and provider-owned OD work units are no longer supported. The v2
+  capsule intentionally rejects the provisional v1 layout. Its frozen table
+  and request prefixes negotiate append-only structure sizes and capabilities, verify
   backend identity, retain the capsule context for each native workflow,
   require thread-safe no-unwind callbacks, fail closed on unsupported
-  non-gravitational parameters, preserve those fixed parameters through OD
+  active non-gravitational parameters, carry the complete physical-parameter
+  batch across propagation, preserve both typed batches through OD
   candidates/results, and carry optional dynamics-consistent backend STMs. Python-only
   propagators now raise ``TypeError`` with migration guidance. Rust users keep
   composing the generic adam-core algorithms directly with concrete
   ``Propagator`` implementations. See `docs/source/reference/native_propagator_abi.rst`.
+
+- ``FittedOrbits`` now includes nullable ``physical_parameters`` and
+  ``non_gravitational_parameters`` columns so fitted and candidate orbits do
+  not lose provider dynamics inputs. This is a schema change for serialized
+  fitted-orbit tables; older tables load with null values and consumers that
+  require an exact schema must migrate.
+
+- The explicit IOD policy ``acceptance="prefit"`` retains the legacy gate:
+  candidates are ordered by prefit reduced chi2 and a raw Gauss candidate is
+  accepted only after its configured outlier trial and whole-arc threshold
+  check. ``run_iod`` and ``NativeOrbitFitter`` continue to default to staged
+  corrected acceptance; deprecated ``iod`` selects the prefit policy.
 
 ### Added
 
@@ -205,10 +219,10 @@ This file contains notable changes in adam-core
   through ASSIST: 32 s, against 885 s for STMs at every step and 18 s for
   the two-body Jacobian alone; fits agree to metres on multi-opposition
   arcs).
-- External native propagators (C ABI v1, `propagation::external`): a
-  backend compiled in another extension (adam-assist's ASSIST) exposes its
-  propagation as an `ExternalPropagatorV1` table in a capsule named
-  `adam_core.propagator.v1` and declares the `propagator_capsule` work unit
+- External native propagators (C ABI v2, `propagation::external`): a
+  backend compiled in another extension exposes its propagation as an
+  `ExternalPropagatorV2` table in a capsule named
+  `adam_core.propagator.v2` and declares only the `propagator_capsule` work unit
   in its `NativeBackend`; the OD entry points (`run_iod`, `refine` and its
   loops, `run_od`, the fits) then run every stage in Rust over an
   `ExternalPropagator` (a `Propagator`) with the backend's dynamics, no
@@ -379,16 +393,16 @@ This file contains notable changes in adam-core
   exact Kepler two-body dynamics; `fit_least_squares`, `iterative_fit`,
   `cmc2003_fit_detailed`, `NativeOrbitFitter.full_od` and `run_od` warn
   (`UserWarning`) when `jacobian="analytic"` is paired with a propagator
-  that does not declare it, on the fused and the callback route alike.
+  that does not declare it, on every adam-core native driver route.
 
 - `run_od(models="default")` checks every default model's data before
   building any of them and raises one error naming all missing inputs
   (`ImportError` when the `adam-observatory-uncertainties` package is
   missing, `FileNotFoundError` when only EFCC18's `bias.dat` is).
 
-- `fit_least_squares` defaults to `jacobian="analytic"`; the fused Rust
-  Gauss-Newton work units of a propagator (`fit_least_squares_evaluated` /
-  `fit_least_squares`) are reached with `jacobian="2-point"` and the linear
+- `fit_least_squares` defaults to `jacobian="analytic"`; adam-core's Rust
+  Gauss-Newton driver uses propagation-backed forward differences with
+  `jacobian="2-point"` and the linear
   loss, matching their forward-difference covariance. The default therefore
   runs the scipy solver with one N-body ephemeris per residual evaluation,
   plus the two-evaluation covariance probe and, when it fails, a
@@ -451,11 +465,11 @@ This file contains notable changes in adam-core
 
 - CMC2003: a row whose rejection statistic cannot be established (NaN residual or Jacobian, singular expected residual covariance with a nonzero residual) now scores `+inf` with the `non_finite_chi2` / `singular_residual_covariance` flag, so it is rejected when selected and never re-included; previously it scored `0` and looked acceptable.
 
-- The weak-direction covariance probe no longer converts a backend error raised while predicting the probe displacement into a "covariance could not be validated" warning: it propagates like any other prediction failure (on the callback route the Python exception reaches the caller unchanged); only the in-band probe outcomes (no positive eigenvalue, rejected trial prediction, non-finite probe residuals) remain warnings.
+- The weak-direction covariance probe no longer converts a fatal provider error raised while predicting the probe displacement into a "covariance could not be validated" warning: it propagates; only in-band outcomes (no positive eigenvalue, rejected row prediction, non-finite probe residuals) remain warnings.
 
-- The fused `run_od` route (a Rust-backed propagator's `run_od` work unit) runs the observation models before requiring an observed covariance, so observations without reported uncertainties can be filled by a `SigmaFillModel` exactly as on the composed route; after the models every observation must carry finite, positive lon/lat variances, else `ValueError` names `SigmaFillModel` as the remedy (the same message every other OD entry point now gives for a missing covariance).
+- Adam-core's one-crossing `run_od` driver runs observation models before requiring an observed covariance, so observations without reported uncertainties can be filled by a `SigmaFillModel` exactly as on the composed route; after the models every observation must carry finite, positive lon/lat variances, else `ValueError` names `SigmaFillModel` as the remedy.
 
-- Gauss IOD (`iod`, `NativeOrbitFitter.initial_fit` / `full_od`, `run_od`, the linkage batch) is deterministic in the caller's row order: the Rust driver sorts observations by epoch, station code and input row before selecting triplets and maps every member array back to the input order. A zero contamination percentage only disables outlier removal (a rejected candidate is followed by the next candidate and triplet instead of ending the search), a candidate whose prediction fails is counted and skipped instead of aborting the search (`InvalidRequest` / schema errors still propagate), and the IOD dict carries `triplets_tried`, `candidates_evaluated`, `candidates_failed` and `not_found_reason`, logged at debug level when no orbit is accepted.
+- Gauss IOD (`iod`, `NativeOrbitFitter.initial_fit` / `full_od`, `run_od`, the linkage batch) is deterministic in the caller's row order: the Rust driver sorts observations by epoch, station code and input row before selecting triplets and maps every member array back to the input order. A zero contamination percentage only disables outlier removal (a rejected candidate is followed by the next candidate and triplet instead of ending the search), a candidate with an in-band failed prediction row is counted and skipped while request, protocol, panic, thread-pool and schema errors propagate, and the IOD dict carries `triplets_tried`, `candidates_evaluated`, `candidates_failed` and `not_found_reason`, logged at debug level when no orbit is accepted.
 ## [0.6.1] - 2026-10-16
 
 ### Fixed

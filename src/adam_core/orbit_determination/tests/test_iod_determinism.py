@@ -16,6 +16,7 @@ import quivr as qv
 
 from adam_core import _rust_native
 
+from .._native_dispatch import native_propagator
 from ..differential_correction import _native_problem
 from ..iod import _placeholder_orbit, iod, run_iod
 from .test_differential_correction import TwoBodyPropagator
@@ -96,7 +97,10 @@ def test_iod_search_budget_is_a_separate_setting(two_body_arc) -> None:  # noqa:
         settings = dict(min_obs=6, rchi2_threshold=1e-30, contamination_percentage=20.0)
         settings.update(overrides)
         return _rust_native.iod_fit_ipc(
-            TwoBodyPropagator(), observed_ipc, observers_ipc, iod_settings=settings
+            native_propagator(TwoBodyPropagator()),
+            observed_ipc,
+            observers_ipc,
+            iod_settings=settings,
         )
 
     # Nothing passes a reduced chi2 threshold of 1e-30, so the search runs
@@ -134,7 +138,10 @@ def test_iod_epoch_crosses_as_exact_days_and_nanoseconds(
         settings = dict(min_obs=6, rchi2_threshold=1e4)
         settings.update(overrides)
         return _rust_native.iod_fit_ipc(
-            TwoBodyPropagator(), observed_ipc, observers_ipc, iod_settings=settings
+            native_propagator(TwoBodyPropagator()),
+            observed_ipc,
+            observers_ipc,
+            iod_settings=settings,
         )
 
     output = run()

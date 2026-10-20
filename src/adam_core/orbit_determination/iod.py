@@ -145,7 +145,7 @@ def select_observations(
 
 
 def _tables_from_native_iod(output: dict) -> Tuple[FittedOrbits, FittedOrbitMembers]:
-    """Wrap one fused Rust IOD batch product without further computation."""
+    """Wrap one adam-core Rust IOD batch product without further computation."""
     orbit_ids = list(output["orbit_ids"])
     if not orbit_ids:
         return FittedOrbits.empty(), FittedOrbitMembers.empty()
@@ -461,7 +461,7 @@ class IodReport:
 
 def report_from_iod_output(output: dict) -> IodReport:
     """The `IodReport` of a Rust IOD dict (`run_iod_ipc` or the ``iod`` entry
-    of a fused ``full_od`` / ``run_od`` output)."""
+    of an adam-core ``full_od`` / ``run_od`` output)."""
     candidates = tuple(
         IodCandidate(
             state=tuple(float(v) for v in candidate["state"]),
@@ -552,10 +552,10 @@ def run_iod(
     This is the native stage behind `iod`, `NativeOrbitFitter.initial_fit`
     and the IOD half of `run_od`. ``propagator`` is explicit: it is the
     backend that scores candidates and may differ from the one that later
-    refines the orbit. A Rust-backed propagator exposing the fused
-    ``run_iod`` work unit runs the whole search in one crossing; any other
-    propagator runs the same Rust search through its own
-    ``generate_ephemeris``.
+    refines the orbit. adam-core owns the complete search and enters Rust
+    once; the selected propagator contributes only its retained native
+    propagation capsule. Python-only propagators are rejected rather than
+    called once per prediction.
 
     Parameters
     ----------
@@ -965,7 +965,11 @@ def initial_orbit_determination(
         orbit_tables: list[FittedOrbits] = []
         member_tables: list[FittedOrbitMembers] = []
         for linkage_id, rows, output in zip(linkage_ids, linkage_rows, outputs):
-            linkage_observations = observations.take(rows)
+            # Arrow infers ``null`` for an untyped empty Python list, which
+            # cannot be used as take indices. Keep unmatched/empty linkages in
+            # the native batch and give every selection an explicit index type.
+            row_indices = pa.array(rows, type=pa.int64())
+            linkage_observations = observations.take(row_indices)
             orbit, members = tables_from_iod_output(
                 linkage_id, linkage_observations, output
             )

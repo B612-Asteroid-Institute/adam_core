@@ -43,7 +43,8 @@ pub(crate) fn od_error(err: PropagationError) -> PyErr {
         | PropagationError::Schema(_)
         | PropagationError::MissingOrbitTimes
         | PropagationError::UnsupportedCovarianceMode(_) => PyValueError::new_err(err.to_string()),
-        PropagationError::Backend(_)
+        PropagationError::RowFailure(_)
+        | PropagationError::Backend(_)
         | PropagationError::BackendProtocol(_)
         | PropagationError::ThreadPool(_) => PyRuntimeError::new_err(err.to_string()),
     }

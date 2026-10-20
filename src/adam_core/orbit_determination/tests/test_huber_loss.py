@@ -3,16 +3,17 @@ Tests for the Huber robust loss in differential correction
 (``fit_least_squares(loss="huber")``), one of the outlier-treatment
 algorithms under evaluation alongside hard rejection.
 
-Synthetic inputs only: an exactly linear problem with a hand-computable
-covariance (from ``test_differential_correction``) and two-body observations
-of a known truth orbit, each with one injected gross outlier.
+Synthetic two-body observations of a known truth orbit exercise the complete
+native solver with one injected gross outlier. Closed-form callback-oracle
+coverage moved to the active Rust tests mapped in
+``migration/od_native_oracle_coverage.md``.
 """
 
 from __future__ import annotations
 
 import pickle
 import warnings
-from typing import Any, cast
+from typing import Any
 
 import numpy as np
 import numpy.testing as npt
@@ -22,7 +23,6 @@ import pytest
 from ...coordinates.cartesian import CartesianCoordinates
 from ...coordinates.origin import Origin
 from ...orbits.orbits import Orbits
-from ...propagator.propagator import Propagator
 from ...time import Timestamp
 from .. import native_orbit_fitter as native_module
 from ..differential_correction import (
@@ -31,7 +31,6 @@ from ..differential_correction import (
     _robust_cost,
     _robust_jacobian_scale,
     _robust_weights,
-    _validated_covariance,
     _weak_direction_delta_chi2,
     fit_least_squares,
     iterative_fit,
@@ -44,7 +43,6 @@ from .test_differential_correction import (
     TRUTH_STATE,
     TwoBodyPropagator,
     make_initial_guess,
-    make_linear_problem,
     make_synthetic_observations,
 )
 
@@ -116,126 +114,6 @@ class TestRobustLossHelpers:
         scale = _robust_jacobian_scale(r, "huber", K)
         npt.assert_array_equal(scale[[0, 1, 4]], 1.0)
         assert np.all(scale[[2, 3]] < 1e-7)  # tail components carry no curvature
-
-
-class TestLinearProblemWithOutlier:
-    """Exactly linear residuals: the Huber M-estimate and its covariance are
-    known in closed form."""
-
-    OUTLIER_OBS = 3
-    OUTLIER_SIGMAS = 20.0
-
-    def make_problem(self) -> tuple[Any, Propagator, np.ndarray, np.ndarray, int]:
-        observations, linear_propagator, x_star, expected = make_linear_problem()
-        # Duck-typed fake propagator (generate_ephemeris only)
-        propagator = cast(Propagator, linear_propagator)
-        # Inject a gross latitude outlier; predictions stay anchored to the
-        # clean observations so the injected offset is the only residual at x*.
-        lat = observations.coordinates.lat.to_numpy(zero_copy_only=False).copy()
-        sigma_lat = np.sqrt(observations.coordinates.covariance.to_matrix()[:, 2, 2])
-        lat[self.OUTLIER_OBS] += self.OUTLIER_SIGMAS * sigma_lat[self.OUTLIER_OBS]
-        contaminated = observations.set_column("coordinates.lat", pa.array(lat))
-        component = 2 * self.OUTLIER_OBS + 1
-        return contaminated, propagator, x_star, expected, component
-
-    def fit(self, loss: LossType) -> tuple[FittedOrbits, FittedOrbitMembers, list[str]]:
-        observations, propagator, x_star, _, _ = self.make_problem()
-        with warnings.catch_warnings(record=True) as caught:
-            warnings.simplefilter("always")
-            fitted, members = fit_least_squares(
-                orbit_at(x_star),
-                observations,
-                propagator,
-                jacobian="central",
-                loss=loss,
-                f_scale=K,
-            )
-        return fitted, members, weak_direction_warnings(caught)
-
-    def test_huber_bounds_the_outlier_influence(self) -> None:
-        _, _, x_star, expected, _ = self.make_problem()
-        linear, _, _ = self.fit("linear")
-        huber, _, _ = self.fit("huber")
-
-        def shift(fitted: FittedOrbits) -> float:
-            error = state_of(fitted) - x_star
-            return float(np.sqrt(error @ np.linalg.solve(expected, error)))
-
-        # Least squares is dragged by the 20-sigma outlier; the Huber estimate
-        # feels it only as a bounded (f_scale-sized) pull.
-        assert shift(linear) > 1.0
-        assert shift(huber) < 0.3 * shift(linear)
-
-    def test_huber_members_report_weights_not_rejections(self) -> None:
-        observations, propagator, _, _, component = self.make_problem()
-        fitted, members, _ = self.fit("huber")
-
-        assert members.outlier.to_pylist() == [False] * len(members)
-        assert members.solution.to_pylist() == [True] * len(members)
-        weights = members.weight.to_numpy(zero_copy_only=False)
-        residuals = residual_function(
-            state_of(fitted), EPOCH_MJD_TDB, observations, propagator
-        )
-        expected_weight = K / abs(residuals[component])
-        assert expected_weight < 0.2
-        assert weights[self.OUTLIER_OBS] == pytest.approx(expected_weight, rel=1e-9)
-        mask = np.ones(len(weights), dtype=bool)
-        mask[self.OUTLIER_OBS] = False
-        npt.assert_array_equal(weights[mask], 1.0)
-
-    def test_huber_covariance_drops_the_outlier_information(self) -> None:
-        # In the linear tail the Huber loss has no curvature, so the covariance
-        # equals the weighted least-squares covariance without that component.
-        observations, _, _, _, component = self.make_problem()
-        _, prop_clean, _, _ = make_linear_problem()
-        sigma_flat = np.empty(2 * len(observations))
-        covariances = observations.coordinates.covariance.to_matrix()
-        sigma_flat[0::2] = np.sqrt(covariances[:, 1, 1])
-        sigma_flat[1::2] = np.sqrt(covariances[:, 2, 2])
-        whitened_design = prop_clean.design_matrix / sigma_flat[:, None]
-        keep = np.ones(len(sigma_flat), dtype=bool)
-        keep[component] = False
-        expected = np.linalg.inv(whitened_design[keep].T @ whitened_design[keep])
-
-        fitted, _, probe_warnings = self.fit("huber")
-        covariance = fitted.coordinates.covariance.to_matrix()[0]
-        npt.assert_allclose(covariance, expected, rtol=1e-4)
-        # ... and that covariance is consistent with the robust cost surface.
-        assert probe_warnings == []
-
-    def test_probe_uses_robust_cost(self) -> None:
-        observations, propagator, _, _, _ = self.make_problem()
-        fitted, _, _ = self.fit("huber")
-        state = state_of(fitted)
-        covariance = fitted.coordinates.covariance.to_matrix()[0]
-        residuals = residual_function(state, EPOCH_MJD_TDB, observations, propagator)
-        delta = _weak_direction_delta_chi2(
-            state,
-            EPOCH_MJD_TDB,
-            observations,
-            propagator,
-            covariance,
-            _robust_cost(residuals, "huber", K),
-            loss="huber",
-            f_scale=K,
-        )
-        assert delta == pytest.approx(1.0, rel=1e-3)
-        with warnings.catch_warnings(record=True) as caught:
-            warnings.simplefilter("always")
-            result = _validated_covariance(
-                covariance,
-                "central",
-                state,
-                EPOCH_MJD_TDB,
-                observations,
-                propagator,
-                _robust_cost(residuals, "huber", K),
-                loss="huber",
-                f_scale=K,
-                residuals_solution=residuals,
-            )
-        npt.assert_array_equal(result, covariance)
-        assert weak_direction_warnings(caught) == []
 
 
 TWO_BODY_OUTLIER_OBS = 10

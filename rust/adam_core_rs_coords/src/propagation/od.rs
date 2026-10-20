@@ -197,7 +197,7 @@ where
         config,
         predict,
     )
-    .map_err(PropagationError::Backend)
+    .map_err(PropagationError::RowFailure)
 }
 
 /// Final `evaluate_orbits`-style statistics for one fitted state against the
@@ -284,7 +284,7 @@ pub fn evaluate_orbit(
     let geometry = OrbitGeometry::from_orbit(orbit)?;
     let predicted = predictor
         .predict_spherical(&[state], &geometry, observers)?
-        .map_err(PropagationError::Backend)?;
+        .map_err(PropagationError::RowFailure)?;
     let residuals = full_residuals(&observed_flat, &observed_cov, &predicted, n)?;
     let included: Vec<bool> = ignore.iter().map(|&flag| !flag).collect();
     let num_included = included.iter().filter(|&&keep| keep).count();
@@ -512,7 +512,7 @@ where
         provider,
         translation_provider,
     )?
-    .map_err(PropagationError::Backend)?;
+    .map_err(PropagationError::RowFailure)?;
     let initial_residuals =
         full_residuals(&observed_flat, &observed_cov, &initial_predicted, n_all)?;
     // Legacy quirk: the normal-equation RHS uses these initial residual
@@ -566,7 +566,7 @@ where
             provider,
             translation_provider,
         )?
-        .map_err(PropagationError::Backend)?;
+        .map_err(PropagationError::RowFailure)?;
 
         // Batched perturbed candidates: plus block, then minus block.
         let mut deltas_diag = [0.0_f64; 6];
@@ -596,7 +596,7 @@ where
             provider,
             translation_provider,
         )?
-        .map_err(PropagationError::Backend)?;
+        .map_err(PropagationError::RowFailure)?;
 
         // Partial derivatives: (num_obs, 2, 6) with mask-filtered rows.
         let masked_rows: Vec<usize> = (0..n_all).filter(|&row| ids_mask[row]).collect();
@@ -719,7 +719,7 @@ where
             provider,
             translation_provider,
         )?
-        .map_err(PropagationError::Backend)?;
+        .map_err(PropagationError::RowFailure)?;
         let residuals_iter = full_residuals(&observed_flat, &observed_cov, &predicted_iter, n_all)?;
         let chi2_total_iter: f64 = (0..n_all)
             .filter(|&row| ids_mask[row])
@@ -908,7 +908,7 @@ where
         translation_provider,
     )? {
         Ok(values) => values,
-        Err(message) => return Err(PropagationError::Backend(message)),
+        Err(message) => return Err(PropagationError::RowFailure(message)),
     };
     let mut residual_cols = residual_lon_lat_columns(&observed_flat, &nominal, n);
     let mut rms_initial = weighted_rms(&residual_cols, &weights, n);
@@ -1893,10 +1893,10 @@ where
 /// output is mapped back to the input order. A zero contamination
 /// percentage only disables outlier removal; a rejected candidate is
 /// followed by the next candidate and the next triplet. A candidate whose
-/// prediction fails (`PropagationError::Backend`, `BackendProtocol`,
-/// `ThreadPool`, including a per-row numerical failure) is counted in
-/// `candidates_failed` and skipped; `InvalidRequest` and `Schema` errors
-/// are caller errors and propagate. When every candidate failed the result
+/// prediction reports an in-band `PropagationError::RowFailure` it is counted
+/// in `candidates_failed` and skipped. Request, protocol, provider-panic,
+/// thread-pool and schema errors are fatal and propagate. When every candidate
+/// had an in-band row failure the result
 /// is not found with the last failure message as `not_found_reason`.
 ///
 /// The product is the typed candidate set [`IodResult`]: every scored
@@ -2280,12 +2280,8 @@ fn run_iod_sorted(
                 6,
             ) {
                 Ok(evaluation) => evaluation,
-                // A failed prediction is local to this candidate.
-                Err(
-                    err @ (PropagationError::Backend(_)
-                    | PropagationError::BackendProtocol(_)
-                    | PropagationError::ThreadPool(_)),
-                ) => {
+                // Only an in-band failed row is local to this candidate.
+                Err(err @ PropagationError::RowFailure(_)) => {
                     counters.candidates_failed += 1;
                     counters.last_failure = Some(err.to_string());
                     continue;
@@ -2919,6 +2915,7 @@ pub struct OrbitGeometry {
     pub scale: crate::TimeScale,
     pub frame: Frame,
     pub origin: crate::OriginId,
+    pub physical_parameters: Option<crate::PhysicalParametersBatch>,
     pub non_gravitational_source: Option<String>,
     pub non_gravitational_parameters: Option<crate::NonGravitationalParametersRow>,
 }
@@ -2950,6 +2947,7 @@ impl OrbitGeometry {
             scale: times.scale,
             frame: orbit.coordinates.frame,
             origin: orbit.coordinates.origins.origins[0].clone(),
+            physical_parameters: orbit.physical_parameters.clone(),
             non_gravitational_source: non_gravitational_parameters
                 .and_then(|parameters| parameters.source[0].clone()),
             non_gravitational_parameters: non_gravitational_parameters
@@ -3102,6 +3100,17 @@ pub fn candidate_orbit_batch(
         vec![None::<ObjectId>; states.len()],
         coordinates,
     )?;
+    if let Some(parameters) = &geometry.physical_parameters {
+        let repeat = |value: Option<f64>| vec![value; states.len()];
+        candidates = candidates.with_physical_parameters(crate::PhysicalParametersBatch {
+            h_v: repeat(parameters.h_v[0]),
+            h_v_sigma: repeat(parameters.h_v_sigma[0]),
+            g: repeat(parameters.g[0]),
+            g_sigma: repeat(parameters.g_sigma[0]),
+            sigma_eff: repeat(parameters.sigma_eff[0]),
+            chi2_red: repeat(parameters.chi2_red[0]),
+        })?;
+    }
     if let Some(parameters) = geometry.non_gravitational_parameters {
         let repeat = |value: Option<f64>| vec![value; states.len()];
         candidates = candidates.with_non_gravitational_parameters(
@@ -3124,8 +3133,8 @@ pub fn candidate_orbit_batch(
 /// Source of predicted topocentric spherical coordinates for candidate
 /// states: the one operation every orbit-determination driver needs from a
 /// backend. [`PropagatorPredictor`] implements it for any Rust
-/// [`Propagator`] through the barycentric ephemeris workflow; a Python
-/// propagator is wrapped by a callback implementation in the binding layer.
+/// [`Propagator`] through the barycentric ephemeris workflow. Python bindings
+/// can provide only a native propagation capsule, never a prediction callback.
 pub trait SphericalPredictor {
     /// Predict `(M * N, 6)` row-major spherical coordinates (candidate-major,
     /// observer order within each candidate) for `states` at the epoch,
@@ -4020,32 +4029,49 @@ mod tests {
     }
 
     #[test]
-    fn iod_fit_skips_a_candidate_whose_prediction_fails() {
+    fn iod_fit_skips_only_an_inband_row_failure() {
+        let observed = synthetic_observations();
+        let observers = observers();
+        let propagator = TwoBodyPropagator::default();
+        let options = ephemeris_options();
+        let inner = two_body_predictor(&propagator, &options);
+        let predictor = FaultyPredictor {
+            inner: &inner,
+            calls: std::cell::Cell::new(0),
+            fail_calls: 1,
+            failure: None,
+            garbage_calls: 0,
+        };
+        let output = iod_fit(&predictor, &observed, &observers, &iod_config(20.0)).unwrap();
+        assert!(output.found, "{:?}", output.not_found_reason);
+        assert_eq!(output.candidates_failed, 1);
+        assert!(output.candidates_evaluated >= 1);
+        assert_eq!(output.outlier, vec![false; NUM_OBS]);
+    }
+
+    #[test]
+    fn iod_fit_propagates_fatal_backend_protocol_and_thread_failures() {
         let observed = synthetic_observations();
         let observers = observers();
         let propagator = TwoBodyPropagator::default();
         let options = ephemeris_options();
         let inner = two_body_predictor(&propagator, &options);
         for failure in [
-            Some(PropagationError::Backend(
-                "backend refused the candidate".to_string(),
-            )),
-            Some(PropagationError::BackendProtocol("short batch".to_string())),
-            Some(PropagationError::ThreadPool("no threads".to_string())),
-            None, // in-band per-row failure
+            PropagationError::Backend("backend refused the request".to_string()),
+            PropagationError::BackendProtocol("short ABI request".to_string()),
+            PropagationError::ThreadPool("no threads".to_string()),
         ] {
             let predictor = FaultyPredictor {
                 inner: &inner,
                 calls: std::cell::Cell::new(0),
                 fail_calls: 1,
-                failure,
+                failure: Some(failure.clone()),
                 garbage_calls: 0,
             };
-            let output = iod_fit(&predictor, &observed, &observers, &iod_config(20.0)).unwrap();
-            assert!(output.found, "{:?}", output.not_found_reason);
-            assert_eq!(output.candidates_failed, 1);
-            assert!(output.candidates_evaluated >= 1);
-            assert_eq!(output.outlier, vec![false; NUM_OBS]);
+            assert_eq!(
+                iod_fit(&predictor, &observed, &observers, &iod_config(20.0)).unwrap_err(),
+                failure
+            );
         }
     }
 
@@ -4692,9 +4718,7 @@ mod tests {
             inner: &inner,
             calls: std::cell::Cell::new(0),
             fail_calls: usize::MAX,
-            failure: Some(PropagationError::Backend(
-                "the Python propagator raised an exception: boom".to_string(),
-            )),
+            failure: None,
             garbage_calls: 0,
         };
         let output = iod_fit(&predictor, &observed, &observers, &iod_config(20.0)).unwrap();
@@ -4709,7 +4733,7 @@ mod tests {
             reason.contains("every candidate prediction failed"),
             "{reason}"
         );
-        assert!(reason.contains("boom"), "{reason}");
+        assert!(reason.contains("light-time iteration failed"), "{reason}");
     }
 
     #[test]

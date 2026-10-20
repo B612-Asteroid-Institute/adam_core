@@ -174,10 +174,11 @@ Current Migrated APIs
     observations, original / used astrometry snapshots for the members).
   - External native propagators: a backend compiled in another extension
     (adam-assist) exposes a propagation-only C-ABI table in a capsule named
-    ``adam_core.propagator.v1``. The v1 table and request carry ABI version,
+    ``adam_core.propagator.v2``. The v2 table and request carry ABI version,
     structure size, identity and capability bits. The mandatory callback is
     thread-safe batched propagation over flat state, exact epoch, frame,
-    origin, target-time and optional A1/A2/A3/Marsden-parameter arrays.
+    origin, target-time, physical-parameter and optional active
+    A1/A2/A3/Marsden-parameter arrays.
     Optional capability-gated STMs are derivatives of the provider's own
     dynamics. Adam-core retains the capsule through the workflow, validates
     its declared identity, releases the GIL and performs no Python call per

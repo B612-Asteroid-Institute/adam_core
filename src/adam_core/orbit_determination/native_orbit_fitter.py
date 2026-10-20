@@ -43,7 +43,7 @@ def tables_from_native_full_od(
     output: dict,
 ) -> Tuple[FittedOrbits, FittedOrbitMembers]:
     """
-    Wrap the dict of a fused ``full_od`` work unit into `FittedOrbits` /
+    Wrap the dict from adam-core's ``full_od`` driver into `FittedOrbits` /
     `FittedOrbitMembers`: empty tables when IOD found no orbit, otherwise the
     refined fit with Python-owned orbit ids and the given object id.
     """
@@ -89,9 +89,9 @@ class NativeOrbitFitter(OrbitFitter):
     The `OrbitFitter` over adam_core's native stages: `run_iod` (Gauss
     candidates accepted by staged correction; see the IOD policy) on the IOD
     propagator, then `refine` (CMC2003 or worst-residual rejection) on the
-    propagator `full_od` / `run_od` receive. Every loop runs in Rust; a
-    propagator whose `NativeBackend` declares the work units runs the whole
-    pipeline in one crossing.
+    propagator `full_od` / `run_od` receive. Every loop belongs to adam-core
+    and runs in Rust in one workflow crossing. Each stage propagator supplies
+    only a native propagation capsule; providers do not implement OD methods.
 
     Parameters
     ----------

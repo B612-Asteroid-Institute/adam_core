@@ -1,3 +1,9 @@
+> **Superseded historical handoff.** This document records the September 2026
+> transition design and is not the current provider contract. The propagation-only
+> capsule architecture in `migration/propagation_only_capsule.md` and
+> `docs/source/reference/native_propagator_abi.rst` supersedes its callback and
+> provider-owned OD-work-unit descriptions.
+
 # OD observation-uncertainty features on the Rust adam-core: handoff / PR description
 
 Date: 2026-09-16

@@ -12,7 +12,7 @@ from ...observers import Observers
 from ...utils.helpers.observations import make_observations
 from ...utils.helpers.orbits import make_real_orbits
 from ..evaluate import OrbitDeterminationObservations
-from ..iod import initial_orbit_determination, iod
+from ..iod import initial_orbit_determination, iod, run_iod
 
 ASSISTPropagator = pytest.importorskip("adam_assist").ASSISTPropagator
 
@@ -144,28 +144,31 @@ def test_iod_fused_matches_pinned_legacy_fixture(real_data):
     assert members.outlier.to_pylist() == fixture["outlier"]
 
 
-def test_iod_assist_capsule_is_deterministic(real_data):
+def test_iod_assist_capsule_matches_explicit_prefit_stage(real_data):
+    """The deprecated ASSIST IOD facade matches the explicit core IOD policy."""
     _, observations = real_data
     kwargs = dict(
         min_obs=6,
         min_arc_length=1.0,
         rchi2_threshold=1000,
         observation_selection_method="combinations",
-        iterate=False,
         light_time=True,
     )
-    first, first_members = iod(observations[:10], propagator=ASSISTPropagator, **kwargs)
-    second, second_members = iod(
-        observations[:10], propagator=ASSISTPropagator, **kwargs
+    legacy, legacy_members = iod(
+        observations[:10], propagator=ASSISTPropagator, iterate=False, **kwargs
     )
-    np.testing.assert_array_equal(first.coordinates.values, second.coordinates.values)
-    np.testing.assert_allclose(
-        first_members.residuals.to_array(),
-        second_members.residuals.to_array(),
-        rtol=0,
-        atol=2e-10,
-        equal_nan=True,
+    staged, staged_members, report = run_iod(
+        observations[:10],
+        ASSISTPropagator(),
+        acceptance="prefit",
+        velocity_method="gibbs",
+        **kwargs,
     )
+    assert report.found and report.corrections_run == 0
+    np.testing.assert_array_equal(legacy.coordinates.values, staged.coordinates.values)
+    assert legacy.coordinates.time.equals(staged.coordinates.time)
+    assert legacy_members.solution.to_pylist() == staged_members.solution.to_pylist()
+    assert legacy_members.outlier.to_pylist() == staged_members.outlier.to_pylist()
 
 
 def test_initial_orbit_determination_fused_batch_deduplicates(real_data):

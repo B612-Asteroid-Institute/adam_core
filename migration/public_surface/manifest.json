@@ -10517,7 +10517,7 @@
         "rust_reference": true,
         "python_loop": true,
         "numpy_reference": false,
-        "pyarrow_reference": false,
+        "pyarrow_reference": true,
         "quivr_reference": true,
         "external_io_reference": false
       },
@@ -10537,7 +10537,7 @@
       "kind": "function",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/iod.py",
-      "line": 1028,
+      "line": 1032,
       "explicit_export": false,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -10565,7 +10565,7 @@
       "kind": "function",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/iod.py",
-      "line": 1036,
+      "line": 1040,
       "explicit_export": false,
       "plotting_exemption_candidate": false,
       "signals": {

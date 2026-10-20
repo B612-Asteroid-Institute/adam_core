@@ -1,8 +1,8 @@
 """
 The IOD stage is explicit about its propagator (bead od_experiments_setup-a6w.2):
-`run_iod` takes the instance that scores candidates, and the fused full-OD work
-units take an ``iod_propagator`` distinct from the refining one, on the
-through explicit native propagation capsules for both stages.
+`run_iod` takes the instance that scores candidates, and adam-core's full-OD
+workflow takes an ``iod_propagator`` distinct from the refining one through
+explicit native propagation capsules for both stages.
 """
 
 import numpy as np
@@ -43,23 +43,32 @@ def test_iod_is_the_accepted_orbit_of_run_iod(two_body_arc) -> None:  # noqa: F8
     )
 
 
-def test_run_iod_capsule_route_is_deterministic(two_body_arc) -> None:  # noqa: F811
-    _, _, first = run_iod(
-        two_body_arc, TwoBodyPropagator(), min_obs=6, rchi2_threshold=1e4
+def test_run_iod_capsule_matches_in_tree_two_body_driver(
+    two_body_arc,  # noqa: F811
+) -> None:
+    """The external capsule route matches the distinct in-tree Rust route."""
+    orbit, members, report = run_iod(
+        two_body_arc,
+        NativeTwoBodyPropagator(),
+        min_obs=6,
+        rchi2_threshold=1e4,
     )
-    _, _, second = run_iod(
-        two_body_arc, NativeTwoBodyPropagator(), min_obs=6, rchi2_threshold=1e4
+    _, observed_ipc, observers_ipc = _native_problem(
+        _placeholder_orbit(two_body_arc), two_body_arc
     )
-    assert second.accepted == first.accepted
-    assert [candidate.state for candidate in second.candidates] == [
-        candidate.state for candidate in first.candidates
-    ]
+    direct = _rust_native.run_iod_2body_ipc(
+        observed_ipc,
+        observers_ipc,
+        iod_settings={"min_obs": 6, "rchi2_threshold": 1e4},
+    )
+    assert direct["accepted"] == report.accepted
+    assert direct["triplets_tried"] == report.triplets_tried
+    assert direct["corrections_run"] == report.corrections_run
     npt.assert_allclose(
-        second.accepted_candidate.corrected_state,
-        first.accepted_candidate.corrected_state,
-        rtol=0,
-        atol=1e-12,
+        orbit.coordinates.values[0], np.asarray(direct["state"]), rtol=0, atol=1e-12
     )
+    assert members.solution.to_pylist() == direct["solution"]
+    assert members.outlier.to_pylist() == direct["outlier"]
 
 
 def test_run_iod_on_empty_observations() -> None:
@@ -373,6 +382,26 @@ def test_initial_orbit_determination_runs_run_iod_per_linkage(
     npt.assert_allclose(
         legacy.coordinates.values, reference.coordinates.values, rtol=0, atol=1e-12
     )
+
+
+def test_initial_orbit_determination_accepts_an_unmatched_linkage(
+    two_body_arc,  # noqa: F811
+) -> None:
+    """An unmatched linkage is an empty typed selection, not an Arrow error."""
+    import quivr as qv
+
+    from ..iod import initial_orbit_determination
+
+    class Linkages(qv.Table):
+        cluster_id = qv.LargeStringColumn()
+        obs_id = qv.LargeStringColumn()
+
+    members = Linkages.from_kwargs(cluster_id=["unmatched"], obs_id=["missing"])
+    orbits, orbit_members = initial_orbit_determination(
+        two_body_arc, members, propagator=TwoBodyPropagator
+    )
+    assert len(orbits) == 0
+    assert len(orbit_members) == 0
 
 
 def test_refinement_signature_defaults_are_the_rust_defaults() -> None:

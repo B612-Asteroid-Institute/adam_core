@@ -28,13 +28,17 @@ pub use ephemeris::{
     EphemerisResult, EphemerisRowDiagnostic,
 };
 pub use external::{
-    two_body_reference, ExternalContext, ExternalPropagator, ExternalPropagatorV1,
-    OwnedExternalPropagator, PropagateRequestV1, PropagateStmV1, EXTERNAL_NON_GRAVITATIONAL_WIDTH,
+    two_body_reference, ExternalContext, ExternalPropagator, ExternalPropagatorV2,
+    OwnedExternalPropagator, PropagateRequestV2, PropagateStmRequestV2, PropagateStmV2,
+    PropagateV2, EXTERNAL_NON_GRAVITATIONAL_WIDTH, EXTERNAL_PHYSICAL_PARAMETERS_WIDTH,
     EXTERNAL_PROPAGATOR_ABI_VERSION, EXTERNAL_PROPAGATOR_CAPSULE,
     EXTERNAL_PROPAGATOR_CAP_NON_GRAVITATIONAL, EXTERNAL_PROPAGATOR_CAP_STM,
     EXTERNAL_PROPAGATOR_CAP_THREAD_SAFE, EXTERNAL_PROPAGATOR_KNOWN_CAPABILITIES,
-    EXTERNAL_PROPAGATOR_STATUS_ERROR, EXTERNAL_PROPAGATOR_STATUS_INVALID,
-    EXTERNAL_PROPAGATOR_STATUS_OK, EXTERNAL_PROPAGATOR_STATUS_PANIC,
+    EXTERNAL_PROPAGATOR_RESERVED_WORDS, EXTERNAL_PROPAGATOR_STATUS_ERROR,
+    EXTERNAL_PROPAGATOR_STATUS_INVALID, EXTERNAL_PROPAGATOR_STATUS_OK,
+    EXTERNAL_PROPAGATOR_STATUS_PANIC, EXTERNAL_PROPAGATOR_V2_MIN_SIZE,
+    EXTERNAL_PROPAGATOR_V2_STM_SIZE, PROPAGATE_REQUEST_V2_MIN_SIZE,
+    PROPAGATE_STM_REQUEST_V2_MIN_SIZE,
 };
 #[allow(deprecated)]
 pub use od::{
@@ -97,7 +101,11 @@ pub enum PropagationError {
     InvalidRequest(String),
     MissingOrbitTimes,
     UnsupportedCovarianceMode(CovariancePropagation),
+    /// Candidate-local numerical failure reported in-band by a successful backend request.
+    RowFailure(String),
+    /// Fatal provider operation failure (including a caught provider panic).
     Backend(String),
+    /// Fatal ABI/protocol failure.
     BackendProtocol(String),
     ThreadPool(String),
 }
@@ -111,6 +119,7 @@ impl fmt::Display for PropagationError {
             Self::UnsupportedCovarianceMode(mode) => {
                 write!(f, "unsupported covariance propagation mode: {mode:?}")
             }
+            Self::RowFailure(message) => write!(f, "propagation row failure: {message}"),
             Self::Backend(message) => write!(f, "propagation backend error: {message}"),
             Self::BackendProtocol(message) => {
                 write!(f, "propagation backend protocol error: {message}")
