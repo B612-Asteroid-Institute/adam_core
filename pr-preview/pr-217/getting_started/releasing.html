@@ -467,14 +467,14 @@ implementation; musllinux is deliberately unsupported.</p>
 </section>
 <section id="stable-release-line">
 <h2>Stable release line<a class="headerlink" href="#stable-release-line" title="Link to this heading">¶</a></h2>
-<p>The current published baseline is <code class="docutils literal notranslate"><span class="pre">adam-core==0.5.8</span></code>. The successor release
-is <code class="docutils literal notranslate"><span class="pre">adam-core==0.6.0</span></code> for Python and <code class="docutils literal notranslate"><span class="pre">0.6.0</span></code> for all six public Rust crates.
-Release <code class="docutils literal notranslate"><span class="pre">0.6.0</span></code> adds nullable source-catalog provenance, OEM 3.0 writing, and
-local orbital-frame covariance transforms. It advances the minor version
-because the public Rust <code class="docutils literal notranslate"><span class="pre">SourceCatalogBatch</span></code> gained fields and the public Rust
-OEM writer surface changed incompatibly. The immutable <code class="docutils literal notranslate"><span class="pre">v0.5.8</span></code> tag must
-never be moved or reused.</p>
-<p>All internal public Rust dependencies use exact <code class="docutils literal notranslate"><span class="pre">=0.6.0</span></code> requirements.
+<p>The current published baseline is <code class="docutils literal notranslate"><span class="pre">adam-core==0.6.0</span></code>. The patch release is
+<code class="docutils literal notranslate"><span class="pre">adam-core==0.6.1</span></code> for Python and <code class="docutils literal notranslate"><span class="pre">0.6.1</span></code> for all six public Rust crates.
+Release <code class="docutils literal notranslate"><span class="pre">0.6.1</span></code> restores fresh Rust 1.87 consumer resolution after the
+upstream <code class="docutils literal notranslate"><span class="pre">zip</span></code> project yanked every pre-9 release: kernel wheel extraction
+now uses <code class="docutils literal notranslate"><span class="pre">rawzip</span></code> plus the existing pure-Rust <code class="docutils literal notranslate"><span class="pre">flate2</span></code> backend. The
+immutable <code class="docutils literal notranslate"><span class="pre">v0.6.0</span></code> tag must never be moved or reused; the patch release uses
+<code class="docutils literal notranslate"><span class="pre">v0.6.1</span></code>.</p>
+<p>All internal public Rust dependencies use exact <code class="docutils literal notranslate"><span class="pre">=0.6.1</span></code> requirements.
 <code class="docutils literal notranslate"><span class="pre">adam_core_py</span></code> remains an unpublished wheel implementation crate. Rust 1.87
 is the authoritative MSRV; latest stable is compatibility-only. The Python
 wheel contains the Python veneer and compiled <code class="docutils literal notranslate"><span class="pre">adam_core._rust_native</span></code>
@@ -508,13 +508,13 @@ order:</p>
 <ol class="arabic simple">
 <li><p>prepare an unpublished, science-code-unchanged <code class="docutils literal notranslate"><span class="pre">adam-assist</span> <span class="pre">0.5.0</span></code> source
 candidate declaring compatibility with Core <code class="docutils literal notranslate"><span class="pre">&gt;=0.6,&lt;0.7</span></code>. Its preliminary
-Cargo lock may select the path-patched, unpublished Core <code class="docutils literal notranslate"><span class="pre">0.6.0</span></code> crates
+Cargo lock may select the path-patched, unpublished Core <code class="docutils literal notranslate"><span class="pre">0.6.1</span></code> crates
 solely for paired acceptance; it is not a publication candidate;</p></li>
-<li><p>accept the exact Core <code class="docutils literal notranslate"><span class="pre">0.6.0</span></code> six-crate set and paired 12-wheel matrix;</p></li>
+<li><p>accept the exact Core <code class="docutils literal notranslate"><span class="pre">0.6.1</span></code> six-crate set and paired 12-wheel matrix;</p></li>
 <li><p>publish and verify the six Core crates in dependency order;</p></li>
 <li><p>publish and verify the exact Core Python wheel set;</p></li>
 <li><p>finalize the ASSIST Python/Rust requirements and frozen registry-only locks
-selected at public Core <code class="docutils literal notranslate"><span class="pre">0.6.0</span></code>;</p></li>
+selected at public Core <code class="docutils literal notranslate"><span class="pre">0.6.1</span></code>;</p></li>
 <li><p>accept, publish, and verify <code class="docutils literal notranslate"><span class="pre">adam_assist</span> <span class="pre">0.5.0</span></code> and the exact
 <code class="docutils literal notranslate"><span class="pre">adam-assist==0.5.0</span></code> wheel set; and</p></li>
 <li><p>run clean no-lock Cargo 1.87/latest-stable and clean pip/current-uv
@@ -562,7 +562,7 @@ approval boundary and is never performed as part of source preparation.</p>
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-10-16</div>
+              Last updated on 2026-10-20</div>
           </div>
           <div class="right-details">
             
