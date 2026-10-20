@@ -721,6 +721,18 @@ pub struct NonGravitationalParametersRow {
     pub r0: Option<f64>,
 }
 
+impl NonGravitationalParametersRow {
+    /// Whether this row changes the dynamics. Marsden-law metadata and a
+    /// source label do not activate non-gravitational acceleration without a
+    /// non-zero A1, A2 or A3 coefficient.
+    pub fn is_active(&self) -> bool {
+        [self.a1, self.a2, self.a3]
+            .into_iter()
+            .flatten()
+            .any(|value| value != 0.0)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct NonGravitationalParametersBatch {
     pub source: Vec<Option<String>>,
@@ -753,11 +765,7 @@ impl NonGravitationalParametersBatch {
     }
 
     pub fn has_values(&self) -> bool {
-        [&self.a1, &self.a2, &self.a3]
-            .into_iter()
-            .flatten()
-            .flatten()
-            .any(|value| *value != 0.0)
+        (0..self.len()).any(|index| self.row(index).is_active())
     }
 
     pub fn row(&self, index: usize) -> NonGravitationalParametersRow {

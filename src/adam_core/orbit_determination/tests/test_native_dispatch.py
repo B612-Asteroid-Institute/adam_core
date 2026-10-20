@@ -3,6 +3,7 @@
 import numpy.testing as npt
 import pytest
 
+import adam_core
 from adam_core.coordinates import CoordinateCovariances
 from adam_core.orbit_determination.native_orbit_fitter import NativeOrbitFitter
 from adam_core.orbit_determination.observation_uncertainty import (
@@ -239,7 +240,11 @@ def test_dispatch_requires_a_declared_backend():
     patched.propagator_capsule = lambda: None
     assert native_backend(patched) is None
     descriptor = native_propagator(base)
-    assert descriptor[1:] == ("adam_core.two_body.external", "0.6.1", True)
+    assert descriptor[1:] == (
+        "adam_core.two_body.external",
+        adam_core.__version__,
+        True,
+    )
 
 
 def test_native_backend_rejects_algorithm_work_units():
@@ -247,6 +252,14 @@ def test_native_backend_rejects_algorithm_work_units():
 
     with pytest.raises(ValueError, match="propagation-only"):
         NativeBackend("provider", "1", frozenset({"run_od"}))
+
+
+@pytest.mark.parametrize(("name", "version"), [("", "1"), ("provider", "")])
+def test_native_backend_rejects_empty_identity(name, version):
+    from adam_core.propagator import NativeBackend
+
+    with pytest.raises(ValueError, match="must be non-empty"):
+        NativeBackend(name, version, frozenset({"propagator_capsule"}))
 
 
 def test_overridden_dynamics_fail_without_a_native_capsule():
@@ -318,7 +331,7 @@ class CapsuleTwoBody(TwoBodyPropagator):
 
     native_backend = _NativeBackend(
         name="adam_core.two_body.external",
-        version="0.6.1",
+        version=adam_core.__version__,
         work_units=frozenset({"propagator_capsule"}),
     )
     ephemeris_calls = 0
@@ -346,16 +359,16 @@ def test_external_propagator_capsule_runs_od_natively():
         propagator=propagator,
     )
     assert CapsuleTwoBody.ephemeris_calls == 0
-    callback, callback_members = run_od(
+    reference, reference_members = run_od(
         observations,
         NativeOrbitFitter(TwoBodyPropagator(), iod_rchi2_threshold=1e6),
         None,
         propagator=TwoBodyPropagator(),
     )
     _npt.assert_allclose(
-        native.coordinates.values, callback.coordinates.values, rtol=0, atol=1e-8
+        native.coordinates.values, reference.coordinates.values, rtol=0, atol=1e-8
     )
-    assert native_members.outlier.to_pylist() == callback_members.outlier.to_pylist()
+    assert native_members.outlier.to_pylist() == reference_members.outlier.to_pylist()
     # Provenance names the external backend.
     assert (
         native.provenance.refinement_backend[0]

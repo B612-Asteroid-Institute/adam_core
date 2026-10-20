@@ -538,8 +538,8 @@ def refine(
     settings (``OD_DEFAULTS["cmc2003"]`` / ``["worst_residual"]``);
     ``fit_settings`` the solver's (``OD_DEFAULTS["fit"]``: ``jacobian``,
     ``loss``, ``f_scale``, ``validate_covariance``, tolerances). Every loop
-    runs in Rust; a propagator whose `NativeBackend` declares the loop's
-    work unit runs it in one crossing.
+    runs in adam-core Rust in one crossing; the propagation provider supplies
+    only its native capsule and never owns a refinement work unit.
 
     When ``orbit`` is a `FittedOrbits` row from `run_iod`, its IOD provenance
     (ambiguity) is carried onto the refined orbit.

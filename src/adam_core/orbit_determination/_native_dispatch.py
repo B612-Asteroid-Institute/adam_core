@@ -45,7 +45,7 @@ def _has_compatible_native_spec(
     Defining a specification on a class explicitly declares that it represents
     that class's Python methods, including inherited methods. A subclass that
     changes one of those methods must supply a new specification. Instance
-    method replacements conservatively use the Python composition.
+    method replacements conservatively invalidate the native declaration.
     """
     if any(name in getattr(instance, "__dict__", {}) for name in method_names):
         return False
@@ -80,7 +80,8 @@ def native_backend(propagator: object):
     ``native_backend``. It holds only while every propagation method and
     declared capsule method the instance uses is the declaring class's own
     (or inherited by it): a subclass or instance that overrides one is
-    not covered, so OD runs the composed path on its Python behavior.
+    not covered, so native OD rejects it unless that class declares a backend
+    matching its own propagation behavior.
     """
     for cls in type(propagator).__mro__:
         if "native_backend" not in cls.__dict__:

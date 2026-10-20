@@ -2940,7 +2940,7 @@ impl OrbitGeometry {
         let non_gravitational_parameters = orbit
             .non_gravitational_parameters
             .as_ref()
-            .filter(|parameters| !parameters.is_all_null());
+            .map(|parameters| parameters.row(0));
         Ok(Self {
             state,
             epoch: times.epochs[0],
@@ -2948,11 +2948,21 @@ impl OrbitGeometry {
             frame: orbit.coordinates.frame,
             origin: orbit.coordinates.origins.origins[0].clone(),
             physical_parameters: orbit.physical_parameters.clone(),
-            non_gravitational_source: non_gravitational_parameters
+            non_gravitational_source: orbit
+                .non_gravitational_parameters
+                .as_ref()
                 .and_then(|parameters| parameters.source[0].clone()),
-            non_gravitational_parameters: non_gravitational_parameters
-                .map(|parameters| parameters.row(0)),
+            non_gravitational_parameters,
         })
+    }
+
+    /// The fixed non-gravitational row when it changes dynamics. The complete
+    /// row remains on `self` so source and Marsden metadata survive fitting.
+    pub fn active_non_gravitational_parameters(
+        &self,
+    ) -> Option<crate::NonGravitationalParametersRow> {
+        self.non_gravitational_parameters
+            .filter(crate::NonGravitationalParametersRow::is_active)
     }
 }
 

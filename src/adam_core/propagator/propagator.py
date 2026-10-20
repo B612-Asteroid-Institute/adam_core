@@ -117,7 +117,8 @@ class NativeBackend:
     embedded in its native capsule. ``work_units`` may contain only
     ``"propagator_capsule"``: adam-core owns OD/IOD/fitting/rejection and the
     provider contributes propagation, derivative and dynamics capabilities
-    through that capsule.
+    through that capsule. Construction raises :class:`ValueError` for any
+    algorithm work unit, or for an empty identity field.
     """
 
     name: str
@@ -156,7 +157,7 @@ class Propagator(EphemerisMixin):
     #: The compiled propagation provider this class exposes (`NativeBackend`),
     #: or None. The declaration covers the class's own propagation and
     #: capsule methods: a subclass that overrides any of them is not
-    #: covered (it runs the composed path) unless it declares again.
+    #: covered for native OD unless it declares a matching backend again.
     native_backend: ClassVar[Optional[NativeBackend]] = None
 
     @abstractmethod

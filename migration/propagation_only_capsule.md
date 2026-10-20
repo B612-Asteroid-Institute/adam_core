@@ -29,7 +29,13 @@ rejection, and linkage orchestration. In particular, migrate away from
 `initial_orbit_determination`, `run_iod_linkages`, and `run_od_fit`. Implement
 the 64-bit v2 table/request layout (the v1 prototype is intentionally
 incompatible) and lifecycle contract in
-`docs/source/reference/native_propagator_abi.rst`.
+`docs/source/reference/native_propagator_abi.rst`. ``NativeBackend`` rejects
+algorithm work units at construction time. Consumers also reject unknown
+capability bits and non-zero advertised reserved words. A successful
+propagation request may report row-local failures through ``out_valid`` and the
+optional stable ``out_failure_codes`` buffer; malformed requests, callback
+errors, panics and protocol errors are fatal to the entire workflow (including
+a linkage batch).
 
 The provider must supply batched propagation, the full optional physical
 parameter batch, complete active non-gravitational inputs when it advertises

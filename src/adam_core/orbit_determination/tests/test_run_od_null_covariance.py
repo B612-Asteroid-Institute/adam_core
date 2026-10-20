@@ -1,8 +1,8 @@
 """
 `run_od` with observations that carry no covariance (PR #217 review round 2,
-phase 1, item 3): the fused Rust route must run the observation models
+phase 1, item 3): the one-crossing Rust route must run observation models
 before requiring a finite covariance, so that `SigmaFillModel` can supply
-the missing sigmas exactly as it does on the composed Python route; without
+the missing sigmas exactly as when adam-core applies the model first; without
 a model that fills them the fit is refused with an error naming the remedy.
 """
 
@@ -19,7 +19,7 @@ from ..evaluate import OrbitDeterminationObservations
 from ..native_orbit_fitter import NativeOrbitFitter
 from ..od_orchestration import run_od
 from ..veres2017 import VERES2017_SIGMA_TABLE_SCHEMA, SigmaFillModel
-from .test_differential_correction import NativeTwoBodyPropagator, TwoBodyPropagator
+from .test_differential_correction import TwoBodyPropagator
 
 FILL_SIGMA_ARCSEC = 0.3
 SIGMA_DEG = 0.3 / 3600.0
@@ -84,14 +84,7 @@ def fitter() -> NativeOrbitFitter:
     )
 
 
-@pytest.mark.parametrize(
-    "propagator_class",
-    [NativeTwoBodyPropagator, TwoBodyPropagator],
-    ids=["fused", "composed"],
-)
-def test_sigma_fill_supplies_the_missing_covariance(
-    null_covariance_arc, propagator_class
-) -> None:
+def test_sigma_fill_supplies_the_missing_covariance(null_covariance_arc) -> None:
     model = SigmaFillModel(global_fill_table(), fallback_sigma_arcsec=None)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", RuntimeWarning)
@@ -99,7 +92,7 @@ def test_sigma_fill_supplies_the_missing_covariance(
             null_covariance_arc,
             fitter(),
             [model],
-            propagator=propagator_class(),
+            propagator=TwoBodyPropagator(),
             object_id="null-cov",
         )
     assert len(fitted) == 1
@@ -117,34 +110,42 @@ def test_sigma_fill_supplies_the_missing_covariance(
     assert np.all(np.isfinite(used.sigma_lon.to_numpy(zero_copy_only=False)))
 
 
-@pytest.mark.parametrize(
-    "propagator_class",
-    [NativeTwoBodyPropagator, TwoBodyPropagator],
-    ids=["fused", "composed"],
-)
-def test_without_a_filling_model_the_fit_is_refused(
-    null_covariance_arc, propagator_class
-) -> None:
+def test_without_a_filling_model_the_fit_is_refused(null_covariance_arc) -> None:
     with pytest.raises(ValueError, match="SigmaFillModel"):
-        run_od(null_covariance_arc, fitter(), None, propagator=propagator_class())
+        run_od(null_covariance_arc, fitter(), None, propagator=TwoBodyPropagator())
 
 
-def test_fused_and_composed_routes_agree_with_filled_sigmas(
+def test_native_and_python_applied_model_routes_agree_with_filled_sigmas(
     null_covariance_arc,
 ) -> None:
     model = SigmaFillModel(global_fill_table(), fallback_sigma_arcsec=None)
+
+    class PythonAppliedSigmaFillModel(SigmaFillModel):
+        """Same operation, with an override that disables model fusion."""
+
+        def apply(self, observations):
+            return super().apply(observations)
+
+    python_model = PythonAppliedSigmaFillModel(
+        global_fill_table(), fallback_sigma_arcsec=None
+    )
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", RuntimeWarning)
         fused, fused_members = run_od(
-            null_covariance_arc, fitter(), [model], propagator=NativeTwoBodyPropagator()
+            null_covariance_arc, fitter(), [model], propagator=TwoBodyPropagator()
         )
         composed, composed_members = run_od(
-            null_covariance_arc, fitter(), [model], propagator=TwoBodyPropagator()
+            null_covariance_arc,
+            fitter(),
+            [python_model],
+            propagator=TwoBodyPropagator(),
         )
     np.testing.assert_allclose(
         fused.coordinates.values, composed.coordinates.values, rtol=1e-7, atol=1e-12
     )
     assert fused_members.outlier.to_pylist() == composed_members.outlier.to_pylist()
+    assert fused.provenance.route.to_pylist() == ["fused"]
+    assert composed.provenance.route.to_pylist() == ["composed"]
     for name in ("sigma_lon", "sigma_lat"):
         np.testing.assert_allclose(
             getattr(fused_members.used_astrometry, name).to_numpy(zero_copy_only=False),

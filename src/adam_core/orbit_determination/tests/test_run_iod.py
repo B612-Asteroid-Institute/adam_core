@@ -87,7 +87,7 @@ def two_body_arc_empty():
 
 
 @pytest.mark.parametrize("entry", ["full_od_ipc", "run_od_ipc"])
-def test_native_driver_accepts_a_distinct_iod_capsule(
+def test_native_driver_accepts_an_explicit_iod_capsule_argument(
     two_body_arc, entry: str  # noqa: F811
 ) -> None:
     from .._native_dispatch import native_propagator

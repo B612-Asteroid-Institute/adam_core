@@ -20,7 +20,7 @@
 //! context must stay alive as long as the capsule.
 
 use std::ffi::{c_char, c_void, CStr, CString};
-use std::mem::size_of;
+use std::mem::{align_of, size_of};
 
 use super::pipeline::{assemble_result, OrbitBlock};
 use super::{
@@ -60,10 +60,21 @@ pub const EXTERNAL_PROPAGATOR_STATUS_PANIC: i32 = 2;
 /// A null context/request or another boundary-level contract violation.
 pub const EXTERNAL_PROPAGATOR_STATUS_INVALID: i32 = 3;
 
+/// ABI value for a successful propagation row.
+pub const EXTERNAL_PROPAGATION_FAILURE_NONE: u8 = 0;
+/// Stable ABI values mirroring [`PropagationFailureCode`].
+pub const EXTERNAL_PROPAGATION_FAILURE_NON_FINITE_INPUT_STATE: u8 = 1;
+pub const EXTERNAL_PROPAGATION_FAILURE_NON_FINITE_OUTPUT_STATE: u8 = 2;
+pub const EXTERNAL_PROPAGATION_FAILURE_NON_FINITE_COVARIANCE: u8 = 3;
+pub const EXTERNAL_PROPAGATION_FAILURE_SOLVER_ZERO_DERIVATIVE: u8 = 4;
+pub const EXTERNAL_PROPAGATION_FAILURE_SOLVER_MAX_ITERATIONS: u8 = 5;
+pub const EXTERNAL_PROPAGATION_FAILURE_INTEGRATOR: u8 = 6;
+
 /// One propagation request across the C boundary. Strings are
 /// NUL-terminated: the time scales and frame as adam-core spells them
 /// (`"tdb"`, `"ecliptic"`, ...), the origin as its code (`"SUN"`).
 #[repr(C)]
+#[derive(Clone, Copy)]
 pub struct PropagateRequestV2 {
     pub abi_version: u32,
     /// Bytes supplied by the caller. Providers require the frozen v2 prefix
@@ -92,15 +103,19 @@ pub struct PropagateRequestV2 {
     pub pairwise: u8,
     pub out_states: *mut f64,
     pub out_valid: *mut u8,
+    /// Optional caller-owned `rows` bytes. Providers write 0 for valid rows
+    /// and one stable `EXTERNAL_PROPAGATION_FAILURE_*` value for invalid rows.
+    pub out_failure_codes: *mut u8,
     pub error: *mut c_char,
     pub error_len: usize,
-    /// Reserved for append-only extensions; providers ignore these words.
+    /// Reserved forever. Every advertised complete word must be zero.
     pub reserved: [usize; EXTERNAL_PROPAGATOR_RESERVED_WORDS],
 }
 
 /// One state-plus-STM request. Non-gravitational parameters are held fixed
 /// while differentiating the six Cartesian state components.
 #[repr(C)]
+#[derive(Clone, Copy)]
 pub struct PropagateStmRequestV2 {
     pub abi_version: u32,
     pub struct_size: usize,
@@ -116,12 +131,13 @@ pub struct PropagateStmRequestV2 {
     pub out_valid: *mut u8,
     pub error: *mut c_char,
     pub error_len: usize,
-    /// Reserved for append-only extensions; providers ignore these words.
+    /// Reserved forever. Every advertised complete word must be zero.
     pub reserved: [usize; EXTERNAL_PROPAGATOR_RESERVED_WORDS],
 }
 
 /// An external propagator: identity and the `propagate` entry point.
 #[repr(C)]
+#[derive(Clone, Copy)]
 pub struct ExternalPropagatorV2 {
     pub abi_version: u32,
     /// Bytes supplied by the provider. Consumers require the frozen v2
@@ -143,33 +159,119 @@ pub struct ExternalPropagatorV2 {
     /// 36` row-major STMs and `n_times` validity flags; returns 0 on
     /// success, else writes `error` like `propagate`.
     pub propagate_stm: Option<PropagateStmV2>,
-    /// Reserved for append-only extensions; consumers ignore these words.
+    /// Reserved forever. Every advertised complete word must be zero.
     pub reserved: [usize; EXTERNAL_PROPAGATOR_RESERVED_WORDS],
 }
 
+/// The two fields that may be read before any v2 structure size is known.
+#[repr(C)]
+#[derive(Clone, Copy)]
+struct AbiHeaderV2 {
+    abi_version: u32,
+    struct_size: usize,
+}
+
+/// Required table fields. Reading this copy is sound once the header reports
+/// at least `EXTERNAL_PROPAGATOR_V2_MIN_SIZE` bytes.
+#[repr(C)]
+#[derive(Clone, Copy)]
+struct ExternalPropagatorRequiredV2 {
+    abi_version: u32,
+    struct_size: usize,
+    capabilities: u64,
+    integration_time_scale: *const c_char,
+    two_body_dynamics: u8,
+    name: *const c_char,
+    version: *const c_char,
+    context: *const c_void,
+    propagate: Option<PropagateV2>,
+}
+
+/// Required table fields plus the capability-gated STM slot.
+#[repr(C)]
+#[derive(Clone, Copy)]
+struct ExternalPropagatorStmV2 {
+    required: ExternalPropagatorRequiredV2,
+    propagate_stm: Option<PropagateStmV2>,
+}
+
+/// Required propagation request fields, copied only after header validation.
+#[repr(C)]
+#[derive(Clone, Copy)]
+struct PropagateRequestPrefixV2 {
+    abi_version: u32,
+    struct_size: usize,
+    n_orbits: usize,
+    states: *const f64,
+    physical_parameters: *const f64,
+    non_gravitational_parameters: *const f64,
+    epoch_days: *const i64,
+    epoch_nanos: *const i64,
+    orbit_time_scale: *const c_char,
+    frame: *const c_char,
+    origin: *const c_char,
+    n_times: usize,
+    time_days: *const i64,
+    time_nanos: *const i64,
+    time_scale: *const c_char,
+    pairwise: u8,
+    out_states: *mut f64,
+    out_valid: *mut u8,
+    out_failure_codes: *mut u8,
+    error: *mut c_char,
+    error_len: usize,
+}
+
+/// Required STM request fields, copied only after header validation.
+#[repr(C)]
+#[derive(Clone, Copy)]
+struct PropagateStmRequestPrefixV2 {
+    abi_version: u32,
+    struct_size: usize,
+    state: *const f64,
+    non_gravitational_parameters: *const f64,
+    epoch_days: i64,
+    epoch_nanos: i64,
+    n_times: usize,
+    time_days: *const i64,
+    time_nanos: *const i64,
+    out_states: *mut f64,
+    out_stm: *mut f64,
+    out_valid: *mut u8,
+    error: *mut c_char,
+    error_len: usize,
+}
+
 /// Required v2 table prefix, ending immediately before the optional STM slot.
-/// The stabilized Python-extension ABI is 64-bit; literals make prefix drift a
-/// compile-time error instead of silently changing negotiation.
 #[cfg(target_pointer_width = "64")]
 pub const EXTERNAL_PROPAGATOR_V2_MIN_SIZE: usize = 72;
+#[cfg(not(target_pointer_width = "64"))]
+pub const EXTERNAL_PROPAGATOR_V2_MIN_SIZE: usize = size_of::<ExternalPropagatorRequiredV2>();
 /// Table prefix required when the STM capability is declared.
 #[cfg(target_pointer_width = "64")]
 pub const EXTERNAL_PROPAGATOR_V2_STM_SIZE: usize = 80;
+#[cfg(not(target_pointer_width = "64"))]
+pub const EXTERNAL_PROPAGATOR_V2_STM_SIZE: usize = size_of::<ExternalPropagatorStmV2>();
 /// Required v2 propagation request prefix. Reserved words are not required.
 #[cfg(target_pointer_width = "64")]
-pub const PROPAGATE_REQUEST_V2_MIN_SIZE: usize = 160;
+pub const PROPAGATE_REQUEST_V2_MIN_SIZE: usize = 168;
+#[cfg(not(target_pointer_width = "64"))]
+pub const PROPAGATE_REQUEST_V2_MIN_SIZE: usize = size_of::<PropagateRequestPrefixV2>();
 /// Required v2 STM request prefix. Reserved words are not required.
 #[cfg(target_pointer_width = "64")]
 pub const PROPAGATE_STM_REQUEST_V2_MIN_SIZE: usize = 112;
-
 #[cfg(not(target_pointer_width = "64"))]
-compile_error!("the external propagator v2 ABI is defined only for 64-bit extension modules");
+pub const PROPAGATE_STM_REQUEST_V2_MIN_SIZE: usize = size_of::<PropagateStmRequestPrefixV2>();
 
 #[cfg(target_pointer_width = "64")]
 const _: () = {
+    assert!(size_of::<ExternalPropagatorRequiredV2>() == 72);
+    assert!(size_of::<ExternalPropagatorStmV2>() == 80);
+    assert!(size_of::<PropagateRequestPrefixV2>() == 168);
+    assert!(size_of::<PropagateStmRequestPrefixV2>() == 112);
     assert!(std::mem::offset_of!(ExternalPropagatorV2, propagate_stm) == 72);
     assert!(std::mem::offset_of!(ExternalPropagatorV2, reserved) == 80);
-    assert!(std::mem::offset_of!(PropagateRequestV2, reserved) == 160);
+    assert!(std::mem::offset_of!(PropagateRequestV2, reserved) == 168);
     assert!(std::mem::offset_of!(PropagateStmRequestV2, reserved) == 112);
 };
 
@@ -179,6 +281,118 @@ pub type PropagateV2 =
 /// Signature of [`ExternalPropagatorV2::propagate_stm`].
 pub type PropagateStmV2 =
     unsafe extern "C" fn(context: *const c_void, request: *const PropagateStmRequestV2) -> i32;
+
+fn pointer_is_aligned<T>(pointer: *const T) -> bool {
+    (pointer as usize) % align_of::<T>() == 0
+}
+
+unsafe fn read_header(pointer: *const c_void, label: &str) -> PropagationResultValue<AbiHeaderV2> {
+    if pointer.is_null() {
+        return Err(PropagationError::BackendProtocol(format!(
+            "external propagator: null {label} pointer"
+        )));
+    }
+    if !pointer_is_aligned(pointer.cast::<AbiHeaderV2>()) {
+        return Err(PropagationError::BackendProtocol(format!(
+            "external propagator: misaligned {label} pointer"
+        )));
+    }
+    // SAFETY: the ABI's minimum allocation is its two-field header. Reading a
+    // value copy creates no reference to a larger advertised structure.
+    Ok(std::ptr::read(pointer.cast::<AbiHeaderV2>()))
+}
+
+unsafe fn validate_reserved_words(
+    pointer: *const c_void,
+    struct_size: usize,
+    reserved_offset: usize,
+    label: &str,
+) -> PropagationResultValue<()> {
+    let available = struct_size.saturating_sub(reserved_offset) / size_of::<usize>();
+    for index in 0..available.min(EXTERNAL_PROPAGATOR_RESERVED_WORDS) {
+        let offset = reserved_offset + index * size_of::<usize>();
+        // Prefix and reserved offsets are pointer-aligned by the repr(C)
+        // definitions, and the base alignment was validated before parsing.
+        let value = std::ptr::read((pointer.cast::<u8>().add(offset)).cast::<usize>());
+        if value != 0 {
+            return Err(PropagationError::BackendProtocol(format!(
+                "external propagator: {label} reserved word {index} must be zero"
+            )));
+        }
+    }
+    Ok(())
+}
+
+fn failure_code_to_abi(code: Option<PropagationFailureCode>) -> u8 {
+    match code {
+        None => EXTERNAL_PROPAGATION_FAILURE_NONE,
+        Some(PropagationFailureCode::NonFiniteInputState) => {
+            EXTERNAL_PROPAGATION_FAILURE_NON_FINITE_INPUT_STATE
+        }
+        Some(PropagationFailureCode::NonFiniteOutputState) => {
+            EXTERNAL_PROPAGATION_FAILURE_NON_FINITE_OUTPUT_STATE
+        }
+        Some(PropagationFailureCode::NonFiniteCovariance) => {
+            EXTERNAL_PROPAGATION_FAILURE_NON_FINITE_COVARIANCE
+        }
+        Some(PropagationFailureCode::SolverZeroDerivative) => {
+            EXTERNAL_PROPAGATION_FAILURE_SOLVER_ZERO_DERIVATIVE
+        }
+        Some(PropagationFailureCode::SolverMaxIterations) => {
+            EXTERNAL_PROPAGATION_FAILURE_SOLVER_MAX_ITERATIONS
+        }
+        Some(PropagationFailureCode::IntegratorFailure) => EXTERNAL_PROPAGATION_FAILURE_INTEGRATOR,
+    }
+}
+
+fn failure_code_from_abi(code: u8) -> PropagationResultValue<Option<PropagationFailureCode>> {
+    match code {
+        EXTERNAL_PROPAGATION_FAILURE_NONE => Ok(None),
+        EXTERNAL_PROPAGATION_FAILURE_NON_FINITE_INPUT_STATE => {
+            Ok(Some(PropagationFailureCode::NonFiniteInputState))
+        }
+        EXTERNAL_PROPAGATION_FAILURE_NON_FINITE_OUTPUT_STATE => {
+            Ok(Some(PropagationFailureCode::NonFiniteOutputState))
+        }
+        EXTERNAL_PROPAGATION_FAILURE_NON_FINITE_COVARIANCE => {
+            Ok(Some(PropagationFailureCode::NonFiniteCovariance))
+        }
+        EXTERNAL_PROPAGATION_FAILURE_SOLVER_ZERO_DERIVATIVE => {
+            Ok(Some(PropagationFailureCode::SolverZeroDerivative))
+        }
+        EXTERNAL_PROPAGATION_FAILURE_SOLVER_MAX_ITERATIONS => {
+            Ok(Some(PropagationFailureCode::SolverMaxIterations))
+        }
+        EXTERNAL_PROPAGATION_FAILURE_INTEGRATOR => {
+            Ok(Some(PropagationFailureCode::IntegratorFailure))
+        }
+        other => Err(PropagationError::BackendProtocol(format!(
+            "external propagator returned unknown row failure code {other}"
+        ))),
+    }
+}
+
+fn decode_row_result(
+    row: usize,
+    valid_flag: u8,
+    state_is_finite: bool,
+    failure_code: u8,
+) -> PropagationResultValue<(bool, Option<PropagationFailureCode>)> {
+    let code = failure_code_from_abi(failure_code)?;
+    match (valid_flag != 0, code) {
+        (true, Some(code)) => Err(PropagationError::BackendProtocol(format!(
+            "external propagator marked row {row} valid with failure code {code:?}"
+        ))),
+        (false, None) => Err(PropagationError::BackendProtocol(format!(
+            "external propagator marked row {row} invalid without a failure code"
+        ))),
+        (false, Some(code)) => Ok((false, Some(code))),
+        (true, None) if state_is_finite => Ok((true, None)),
+        // A provider may only know that integration succeeded. Adam-core owns
+        // the final finite-output validation and supplies its stable code.
+        (true, None) => Ok((false, Some(PropagationFailureCode::NonFiniteOutputState))),
+    }
+}
 
 fn callback_status_error(
     identity: &BackendIdentity,
@@ -213,13 +427,6 @@ fn callback_status_error(
             "{prefix} returned unknown status {other}: {message}"
         )),
     }
-}
-
-fn non_gravitational_row_has_values(parameters: &crate::NonGravitationalParametersRow) -> bool {
-    [parameters.a1, parameters.a2, parameters.a3]
-        .into_iter()
-        .flatten()
-        .any(|value| value != 0.0)
 }
 
 fn c_string(pointer: *const c_char, field: &str) -> PropagationResultValue<String> {
@@ -264,22 +471,39 @@ impl ExternalPropagator {
     /// `raw` must point to the readable prefix declared by `struct_size`; the
     /// table, strings, callbacks and context must outlive the returned value.
     pub unsafe fn from_raw(raw: *const ExternalPropagatorV2) -> PropagationResultValue<Self> {
-        if raw.is_null() {
-            return Err(PropagationError::BackendProtocol(
-                "external propagator: null pointer".to_string(),
-            ));
-        }
-        let table = &*raw;
-        if table.abi_version != EXTERNAL_PROPAGATOR_ABI_VERSION {
+        let header = read_header(raw.cast(), "table")?;
+        if header.abi_version != EXTERNAL_PROPAGATOR_ABI_VERSION {
             return Err(PropagationError::BackendProtocol(format!(
                 "external propagator ABI version {} (adam-core requires exactly {})",
-                table.abi_version, EXTERNAL_PROPAGATOR_ABI_VERSION
+                header.abi_version, EXTERNAL_PROPAGATOR_ABI_VERSION
             )));
         }
-        if table.struct_size < EXTERNAL_PROPAGATOR_V2_MIN_SIZE {
+        if header.struct_size < EXTERNAL_PROPAGATOR_V2_MIN_SIZE {
             return Err(PropagationError::BackendProtocol(format!(
                 "external propagator table has {} bytes; ABI v{} requires the {}-byte prefix",
-                table.struct_size, EXTERNAL_PROPAGATOR_ABI_VERSION, EXTERNAL_PROPAGATOR_V2_MIN_SIZE
+                header.struct_size,
+                EXTERNAL_PROPAGATOR_ABI_VERSION,
+                EXTERNAL_PROPAGATOR_V2_MIN_SIZE
+            )));
+        }
+        if !pointer_is_aligned(raw.cast::<ExternalPropagatorRequiredV2>()) {
+            return Err(PropagationError::BackendProtocol(
+                "external propagator: misaligned table prefix".to_string(),
+            ));
+        }
+        // SAFETY: the validated size covers this exact repr(C) prefix. Copying
+        // it does not create a reference to the larger public table type.
+        let table = std::ptr::read(raw.cast::<ExternalPropagatorRequiredV2>());
+        validate_reserved_words(
+            raw.cast(),
+            header.struct_size,
+            std::mem::offset_of!(ExternalPropagatorV2, reserved),
+            "table",
+        )?;
+        let unknown_capabilities = table.capabilities & !EXTERNAL_PROPAGATOR_KNOWN_CAPABILITIES;
+        if unknown_capabilities != 0 {
+            return Err(PropagationError::BackendProtocol(format!(
+                "external propagator declares unknown capability bits {unknown_capabilities:#x}"
             )));
         }
         if table.context.is_null() {
@@ -304,13 +528,15 @@ impl ExternalPropagator {
             )
         })?;
         let stm_callback = if table.capabilities & EXTERNAL_PROPAGATOR_CAP_STM != 0 {
-            if table.struct_size < EXTERNAL_PROPAGATOR_V2_STM_SIZE {
+            if header.struct_size < EXTERNAL_PROPAGATOR_V2_STM_SIZE {
                 return Err(PropagationError::BackendProtocol(format!(
                     "external propagator declares STM support but its {}-byte table does not contain the STM slot ({} bytes required)",
-                    table.struct_size, EXTERNAL_PROPAGATOR_V2_STM_SIZE
+                    header.struct_size, EXTERNAL_PROPAGATOR_V2_STM_SIZE
                 )));
             }
-            table
+            // SAFETY: the validated size covers this exact repr(C) prefix.
+            let with_stm = std::ptr::read(raw.cast::<ExternalPropagatorStmV2>());
+            with_stm
                 .propagate_stm
                 .ok_or_else(|| {
                     PropagationError::BackendProtocol(
@@ -401,7 +627,7 @@ impl Propagator for ExternalPropagator {
             )));
         };
         let non_gravitational_parameters =
-            non_gravitational_parameters.filter(non_gravitational_row_has_values);
+            non_gravitational_parameters.filter(crate::NonGravitationalParametersRow::is_active);
         if non_gravitational_parameters.is_some() && !self.supports_non_gravitational_parameters() {
             return Err(PropagationError::InvalidRequest(format!(
                 "{} does not accept non-gravitational parameters",
@@ -621,6 +847,7 @@ impl Propagator for ExternalPropagator {
             .map_err(|err| PropagationError::InvalidRequest(format!("origin code: {err}")))?;
         let mut out_states = vec![f64::NAN; state_values];
         let mut out_valid = vec![0_u8; rows];
+        let mut out_failure_codes = vec![u8::MAX; rows];
         let mut error = vec![0 as c_char; 1024];
         let c_request = PropagateRequestV2 {
             abi_version: EXTERNAL_PROPAGATOR_ABI_VERSION,
@@ -645,6 +872,7 @@ impl Propagator for ExternalPropagator {
             pairwise: u8::from(pairwise),
             out_states: out_states.as_mut_ptr(),
             out_valid: out_valid.as_mut_ptr(),
+            out_failure_codes: out_failure_codes.as_mut_ptr(),
             error: error.as_mut_ptr(),
             error_len: error.len(),
             reserved: [0; EXTERNAL_PROPAGATOR_RESERVED_WORDS],
@@ -661,7 +889,7 @@ impl Propagator for ExternalPropagator {
             ));
         }
         let blocks = (0..n_orbits)
-            .map(|orbit| {
+            .map(|orbit| -> PropagationResultValue<OrbitBlock> {
                 let time_indices: Vec<usize> = if pairwise {
                     vec![orbit]
                 } else {
@@ -671,14 +899,20 @@ impl Propagator for ExternalPropagator {
                 let states: Vec<[f64; 6]> = (0..rows_per_orbit)
                     .map(|k| std::array::from_fn(|axis| out_states[(base + k) * 6 + axis]))
                     .collect();
-                let validity: Vec<bool> = (0..rows_per_orbit)
-                    .map(|k| out_valid[base + k] != 0 && states[k].iter().all(|v| v.is_finite()))
+                let row_results: PropagationResultValue<Vec<_>> = (0..rows_per_orbit)
+                    .map(|k| {
+                        decode_row_result(
+                            base + k,
+                            out_valid[base + k],
+                            states[k].iter().all(|value| value.is_finite()),
+                            out_failure_codes[base + k],
+                        )
+                    })
                     .collect();
-                let failure_codes = validity
-                    .iter()
-                    .map(|&ok| (!ok).then_some(PropagationFailureCode::IntegratorFailure))
-                    .collect();
-                OrbitBlock {
+                let row_results = row_results?;
+                let validity = row_results.iter().map(|(valid, _)| *valid).collect();
+                let failure_codes = row_results.into_iter().map(|(_, code)| code).collect();
+                Ok(OrbitBlock {
                     orbit_index: orbit,
                     time_indices,
                     states,
@@ -689,9 +923,9 @@ impl Propagator for ExternalPropagator {
                     iterations: vec![None; rows_per_orbit],
                     failure_codes,
                     validity,
-                }
+                })
             })
-            .collect();
+            .collect::<PropagationResultValue<Vec<_>>>()?;
         // Output rows carry the caller's target times (not the rescaled
         // copy), as every adam-core propagator returns them.
         assemble_result(request, request.times, blocks)
@@ -778,7 +1012,7 @@ impl<P: Propagator + Send + 'static> OwnedExternalPropagator<P> {
     }
 }
 
-fn write_error(request: &PropagateRequestV2, message: &str) {
+fn write_error(request: &PropagateRequestPrefixV2, message: &str) {
     if request.error.is_null() || request.error_len == 0 {
         return;
     }
@@ -791,6 +1025,48 @@ fn write_error(request: &PropagateRequestV2, message: &str) {
     }
 }
 
+unsafe fn parse_propagate_request_prefix(
+    request: *const PropagateRequestV2,
+) -> Result<PropagateRequestPrefixV2, (Option<Box<PropagateRequestPrefixV2>>, String)> {
+    let header = read_header(request.cast(), "propagation request")
+        .map_err(|error| (None, error.to_string()))?;
+    // A caller using another ABI version has not promised that any v2 offset
+    // after the header exists. In particular, never write through its error
+    // pointer.
+    if header.abi_version != EXTERNAL_PROPAGATOR_ABI_VERSION {
+        return Err((
+            None,
+            format!(
+                "propagation request ABI version {} (provider requires exactly {})",
+                header.abi_version, EXTERNAL_PROPAGATOR_ABI_VERSION
+            ),
+        ));
+    }
+    if header.struct_size < PROPAGATE_REQUEST_V2_MIN_SIZE {
+        return Err((
+            None,
+            format!(
+                "propagation request has {} bytes; ABI v{} requires the {}-byte prefix",
+                header.struct_size, EXTERNAL_PROPAGATOR_ABI_VERSION, PROPAGATE_REQUEST_V2_MIN_SIZE
+            ),
+        ));
+    }
+    if !pointer_is_aligned(request.cast::<PropagateRequestPrefixV2>()) {
+        return Err((None, "misaligned propagation request prefix".to_string()));
+    }
+    // SAFETY: the validated byte count covers this exact prefix type.
+    let prefix = std::ptr::read(request.cast::<PropagateRequestPrefixV2>());
+    if let Err(error) = validate_reserved_words(
+        request.cast(),
+        header.struct_size,
+        std::mem::offset_of!(PropagateRequestV2, reserved),
+        "propagation request",
+    ) {
+        return Err((Some(Box::new(prefix)), error.to_string()));
+    }
+    Ok(prefix)
+}
+
 unsafe extern "C" fn propagate_with<P: Propagator>(
     context: *const c_void,
     request: *const PropagateRequestV2,
@@ -798,36 +1074,62 @@ unsafe extern "C" fn propagate_with<P: Propagator>(
     if context.is_null() || request.is_null() {
         return EXTERNAL_PROPAGATOR_STATUS_INVALID;
     }
-    let context = &*(context as *const ExternalContext<P>);
-    let request = &*request;
-    match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        run_request(&context.propagator, request)
-    })) {
-        Ok(Ok(())) => EXTERNAL_PROPAGATOR_STATUS_OK,
-        Ok(Err(CallbackFailure::Invalid(message))) => {
-            if request.struct_size >= PROPAGATE_REQUEST_V2_MIN_SIZE {
-                write_error(request, &message);
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let request = match parse_propagate_request_prefix(request) {
+            Ok(request) => request,
+            Err((reportable, message)) => {
+                if let Some(request) = reportable {
+                    write_error(&request, &message);
+                }
+                return EXTERNAL_PROPAGATOR_STATUS_INVALID;
             }
-            EXTERNAL_PROPAGATOR_STATUS_INVALID
+        };
+        if !pointer_is_aligned(context.cast::<ExternalContext<P>>()) {
+            write_error(&request, "misaligned external propagator context");
+            return EXTERNAL_PROPAGATOR_STATUS_INVALID;
         }
-        Ok(Err(CallbackFailure::Backend(message))) => {
-            write_error(request, &message);
-            EXTERNAL_PROPAGATOR_STATUS_ERROR
+        // SAFETY: this is the provider's own context pointer and its exact
+        // alignment was validated before creating the reference.
+        let context = &*(context.cast::<ExternalContext<P>>());
+        match run_request(&context.propagator, &request) {
+            Ok(()) => EXTERNAL_PROPAGATOR_STATUS_OK,
+            Err(CallbackFailure::Invalid(message)) => {
+                write_error(&request, &message);
+                EXTERNAL_PROPAGATOR_STATUS_INVALID
+            }
+            Err(CallbackFailure::Backend(message)) => {
+                write_error(&request, &message);
+                EXTERNAL_PROPAGATOR_STATUS_ERROR
+            }
         }
+    }));
+    match result {
+        Ok(status) => status,
         Err(_) => {
-            if request.struct_size >= PROPAGATE_REQUEST_V2_MIN_SIZE {
-                write_error(request, "external propagator panicked");
+            // Parsing is repeated without touching provider state. Only an
+            // exact-v2 request with the complete prefix owns the error slot.
+            match parse_propagate_request_prefix(request) {
+                Ok(request) => write_error(&request, "external propagator panicked"),
+                Err((Some(request), _)) => write_error(&request, "external propagator panicked"),
+                Err((None, _)) => {}
             }
             EXTERNAL_PROPAGATOR_STATUS_PANIC
         }
     }
 }
 
-fn validate_non_aliasing(buffers: &[(usize, usize, usize, &'static str)]) -> Result<(), String> {
+fn validate_non_aliasing(
+    buffers: &[(usize, usize, usize, usize, &'static str)],
+) -> Result<(), String> {
     let mut ranges = Vec::with_capacity(buffers.len());
-    for &(start, elements, element_size, name) in buffers {
+    for &(start, elements, element_size, alignment, name) in buffers {
         if start == 0 || elements == 0 {
             continue;
+        }
+        if start % alignment != 0 {
+            return Err(format!(
+                "request buffer {name} is not aligned to {alignment} bytes"
+            ));
         }
         let bytes = elements
             .checked_mul(element_size)
@@ -861,7 +1163,7 @@ impl From<String> for CallbackFailure {
     }
 }
 
-unsafe fn write_stm_error(request: &PropagateStmRequestV2, message: &str) {
+unsafe fn write_stm_error(request: &PropagateStmRequestPrefixV2, message: &str) {
     if request.error.is_null() || request.error_len == 0 {
         return;
     }
@@ -872,22 +1174,9 @@ unsafe fn write_stm_error(request: &PropagateStmRequestV2, message: &str) {
 }
 
 unsafe fn run_stm_request<P: Propagator>(
-    context: *const c_void,
-    request: *const PropagateStmRequestV2,
+    context: &ExternalContext<P>,
+    request: &PropagateStmRequestPrefixV2,
 ) -> Result<(), CallbackFailure> {
-    let request = &*request;
-    if request.abi_version != EXTERNAL_PROPAGATOR_ABI_VERSION {
-        return Err(CallbackFailure::Invalid(format!(
-            "STM request ABI version {} (provider requires exactly {})",
-            request.abi_version, EXTERNAL_PROPAGATOR_ABI_VERSION
-        )));
-    }
-    if request.struct_size < PROPAGATE_STM_REQUEST_V2_MIN_SIZE {
-        return Err(CallbackFailure::Invalid(format!(
-            "STM request has {} bytes; ABI v{} requires the {}-byte prefix",
-            request.struct_size, EXTERNAL_PROPAGATOR_ABI_VERSION, PROPAGATE_STM_REQUEST_V2_MIN_SIZE
-        )));
-    }
     let state_values = 6usize;
     let time_values = request.n_times;
     let output_state_values = request
@@ -913,54 +1202,61 @@ unsafe fn run_stm_request<P: Propagator>(
             request.state as usize,
             state_values,
             size_of::<f64>(),
+            align_of::<f64>(),
             "state",
         ),
         (
             request.non_gravitational_parameters as usize,
             EXTERNAL_NON_GRAVITATIONAL_WIDTH,
             size_of::<f64>(),
+            align_of::<f64>(),
             "non_gravitational_parameters",
         ),
         (
             request.time_days as usize,
             time_values,
             size_of::<i64>(),
+            align_of::<i64>(),
             "time_days",
         ),
         (
             request.time_nanos as usize,
             time_values,
             size_of::<i64>(),
+            align_of::<i64>(),
             "time_nanos",
         ),
         (
             request.out_states as usize,
             output_state_values,
             size_of::<f64>(),
+            align_of::<f64>(),
             "out_states",
         ),
         (
             request.out_stm as usize,
             output_matrix_values,
             size_of::<f64>(),
+            align_of::<f64>(),
             "out_stm",
         ),
         (
             request.out_valid as usize,
             request.n_times,
             size_of::<u8>(),
+            align_of::<u8>(),
             "out_valid",
         ),
         (
             request.error as usize,
             request.error_len,
             size_of::<c_char>(),
+            align_of::<c_char>(),
             "error",
         ),
     ])
     .map_err(CallbackFailure::Invalid)?;
 
-    let context = &*(context as *const ExternalContext<P>);
     let state_values = std::slice::from_raw_parts(request.state, 6);
     let state: [f64; 6] = std::array::from_fn(|i| state_values[i]);
     let non_gravitational_parameters = if request.non_gravitational_parameters.is_null() {
@@ -981,7 +1277,7 @@ unsafe fn run_stm_request<P: Propagator>(
             nn: field(6),
             r0: field(7),
         })
-        .filter(non_gravitational_row_has_values)
+        .filter(crate::NonGravitationalParametersRow::is_active)
     };
     let days = if request.n_times == 0 {
         &[]
@@ -1028,6 +1324,47 @@ unsafe fn run_stm_request<P: Propagator>(
     Ok(())
 }
 
+unsafe fn parse_stm_request_prefix(
+    request: *const PropagateStmRequestV2,
+) -> Result<PropagateStmRequestPrefixV2, (Option<Box<PropagateStmRequestPrefixV2>>, String)> {
+    let header =
+        read_header(request.cast(), "STM request").map_err(|error| (None, error.to_string()))?;
+    if header.abi_version != EXTERNAL_PROPAGATOR_ABI_VERSION {
+        return Err((
+            None,
+            format!(
+                "STM request ABI version {} (provider requires exactly {})",
+                header.abi_version, EXTERNAL_PROPAGATOR_ABI_VERSION
+            ),
+        ));
+    }
+    if header.struct_size < PROPAGATE_STM_REQUEST_V2_MIN_SIZE {
+        return Err((
+            None,
+            format!(
+                "STM request has {} bytes; ABI v{} requires the {}-byte prefix",
+                header.struct_size,
+                EXTERNAL_PROPAGATOR_ABI_VERSION,
+                PROPAGATE_STM_REQUEST_V2_MIN_SIZE
+            ),
+        ));
+    }
+    if !pointer_is_aligned(request.cast::<PropagateStmRequestPrefixV2>()) {
+        return Err((None, "misaligned STM request prefix".to_string()));
+    }
+    // SAFETY: the validated byte count covers this exact prefix type.
+    let prefix = std::ptr::read(request.cast::<PropagateStmRequestPrefixV2>());
+    if let Err(error) = validate_reserved_words(
+        request.cast(),
+        header.struct_size,
+        std::mem::offset_of!(PropagateStmRequestV2, reserved),
+        "STM request",
+    ) {
+        return Err((Some(Box::new(prefix)), error.to_string()));
+    }
+    Ok(prefix)
+}
+
 unsafe extern "C" fn propagate_stm_with<P: Propagator>(
     context: *const c_void,
     request: *const PropagateStmRequestV2,
@@ -1036,25 +1373,43 @@ unsafe extern "C" fn propagate_stm_with<P: Propagator>(
         return EXTERNAL_PROPAGATOR_STATUS_INVALID;
     }
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        run_stm_request::<P>(context, request)
+        let request = match parse_stm_request_prefix(request) {
+            Ok(request) => request,
+            Err((reportable, message)) => {
+                if let Some(request) = reportable {
+                    write_stm_error(&request, &message);
+                }
+                return EXTERNAL_PROPAGATOR_STATUS_INVALID;
+            }
+        };
+        if !pointer_is_aligned(context.cast::<ExternalContext<P>>()) {
+            write_stm_error(&request, "misaligned external propagator context");
+            return EXTERNAL_PROPAGATOR_STATUS_INVALID;
+        }
+        // SAFETY: this is the provider's own context pointer and its exact
+        // alignment was validated before creating the reference.
+        let context = &*(context.cast::<ExternalContext<P>>());
+        match run_stm_request(context, &request) {
+            Ok(()) => EXTERNAL_PROPAGATOR_STATUS_OK,
+            Err(CallbackFailure::Invalid(message)) => {
+                write_stm_error(&request, &message);
+                EXTERNAL_PROPAGATOR_STATUS_INVALID
+            }
+            Err(CallbackFailure::Backend(message)) => {
+                write_stm_error(&request, &message);
+                EXTERNAL_PROPAGATOR_STATUS_ERROR
+            }
+        }
     }));
     match result {
-        Ok(Ok(())) => EXTERNAL_PROPAGATOR_STATUS_OK,
-        Ok(Err(CallbackFailure::Invalid(message))) => {
-            // The error fields are part of the required prefix only after
-            // successful size validation; a short request cannot be written.
-            if (*request).struct_size >= PROPAGATE_STM_REQUEST_V2_MIN_SIZE {
-                write_stm_error(&*request, &message);
-            }
-            EXTERNAL_PROPAGATOR_STATUS_INVALID
-        }
-        Ok(Err(CallbackFailure::Backend(message))) => {
-            write_stm_error(&*request, &message);
-            EXTERNAL_PROPAGATOR_STATUS_ERROR
-        }
+        Ok(status) => status,
         Err(_) => {
-            if (*request).struct_size >= PROPAGATE_STM_REQUEST_V2_MIN_SIZE {
-                write_stm_error(&*request, "external propagator panicked");
+            match parse_stm_request_prefix(request) {
+                Ok(request) => write_stm_error(&request, "external propagator panicked"),
+                Err((Some(request), _)) => {
+                    write_stm_error(&request, "external propagator panicked")
+                }
+                Err((None, _)) => {}
             }
             EXTERNAL_PROPAGATOR_STATUS_PANIC
         }
@@ -1069,25 +1424,13 @@ const NANOS_PER_DAY: f64 = 86_400e9;
 
 unsafe fn run_request<P: Propagator>(
     propagator: &P,
-    request: &PropagateRequestV2,
+    request: &PropagateRequestPrefixV2,
 ) -> Result<(), CallbackFailure> {
     use crate::propagation::PropagationOptions;
     use crate::{
         CoordinateBatch, NonGravitationalParametersBatch, OrbitBatch, OrbitId, OriginArray,
         OriginId, PhysicalParametersBatch, TimeArray,
     };
-    if request.abi_version != EXTERNAL_PROPAGATOR_ABI_VERSION {
-        return Err(CallbackFailure::Invalid(format!(
-            "propagation request ABI version {} (provider requires exactly {})",
-            request.abi_version, EXTERNAL_PROPAGATOR_ABI_VERSION
-        )));
-    }
-    if request.struct_size < PROPAGATE_REQUEST_V2_MIN_SIZE {
-        return Err(CallbackFailure::Invalid(format!(
-            "propagation request has {} bytes; ABI v{} requires the {}-byte prefix",
-            request.struct_size, EXTERNAL_PROPAGATOR_ABI_VERSION, PROPAGATE_REQUEST_V2_MIN_SIZE
-        )));
-    }
     let n = request.n_orbits;
     let m = request.n_times;
     if request.pairwise > 1 {
@@ -1143,55 +1486,77 @@ unsafe fn run_request<P: Propagator>(
             request.states as usize,
             state_values,
             size_of::<f64>(),
+            align_of::<f64>(),
             "states",
         ),
         (
             request.physical_parameters as usize,
             physical_values,
             size_of::<f64>(),
+            align_of::<f64>(),
             "physical_parameters",
         ),
         (
             request.non_gravitational_parameters as usize,
             non_gravitational_values,
             size_of::<f64>(),
+            align_of::<f64>(),
             "non_gravitational_parameters",
         ),
         (
             request.epoch_days as usize,
             n,
             size_of::<i64>(),
+            align_of::<i64>(),
             "epoch_days",
         ),
         (
             request.epoch_nanos as usize,
             n,
             size_of::<i64>(),
+            align_of::<i64>(),
             "epoch_nanos",
         ),
-        (request.time_days as usize, m, size_of::<i64>(), "time_days"),
+        (
+            request.time_days as usize,
+            m,
+            size_of::<i64>(),
+            align_of::<i64>(),
+            "time_days",
+        ),
         (
             request.time_nanos as usize,
             m,
             size_of::<i64>(),
+            align_of::<i64>(),
             "time_nanos",
         ),
         (
             request.out_states as usize,
             output_values,
             size_of::<f64>(),
+            align_of::<f64>(),
             "out_states",
         ),
         (
             request.out_valid as usize,
             rows,
             size_of::<u8>(),
+            align_of::<u8>(),
             "out_valid",
+        ),
+        (
+            request.out_failure_codes as usize,
+            rows,
+            size_of::<u8>(),
+            align_of::<u8>(),
+            "out_failure_codes",
         ),
         (
             request.error as usize,
             request.error_len,
             size_of::<c_char>(),
+            align_of::<c_char>(),
             "error",
         ),
     ])
@@ -1339,6 +1704,11 @@ unsafe fn run_request<P: Propagator>(
     } else {
         std::slice::from_raw_parts_mut(request.out_valid, rows)
     };
+    let out_failure_codes: &mut [u8] = if rows == 0 || request.out_failure_codes.is_null() {
+        &mut []
+    } else {
+        std::slice::from_raw_parts_mut(request.out_failure_codes, rows)
+    };
     for (row, state) in out.iter().enumerate() {
         let id = &result.orbits.orbit_id[row].0;
         let orbit = id
@@ -1374,7 +1744,17 @@ unsafe fn run_request<P: Propagator>(
             })?;
         filled[slot] = true;
         out_states[slot * 6..slot * 6 + 6].copy_from_slice(state);
-        out_valid[slot] = u8::from(result.validity.is_valid(row));
+        let valid = result.validity.is_valid(row);
+        out_valid[slot] = u8::from(valid);
+        if !out_failure_codes.is_empty() {
+            let code = result
+                .diagnostics
+                .convergence
+                .get(row)
+                .and_then(|diagnostic| diagnostic.failure_code)
+                .or_else(|| (!valid).then_some(PropagationFailureCode::IntegratorFailure));
+            out_failure_codes[slot] = failure_code_to_abi(code);
+        }
     }
     Ok(())
 }
@@ -1641,6 +2021,7 @@ mod tests {
         let origin = CString::new("SUN").unwrap();
         let mut out_states = vec![0.0; 6];
         let mut out_valid = vec![0_u8; 1];
+        let mut out_failure_codes = vec![u8::MAX; 1];
         let mut error = vec![0 as c_char; 128];
         let request = PropagateRequestV2 {
             abi_version: EXTERNAL_PROPAGATOR_ABI_VERSION,
@@ -1661,6 +2042,7 @@ mod tests {
             pairwise,
             out_states: out_states.as_mut_ptr(),
             out_valid: out_valid.as_mut_ptr(),
+            out_failure_codes: out_failure_codes.as_mut_ptr(),
             error: error.as_mut_ptr(),
             error_len: error.len(),
             reserved: [0; EXTERNAL_PROPAGATOR_RESERVED_WORDS],
@@ -1827,7 +2209,7 @@ mod tests {
         assert!(error.to_string().contains("thread-safe"));
 
         owned.table.capabilities =
-            EXTERNAL_PROPAGATOR_CAP_THREAD_SAFE | EXTERNAL_PROPAGATOR_CAP_STM | (1_u64 << 63);
+            EXTERNAL_PROPAGATOR_CAP_THREAD_SAFE | EXTERNAL_PROPAGATOR_CAP_STM;
         owned.table.propagate_stm = None;
         let error = unsafe { ExternalPropagator::from_raw(owned.table()) }
             .err()
@@ -1835,9 +2217,10 @@ mod tests {
         assert!(error.to_string().contains("STM support"));
 
         owned.table.capabilities = EXTERNAL_PROPAGATOR_CAP_THREAD_SAFE | (1_u64 << 63);
-        let external = unsafe { ExternalPropagator::from_raw(owned.table()) }
-            .expect("unknown future capabilities are ignored");
-        assert!(!external.supports_stm());
+        let error = unsafe { ExternalPropagator::from_raw(owned.table()) }
+            .err()
+            .expect("unknown capabilities must fail closed");
+        assert!(error.to_string().contains("unknown capability"));
     }
 
     #[test]
@@ -1906,7 +2289,15 @@ mod tests {
             "0",
         )));
         let external = unsafe { ExternalPropagator::from_raw(aware.table()) }.unwrap();
-        external.propagate(&request, &SameScale).unwrap();
+        let propagated = external.propagate(&request, &SameScale).unwrap();
+        assert_eq!(
+            propagated.orbits.physical_parameters,
+            orbits.physical_parameters
+        );
+        assert_eq!(
+            propagated.orbits.non_gravitational_parameters,
+            orbits.non_gravitational_parameters
+        );
         let first_orbit = OrbitBatch {
             orbit_id: vec![orbits.orbit_id[0].clone()],
             object_id: vec![orbits.object_id[0].clone()],
@@ -2065,6 +2456,186 @@ mod tests {
     }
 
     #[test]
+    fn real_short_allocations_and_misaligned_prefixes_fail_before_wide_reads() {
+        let header = Box::new(AbiHeaderV2 {
+            abi_version: EXTERNAL_PROPAGATOR_ABI_VERSION,
+            struct_size: size_of::<AbiHeaderV2>(),
+        });
+        let error = unsafe {
+            ExternalPropagator::from_raw(
+                (&*header as *const AbiHeaderV2).cast::<ExternalPropagatorV2>(),
+            )
+        }
+        .err()
+        .expect("a header-sized table allocation must be rejected safely");
+        assert!(error.to_string().contains("requires the"));
+
+        let owned = two_body_reference::new(TwoBodyPropagator::default());
+        let propagate = owned.table.propagate.unwrap();
+        let status = unsafe {
+            propagate(
+                owned.table.context,
+                (&*header as *const AbiHeaderV2).cast::<PropagateRequestV2>(),
+            )
+        };
+        assert_eq!(status, EXTERNAL_PROPAGATOR_STATUS_INVALID);
+        let stm = owned.table.propagate_stm.unwrap();
+        let status = unsafe {
+            stm(
+                owned.table.context,
+                (&*header as *const AbiHeaderV2).cast::<PropagateStmRequestV2>(),
+            )
+        };
+        assert_eq!(status, EXTERNAL_PROPAGATOR_STATUS_INVALID);
+
+        let bytes = vec![0_u8; size_of::<AbiHeaderV2>() + align_of::<AbiHeaderV2>()];
+        let misaligned = unsafe { bytes.as_ptr().add(1) };
+        let error =
+            unsafe { ExternalPropagator::from_raw(misaligned.cast::<ExternalPropagatorV2>()) }
+                .err()
+                .expect("a misaligned table header must fail before it is read");
+        assert!(error.to_string().contains("misaligned"));
+    }
+
+    #[test]
+    fn version_mismatch_never_writes_v2_error_offsets_and_reserved_words_are_zero() {
+        let owned = two_body_reference::new(TwoBodyPropagator::default());
+        let mut error = [b'X' as c_char; 256];
+        let mut request = PropagateRequestV2 {
+            abi_version: EXTERNAL_PROPAGATOR_ABI_VERSION - 1,
+            struct_size: size_of::<PropagateRequestV2>(),
+            n_orbits: 0,
+            states: std::ptr::null(),
+            physical_parameters: std::ptr::null(),
+            non_gravitational_parameters: std::ptr::null(),
+            epoch_days: std::ptr::null(),
+            epoch_nanos: std::ptr::null(),
+            orbit_time_scale: std::ptr::null(),
+            frame: std::ptr::null(),
+            origin: std::ptr::null(),
+            n_times: 0,
+            time_days: std::ptr::null(),
+            time_nanos: std::ptr::null(),
+            time_scale: std::ptr::null(),
+            pairwise: 0,
+            out_states: std::ptr::null_mut(),
+            out_valid: std::ptr::null_mut(),
+            out_failure_codes: std::ptr::null_mut(),
+            error: error.as_mut_ptr(),
+            error_len: error.len(),
+            reserved: [0; EXTERNAL_PROPAGATOR_RESERVED_WORDS],
+        };
+        let status = unsafe { (owned.table.propagate.unwrap())(owned.table.context, &request) };
+        assert_eq!(status, EXTERNAL_PROPAGATOR_STATUS_INVALID);
+        assert!(error.iter().all(|&value| value == b'X' as c_char));
+
+        let mut stm_error = [b'Y' as c_char; 32];
+        let stm_request = PropagateStmRequestV2 {
+            abi_version: EXTERNAL_PROPAGATOR_ABI_VERSION - 1,
+            struct_size: size_of::<PropagateStmRequestV2>(),
+            state: std::ptr::null(),
+            non_gravitational_parameters: std::ptr::null(),
+            epoch_days: 0,
+            epoch_nanos: 0,
+            n_times: 0,
+            time_days: std::ptr::null(),
+            time_nanos: std::ptr::null(),
+            out_states: std::ptr::null_mut(),
+            out_stm: std::ptr::null_mut(),
+            out_valid: std::ptr::null_mut(),
+            error: stm_error.as_mut_ptr(),
+            error_len: stm_error.len(),
+            reserved: [0; EXTERNAL_PROPAGATOR_RESERVED_WORDS],
+        };
+        let status =
+            unsafe { (owned.table.propagate_stm.unwrap())(owned.table.context, &stm_request) };
+        assert_eq!(status, EXTERNAL_PROPAGATOR_STATUS_INVALID);
+        assert!(stm_error.iter().all(|&value| value == b'Y' as c_char));
+
+        request.abi_version = EXTERNAL_PROPAGATOR_ABI_VERSION;
+        request.reserved[0] = 1;
+        let status = unsafe { (owned.table.propagate.unwrap())(owned.table.context, &request) };
+        assert_eq!(status, EXTERNAL_PROPAGATOR_STATUS_INVALID);
+        let message = unsafe { CStr::from_ptr(error.as_ptr()) }.to_string_lossy();
+        assert!(message.contains("reserved word 0"), "{message}");
+    }
+
+    #[test]
+    fn row_failure_code_protocol_is_stable_and_non_finite_outputs_are_classified() {
+        assert_eq!(
+            decode_row_result(3, 1, false, EXTERNAL_PROPAGATION_FAILURE_NONE).unwrap(),
+            (false, Some(PropagationFailureCode::NonFiniteOutputState))
+        );
+        assert_eq!(
+            decode_row_result(
+                3,
+                0,
+                true,
+                EXTERNAL_PROPAGATION_FAILURE_SOLVER_MAX_ITERATIONS,
+            )
+            .unwrap(),
+            (false, Some(PropagationFailureCode::SolverMaxIterations))
+        );
+        assert!(decode_row_result(
+            3,
+            1,
+            true,
+            EXTERNAL_PROPAGATION_FAILURE_NON_FINITE_INPUT_STATE,
+        )
+        .unwrap_err()
+        .to_string()
+        .contains("valid with failure code"));
+        assert!(
+            decode_row_result(3, 0, true, EXTERNAL_PROPAGATION_FAILURE_NONE)
+                .unwrap_err()
+                .to_string()
+                .contains("invalid without a failure code")
+        );
+        assert!(decode_row_result(3, 0, true, u8::MAX)
+            .unwrap_err()
+            .to_string()
+            .contains("unknown row failure code"));
+    }
+
+    #[test]
+    fn row_failure_codes_survive_the_external_round_trip() {
+        let orbits = OrbitBatch::new(
+            vec![OrbitId("invalid".to_string())],
+            vec![None],
+            CoordinateBatch::cartesian(
+                vec![[f64::NAN, 0.0, 0.0, 0.0, 0.01, 0.0]],
+                Frame::Ecliptic,
+                OriginArray::repeat(OriginId::from_code("SUN"), 1),
+                Some(TimeArray::new(TimeScale::Tdb, vec![Epoch::new(60_000, 0)]).unwrap()),
+                None,
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        let times = TimeArray::new(TimeScale::Tdb, vec![Epoch::new(60_001, 0)]).unwrap();
+        let request = PropagationRequest::new(
+            &orbits,
+            &times,
+            PropagationOptions {
+                chunk_size: None,
+                thread_limit: None,
+                epoch_policy: EpochPolicy::CrossProduct,
+                covariance: CovariancePropagation::None,
+            },
+        )
+        .unwrap();
+        let owned = Box::leak(Box::new(two_body_reference::new(
+            TwoBodyPropagator::default(),
+        )));
+        let external = unsafe { ExternalPropagator::from_raw(owned.table()) }.unwrap();
+        let result = external.propagate(&request, &SameScale).unwrap();
+        assert_eq!(
+            result.diagnostics.convergence[0].failure_code,
+            Some(PropagationFailureCode::NonFiniteInputState)
+        );
+    }
+
+    #[test]
     fn exact_abi_version_and_frozen_prefixes_are_enforced() {
         assert_eq!(
             PROPAGATE_REQUEST_V2_MIN_SIZE,
@@ -2097,13 +2668,19 @@ mod tests {
 
     #[test]
     fn request_range_validation_rejects_overflow_and_error_aliasing() {
-        let overflow = validate_non_aliasing(&[(usize::MAX - 3, 2, 8, "states")])
+        let overflow = validate_non_aliasing(&[(usize::MAX - 7, 2, 8, 8, "states")])
             .expect_err("overflowing request range must fail closed");
         assert!(overflow.contains("overflows usize"), "{overflow}");
 
-        let alias =
-            validate_non_aliasing(&[(0x1000, 48, 1, "out_states"), (0x1020, 64, 1, "error")])
-                .expect_err("the error buffer must not alias an output");
+        let alignment = validate_non_aliasing(&[(0x1001, 1, 8, 8, "states")])
+            .expect_err("misaligned typed buffers must fail before slice creation");
+        assert!(alignment.contains("not aligned"), "{alignment}");
+
+        let alias = validate_non_aliasing(&[
+            (0x1000, 48, 1, 1, "out_states"),
+            (0x1020, 64, 1, 1, "error"),
+        ])
+        .expect_err("the error buffer must not alias an output");
         assert!(alias.contains("out_states and error overlap"), "{alias}");
     }
 

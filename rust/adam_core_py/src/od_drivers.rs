@@ -948,8 +948,8 @@ fn snapshot_dict<'py>(
 
 /// One-crossing whitened `fit_least_squares`: the analytic / central /
 /// 2-point Jacobian, linear or Huber loss, the validated covariance and the
-/// fused final evaluation. ``propagator`` is any Python propagator (callback
-/// route) or None for adam_core's two-body propagator.
+/// final evaluation. ``propagator`` is a retained native propagation-capsule
+/// descriptor, or None for adam_core's two-body propagator.
 #[pyfunction]
 #[pyo3(signature = (propagator, orbit_ipc, observed_ipc, observers_ipc, ignore, fit_settings=None))]
 fn fit_orbit_whitened_ipc<'py>(
@@ -1426,8 +1426,8 @@ fn full_od_ipc<'py>(
     full_od_dict(py, output, n)
 }
 
-/// `full_od_ipc` over adam_core's two-body propagator (``iod_propagator``
-/// may still name a Python propagator for the IOD stage).
+/// `full_od_ipc` over adam_core's two-body propagator. ``iod_propagator`` may
+/// independently hold a native propagation-capsule descriptor for IOD.
 #[pyfunction]
 #[pyo3(signature = (observed_ipc, observers_ipc, iod_settings=None, refinement=None, fit_settings=None, iod_propagator=None))]
 fn full_od_2body_ipc<'py>(

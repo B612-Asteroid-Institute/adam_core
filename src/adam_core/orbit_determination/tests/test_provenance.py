@@ -12,6 +12,7 @@ from adam_core.orbit_determination.observation_uncertainty import (
 from adam_core.orbit_determination.od_orchestration import run_od
 from adam_core.orbit_determination.provenance import (
     backend_identity,
+    complete_provenance,
     model_descriptor,
 )
 from adam_core.orbit_determination.tests.test_differential_correction import (
@@ -37,21 +38,26 @@ def test_run_od_records_provenance(route):
     observations = make_synthetic_observations()
     table = make_bias_table([{"obs_code": "500", "chi2_per_obs": 1.0}])
 
-    class PythonCompositionModel(PerformanceWeightedModel):
-        """Same model arithmetic, but an override deliberately disables fusion."""
+    class PythonAppliedModel(PerformanceWeightedModel):
+        """Same arithmetic, with an override that selects core orchestration."""
 
         def apply(self, observations):
             return super().apply(observations)
 
     model = (
-        PythonCompositionModel(table)
+        PythonAppliedModel(table)
         if route == "composed"
         else PerformanceWeightedModel(table)
     )
     propagator_class = NativeTwoBodyPropagator
     orbits, members = run_od(
         observations,
-        NativeOrbitFitter(propagator_class()),
+        NativeOrbitFitter(
+            propagator_class(),
+            iod_rchi2_threshold=123.0,
+            observation_selection_method="combinations",
+            velocity_method="gibbs",
+        ),
         [model],
         propagator=propagator_class(),
     )
@@ -64,9 +70,12 @@ def test_run_od_records_provenance(route):
     settings = json.loads(record["settings"])
     assert set(settings) == {"iod", "refinement", "fit"}
     assert settings["iod"]["acceptance"] == "corrected"
+    assert settings["iod"]["rchi2_threshold"] == 123.0
+    assert settings["iod"]["observation_selection_method"] == "combinations"
+    assert settings["iod"]["velocity_method"] == "gibbs"
     (descriptor,) = json.loads(record["models"])
     assert descriptor["type"].endswith(
-        "PythonCompositionModel" if route == "composed" else "PerformanceWeightedModel"
+        "PythonAppliedModel" if route == "composed" else "PerformanceWeightedModel"
     )
     assert all(len(h) == 64 for h in descriptor["tables_sha256"].values())
     # The IOD's ambiguity reaches the final orbit on both routes.
@@ -76,9 +85,44 @@ def test_run_od_records_provenance(route):
     assert record["rejected_fraction"] == pytest.approx(rejected / len(members))
 
 
+def test_provenance_reports_distinct_declared_iod_and_refinement_identities():
+    from adam_core.propagator import NativeBackend
+
+    class IodProvider(NativeTwoBodyPropagator):
+        native_backend = NativeBackend(
+            "iod-stage", adam_core.__version__, frozenset({"propagator_capsule"})
+        )
+
+    class RefinementProvider(NativeTwoBodyPropagator):
+        native_backend = NativeBackend(
+            "refinement-stage",
+            adam_core.__version__,
+            frozenset({"propagator_capsule"}),
+        )
+
+    observations = make_synthetic_observations()
+    fitted, members = run_od(
+        observations,
+        NativeOrbitFitter(TwoBodyPropagator()),
+        None,
+        propagator=TwoBodyPropagator(),
+    )
+    stamped = complete_provenance(
+        fitted,
+        members,
+        fitter=NativeOrbitFitter(IodProvider()),
+        propagator=RefinementProvider(),
+        models=[],
+        route="composed",
+    )
+    record = _record(stamped)
+    assert record["iod_backend"] == f"iod-stage {adam_core.__version__}"
+    assert record["refinement_backend"] == (f"refinement-stage {adam_core.__version__}")
+
+
 def test_backend_identity_names_declared_and_python_backends():
     assert backend_identity(NativeTwoBodyPropagator()) == (
-        "adam_core.two_body.external 0.6.1"
+        f"adam_core.two_body.external {adam_core.__version__}"
     )
     assert backend_identity(NativeTwoBodyPropagator) == backend_identity(
         NativeTwoBodyPropagator()

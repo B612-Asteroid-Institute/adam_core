@@ -187,7 +187,10 @@ impl Propagator for TwoBodyPropagator {
         epoch_tdb: Epoch,
         times_tdb: &[Epoch],
     ) -> PropagationResultValue<Vec<super::StmRow>> {
-        if non_gravitational_parameters.is_some() {
+        if non_gravitational_parameters
+            .as_ref()
+            .is_some_and(crate::NonGravitationalParametersRow::is_active)
+        {
             return Err(PropagationError::InvalidRequest(
                 "two-body STMs do not support non-gravitational parameters".to_string(),
             ));

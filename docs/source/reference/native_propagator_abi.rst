@@ -27,8 +27,11 @@ work_units=frozenset({"propagator_capsule"}))``. Its ``propagator_capsule()``
 returns a ``PyCapsule`` named exactly ``adam_core.propagator.v2``. Adam-core
 retains the capsule for the complete native call and compares the declaration's
 name, version and two-body declaration with the immutable identity in the
-table. Empty or mismatched identities fail before propagation. Subclasses that override
-propagation or the capsule method need a new declaration.
+table. Constructing ``NativeBackend`` with an algorithm work unit (rather than
+only ``propagator_capsule``), or with an empty identity field, raises
+``ValueError``. Empty or mismatched capsule identities fail before propagation.
+Subclasses that override propagation or the capsule method need a new
+declaration.
 
 The capsule points to ``ExternalPropagatorV2`` in
 ``adam_core_rs_coords::propagation``. ``abi_version`` must equal **2** exactly;
@@ -36,9 +39,11 @@ there is no major/minor compatibility rule. The distinct v2 capsule name and
 version intentionally prevent provisional v1 tables from being interpreted as
 the stabilized layout.
 
-Every structure has a frozen required prefix and four zeroed reserved
-pointer-sized words. Providers set ``struct_size`` to the bytes they actually
-supply. Consumers require ``EXTERNAL_PROPAGATOR_V2_MIN_SIZE`` for the mandatory
+Every structure has a frozen required prefix and four reserved pointer-sized
+words. Providers set ``struct_size`` to the bytes they actually supply. Every
+reserved word completely covered by that advertised size must be zero; a
+non-zero word is a protocol error. Consumers require
+``EXTERNAL_PROPAGATOR_V2_MIN_SIZE`` for the mandatory
 table fields and ``EXTERNAL_PROPAGATOR_V2_STM_SIZE`` before reading the optional
 STM slot. Requests similarly require ``PROPAGATE_REQUEST_V2_MIN_SIZE`` or
 ``PROPAGATE_STM_REQUEST_V2_MIN_SIZE``. A larger structure is accepted and the
@@ -47,7 +52,7 @@ field is read. Existing prefix fields must never be reordered or retyped.
 ABI v2 is defined for 64-bit extension processes. Its frozen prefix sizes are
 ``EXTERNAL_PROPAGATOR_V2_MIN_SIZE = 72``,
 ``EXTERNAL_PROPAGATOR_V2_STM_SIZE = 80``,
-``PROPAGATE_REQUEST_V2_MIN_SIZE = 160`` and
+``PROPAGATE_REQUEST_V2_MIN_SIZE = 168`` and
 ``PROPAGATE_STM_REQUEST_V2_MIN_SIZE = 112`` bytes. Providers must compile
 against the exact exported v2 definitions and constants, not copy an inferred
 Rust layout.
@@ -55,7 +60,9 @@ Rust layout.
 Capabilities
 ------------
 
-``capabilities`` is a bit set:
+``capabilities`` is a bit set. Unknown bits are rejected rather than ignored,
+so a provider cannot accidentally request semantics this consumer does not
+implement:
 
 * ``EXTERNAL_PROPAGATOR_CAP_THREAD_SAFE`` is mandatory. All callbacks and the
   context they reference may be used concurrently from arbitrary native
@@ -94,6 +101,14 @@ The callback receives all orbits and target times in one request. For
 ``pairwise == 1`` orbit *i* maps to time *i* and both lengths must match.
 ``out_valid == 0`` marks an individual failed row; a successful callback may
 therefore return partial row failures without failing the request.
+``out_failure_codes`` is an optional caller-owned byte buffer with one entry per
+output row. When it is non-null, providers write 0 for every valid row and one
+of these stable values for every invalid row: 1 ``NonFiniteInputState``, 2
+``NonFiniteOutputState``, 3 ``NonFiniteCovariance``, 4
+``SolverZeroDerivative``, 5 ``SolverMaxIterations`` or 6
+``IntegratorFailure``. Unknown codes, non-zero codes on valid rows, and zero
+codes on invalid rows are fatal protocol errors. When the pointer is null,
+validity remains available but the caller has elected not to receive a code.
 
 A non-null physical-parameter pointer has
 ``n_orbits * EXTERNAL_PHYSICAL_PARAMETERS_WIDTH`` values in
@@ -126,17 +141,22 @@ Callback status values are ``OK=0``, ``ERROR=1``, ``PANIC=2`` and
 failure, ``PANIC`` is a caught provider panic/exception, and ``INVALID`` is a
 malformed ABI request or protocol violation. On any non-OK status the whole
 request fails; adam-core never converts it into candidate-local row invalidity.
-The provider writes a NUL-terminated message when the validated prefix includes
-an error buffer. Messages may be truncated. No Rust panic, C++ exception or
-other language unwind may cross the C ABI.
+The provider writes a NUL-terminated message when the validated v2 prefix
+includes an error buffer. Messages may be truncated. An ABI-version mismatch
+must not write through v2-only error offsets because only the two-field header
+has been established. No Rust panic, C++ exception or other language unwind may
+cross the C ABI.
 
-Only ``OK`` may contain candidate-local failures. In that case ``out_valid=0``
-marks a failed row. ABI v2 has no per-row message or provider failure-code
-buffer; adam-core records the generic ``IntegratorFailure`` code and no row
-message, so providers must not rely on diagnostics that the ABI does not carry.
-A row marked valid but containing non-finite state/STM values is also treated as
-row-invalid. Unknown statuses and ``INVALID`` map to a fatal protocol error;
-``ERROR`` and ``PANIC`` map to fatal backend errors with distinct text.
+Only ``OK`` may contain candidate-local failures. In that case
+``out_valid=0`` marks a failed row and the optional stable per-row code preserves
+its ``PropagationFailureCode``; ABI v2 has no per-row message. Adam-core
+classifies a state row marked valid but containing non-finite output as
+``NonFiniteOutputState``. A non-finite state/STM row is never accepted as valid.
+Unknown statuses and ``INVALID`` map to a fatal protocol error; ``ERROR`` and
+``PANIC`` map to fatal backend errors with distinct text. The same distinction
+applies to linkage batches: row-local failures may reject one candidate, while
+a malformed request, callback error, panic or protocol violation aborts the
+whole core-owned batch.
 
 Migration from backend-owned OD methods
 ---------------------------------------

@@ -6,6 +6,8 @@ import numpy.testing as npt
 import pyarrow as pa
 import pytest
 
+import adam_core
+
 try:
     from adam_core.propagator.adam_pyoorb import PYOORBPropagator
 except ImportError:
@@ -53,7 +55,7 @@ class TwoBodyPropagator(Propagator):
     two_body_dynamics = True
     native_backend = NativeBackend(
         name="adam_core.two_body.external",
-        version="0.6.1",
+        version=adam_core.__version__,
         work_units=frozenset({"propagator_capsule"}),
     )
 

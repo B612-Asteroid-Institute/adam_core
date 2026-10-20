@@ -18,7 +18,6 @@ from adam_core.orbit_determination.differential_correction import (
 from adam_core.orbit_determination.native_orbit_fitter import NativeOrbitFitter
 from adam_core.orbit_determination.rejection import cmc2003_fit
 from adam_core.orbit_determination.tests.test_differential_correction import (
-    NativeTwoBodyPropagator,
     TwoBodyPropagator,
     make_initial_guess,
     make_synthetic_observations,
@@ -30,15 +29,14 @@ def observations():
     return make_synthetic_observations()
 
 
-@pytest.mark.parametrize("backend", [TwoBodyPropagator, NativeTwoBodyPropagator])
 @pytest.mark.parametrize(
     "jacobian, jacobian_evals", [("analytic", 0), ("2-point", 6), ("central", 12)]
 )
 @pytest.mark.parametrize("budget", [1, 2, 7, 8, 13, 14])
 def test_evaluation_budget_caps_solver_work(
-    observations, backend, jacobian, jacobian_evals, budget
+    observations, jacobian, jacobian_evals, budget
 ):
-    propagator = backend()
+    propagator = TwoBodyPropagator()
     initial = make_initial_guess()
     fitted, _ = fit_least_squares(
         initial,
@@ -67,18 +65,15 @@ def test_evaluation_budget_caps_solver_work(
         assert 1 <= jacobians <= budget - 1
 
 
-@pytest.mark.parametrize("backend", [TwoBodyPropagator, NativeTwoBodyPropagator])
 @pytest.mark.parametrize(
     "jacobian, expected_nfev", [("analytic", 2), ("2-point", 8), ("central", 14)]
 )
 @pytest.mark.parametrize("max_nfev", [None, 1000])
-def test_iteration_budget_is_separate(
-    observations, backend, jacobian, expected_nfev, max_nfev
-):
+def test_iteration_budget_is_separate(observations, jacobian, expected_nfev, max_nfev):
     fitted, _ = fit_least_squares(
         make_initial_guess(),
         observations,
-        backend(),
+        TwoBodyPropagator(),
         jacobian=jacobian,
         validate_covariance=False,
         max_iterations=1,
@@ -92,23 +87,21 @@ def test_iteration_budget_is_separate(
     assert fitted.success.to_pylist() == [False]
 
 
-@pytest.mark.parametrize("backend", [TwoBodyPropagator, NativeTwoBodyPropagator])
 @pytest.mark.parametrize("limit", ["max_nfev", "max_iterations"])
-def test_zero_solver_budget_is_rejected(observations, backend, limit):
+def test_zero_solver_budget_is_rejected(observations, limit):
     with pytest.raises(ValueError, match=limit):
-        fit_least_squares(make_initial_guess(), observations, backend(), **{limit: 0})
+        fit_least_squares(
+            make_initial_guess(), observations, TwoBodyPropagator(), **{limit: 0}
+        )
 
 
-@pytest.mark.parametrize("backend", [TwoBodyPropagator, NativeTwoBodyPropagator])
 @pytest.mark.parametrize("algorithm", ["worst_residual", "cmc2003"])
-def test_rejection_loops_forward_the_evaluation_budget(
-    observations, backend, algorithm
-):
+def test_rejection_loops_forward_the_evaluation_budget(observations, algorithm):
     if algorithm == "worst_residual":
         fitted, _ = iterative_fit(
             make_initial_guess(),
             observations,
-            backend(),
+            TwoBodyPropagator(),
             contamination_percentage=0,
             max_iterations=3,
             max_nfev=1,
@@ -118,7 +111,7 @@ def test_rejection_loops_forward_the_evaluation_budget(
         fitted, _ = cmc2003_fit(
             make_initial_guess(),
             observations,
-            backend(),
+            TwoBodyPropagator(),
             max_iterations=1,
             max_nfev=1,
             validate_covariance=False,

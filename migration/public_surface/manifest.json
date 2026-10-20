@@ -18299,7 +18299,7 @@
       "signals": {
         "plotting": false,
         "rust_reference": false,
-        "python_loop": false,
+        "python_loop": true,
         "numpy_reference": false,
         "pyarrow_reference": false,
         "quivr_reference": false,
@@ -18321,7 +18321,7 @@
       "kind": "class",
       "domain": "propagator",
       "source": "src/adam_core/propagator/propagator.py",
-      "line": 138,
+      "line": 139,
       "explicit_export": true,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -18349,7 +18349,7 @@
       "kind": "method",
       "domain": "propagator",
       "source": "src/adam_core/propagator/propagator.py",
-      "line": 163,
+      "line": 164,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {

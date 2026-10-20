@@ -430,7 +430,7 @@ impl<'a> WhitenedProblem<'a> {
                     .collect();
                 let rows = self.predictor.propagate_stm(
                     *state,
-                    self.geometry.non_gravitational_parameters,
+                    self.geometry.active_non_gravitational_parameters(),
                     epoch,
                     &times,
                 )?;
@@ -1514,8 +1514,7 @@ pub fn validate_fit_covariance_with<T: OriginTranslationProvider>(
 
 /// A copy of `orbit` (one row) with its Cartesian state replaced and no
 /// covariance: the warm-start seed of the next refit pass. Physical and
-/// non-gravitational parameter tables are not carried, matching the
-/// candidate batches of the other drivers.
+/// non-gravitational parameter tables are preserved unchanged.
 fn orbit_with_state(orbit: &OrbitBatch, state: [f64; 6]) -> PropagationResultValue<OrbitBatch> {
     let coordinates = CoordinateBatch::new(
         crate::CoordinateValues::Cartesian(vec![state]),
@@ -3464,6 +3463,571 @@ mod tests {
             .zip(b)
             .map(|(x, y)| (x - y).abs())
             .fold(0.0, f64::max)
+    }
+
+    /// Deterministic non-Keplerian predictor used to preserve the retired
+    /// closed-form callback oracles without crossing into Python:
+    /// `prediction = base + A * (state - truth)`.
+    struct LinearPredictor {
+        base: Vec<[f64; 6]>,
+        design: Vec<[f64; 6]>,
+        truth: [f64; 6],
+        batches: std::cell::RefCell<Vec<usize>>,
+    }
+
+    impl SphericalPredictor for LinearPredictor {
+        fn predict_spherical(
+            &self,
+            states: &[[f64; 6]],
+            _geometry: &OrbitGeometry,
+            observers: &ObserverBatch,
+        ) -> PropagationResultValue<Result<Vec<f64>, String>> {
+            self.batches.borrow_mut().push(states.len());
+            let indices: PropagationResultValue<Vec<usize>> = observers
+                .code
+                .iter()
+                .map(|code| {
+                    code.0
+                        .strip_prefix('T')
+                        .and_then(|value| value.parse::<usize>().ok())
+                        .filter(|&index| index < self.base.len())
+                        .ok_or_else(|| {
+                            PropagationError::InvalidRequest(format!(
+                                "linear predictor received unknown observer code {:?}",
+                                code.0
+                            ))
+                        })
+                })
+                .collect();
+            let indices = indices?;
+            let mut output = Vec::with_capacity(states.len() * observers.len() * 6);
+            for state in states {
+                let delta: [f64; 6] = std::array::from_fn(|axis| state[axis] - self.truth[axis]);
+                for &row in &indices {
+                    let mut predicted = self.base[row];
+                    for component in 0..2 {
+                        predicted[1 + component] += self.design[2 * row + component]
+                            .iter()
+                            .zip(delta)
+                            .map(|(sensitivity, offset)| sensitivity * offset)
+                            .sum::<f64>();
+                    }
+                    output.extend_from_slice(&predicted);
+                }
+            }
+            Ok(Ok(output))
+        }
+
+        fn backend(&self) -> super::super::BackendIdentity {
+            super::super::BackendIdentity {
+                name: "test.linear.non_keplerian".to_string(),
+                version: "1".to_string(),
+                two_body_dynamics: false,
+            }
+        }
+    }
+
+    struct LinearFixture {
+        observed: CoordinateBatch,
+        predictor: LinearPredictor,
+        /// Per-observation A^T R^-1 A matrices.
+        normal_rows: Vec<[[f64; 6]; 6]>,
+        /// Per-component whitened design rows (correlation-free fixtures).
+        whitened_design: Vec<[f64; 6]>,
+    }
+
+    fn add_normal(target: &mut [[f64; 6]; 6], source: &[[f64; 6]; 6]) {
+        for i in 0..6 {
+            for j in 0..6 {
+                target[i][j] += source[i][j];
+            }
+        }
+    }
+
+    fn invert_normal(normal: &[[f64; 6]; 6]) -> [f64; 36] {
+        let inverse = inverse_6x6(normal).expect("deterministic design is full rank");
+        std::array::from_fn(|index| inverse[index])
+    }
+
+    fn expected_linear_covariance(fixture: &LinearFixture, selected: &[bool]) -> [f64; 36] {
+        let mut normal = [[0.0_f64; 6]; 6];
+        for (row, row_normal) in fixture.normal_rows.iter().enumerate() {
+            if selected[row] {
+                add_normal(&mut normal, row_normal);
+            }
+        }
+        invert_normal(&normal)
+    }
+
+    fn max_relative_difference(actual: &[f64], expected: &[f64]) -> f64 {
+        actual
+            .iter()
+            .zip(expected)
+            .map(|(actual, expected)| (actual - expected).abs() / expected.abs().max(1e-30))
+            .fold(0.0, f64::max)
+    }
+
+    fn linear_fixture(correlation: f64) -> LinearFixture {
+        let template = synthetic_observations(None);
+        let mut base = vec![[f64::NAN; 6]; NUM_OBS];
+        let mut covariance = vec![f64::NAN; NUM_OBS * 36];
+        let mut design = vec![[0.0_f64; 6]; 2 * NUM_OBS];
+        let mut seed = 7_u64;
+        let mut next = || {
+            seed = seed
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
+            ((seed >> 11) as f64 / (1_u64 << 53) as f64 - 0.5) * 600.0
+        };
+        let mut normal_rows = Vec::with_capacity(NUM_OBS);
+        let mut whitened_design = Vec::with_capacity(2 * NUM_OBS);
+        for row in 0..NUM_OBS {
+            base[row][1] = 10.0 + 0.01 * row as f64;
+            base[row][2] = 0.0;
+            let sigma_lon = SIGMA_DEG * (0.75 + 0.035 * row as f64);
+            let sigma_lat = SIGMA_DEG * (1.20 - 0.025 * row as f64);
+            let cov = correlation * sigma_lon * sigma_lat;
+            covariance[row * 36 + 7] = sigma_lon * sigma_lon;
+            covariance[row * 36 + 8] = cov;
+            covariance[row * 36 + 13] = cov;
+            covariance[row * 36 + 14] = sigma_lat * sigma_lat;
+            design[2 * row] = std::array::from_fn(|_| next());
+            design[2 * row + 1] = std::array::from_fn(|_| next());
+
+            let determinant = sigma_lon * sigma_lon * sigma_lat * sigma_lat - cov * cov;
+            let inverse = [
+                sigma_lat * sigma_lat / determinant,
+                -cov / determinant,
+                -cov / determinant,
+                sigma_lon * sigma_lon / determinant,
+            ];
+            let mut row_normal = [[0.0_f64; 6]; 6];
+            for i in 0..6 {
+                for j in 0..6 {
+                    row_normal[i][j] = design[2 * row][i]
+                        * (inverse[0] * design[2 * row][j] + inverse[1] * design[2 * row + 1][j])
+                        + design[2 * row + 1][i]
+                            * (inverse[2] * design[2 * row][j]
+                                + inverse[3] * design[2 * row + 1][j]);
+                }
+            }
+            normal_rows.push(row_normal);
+            if correlation == 0.0 {
+                whitened_design.push(design[2 * row].map(|value| value / sigma_lon));
+                whitened_design.push(design[2 * row + 1].map(|value| value / sigma_lat));
+            }
+        }
+        let observed = CoordinateBatch::new(
+            crate::CoordinateValues::Spherical(base.clone()),
+            template.frame,
+            template.origins,
+            template.times,
+            Some(
+                CovarianceBatch::new(
+                    NUM_OBS,
+                    6,
+                    covariance,
+                    CovarianceUnits::Coordinate(crate::CoordinateRepresentation::Spherical),
+                )
+                .unwrap(),
+            ),
+        )
+        .unwrap();
+        LinearFixture {
+            observed,
+            predictor: LinearPredictor {
+                base,
+                design,
+                truth: TRUTH_STATE,
+                batches: std::cell::RefCell::new(Vec::new()),
+            },
+            normal_rows,
+            whitened_design,
+        }
+    }
+
+    fn linear_problem<'a>(
+        fixture: &'a LinearFixture,
+        config: &WhitenedFitConfig,
+    ) -> WhitenedProblem<'a> {
+        WhitenedProblem::new(
+            &fixture.predictor,
+            &orbit(TRUTH_STATE),
+            &fixture.observed,
+            &observers(),
+            config,
+            &NoopProvider,
+            &ZeroTranslationProvider,
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn linear_predictor_recovers_exact_wls_covariance_and_unit_quadratic_probe() {
+        let fixture = linear_fixture(0.0);
+        let expected = expected_linear_covariance(&fixture, &[true; NUM_OBS]);
+        let config = WhitenedFitConfig {
+            jacobian: JacobianMethod::Central,
+            ..WhitenedFitConfig::default()
+        };
+        let fit = fit_orbit_whitened_with(
+            &fixture.predictor,
+            &perturbed_start(),
+            &fixture.observed,
+            &observers(),
+            &[false; NUM_OBS],
+            &config,
+            &NoopProvider,
+            &ZeroTranslationProvider,
+        )
+        .unwrap();
+        assert!(fit.converged, "status {}", fit.status_code);
+        assert!(fit.warnings.is_empty(), "{:?}", fit.warnings);
+        assert!(max_abs_diff(&fit.state, &TRUTH_STATE) < 1e-11);
+        assert!(
+            max_relative_difference(&fit.covariance, &expected) < 2e-6,
+            "{}",
+            max_relative_difference(&fit.covariance, &expected)
+        );
+
+        let problem = linear_problem(&fixture, &config);
+        let residuals = problem.residuals_one(&TRUTH_STATE).unwrap();
+        let delta = weak_direction_delta_cost(
+            &problem,
+            &TRUTH_STATE,
+            &expected,
+            robust_cost(&residuals, LossType::Linear, config.f_scale),
+            &config,
+        )
+        .unwrap()
+        .unwrap();
+        assert!((delta - 1.0).abs() < 1e-6, "{delta}");
+    }
+
+    #[test]
+    fn linear_predictor_preserves_probe_warning_branches_and_analytic_fallback() {
+        let fixture = linear_fixture(0.0);
+        let expected = expected_linear_covariance(&fixture, &[true; NUM_OBS]);
+        let fabricated = expected.map(|value| value / 100.0);
+        let config = WhitenedFitConfig {
+            jacobian: JacobianMethod::Central,
+            ..WhitenedFitConfig::default()
+        };
+        let problem = linear_problem(&fixture, &config);
+        let residuals = problem.residuals_one(&TRUTH_STATE).unwrap();
+        let cost = robust_cost(&residuals, LossType::Linear, config.f_scale);
+
+        for (method, message) in [
+            (JacobianMethod::TwoPoint, "noise floor"),
+            (JacobianMethod::Central, "covariance may be unreliable"),
+        ] {
+            let mut warnings = Vec::new();
+            let returned = validated_covariance(
+                &problem,
+                fabricated,
+                method,
+                &TRUTH_STATE,
+                &residuals,
+                cost,
+                &config,
+                &mut warnings,
+            )
+            .unwrap();
+            assert_eq!(returned, fabricated);
+            assert_eq!(warnings.len(), 1, "{warnings:?}");
+            assert!(warnings[0].contains(message), "{:?}", warnings);
+        }
+
+        let mut warnings = Vec::new();
+        let recovered = validated_covariance(
+            &problem,
+            fabricated,
+            JacobianMethod::Analytic,
+            &TRUTH_STATE,
+            &residuals,
+            cost,
+            &config,
+            &mut warnings,
+        )
+        .unwrap();
+        assert_eq!(warnings.len(), 1, "{warnings:?}");
+        assert!(warnings[0].contains("central-difference Jacobian"));
+        assert!(max_relative_difference(&recovered, &expected) < 2e-6);
+    }
+
+    #[test]
+    fn linear_predictor_huber_covariance_removes_tail_and_probe_uses_robust_cost() {
+        const OUTLIER: usize = 3;
+        const OUTLIER_SIGMAS: f64 = 20.0;
+        let mut fixture = linear_fixture(0.0);
+        let sigma = fixture
+            .observed
+            .covariance
+            .as_ref()
+            .unwrap()
+            .values_row_major[OUTLIER * 36 + 14]
+            .sqrt();
+        if let crate::CoordinateValues::Spherical(values) = &mut fixture.observed.values {
+            values[OUTLIER][2] += OUTLIER_SIGMAS * sigma;
+        }
+        let config = WhitenedFitConfig {
+            jacobian: JacobianMethod::Central,
+            loss: LossType::Huber,
+            f_scale: 1.345,
+            ..WhitenedFitConfig::default()
+        };
+        let fit = fit_orbit_whitened_with(
+            &fixture.predictor,
+            &orbit(TRUTH_STATE),
+            &fixture.observed,
+            &observers(),
+            &[false; NUM_OBS],
+            &config,
+            &NoopProvider,
+            &ZeroTranslationProvider,
+        )
+        .unwrap();
+        assert!(fit.converged, "status {}", fit.status_code);
+        assert!(fit.warnings.is_empty(), "{:?}", fit.warnings);
+        assert!(fit.weights[OUTLIER] < 0.2, "{:?}", fit.weights);
+
+        let tail_component = 2 * OUTLIER + 1;
+        let mut normal = [[0.0_f64; 6]; 6];
+        for (component, row) in fixture.whitened_design.iter().enumerate() {
+            if component == tail_component {
+                continue;
+            }
+            for i in 0..6 {
+                for j in 0..6 {
+                    normal[i][j] += row[i] * row[j];
+                }
+            }
+        }
+        let expected = invert_normal(&normal);
+        assert!(max_relative_difference(&fit.covariance, &expected) < 2e-5);
+
+        let problem = linear_problem(&fixture, &config);
+        let residuals = problem.residuals_one(&fit.state).unwrap();
+        assert!(residuals[tail_component].abs() > config.f_scale);
+        let delta = weak_direction_delta_cost(
+            &problem,
+            &fit.state,
+            &fit.covariance,
+            robust_cost(&residuals, config.loss, config.f_scale),
+            &config,
+        )
+        .unwrap()
+        .unwrap();
+        assert!((delta - 1.0).abs() < 1e-3, "{delta}");
+    }
+
+    fn add_linear_observation_offset(
+        observed: &mut CoordinateBatch,
+        row: usize,
+        lon: f64,
+        lat: f64,
+    ) {
+        if let crate::CoordinateValues::Spherical(values) = &mut observed.values {
+            values[row][1] += lon;
+            values[row][2] += lat;
+        } else {
+            panic!("linear fixture is spherical");
+        }
+    }
+
+    fn cmc_linear_config(
+        jacobian: JacobianMethod,
+        validate_covariance: bool,
+        max_iterations: usize,
+    ) -> Cmc2003FitConfig {
+        Cmc2003FitConfig {
+            max_iterations,
+            fit: WhitenedFitConfig {
+                jacobian,
+                max_nfev: Some(1),
+                validate_covariance,
+                ..WhitenedFitConfig::default()
+            },
+            ..Cmc2003FitConfig::default()
+        }
+    }
+
+    #[test]
+    fn linear_predictor_cmc_finalization_uses_full_non_keplerian_sensitivities() {
+        for jacobian in [
+            JacobianMethod::Analytic,
+            JacobianMethod::Central,
+            JacobianMethod::TwoPoint,
+        ] {
+            for validate_covariance in [false, true] {
+                let fixture = linear_fixture(0.4);
+                let expected = expected_linear_covariance(&fixture, &[true; NUM_OBS]);
+                let output = cmc2003_fit_with(
+                    &fixture.predictor,
+                    &orbit(TRUTH_STATE),
+                    &fixture.observed,
+                    &observers(),
+                    &cmc_linear_config(jacobian, validate_covariance, 3),
+                    &NoopProvider,
+                    &ZeroTranslationProvider,
+                )
+                .unwrap();
+                assert_eq!(output.n_iterations, 1);
+                assert_eq!(output.n_rejected, 0);
+                assert_eq!(output.n_recovered, 0);
+                assert!(output.flags.is_empty(), "{:?}", output.flags);
+                assert!(output.fit.warnings.is_empty(), "{:?}", output.fit.warnings);
+                assert!(max_relative_difference(&output.fit.covariance, &expected) < 2e-6);
+                assert_eq!(output.fit.iterations, 1); // exact solver budget
+                let batches = fixture.predictor.batches.borrow();
+                let expected_batches: &[usize] = if validate_covariance {
+                    &[1, 12, 2, 1]
+                } else {
+                    &[1, 12, 1]
+                };
+                assert_eq!(batches.as_slice(), expected_batches, "{jacobian:?}");
+            }
+        }
+    }
+
+    fn highest_leverage_offset(fixture: &LinearFixture, raw_chi2: f64) -> (usize, f64, f64, f64) {
+        let covariance = expected_linear_covariance(fixture, &[true; NUM_OBS]);
+        let covariance = covariance_matrix(&covariance);
+        let covariances = &fixture
+            .observed
+            .covariance
+            .as_ref()
+            .unwrap()
+            .values_row_major;
+        let mut best = (f64::NEG_INFINITY, 0_usize, [0.0_f64; 2], [0.0_f64; 3]);
+        for row in 0..NUM_OBS {
+            let variance_lon = covariances[row * 36 + 7];
+            let covariance_lonlat = covariances[row * 36 + 8];
+            let variance_lat = covariances[row * 36 + 14];
+            let l00 = variance_lon.sqrt();
+            let l10 = covariance_lonlat / l00;
+            let l11 = (variance_lat - l10 * l10).sqrt();
+            let a0 = fixture.predictor.design[2 * row];
+            let a1 = fixture.predictor.design[2 * row + 1];
+            let b0 = a0.map(|value| value / l00);
+            let b1 = std::array::from_fn(|axis| (a1[axis] - l10 * b0[axis]) / l11);
+            let quadratic = |left: &[f64; 6], right: &[f64; 6]| {
+                let mut value = 0.0;
+                for i in 0..6 {
+                    for j in 0..6 {
+                        value += left[i] * covariance[i][j] * right[j];
+                    }
+                }
+                value
+            };
+            let m00 = quadratic(&b0, &b0);
+            let m01 = quadratic(&b0, &b1);
+            let m11 = quadratic(&b1, &b1);
+            let discriminant = ((m00 - m11) * (m00 - m11) + 4.0 * m01 * m01).sqrt();
+            let eigenvalue = 0.5 * (m00 + m11 + discriminant);
+            let mut direction = if m01.abs() > 1e-30 {
+                [m01, eigenvalue - m00]
+            } else if m00 >= m11 {
+                [1.0, 0.0]
+            } else {
+                [0.0, 1.0]
+            };
+            let norm = direction[0].hypot(direction[1]);
+            direction[0] /= norm;
+            direction[1] /= norm;
+            if eigenvalue > best.0 {
+                best = (eigenvalue, row, direction, [l00, l10, l11]);
+            }
+        }
+        let scale = raw_chi2.sqrt();
+        let whitened = [scale * best.2[0], scale * best.2[1]];
+        let lon = best.3[0] * whitened[0];
+        let lat = best.3[1] * whitened[0] + best.3[2] * whitened[1];
+        (best.1, best.0, lon, lat)
+    }
+
+    #[test]
+    fn linear_predictor_cmc_near_threshold_recovery_and_final_mask_covariance() {
+        for jacobian in [
+            JacobianMethod::Analytic,
+            JacobianMethod::Central,
+            JacobianMethod::TwoPoint,
+        ] {
+            for (raw_chi2, max_iterations) in [(6.0, 1_usize), (10.0, 2_usize)] {
+                let mut fixture = linear_fixture(0.4);
+                let (row, leverage, lon, lat) = highest_leverage_offset(&fixture, raw_chi2);
+                assert!(raw_chi2 / (1.0 - leverage) > 9.0, "{leverage}");
+                assert!(raw_chi2 * (1.0 - leverage) < 7.0, "{leverage}");
+                add_linear_observation_offset(&mut fixture.observed, row, lon, lat);
+                let output = cmc2003_fit_with(
+                    &fixture.predictor,
+                    &orbit(TRUTH_STATE),
+                    &fixture.observed,
+                    &observers(),
+                    &cmc_linear_config(jacobian, false, max_iterations),
+                    &NoopProvider,
+                    &ZeroTranslationProvider,
+                )
+                .unwrap();
+                let expected_mask: Vec<bool> = (0..NUM_OBS)
+                    .map(|index| index == row && max_iterations == 1)
+                    .collect();
+                assert_eq!(output.n_recovered, max_iterations - 1);
+                assert_eq!(output.fit.evaluation.outlier, expected_mask);
+                assert_eq!(output.flags, vec!["max_iterations".to_string()]);
+                assert!(output.fit.warnings.is_empty(), "{:?}", output.fit.warnings);
+                let selected: Vec<bool> = expected_mask.iter().map(|flag| !flag).collect();
+                let expected = expected_linear_covariance(&fixture, &selected);
+                assert!(max_relative_difference(&output.fit.covariance, &expected) < 2e-6);
+                // Every pass spends one solver evaluation, one 12-state full
+                // finalization Jacobian, and one final evaluation.
+                assert_eq!(output.fit.iterations, 1);
+                assert_eq!(
+                    fixture.predictor.batches.borrow().len(),
+                    3 * (max_iterations + 1),
+                    "{jacobian:?} {raw_chi2}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn linear_predictor_cmc_rejects_outlier_and_recovers_known_state_and_covariance() {
+        const OUTLIER: usize = 6;
+        let mut fixture = linear_fixture(0.4);
+        let sigma = fixture
+            .observed
+            .covariance
+            .as_ref()
+            .unwrap()
+            .values_row_major[OUTLIER * 36 + 14]
+            .sqrt();
+        add_linear_observation_offset(&mut fixture.observed, OUTLIER, 0.0, 40.0 * sigma);
+        let output = cmc2003_fit_with(
+            &fixture.predictor,
+            &perturbed_start(),
+            &fixture.observed,
+            &observers(),
+            &Cmc2003FitConfig {
+                fit: WhitenedFitConfig {
+                    jacobian: JacobianMethod::Central,
+                    ..WhitenedFitConfig::default()
+                },
+                ..Cmc2003FitConfig::default()
+            },
+            &NoopProvider,
+            &ZeroTranslationProvider,
+        )
+        .unwrap();
+        assert!(output.fit.converged, "status {}", output.fit.status_code);
+        assert_eq!(output.n_rejected, 1);
+        assert!(output.fit.evaluation.outlier[OUTLIER]);
+        assert!(output.flags.is_empty(), "{:?}", output.flags);
+        assert!(output.fit.warnings.is_empty(), "{:?}", output.fit.warnings);
+        assert!(max_abs_diff(&output.fit.state, &TRUTH_STATE) < 1e-11);
+        let selected: Vec<bool> = (0..NUM_OBS).map(|row| row != OUTLIER).collect();
+        let expected = expected_linear_covariance(&fixture, &selected);
+        assert!(max_relative_difference(&output.fit.covariance, &expected) < 2e-6);
     }
 
     #[derive(Clone, Copy, PartialEq)]
@@ -5499,6 +6063,118 @@ mod tests {
         assert_eq!(via_abi, direct);
     }
 
+    fn orbit_with_non_gravitational(source: Option<&str>, a1: Option<f64>) -> OrbitBatch {
+        orbit(TRUTH_STATE)
+            .with_non_gravitational_parameters(crate::NonGravitationalParametersBatch {
+                source: vec![source.map(str::to_string)],
+                a1: vec![a1],
+                a2: vec![None],
+                a3: vec![None],
+                aln: vec![Some(1.0)],
+                nk: vec![None],
+                nm: vec![Some(2.0)],
+                nn: vec![Some(5.093)],
+                r0: vec![Some(1.0)],
+            })
+            .unwrap()
+    }
+
+    #[test]
+    fn inactive_non_gravitational_rows_have_in_tree_and_capsule_stm_parity() {
+        let observed = synthetic_observations(None);
+        let (propagator, options) = two_body();
+        let direct = PropagatorPredictor {
+            propagator: &propagator,
+            options: &options,
+            provider: &NoopProvider,
+            translation_provider: &ZeroTranslationProvider,
+        };
+        let table = super::super::two_body_reference::table(TwoBodyPropagator::default());
+        let external = unsafe { super::super::ExternalPropagator::from_raw(table) }.unwrap();
+        let capsule = PropagatorPredictor {
+            propagator: &external,
+            options: &options,
+            provider: &NoopProvider,
+            translation_provider: &ZeroTranslationProvider,
+        };
+        let config = WhitenedFitConfig {
+            jacobian: JacobianMethod::Propagator,
+            ..WhitenedFitConfig::default()
+        };
+
+        for inactive in [
+            orbit_with_non_gravitational(Some("source-only"), None),
+            orbit_with_non_gravitational(Some("zero-a1"), Some(0.0)),
+        ] {
+            let direct_problem = WhitenedProblem::new(
+                &direct,
+                &inactive,
+                &observed,
+                &observers(),
+                &config,
+                &NoopProvider,
+                &ZeroTranslationProvider,
+            )
+            .unwrap();
+            let capsule_problem = WhitenedProblem::new(
+                &capsule,
+                &inactive,
+                &observed,
+                &observers(),
+                &config,
+                &NoopProvider,
+                &ZeroTranslationProvider,
+            )
+            .unwrap();
+            for geometry in [&direct_problem.geometry, &capsule_problem.geometry] {
+                assert!(geometry.non_gravitational_parameters.is_some());
+                assert!(geometry.active_non_gravitational_parameters().is_none());
+                assert_eq!(
+                    geometry.non_gravitational_source.as_deref(),
+                    inactive
+                        .non_gravitational_parameters
+                        .as_ref()
+                        .unwrap()
+                        .source[0]
+                        .as_deref()
+                );
+                let candidate =
+                    super::super::od::candidate_orbit_batch(&[geometry.state], geometry).unwrap();
+                assert_eq!(
+                    candidate.non_gravitational_parameters,
+                    inactive.non_gravitational_parameters
+                );
+            }
+            let state = direct_problem.geometry.state;
+            let direct_jacobian = direct_problem
+                .jacobian(JacobianMethod::Propagator, &state, &[])
+                .unwrap();
+            let capsule_jacobian = capsule_problem
+                .jacobian(JacobianMethod::Propagator, &state, &[])
+                .unwrap();
+            assert!(max_abs_diff(&direct_jacobian, &capsule_jacobian) < 1e-12);
+        }
+
+        let active = orbit_with_non_gravitational(Some("active"), Some(1e-10));
+        for predictor in [&direct as &dyn SphericalPredictor, &capsule] {
+            let problem = WhitenedProblem::new(
+                predictor,
+                &active,
+                &observed,
+                &observers(),
+                &config,
+                &NoopProvider,
+                &ZeroTranslationProvider,
+            )
+            .unwrap();
+            assert!(problem.geometry.non_gravitational_parameters.is_some());
+            let error = problem
+                .jacobian(JacobianMethod::Propagator, &problem.geometry.state, &[])
+                .unwrap_err();
+            assert!(error.to_string().contains("non-gravitational"), "{error}");
+        }
+    }
+
     #[test]
     fn corrected_acceptance_reports_stalled_candidates() {
         let observed = synthetic_observations(None);
@@ -5713,6 +6389,161 @@ mod tests {
         assert_eq!(full.fit.state, refined.fit.state);
         assert_eq!(full.fit.evaluation.outlier, refined.fit.evaluation.outlier);
         assert_eq!(full.n_rejected, refined.n_rejected);
+    }
+
+    struct StageCountingPredictor<'a> {
+        inner: &'a dyn SphericalPredictor,
+        calls: std::cell::Cell<usize>,
+        states: std::cell::Cell<usize>,
+    }
+
+    impl StageCountingPredictor<'_> {
+        fn reset(&self) {
+            self.calls.set(0);
+            self.states.set(0);
+        }
+    }
+
+    impl SphericalPredictor for StageCountingPredictor<'_> {
+        fn predict_spherical(
+            &self,
+            states: &[[f64; 6]],
+            geometry: &OrbitGeometry,
+            observers: &ObserverBatch,
+        ) -> PropagationResultValue<Result<Vec<f64>, String>> {
+            self.calls.set(self.calls.get() + 1);
+            self.states.set(self.states.get() + states.len());
+            self.inner.predict_spherical(states, geometry, observers)
+        }
+
+        fn supports_stm(&self) -> bool {
+            self.inner.supports_stm()
+        }
+
+        fn propagate_stm(
+            &self,
+            state: [f64; 6],
+            non_gravitational_parameters: Option<crate::NonGravitationalParametersRow>,
+            epoch_tdb: crate::Epoch,
+            times_tdb: &[crate::Epoch],
+        ) -> PropagationResultValue<Vec<super::super::StmRow>> {
+            self.inner
+                .propagate_stm(state, non_gravitational_parameters, epoch_tdb, times_tdb)
+        }
+
+        fn backend(&self) -> super::super::BackendIdentity {
+            self.inner.backend()
+        }
+    }
+
+    #[test]
+    fn iod_refinement_full_od_and_run_od_use_only_their_configured_stage_predictors() {
+        let observed = synthetic_observations_spaced(1, Some(3));
+        let observers = observers_spaced(1);
+        let (propagator, options) = two_body();
+        let inner = PropagatorPredictor {
+            propagator: &propagator,
+            options: &options,
+            provider: &NoopProvider,
+            translation_provider: &ZeroTranslationProvider,
+        };
+        let iod_predictor = StageCountingPredictor {
+            inner: &inner,
+            calls: std::cell::Cell::new(0),
+            states: std::cell::Cell::new(0),
+        };
+        let refinement_predictor = StageCountingPredictor {
+            inner: &inner,
+            calls: std::cell::Cell::new(0),
+            states: std::cell::Cell::new(0),
+        };
+        let config = FullOdConfig {
+            iod: super::super::od::IodConfig {
+                max_triplets: Some(3),
+                contamination_percentage: 20.0,
+                ..corrected_iod_config(50.0)
+            },
+            refinement: RefinementConfig::default(),
+        };
+        let fit = match config.refinement {
+            RefinementConfig::Cmc2003(loop_config) => loop_config.fit,
+            RefinementConfig::WorstResidual(loop_config) => loop_config.fit,
+        };
+
+        let iod = run_iod_with(
+            &iod_predictor,
+            &observed,
+            &observers,
+            &config.iod,
+            &fit,
+            &NoopProvider,
+            &ZeroTranslationProvider,
+        )
+        .unwrap();
+        assert!(iod_predictor.calls.get() > 0);
+        assert_eq!(refinement_predictor.calls.get(), 0);
+        assert!(iod.triplets_tried <= 3);
+        let seed = iod
+            .seed_orbit()
+            .unwrap()
+            .expect("configured IOD found a seed");
+        let iod_calls = iod_predictor.calls.get();
+
+        let refined = refine_with(
+            &refinement_predictor,
+            &seed,
+            &observed,
+            &observers,
+            &config.refinement,
+            &NoopProvider,
+            &ZeroTranslationProvider,
+        )
+        .unwrap();
+        assert!(refined.fit.converged);
+        assert_eq!(iod_predictor.calls.get(), iod_calls);
+        assert!(refinement_predictor.calls.get() > 0);
+
+        iod_predictor.reset();
+        refinement_predictor.reset();
+        let full = full_od_with(
+            &iod_predictor,
+            &refinement_predictor,
+            &observed,
+            &observers,
+            &config,
+            &NoopProvider,
+            &ZeroTranslationProvider,
+        )
+        .unwrap();
+        assert!(full.refined.is_some());
+        assert_eq!(full.iod.triplets_tried, iod.triplets_tried);
+        assert_eq!(full.iod.candidates.len(), iod.candidates.len());
+        assert!(iod_predictor.calls.get() > 0);
+        assert!(refinement_predictor.calls.get() > 0);
+
+        iod_predictor.reset();
+        refinement_predictor.reset();
+        let obs_code: Vec<String> = observers.code.iter().map(|code| code.0.clone()).collect();
+        let none = vec![None; observed.len()];
+        let run = run_od_with(
+            &iod_predictor,
+            &refinement_predictor,
+            &observed,
+            &observers,
+            &obs_code,
+            &none,
+            &none,
+            Vec::new(),
+            &config,
+            &NoopProvider,
+            &ZeroTranslationProvider,
+        )
+        .unwrap();
+        assert!(!run.models_changed);
+        assert!(run.full_od.refined.is_some());
+        assert_eq!(run.full_od.iod.triplets_tried, iod.triplets_tried);
+        assert!(iod_predictor.calls.get() > 0);
+        assert!(refinement_predictor.calls.get() > 0);
     }
 
     #[test]
