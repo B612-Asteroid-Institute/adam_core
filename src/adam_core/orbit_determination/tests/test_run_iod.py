@@ -173,6 +173,18 @@ def test_spans_settings_reach_the_search(two_body_arc) -> None:  # noqa: F811
         ranging_settings={"ranging_enabled": False},
     )
     assert explicit_default.triplets_tried <= 32
+    _, _, combinations_default = run_iod(
+        two_body_arc,
+        TwoBodyPropagator(),
+        min_obs=6,
+        contamination_percentage=0.0,
+        rchi2_threshold=1e-30,
+        observation_selection_method="combinations",
+        # Span-only settings must not replace the combinations budget.
+        span_settings={"span_max_triplets": 1},
+        ranging_settings={"ranging_enabled": False},
+    )
+    assert combinations_default.triplets_tried == 3
     with pytest.raises(ValueError, match="span_max_triplets.*bool"):
         run_iod(
             two_body_arc,
