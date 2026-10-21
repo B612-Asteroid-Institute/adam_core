@@ -45,7 +45,7 @@ from ..od_orchestration import (
 )
 from ..orbit_fitter import OrbitFitter
 from ..veres2017 import SIGMA_TABLE_PACKAGE, SigmaFillModel
-from .test_differential_correction import TwoBodyPropagator
+from .test_differential_correction import NativeTwoBodyPropagator, TwoBodyPropagator
 from .test_observation_uncertainty import make_bias_table, make_observations
 from .test_observatory_bias_model_wiring import (
     UNUSED_PROPAGATOR,
@@ -997,4 +997,17 @@ class TestCoreRunOdRoutes:
         npt.assert_allclose(
             members.used_astrometry.sigma_lon.to_numpy(zero_copy_only=False),
             2.0 * members.original_astrometry.sigma_lon.to_numpy(zero_copy_only=False),
+        )
+
+
+def test_native_run_od_validates_full_settings_before_empty_exit() -> None:
+    with pytest.raises(ValueError, match="max_iterations"):
+        run_od(
+            OrbitDeterminationObservations.empty(),
+            NativeOrbitFitter(
+                NativeTwoBodyPropagator(),
+                rejection_kwargs={"max_iterations": 0},
+            ),
+            None,
+            propagator=NativeTwoBodyPropagator(),
         )

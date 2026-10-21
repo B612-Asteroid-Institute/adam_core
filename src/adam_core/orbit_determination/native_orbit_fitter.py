@@ -1,7 +1,7 @@
 import logging
 import uuid
 import warnings
-from typing import Any, Literal, Optional, Tuple, Type
+from typing import Any, Literal, Optional, Tuple, Type, cast
 
 import numpy as np
 import pyarrow as pa
@@ -28,10 +28,9 @@ from .differential_correction import (
     _iterative_fit,
 )
 from .evaluate import OrbitDeterminationObservations, evaluate_orbits
-from .fitted_orbits import FittedOrbitMembers, FittedOrbits
+from .fitted_orbits import FittedOrbitMembers, FittedOrbits, OdProvenance
 from .iod import IOD_DEFAULTS, _placeholder_orbit, run_iod
 from .orbit_fitter import OrbitFitter
-from .provenance import with_iod_provenance
 from .rejection import _cmc2003_fit
 
 logger = logging.getLogger(__name__)
@@ -79,7 +78,59 @@ def tables_from_native_full_od(
     fitted_orbits, members = _fitted_tables_from_native_output(
         seed, observations, fit, np.asarray(fit["weights"], dtype=np.float64)
     )
-    return with_iod_provenance(fitted_orbits, iod.get("ambiguous_with")), members
+    alternatives = len(iod.get("ambiguous_with") or ())
+    import json
+
+    iod_diagnostics = {
+        key: iod.get(key)
+        for key in (
+            "triplets_tried",
+            "candidates_evaluated",
+            "candidates_failed",
+            "candidate_failures",
+            "pair_visits",
+            "raw_pair_visits",
+            "middle_visits",
+            "search_cap_exhausted",
+            "corrections_run",
+            "accepted",
+            "ambiguous_with",
+            "not_found_reason",
+        )
+    }
+    refinement_diagnostics = {
+        key: fit.get(key) for key in ("passes", "n_rejected", "n_recovered", "flags")
+    }
+    fitted_orbits = fitted_orbits.set_column(
+        "provenance",
+        OdProvenance.from_kwargs(
+            iod_ambiguous=[alternatives > 0] * len(fitted_orbits),
+            iod_alternatives=[alternatives] * len(fitted_orbits),
+            iod_provider=[
+                json.dumps(
+                    output["iod_provider"], sort_keys=True, separators=(",", ":")
+                )
+            ]
+            * len(fitted_orbits),
+            refinement_provider=[
+                json.dumps(
+                    output["refinement_provider"], sort_keys=True, separators=(",", ":")
+                )
+            ]
+            * len(fitted_orbits),
+            iod_diagnostics=[
+                json.dumps(iod_diagnostics, sort_keys=True, separators=(",", ":"))
+            ]
+            * len(fitted_orbits),
+            refinement_diagnostics=[
+                json.dumps(
+                    refinement_diagnostics, sort_keys=True, separators=(",", ":")
+                )
+            ]
+            * len(fitted_orbits),
+        ),
+    )
+    return fitted_orbits, members
 
 
 class NativeOrbitFitter(OrbitFitter):
@@ -183,9 +234,9 @@ class NativeOrbitFitter(OrbitFitter):
         iod_acceptance: Literal["corrected", "prefit"] = IOD_DEFAULTS["acceptance"],
         loss: LossType = OD_DEFAULTS["fit"]["loss"],
         f_scale: float = HUBER_F_SCALE_DEFAULT,
-        outlier_rejection: Literal["worst_residual", "cmc2003"] = OD_DEFAULTS[
-            "refinement"
-        ],
+        outlier_rejection: Literal["worst_residual", "cmc2003"] = cast(
+            Literal["worst_residual", "cmc2003"], OD_DEFAULTS["refinement"]
+        ),
         rejection_kwargs: dict[str, Any] | None = None,
         *,
         propagator_class: Optional[Type[Propagator]] = None,
@@ -373,6 +424,7 @@ class NativeOrbitFitter(OrbitFitter):
         if not self.supports_native_full_od():
             return super().full_od(object_id, observations, propagator)
         from adam_core import _rust_native
+
         from .differential_correction import _native_problem
 
         iod_settings, refinement, fit_settings = self.native_settings()

@@ -62,11 +62,45 @@ size check the optional STM callback is read as one aligned field, never as a
 padded whole-prefix structure. On 64-bit targets the frozen values are
 ``EXTERNAL_PROPAGATOR_V2_MIN_SIZE = 72``,
 ``EXTERNAL_PROPAGATOR_V2_STM_SIZE = 80``,
+``EXTERNAL_PROPAGATOR_V2_LEGACY_FULL_SIZE = 112``,
+``EXTERNAL_PROPAGATOR_V2_METADATA_SIZE = 128``,
 ``PROPAGATE_REQUEST_V2_MIN_SIZE = 168`` and
 ``PROPAGATE_STM_REQUEST_V2_MIN_SIZE = 112`` bytes. Generic adam-core Rust APIs
 remain available on every supported target. Providers must compile against the
 exact exported v2 definitions and target-specific constants, not copy an
 inferred layout.
+
+Reproducibility metadata suffix
+-------------------------------
+
+The frozen table prefix and four reserved words retain their original offsets.
+A complete legacy table ends at ``EXTERNAL_PROPAGATOR_V2_LEGACY_FULL_SIZE``
+(112 bytes on 64-bit targets). The append-only suffix adds two immutable
+NUL-terminated lowercase 64-character SHA-256 strings,
+``configuration_fingerprint`` and ``data_fingerprint``; a complete suffix ends
+at ``EXTERNAL_PROPAGATOR_V2_METADATA_SIZE`` (128 bytes on 64-bit targets).
+Sizes between those boundaries are rejected because they advertise only part
+of an atomic metadata contract. General propagation remains compatible with a
+short or legacy v2 table, but native OD fails clearly unless both hashes are
+present. The provider hashes every dynamics-affecting configuration input and
+all external ephemeris/model data. Adam-core decodes and copies this metadata
+from the exact retained capsule used by each IOD/refinement stage before
+releasing the GIL; provenance never asks Python for a second capsule afterward.
+Unknown fields appended after the complete suffix remain ignored.
+
+``adam-assist`` adaptation contract
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+``ASSISTPropagator`` remains a propagation-only capsule provider; Core does
+not add an OD callback or import ASSIST. Its provider table must append both
+fields after the frozen reserved words, retain stable NUL-terminated storage
+for the capsule lifetime, and advertise at least
+``EXTERNAL_PROPAGATOR_V2_METADATA_SIZE``. The configuration hash covers every
+setting that can change propagated states (including integration and force
+model choices); the data hash covers the exact immutable ephemeris/kernel and
+other dynamics data content. An older adam-assist table remains usable for
+general propagation but is intentionally rejected by native OD as
+provenance-incomplete. This is the only required downstream ABI adaptation.
 
 Capabilities
 ------------

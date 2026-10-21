@@ -592,3 +592,15 @@ def test_candidate_failure_diagnostics_are_public_and_typed() -> None:
     assert report.candidate_failures == (
         IodCandidateFailure((4, 1, 3), 2, "row failure: no convergence"),
     )
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "message"),
+    [
+        ({"span_settings": {"max_pair_visits": 0}}, "max_pair_visits"),
+        ({"fit_settings": {"prop_tol": 0.0}}, "propagation_tol"),
+    ],
+)
+def test_run_iod_validates_all_settings_before_empty_exit(kwargs, message) -> None:
+    with pytest.raises(ValueError, match=message):
+        run_iod(two_body_arc_empty(), TwoBodyPropagator(), **kwargs)

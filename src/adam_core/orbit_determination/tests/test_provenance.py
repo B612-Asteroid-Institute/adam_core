@@ -64,10 +64,38 @@ def test_run_od_records_provenance(route):
     )
     record = _record(orbits)
     assert record["adam_core_version"] == adam_core.__version__
+    assert (
+        record["adam_core_build"] == "unknown"
+        or record["adam_core_build"].startswith("dirty:")
+        or len(record["adam_core_build"]) == 40
+    )
+    assert len(record["input_fingerprint"]) == 64
     assert record["route"] == route
     assert record["fitter"].endswith("NativeOrbitFitter")
     assert record["refinement_backend"] == backend_identity(propagator_class())
     assert record["iod_backend"] == record["refinement_backend"]
+    for field in ("iod_provider", "refinement_provider"):
+        provider = json.loads(record[field])
+        assert (
+            provider["name"]
+            in record[
+                "iod_backend" if field == "iod_provider" else "refinement_backend"
+            ]
+        )
+        assert provider["abi_version"] == 2
+        assert provider["identity_validated_by_capsule"] is True
+        assert provider["capabilities"] == provider["known_capabilities"]
+        assert provider["integration_time_scale"] == "tdb"
+        assert len(provider["configuration_fingerprint"]) == 64
+        assert len(provider["data_fingerprint"]) == 64
+    iod_diagnostics = json.loads(record["iod_diagnostics"])
+    assert set(("pair_visits", "raw_pair_visits", "middle_visits")) <= set(
+        iod_diagnostics
+    )
+    refinement_diagnostics = json.loads(record["refinement_diagnostics"])
+    assert set(("passes", "n_rejected", "n_recovered", "flags")) <= set(
+        refinement_diagnostics
+    )
     settings = json.loads(record["settings"])
     assert set(settings) == {"iod", "refinement", "fit"}
     assert settings["iod"]["acceptance"] == "corrected"
@@ -86,7 +114,7 @@ def test_run_od_records_provenance(route):
     assert record["rejected_fraction"] == pytest.approx(rejected / len(members))
 
 
-def test_provenance_reports_distinct_declared_iod_and_refinement_identities():
+def test_provenance_keeps_exact_native_identity_not_later_declarations():
     from adam_core.propagator import NativeBackend
 
     class IodProvider(NativeTwoBodyPropagator):
@@ -117,8 +145,10 @@ def test_provenance_reports_distinct_declared_iod_and_refinement_identities():
         route="composed",
     )
     record = _record(stamped)
-    assert record["iod_backend"] == "iod-stage 1.2.3-rc.4"
-    assert record["refinement_backend"] == "refinement-stage 2.0.0-beta.2"
+    assert record["iod_backend"].startswith("adam_core.two_body.external ")
+    assert record["refinement_backend"].startswith("adam_core.two_body.external ")
+    assert "iod-stage" not in record["iod_provider"]
+    assert "refinement-stage" not in record["refinement_provider"]
 
 
 def test_backend_identity_names_declared_and_python_backends():
@@ -155,6 +185,39 @@ def test_model_descriptor_hashes_table_content():
     )
     assert same == again
     assert same["tables_sha256"] != other["tables_sha256"]
+
+
+def test_model_descriptor_hashes_numpy_configuration_and_sets():
+    import numpy as np
+
+    class ArrayModel:
+        def __init__(self, values, excluded):
+            self.values = values
+            self.excluded = excluded
+
+    first = model_descriptor(ArrayModel(np.array([1.0, 2.0]), {"a", "b"}))
+    same = model_descriptor(ArrayModel(np.array([1.0, 2.0]), {"b", "a"}))
+    changed_array = model_descriptor(ArrayModel(np.array([1.0, 3.0]), {"a", "b"}))
+    changed_set = model_descriptor(ArrayModel(np.array([1.0, 2.0]), {"a", "c"}))
+    assert first == same
+    assert first["descriptor_sha256"] != changed_array["descriptor_sha256"]
+    assert first["descriptor_sha256"] != changed_set["descriptor_sha256"]
+
+
+def test_model_descriptor_rejects_unsupported_and_cyclic_configuration():
+    class Model:
+        pass
+
+    unsupported = Model()
+    unsupported.value = object()
+    with pytest.raises(TypeError, match="unsupported provenance field"):
+        model_descriptor(unsupported)
+
+    cyclic = Model()
+    cyclic.value = []
+    cyclic.value.append(cyclic.value)
+    with pytest.raises(ValueError, match="cyclic provenance"):
+        model_descriptor(cyclic)
 
 
 def test_other_entry_points_leave_provenance_null():

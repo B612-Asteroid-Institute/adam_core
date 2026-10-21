@@ -623,15 +623,14 @@ def _fit_least_squares(
         - ``"analytic"``: the observation partials (topocentric
           spherical projection including light time) chained with the 2-body
           state transition matrix, computed by forward-mode automatic
-          differentiation in the Rust backend and passed to
-          `scipy.optimize.least_squares` as an exact Jacobian callable.
+          differentiation inside adam-core's native trust-region solver.
           Residual values remain full N-body through `propagator`. This
           removes the finite-difference noise that fabricates curvature — and
           hence collapses the covariance — in weakly constrained
           (line-of-sight) directions, and improves convergence along flat
           chi2 valleys.
-        - ``"central"``: the solver uses its default forward differences, and
-          the covariance is recomputed after the fit from a central-difference
+        - ``"central"``: the solver and final covariance use a
+          central-difference
           Jacobian of the whitened residual vector through the full residual
           pipeline. Use this when the arc contains dynamics the 2-body state
           transition matrix cannot represent (e.g. a deep planetary
@@ -642,8 +641,6 @@ def _fit_least_squares(
           canonical adam-core Rust solver implements this path over the same
           selected propagation capsule as every other Jacobian mode.
 
-        Passing an explicit ``jac`` in ``**kwargs`` overrides this parameter
-        and computes the covariance from the solver-reported Jacobian.
     validate_covariance : bool, optional
         If True (default), measure the actual chi2 change at a 1-sigma
         displacement along the covariance's weakest direction (two extra
@@ -665,8 +662,7 @@ def _fit_least_squares(
           growing with its residual. No observation is removed: every
           observation stays in the solution with an iteratively-reweighted
           least-squares weight of ``min(1, f_scale / |r|)`` per component,
-          reported on the members (see Notes). Requires
-          ``method='trf'`` (default) or ``'dogbox'``.
+          reported on the members (see Notes).
     f_scale : float, optional
         Huber transition point in units of whitened (1-sigma) residual
         components. Default `HUBER_F_SCALE_DEFAULT` (1.345), the classical
@@ -674,7 +670,8 @@ def _fit_least_squares(
         Ignored for ``loss="linear"``.
     **kwargs
         Solver settings forwarded to the Rust driver: ``xtol``, ``ftol``,
-        ``gtol`` (default 1e-12 each, scipy's stopping rules), ``max_iterations``
+        ``gtol`` (default 1e-12 each, using the documented native stopping rules),
+        ``max_iterations``
         (positive integer, default 100: optimizer iterations, one Jacobian
         each), and ``max_nfev`` (positive integer or None, default None:
         every residual-vector evaluation: the initial state, each accepted or
@@ -698,9 +695,8 @@ def _fit_least_squares(
 
     Notes
     -----
-    **Solver contract.** The optimizer is the trust-region Gauss-Newton
-    method of ``scipy.optimize.least_squares(method="trf", x_scale="jac")``
-    without bounds, run natively: parameters are scaled by their Jacobian
+    **Solver contract.** The optimizer is adam-core's native unbounded
+    trust-region Gauss-Newton method. Parameters are scaled by their Jacobian
     column norms, each iteration takes the exact trust-region step of the
     scaled Gauss-Newton model, a step is accepted when the cost decreases,
     and the region shrinks fourfold on a poor actual-to-predicted reduction

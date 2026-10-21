@@ -6,6 +6,17 @@ This file contains notable changes in adam-core
 
 ### Changed
 
+- Reproducible OD and physical-policy hardening: native provider ABI v2 has an
+  append-only atomic configuration/data SHA-256 suffix (the frozen prefix and
+  STM offsets do not move), native OD requires both hashes, and ``run_od``
+  records the exact decoded stage providers, native Core source commit,
+  ordered input/used-astrometry hash, complete model configuration and data
+  hashes. UTC/TAI edges now use absolute ERFA ``Utctai``/``Taiutc`` conversion,
+  OD dynamics use centralized TDB epochs, systematic-ranging probabilities
+  integrate the physical ``d rho d rho_dot`` cell measure, bounded triplet
+  search reports independent work counters/caps, and CMC2003 fails closed when
+  a trustworthy fit covariance is unavailable.
+
 - Orbit determination now owns every IOD, least-squares, rejection, linkage
   and ``run_od`` loop in adam-core. Separately built propagators contribute
   only a private batched ``adam_core.propagator.v2`` capsule; Python prediction
@@ -25,8 +36,9 @@ This file contains notable changes in adam-core
   composing the generic adam-core algorithms directly with concrete
   ``Propagator`` implementations. See `docs/source/reference/native_propagator_abi.rst`.
 
-- **Breaking Rust API:** `PropagationError` adds `RowFailure`; exhaustive
-  downstream matches must now handle candidate-local numerical failures.
+- **Breaking Rust API:** `PropagationError` adds `RowFailure` and
+  `CmcCovarianceUnavailable`; exhaustive downstream matches must now handle
+  candidate-local numerical failures and fail-closed CMC covariance refusal.
   `Backend` and `BackendProtocol` already exist in released 0.6.1 and continue
   to represent fatal provider and ABI/protocol failures. This breaking contract
   targets adam-core 0.7.0 and does not claim 0.6.x compatibility: released

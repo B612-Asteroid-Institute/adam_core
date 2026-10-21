@@ -26,16 +26,16 @@ Design
 * ``model.apply(observations) -> observations`` stays the internal primitive,
   shared with the ``observatory_bias_model`` parameter of the lower-level OD
   functions. Prefer `run_od` when the provenance of the fit matters.
-* Called without ``models``, `run_od` applies the shipped default model stack,
-  written out in its body and explained in its Notes. Some of those models
-  import data packages for their tables.
+* Called without ``models``, `run_od` uses observations exactly as supplied.
+  Explicit ``models="default"`` selects the Institute reference stack described
+  in its Notes; some models in that stack import data packages for their tables.
 """
 
 from __future__ import annotations
 
 import uuid
 from collections.abc import Sequence
-from typing import Literal, Optional
+from typing import Literal, Optional, TypeAlias, cast
 
 import numpy as np
 import pyarrow as pa
@@ -71,7 +71,7 @@ __all__ = [
 
 # Models accepted by run_od: a single model, an ordered sequence of models
 # (applied left to right, equivalent to a CompositeModel), or None.
-ObservationModels = (
+ObservationModels: TypeAlias = (
     ObservationUncertaintyModel | Sequence[ObservationUncertaintyModel] | None
 )
 
@@ -214,9 +214,9 @@ def _stamp_object_id(
 
 def _default_models() -> list[ObservationUncertaintyModel]:
     """
-    The shipped default stack of `run_od`, in application order (see its
-    Notes). Built here, not as a signature default, because the models load
-    their tables from data packages when constructed. Every model whose
+    The explicit Institute reference stack of `run_od`, in application order
+    (see its Notes). Built here, not as a signature default, because the
+    models load their tables from data packages when constructed. Every model whose
     data is missing is reported in one error, before any fit runs, so the
     caller learns all of what to install at once.
     """
@@ -283,6 +283,7 @@ def _fused_run_od(
     _warn_if_analytic_jacobian_mismatches(propagator, fit_settings["jacobian"])
     backend_object_id = object_id if object_id is not None else uuid.uuid4().hex
     from adam_core import _rust_native
+
     from .differential_correction import _native_problem
     from .iod import _placeholder_orbit
 
@@ -329,7 +330,7 @@ def _fused_run_od(
 def run_od(
     observations: OrbitDeterminationObservations,
     fitter: OrbitFitter,
-    models: ObservationModels | Literal["default"] = "default",
+    models: ObservationModels | Literal["default"] = None,
     *,
     propagator: Propagator,
     object_id: str | None = None,
@@ -364,7 +365,8 @@ def run_od(
         the models.
     models : `ObservationUncertaintyModel`, sequence of them, None, or "default"
         Observation model(s) to apply before fitting, in order. The default
-        ``"default"`` applies the shipped stack (sigma fill, EFCC18
+        ``None`` uses observations exactly as supplied and requires no private data.
+        Explicit ``"default"`` applies the Institute stack (sigma fill, EFCC18
         debiasing, empirical station covariance, nightly deweighting; see
         Notes), whose tables come from data packages. Pass None (or an empty
         sequence) to fit the observations exactly as supplied (members then
@@ -409,10 +411,11 @@ def run_od(
 
     Notes
     -----
-    **The default configuration.** ``models="default"`` together with a
-    default-constructed `NativeOrbitFitter` is the Asteroid Institute
-    configuration (decision 2026-09-23, from the 100-object walk-forward
-    study). The models, in the order applied:
+    **The explicit Institute reference configuration.**
+    ``models="default"`` together with a default-constructed
+    `NativeOrbitFitter` selects the Asteroid Institute configuration (decision
+    2026-09-23, from the 100-object walk-forward study). The models, in the
+    order applied:
 
     1. ``SigmaFillModel()``: a sigma where the MPC reports none, from the
        ``v2_sigma_fill`` station/catalog table (0.75" global fallback). Fills
@@ -435,8 +438,8 @@ def run_od(
     `load_bias_table`), and `EFCC18DebiasModel` locates ``bias.dat`` through
     the ``jpl_debias_2018`` package, the ``ADAM_CORE_EFCC18_BIAS_DAT``
     environment variable or the EFCC18 cache. adam_core does not depend on
-    these packages: the default raises an `ImportError` /
-    `FileNotFoundError` naming the missing one, and ``models=None`` or an
+    these packages: the explicit ``models="default"`` stack raises an
+    `ImportError` / `FileNotFoundError` naming the missing one, and ``models=None`` or an
     explicit model list built with your own tables needs none of them.
 
     The fitter defaults are those of `NativeOrbitFitter`: Carpino-Milani-
@@ -460,6 +463,17 @@ def run_od(
     here; disabling such internal handling when models are supplied is the
     responsibility of the backend plugin.
     """
+    if isinstance(models, str) and models != "default":
+        raise ValueError(
+            "models must be observation models, None or 'default'; " f"got {models!r}"
+        )
+    from .native_orbit_fitter import NativeOrbitFitter
+
+    if isinstance(fitter, NativeOrbitFitter):
+        from adam_core import _rust_native
+
+        iod_settings, refinement, fit_settings = fitter.native_settings()
+        _rust_native.validate_full_od_settings(iod_settings, refinement, fit_settings)
     if len(observations) == 0:
         return FittedOrbits.empty(), FittedOrbitMembers.empty()
 
@@ -468,11 +482,6 @@ def run_od(
         raise ValueError("Observation ids must be unique and non-null")
 
     if isinstance(models, str):
-        if models != "default":
-            raise ValueError(
-                "models must be observation models, None or 'default'; "
-                f"got {models!r}"
-            )
         models = _default_models()
 
     # adam-core runs the whole step in one native crossing: models, IOD,
@@ -490,6 +499,7 @@ def run_od(
                 propagator=propagator,
                 models=_model_list(models),
                 route="fused",
+                observations=observations,
             ),
             fitted_orbit_members,
         )
@@ -513,6 +523,7 @@ def run_od(
         propagator=propagator,
         models=_model_list(models),
         route="composed",
+        observations=observations,
     )
     return fitted_orbits, fitted_orbit_members
 
@@ -522,7 +533,9 @@ def refine(
     observations: OrbitDeterminationObservations,
     propagator: Propagator,
     *,
-    rejection: Literal["cmc2003", "worst_residual", "none"] = OD_DEFAULTS["refinement"],
+    rejection: Literal["cmc2003", "worst_residual", "none"] = cast(
+        Literal["cmc2003", "worst_residual", "none"], OD_DEFAULTS["refinement"]
+    ),
     rejection_settings: Optional[dict] = None,
     fit_settings: Optional[dict] = None,
 ) -> tuple[FittedOrbits, FittedOrbitMembers]:

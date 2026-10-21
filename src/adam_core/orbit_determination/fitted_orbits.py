@@ -121,6 +121,11 @@ class OdProvenance(qv.Table):
 
     #: adam-core version that produced the orbit.
     adam_core_version = qv.LargeStringColumn(nullable=True)
+    #: Source commit embedded by the native build; ``dirty:<commit>`` for a
+    #: modified checkout, or explicit ``unknown`` when no source identity exists.
+    adam_core_build = qv.LargeStringColumn(nullable=True)
+    #: SHA-256 of the ordered caller table plus exact used-astrometry rows.
+    input_fingerprint = qv.LargeStringColumn(nullable=True)
     #: ``"fused"`` (one native ``run_od`` crossing) or ``"composed"``.
     route = qv.LargeStringColumn(nullable=True)
     #: The `OrbitFitter` class (``module.qualname``).
@@ -129,6 +134,14 @@ class OdProvenance(qv.Table):
     #: propagator without a `NativeBackend` is ``python:module.qualname``).
     iod_backend = qv.LargeStringColumn(nullable=True)
     refinement_backend = qv.LargeStringColumn(nullable=True)
+    #: Capsule-decoded native provider metadata (JSON), including ABI,
+    #: capabilities, scale, dynamics, and immutable configuration/data hashes.
+    iod_provider = qv.LargeStringColumn(nullable=True)
+    refinement_provider = qv.LargeStringColumn(nullable=True)
+    #: Native decision diagnostics (JSON): bounded IOD work/failures and
+    #: refinement pass/rejection/recovery/CMC flags.
+    iod_diagnostics = qv.LargeStringColumn(nullable=True)
+    refinement_diagnostics = qv.LargeStringColumn(nullable=True)
     #: IOD, refinement and solver settings (JSON), when the fitter exposes
     #: them (`NativeOrbitFitter.native_settings`).
     settings = qv.LargeStringColumn(nullable=True)

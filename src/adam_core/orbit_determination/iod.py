@@ -3,7 +3,7 @@ import time
 import uuid
 from dataclasses import dataclass
 from types import MappingProxyType
-from typing import Literal, Optional, Tuple, Type
+from typing import Any, Literal, Optional, Tuple, Type, cast
 
 import numpy as np
 import numpy.typing as npt
@@ -327,7 +327,9 @@ class IodCandidate:
     root_index: int
     root_count: int
     velocity_method: str
-    #: Two-body score of the preliminary orbit against every observation.
+    #: Two-body score of the preliminary orbit on the configured prefit
+    #: scope: the first correction-stage rows by default (``"local"``), or
+    #: the whole arc when ``prefit_scope="whole_arc"``.
     prefit_chi2: float
     prefit_reduced_chi2: float
     #: Rows the outlier trial removed to reach acceptance (empty otherwise).
@@ -364,8 +366,12 @@ class RangingSample:
     The systematic-ranging sample of an arc Gauss could not handle: the
     attributable (position and rates at the reference observation), and per
     orbit in the admissible region its heliocentric ecliptic state at the
-    attributable's epoch, range, range rate, chi2 and weight
-    ``exp(-delta_chi2 / 2)`` (normalized).
+    attributable's epoch, range, range rate, chi2 and normalized physical
+    cell probability. Before normalization each node has weight
+    ``exp(-chi2 / 2) * rho * delta(log(rho)) * delta(rho_dot)``: the ``rho``
+    Jacobian converts the log-spaced range grid to the physical
+    ``d(rho) d(rho_dot)`` measure, including the actual admissible range-rate
+    cell width.
     """
 
     attributable: dict
@@ -454,6 +460,12 @@ class IodReport:
     candidates_failed: int
     corrections_run: int
     not_found_reason: Optional[str]
+    #: Work counters are independent of contamination/outlier policy. The
+    #: search stops deterministically when any configured cap is exhausted.
+    pair_visits: int = 0
+    raw_pair_visits: int = 0
+    middle_visits: int = 0
+    search_cap_exhausted: bool = False
     #: Candidate-local row failures skipped while later roots/triplets ran.
     candidate_failures: tuple[IodCandidateFailure, ...] = ()
     #: Indices of converged candidates that are distinct solutions (outside
@@ -477,17 +489,33 @@ class IodReport:
         return None if self.accepted is None else self.candidates[self.accepted]
 
 
+def _state6(values: Any) -> tuple[float, float, float, float, float, float]:
+    state = tuple(float(value) for value in values)
+    if len(state) != 6:
+        raise ValueError(f"native IOD state must contain 6 values, got {len(state)}")
+    return cast(tuple[float, float, float, float, float, float], state)
+
+
+def _triplet3(values: Any) -> tuple[int, int, int]:
+    triplet = tuple(int(value) for value in values)
+    if len(triplet) != 3:
+        raise ValueError(
+            f"native IOD observation triplet must contain 3 rows, got {len(triplet)}"
+        )
+    return cast(tuple[int, int, int], triplet)
+
+
 def report_from_iod_output(output: dict) -> IodReport:
     """The `IodReport` of a Rust IOD dict (`run_iod_ipc` or the ``iod`` entry
     of an adam-core ``full_od`` / ``run_od`` output)."""
     candidates = tuple(
         IodCandidate(
-            state=tuple(float(v) for v in candidate["state"]),
+            state=_state6(candidate["state"]),
             epoch_days=int(candidate["epoch_days"]),
             epoch_nanos=int(candidate["epoch_nanos"]),
             epoch_scale=candidate["epoch_scale"],
             window=(int(candidate["window"][0]), int(candidate["window"][1])),
-            triplet=tuple(int(row) for row in candidate["triplet"]),
+            triplet=_triplet3(candidate["triplet"]),
             root_index=int(candidate["root_index"]),
             root_count=int(candidate["root_count"]),
             velocity_method=candidate["velocity_method"],
@@ -506,7 +534,7 @@ def report_from_iod_output(output: dict) -> IodReport:
             corrected_state=(
                 None
                 if candidate.get("corrected_state") is None
-                else tuple(float(v) for v in candidate["corrected_state"])
+                else _state6(candidate["corrected_state"])
             ),
             stages=int(candidate.get("stages", 0)),
             correction_note=candidate.get("correction_note"),
@@ -522,9 +550,13 @@ def report_from_iod_output(output: dict) -> IodReport:
         candidates_failed=int(output.get("candidates_failed", 0)),
         corrections_run=int(output.get("corrections_run", 0)),
         not_found_reason=output.get("not_found_reason"),
+        pair_visits=int(output.get("pair_visits", 0)),
+        raw_pair_visits=int(output.get("raw_pair_visits", 0)),
+        middle_visits=int(output.get("middle_visits", 0)),
+        search_cap_exhausted=bool(output.get("search_cap_exhausted", False)),
         candidate_failures=tuple(
             IodCandidateFailure(
-                triplet=tuple(int(row) for row in failure["triplet"]),
+                triplet=_triplet3(failure["triplet"]),
                 root_index=int(failure["root_index"]),
                 message=str(failure["message"]),
             )
@@ -606,8 +638,11 @@ def run_iod(
         Overrides of the ``observation_selection_method="spans"`` search
         (keys ``span_target_days``, ``span_min_days``, ``span_max_days``,
         ``span_dense_window_days``, ``span_edge_window_days``,
-        ``span_max_triplets``); missing keys keep the Rust defaults of
-        ``SpanSearchConfig``.
+        ``span_max_triplets``, ``max_pair_visits``,
+        ``max_raw_pair_visits`` and ``max_middle_visits``); the last three
+        independently cap pair, raw-pair and middle-row work regardless of
+        contamination or ``max_triplets``. Missing keys keep the Rust defaults
+        of ``SpanSearchConfig``.
     acceptance : {"corrected", "prefit"}
         See above.
     correction_settings : dict, optional
@@ -650,14 +685,6 @@ def run_iod(
         Every scored candidate, the accepted index, the search counters and
         the reason when no orbit was accepted.
     """
-    if observatory_bias_model is not None:
-        observations = observatory_bias_model.apply(observations)
-    if len(observations) == 0:
-        return (
-            FittedOrbits.empty(),
-            FittedOrbitMembers.empty(),
-            _empty_report("no observations"),
-        )
     iod_settings = {
         "min_obs": min_obs,
         "min_arc_length": min_arc_length,
@@ -674,8 +701,18 @@ def run_iod(
         **(correction_settings or {}),
         **(ranging_settings or {}),
     }
-    orbit_id = uuid.uuid4().hex
     from adam_core import _rust_native
+
+    _rust_native.validate_iod_settings(iod_settings, fit_settings)
+    if observatory_bias_model is not None:
+        observations = observatory_bias_model.apply(observations)
+    if len(observations) == 0:
+        return (
+            FittedOrbits.empty(),
+            FittedOrbitMembers.empty(),
+            _empty_report("no observations"),
+        )
+    orbit_id = uuid.uuid4().hex
 
     from .differential_correction import _native_problem
 
@@ -940,6 +977,7 @@ def initial_orbit_determination(
         iod_orbit_members = FittedOrbitMembers.empty()
     else:
         from adam_core import _rust_native
+
         from .differential_correction import _native_problem
 
         native_prop = propagator(**propagator_kwargs)

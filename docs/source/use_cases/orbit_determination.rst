@@ -123,14 +123,14 @@ observations, so the ``OrbitFitter`` interface stays flag-free.
   None of them changes a position.
 * ``CompositeModel`` (or a plain sequence) applies models left to right.
 
-The shipped defaults
-~~~~~~~~~~~~~~~~~~~~
+Built-in defaults and the Institute reference stack
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Calling the pieces with no arguments gives the Asteroid Institute default
-configuration (the outcome of the 100-object walk-forward study, decision
-2026-09-23). Every default is the default value of the signature that owns
-it, and ``run_od`` called without ``models`` applies the default model stack,
-which is written out in its body and explained in its docstring:
+The numerical defaults on ``NativeOrbitFitter`` are the outcome of the
+100-object walk-forward study (decision 2026-09-23). ``run_od`` itself defaults
+to ``models=None`` and therefore fits the supplied observations without an
+observation-model or private-data dependency. Select the full Asteroid
+Institute reference model stack explicitly with ``models="default"``:
 
 .. code-block:: python
 
@@ -139,10 +139,13 @@ which is written out in its body and explained in its docstring:
    fitted_orbits, members = run_od(
        observations,
        NativeOrbitFitter(ASSISTPropagator()),
+       models="default",
        propagator=ASSISTPropagator(),
    )
 
-Some of the default models import data packages for their tables.
+The optional ``models="default"`` reference stack imports data packages for
+some of its tables; the actual ``run_od`` default is ``models=None`` and has no
+private-data dependency.
 ``SigmaFillModel()`` and ``EmpiricalCovarianceModel()`` load
 ``v2_sigma_fill`` and ``v2_full`` from the private
 ``adam-observatory-uncertainties`` package, and ``EFCC18DebiasModel()``
@@ -208,8 +211,11 @@ model list built with your own tables needs no package.
        and ``weight``; the models act on the fit only. Judge a held-out
        observation against its nominal position and original sigma.
        ``FittedOrbits.provenance`` (``OdProvenance``) records the
-       adam-core version, route, fitter, IOD and refinement backends,
-       settings, model descriptors with table hashes, IOD ambiguity, and the
+       adam-core version and exact native source commit, route, fitter,
+       exact capsule-decoded IOD/refinement identities, ABI capabilities,
+       integration scales and configuration/data hashes, all settings, the
+       ordered fitting-input hash, model descriptors with content hashes, IOD
+       ambiguity, bounded-search and CMC/refinement diagnostics, and the
        number and fraction of observations rejected (CMC2003 may reject up
        to half the arc; the fraction shows how much it did).
      - ``run_od``
