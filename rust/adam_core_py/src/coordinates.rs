@@ -3016,7 +3016,7 @@ fn oem_write_orbits_kvn(
     orbits_ipc: &Bound<'_, PyBytes>,
     originator: &str,
     creation_date: &str,
-    version: String,
+    version: Option<String>,
     object_name: Option<String>,
     object_id: Option<String>,
     comments: Vec<String>,

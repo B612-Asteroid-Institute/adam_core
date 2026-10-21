@@ -73,3 +73,28 @@ def test_vnc_rotating_blocks_hold_the_local_frame_product(history, tmp_path):
     loaded = orbit_from_oem(str(tmp_path / "vnc.oem")).coordinates
     assert loaded.time.equals(history.coordinates.time)
     assert loaded.covariance.is_all_nan()
+
+
+def test_version_2_writes_a_validated_file_with_the_table_frame(history, tmp_path):
+    path = str(tmp_path / "two.oem")
+    options = dict(creation_date="2026-10-06T00:00:00", comments=["a comment"])
+    orbit_to_oem(history, path, "ME", version="2.0", covariance_frame="TNW", **options)
+    text = open(path).read()
+    assert text.startswith("CCSDS_OEM_VERS = 2.0\nCREATION_DATE = 2026-10-06T00:00:00")
+    assert "\nMETA_START\nCOMMENT a comment\nOBJECT_NAME = " in text
+    assert "\nREF_FRAME = ICRF\n" in text and text.count("COV_REF_FRAME = TNW") == 4
+    assert "annex B5" not in text
+    segment = json.loads(_rust_native.oem_parse_kvn(path))
+    written = [block["matrix"] for block in segment["segments"][0]["covariances"]]
+    local = LocalFrameCovariances.from_orbits(history, "TNW").covariance.to_matrix()
+    expected = convert_cartesian_covariance_au_to_km(local)
+    sigma = np.sqrt(np.diagonal(expected, axis1=1, axis2=2))
+    bound = 1e-12 * sigma[:, :, None] * sigma[:, None, :]
+    assert np.all(np.abs(np.reshape(written, (4, 6, 6)) - expected) <= bound)
+    with pytest.raises(ValueError, match="Annex B5 is an OEM 3.0 provision"):
+        orbit_to_oem(
+            history, path, "ME", version="2.0", covariance_frame="VNC_ROTATING"
+        )
+    # Without a version the legacy product is unchanged.
+    orbit_to_oem(history, path, "ME")
+    assert "\nREF_FRAME = EME2000\n" in open(path).read()
