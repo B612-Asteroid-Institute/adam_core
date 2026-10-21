@@ -1,6 +1,6 @@
 # adam-core Rust Packaging Notes
 
-Last updated: 2026-08-31.
+Last updated: 2026-10-21.
 
 ## Supported Build Path
 
@@ -16,6 +16,7 @@ Last updated: 2026-08-31.
 - This is intentional because maturin uses that Cargo version for wheel metadata when `project.version` is dynamic.
 - `migration/scripts/write_maturin_version.py` mirrors the Cargo version into `src/adam_core/_version.py` before build.
 - Stable versions are identical in both systems. Supported Cargo prereleases are normalized explicitly, for example `0.5.6-rc.1` to PEP 440 `0.5.6rc1`.
+- The current breaking source line is Python/Cargo `0.7.0` for the wheel implementation and all six public Rust crates, with exact `=0.7.0` internal requirements. Released `0.6.1` remains incompatible with the propagation-only v2 provider contract.
 - `pyproject.toml` does not declare `[tool.pdm.version]`; PDM SCM versioning is not part of the native wheel path.
 - If the checkout is exactly on a `vX.Y.Z` or prerelease tag, `write_maturin_version.py` fails when the normalized tag and Cargo versions differ.
 - `migration/scripts/verify_preview_versions.py` enforces explicit preview/stable channel semantics and exact public-crate pins. Stable version, tag, protected-environment, resumable-publication, and release-order policy is canonical in `docs/source/getting_started/releasing.rst`.

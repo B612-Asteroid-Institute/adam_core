@@ -311,6 +311,7 @@ def test_provider_identity_uses_native_semver_with_or_without_version_module(
     from adam_core.orbit_determination._native_dispatch import native_propagator
 
     native_semver = _rust_native.two_body_propagator_semver()
+    assert native_semver == "0.7.0"
     monkeypatch.setattr(adam_core, "__version__", "9.9.9rc7")
     descriptor = native_propagator(TwoBodyPropagator())
     assert descriptor[2] == native_semver

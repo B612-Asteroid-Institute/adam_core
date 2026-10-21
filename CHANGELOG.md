@@ -28,10 +28,11 @@ This file contains notable changes in adam-core
 - **Breaking Rust API:** `PropagationError` adds `RowFailure`; exhaustive
   downstream matches must now handle candidate-local numerical failures.
   `Backend` and `BackendProtocol` already exist in released 0.6.1 and continue
-  to represent fatal provider and ABI/protocol failures. This unreleased
-  contract does not claim 0.6.x compatibility: the eventual
-  adam-core release version and compatible adam-assist dependency floor remain
-  to be settled, and released adam-assist 0.5.0 does not implement this v2 ABI.
+  to represent fatal provider and ABI/protocol failures. This breaking contract
+  targets adam-core 0.7.0 and does not claim 0.6.x compatibility: released
+  adam-core 0.6.1 and adam-assist 0.5.0 do not implement this v2 ABI. The
+  compatible adam-assist 0.6.0 commit and dependency floor remain pending final
+  provider review and are intentionally not pinned in adam-core CI yet.
 
 - ``FittedOrbits`` now includes nullable ``physical_parameters`` and
   ``non_gravitational_parameters`` columns so fitted and candidate orbits do

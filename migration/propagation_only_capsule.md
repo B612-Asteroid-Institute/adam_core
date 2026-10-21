@@ -58,10 +58,11 @@ the C ABI.
 
 ## Version and Rust error compatibility
 
-This document specifies an unreleased branch contract, not a ``0.6.x``
-compatibility promise. The adam-core release version and the minimum compatible
-adam-assist dependency are still to be settled. Released adam-core 0.6.1 and
-adam-assist 0.5.0 do not establish compatibility with this v2 layout.
+This document specifies the unreleased adam-core ``0.7.0`` contract, not a
+``0.6.x`` compatibility promise. Released adam-core 0.6.1 and adam-assist 0.5.0
+are incompatible with this v2 layout. The compatible adam-assist 0.6.0 commit
+and dependency floor remain pending final provider review and must not be
+invented or pinned in adam-core CI before then.
 
 For Rust callers this is also a breaking exhaustive-match change:
 ``PropagationError`` adds the public ``RowFailure`` variant for candidate-local
