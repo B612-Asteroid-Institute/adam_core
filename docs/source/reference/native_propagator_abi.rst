@@ -137,8 +137,10 @@ A non-null non-gravitational pointer has
 ``n_orbits * EXTERNAL_NON_GRAVITATIONAL_WIDTH`` values in the order listed
 above. Before encoding nulls as NaN, the adam-core consumer rejects every
 present non-finite physical or non-gravitational value; ``Some(NaN)`` can never
-silently become null. On the provider side NaN remains the specified null
-sentinel. Providers must apply the complete active non-gravitational row
+silently become null. A provider decodes NaN as the specified null sentinel but
+must reject every other non-finite value (positive or negative infinity) as
+``INVALID`` before constructing typed batches or invoking either propagation
+callback. Providers must apply the complete active non-gravitational row
 consistently in propagation and in any derivatives they advertise. Adam-core
 carries both typed batches through every candidate, finite-difference batch,
 rejection refit and returned ``FittedOrbits`` table.

@@ -34,8 +34,11 @@ incompatible) and lifecycle contract in
 `docs/source/reference/native_propagator_abi.rst`. ``NativeBackend`` rejects
 algorithm work units at construction time. Consumers ignore unknown optional
 capability bits for forward negotiation, while still rejecting malformed known
-capabilities and non-zero advertised reserved words. A successful
-propagation request may report row-local failures through ``out_valid`` and the
+capabilities and non-zero advertised reserved words. Adam-core rejects present
+non-finite typed dynamics before encoding nulls; providers decode NaN as null
+but reject positive or negative infinity as ``INVALID`` before constructing
+Core batches or invoking propagation. A successful propagation request may
+report row-local failures through ``out_valid`` and the
 optional stable ``out_failure_codes`` buffer; malformed requests, callback
 errors, panics and protocol errors are fatal to the entire workflow (including
 a linkage batch).

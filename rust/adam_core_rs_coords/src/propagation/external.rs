@@ -335,6 +335,23 @@ fn encode_optional_parameter(
     }
 }
 
+fn decode_provider_optional_parameter(
+    value: f64,
+    batch: &str,
+    field: &str,
+    row: usize,
+) -> Result<Option<f64>, CallbackFailure> {
+    if value.is_nan() {
+        return Ok(None);
+    }
+    if !value.is_finite() {
+        return Err(CallbackFailure::Invalid(format!(
+            "external propagator {batch}.{field}[{row}] is present but non-finite"
+        )));
+    }
+    Ok(Some(value))
+}
+
 fn failure_code_to_abi(code: Option<PropagationFailureCode>) -> u8 {
     match code {
         None => EXTERNAL_PROPAGATION_FAILURE_NONE,
@@ -1343,19 +1360,34 @@ unsafe fn run_stm_request<P: Propagator>(
             request.non_gravitational_parameters,
             EXTERNAL_NON_GRAVITATIONAL_WIDTH,
         );
-        let field = |index: usize| (!values[index].is_nan()).then_some(values[index]);
+        let field = |index: usize, name: &str| {
+            decode_provider_optional_parameter(
+                values[index],
+                "non_gravitational_parameters",
+                name,
+                0,
+            )
+        };
         Some(crate::NonGravitationalParametersRow {
-            a1: field(0),
-            a2: field(1),
-            a3: field(2),
-            aln: field(3),
-            nk: field(4),
-            nm: field(5),
-            nn: field(6),
-            r0: field(7),
+            a1: field(0, "a1")?,
+            a2: field(1, "a2")?,
+            a3: field(2, "a3")?,
+            aln: field(3, "aln")?,
+            nk: field(4, "nk")?,
+            nm: field(5, "nm")?,
+            nn: field(6, "nn")?,
+            r0: field(7, "r0")?,
         })
         .filter(crate::NonGravitationalParametersRow::is_active)
     };
+    if non_gravitational_parameters.is_some()
+        && !context.propagator.supports_non_gravitational_parameters()
+    {
+        return Err(CallbackFailure::Invalid(
+            "provider received unsupported active non-gravitational parameters in STM request"
+                .to_string(),
+        ));
+    }
     let days = if request.n_times == 0 {
         &[]
     } else {
@@ -1685,19 +1717,27 @@ unsafe fn run_request<P: Propagator>(
     .map_err(|e| CallbackFailure::Invalid(e.to_string()))?;
     if n > 0 && !request.physical_parameters.is_null() {
         let values = std::slice::from_raw_parts(request.physical_parameters, physical_values);
-        let field = |row: usize, axis: usize| {
-            let value = values[row * EXTERNAL_PHYSICAL_PARAMETERS_WIDTH + axis];
-            (!value.is_nan()).then_some(value)
+        let field = |row: usize, axis: usize, name: &str| {
+            decode_provider_optional_parameter(
+                values[row * EXTERNAL_PHYSICAL_PARAMETERS_WIDTH + axis],
+                "physical_parameters",
+                name,
+                row,
+            )
         };
-        let column = |axis: usize| (0..n).map(|row| field(row, axis)).collect();
+        let column = |axis: usize, name: &str| {
+            (0..n)
+                .map(|row| field(row, axis, name))
+                .collect::<Result<Vec<_>, _>>()
+        };
         orbits = orbits
             .with_physical_parameters(PhysicalParametersBatch {
-                h_v: column(0),
-                h_v_sigma: column(1),
-                g: column(2),
-                g_sigma: column(3),
-                sigma_eff: column(4),
-                chi2_red: column(5),
+                h_v: column(0, "h_v")?,
+                h_v_sigma: column(1, "h_v_sigma")?,
+                g: column(2, "g")?,
+                g_sigma: column(3, "g_sigma")?,
+                sigma_eff: column(4, "sigma_eff")?,
+                chi2_red: column(5, "chi2_red")?,
             })
             .map_err(|e| CallbackFailure::Invalid(e.to_string()))?;
     }
@@ -1711,22 +1751,30 @@ unsafe fn run_request<P: Propagator>(
             request.non_gravitational_parameters,
             non_gravitational_values,
         );
-        let field = |row: usize, axis: usize| {
-            let value = values[row * EXTERNAL_NON_GRAVITATIONAL_WIDTH + axis];
-            (!value.is_nan()).then_some(value)
+        let field = |row: usize, axis: usize, name: &str| {
+            decode_provider_optional_parameter(
+                values[row * EXTERNAL_NON_GRAVITATIONAL_WIDTH + axis],
+                "non_gravitational_parameters",
+                name,
+                row,
+            )
         };
-        let column = |axis: usize| (0..n).map(|row| field(row, axis)).collect();
+        let column = |axis: usize, name: &str| {
+            (0..n)
+                .map(|row| field(row, axis, name))
+                .collect::<Result<Vec<_>, _>>()
+        };
         orbits = orbits
             .with_non_gravitational_parameters(NonGravitationalParametersBatch {
                 source: vec![None; n],
-                a1: column(0),
-                a2: column(1),
-                a3: column(2),
-                aln: column(3),
-                nk: column(4),
-                nm: column(5),
-                nn: column(6),
-                r0: column(7),
+                a1: column(0, "a1")?,
+                a2: column(1, "a2")?,
+                a3: column(2, "a3")?,
+                aln: column(3, "aln")?,
+                nk: column(4, "nk")?,
+                nm: column(5, "nm")?,
+                nn: column(6, "nn")?,
+                r0: column(7, "r0")?,
             })
             .map_err(|e| CallbackFailure::Invalid(e.to_string()))?;
     }
@@ -2135,6 +2183,50 @@ mod tests {
         }
     }
 
+    struct NeverCalled(TwoBodyPropagator);
+
+    impl Propagator for NeverCalled {
+        type Shard = <TwoBodyPropagator as Propagator>::Shard;
+
+        fn integration_time_scale(&self) -> TimeScale {
+            self.0.integration_time_scale()
+        }
+
+        fn supports_stm(&self) -> bool {
+            true
+        }
+
+        fn supports_non_gravitational_parameters(&self) -> bool {
+            true
+        }
+
+        fn supports(&self, mode: CovariancePropagation) -> bool {
+            self.0.supports(mode)
+        }
+
+        fn create_shard(&self) -> Self::Shard {
+            self.0.create_shard()
+        }
+
+        fn propagate(
+            &self,
+            _request: &PropagationRequest<'_>,
+            _provider: &dyn TimeScaleProvider,
+        ) -> PropagationResultValue<crate::propagation::PropagationResult> {
+            panic!("foreign non-finite dynamics reached the propagator")
+        }
+
+        fn propagate_stm(
+            &self,
+            _state: [f64; 6],
+            _parameters: Option<crate::NonGravitationalParametersRow>,
+            _epoch_tdb: Epoch,
+            _times_tdb: &[Epoch],
+        ) -> PropagationResultValue<Vec<crate::propagation::StmRow>> {
+            panic!("foreign non-finite STM dynamics reached the propagator")
+        }
+    }
+
     fn inactive_stm_parameter_rows() -> [crate::NonGravitationalParametersRow; 2] {
         [(Some("source-only"), None), (Some("zero-a1"), Some(0.0))].map(|(source, a1)| {
             NonGravitationalParametersBatch {
@@ -2150,6 +2242,95 @@ mod tests {
             }
             .row(0)
         })
+    }
+
+    fn raw_foreign_propagation_status<P: Propagator + Send + 'static>(
+        owned: &OwnedExternalPropagator<P>,
+        physical: Option<&[f64; EXTERNAL_PHYSICAL_PARAMETERS_WIDTH]>,
+        non_gravitational: Option<&[f64; EXTERNAL_NON_GRAVITATIONAL_WIDTH]>,
+    ) -> (i32, String) {
+        let states = [1.0, 0.0, 0.0, 0.0, 0.017, 0.0];
+        let epoch_days = [60_000_i64];
+        let epoch_nanos = [0_i64];
+        let time_days = [60_001_i64];
+        let time_nanos = [0_i64];
+        let scale = CString::new("tdb").unwrap();
+        let frame = CString::new("ecliptic").unwrap();
+        let origin = CString::new("SUN").unwrap();
+        let mut out_states = [0.0; 6];
+        let mut out_valid = [0_u8; 1];
+        let mut out_failure_codes = [u8::MAX; 1];
+        let mut error = [0 as c_char; 256];
+        let request = PropagateRequestV2 {
+            abi_version: EXTERNAL_PROPAGATOR_ABI_VERSION,
+            struct_size: size_of::<PropagateRequestV2>(),
+            n_orbits: 1,
+            states: states.as_ptr(),
+            physical_parameters: physical.map_or(std::ptr::null(), |values| values.as_ptr()),
+            non_gravitational_parameters: non_gravitational
+                .map_or(std::ptr::null(), |values| values.as_ptr()),
+            epoch_days: epoch_days.as_ptr(),
+            epoch_nanos: epoch_nanos.as_ptr(),
+            orbit_time_scale: scale.as_ptr(),
+            frame: frame.as_ptr(),
+            origin: origin.as_ptr(),
+            n_times: 1,
+            time_days: time_days.as_ptr(),
+            time_nanos: time_nanos.as_ptr(),
+            time_scale: scale.as_ptr(),
+            pairwise: 0,
+            out_states: out_states.as_mut_ptr(),
+            out_valid: out_valid.as_mut_ptr(),
+            out_failure_codes: out_failure_codes.as_mut_ptr(),
+            error: error.as_mut_ptr(),
+            error_len: error.len(),
+            reserved: [0; EXTERNAL_PROPAGATOR_RESERVED_WORDS],
+        };
+        let status =
+            unsafe { ((*owned.table()).propagate.unwrap())((*owned.table()).context, &request) };
+        let message = unsafe { CStr::from_ptr(error.as_ptr()) }
+            .to_string_lossy()
+            .into_owned();
+        (status, message)
+    }
+
+    fn raw_foreign_stm_status<P: Propagator + Send + 'static>(
+        owned: &OwnedExternalPropagator<P>,
+        non_gravitational: Option<&[f64; EXTERNAL_NON_GRAVITATIONAL_WIDTH]>,
+        reserved: [usize; EXTERNAL_PROPAGATOR_RESERVED_WORDS],
+    ) -> (i32, String) {
+        let state = [1.0, 0.0, 0.0, 0.0, 0.017, 0.0];
+        let time_days = [60_001_i64];
+        let time_nanos = [0_i64];
+        let mut out_states = [0.0; 6];
+        let mut out_stm = [0.0; 36];
+        let mut out_valid = [0_u8; 1];
+        let mut error = [0 as c_char; 256];
+        let request = PropagateStmRequestV2 {
+            abi_version: EXTERNAL_PROPAGATOR_ABI_VERSION,
+            struct_size: size_of::<PropagateStmRequestV2>(),
+            state: state.as_ptr(),
+            non_gravitational_parameters: non_gravitational
+                .map_or(std::ptr::null(), |values| values.as_ptr()),
+            epoch_days: 60_000,
+            epoch_nanos: 0,
+            n_times: 1,
+            time_days: time_days.as_ptr(),
+            time_nanos: time_nanos.as_ptr(),
+            out_states: out_states.as_mut_ptr(),
+            out_stm: out_stm.as_mut_ptr(),
+            out_valid: out_valid.as_mut_ptr(),
+            error: error.as_mut_ptr(),
+            error_len: error.len(),
+            reserved,
+        };
+        let status = unsafe {
+            ((*owned.table()).propagate_stm.unwrap())((*owned.table()).context, &request)
+        };
+        let message = unsafe { CStr::from_ptr(error.as_ptr()) }
+            .to_string_lossy()
+            .into_owned();
+        (status, message)
     }
 
     fn raw_propagation_status(mode: Option<StatusMode>, pairwise: u8) -> i32 {
@@ -2365,6 +2546,16 @@ mod tests {
             external.capabilities & EXTERNAL_PROPAGATOR_KNOWN_CAPABILITIES,
             EXTERNAL_PROPAGATOR_CAP_THREAD_SAFE
         );
+    }
+
+    #[test]
+    fn full_table_reserved_words_are_validated() {
+        let mut owned = two_body_reference::new(TwoBodyPropagator::default());
+        owned.table.reserved[2] = 1;
+        let error = unsafe { ExternalPropagator::from_raw(owned.table()) }
+            .err()
+            .expect("a non-zero complete table reserved word must fail");
+        assert!(error.to_string().contains("table reserved word 2"));
     }
 
     #[test]
@@ -2661,6 +2852,47 @@ mod tests {
     }
 
     #[test]
+    fn raw_provider_rejects_non_finite_physical_and_non_gravitational_values() {
+        let never_called = OwnedExternalPropagator::new(
+            NeverCalled(TwoBodyPropagator::default()),
+            "never-called",
+            "0",
+        );
+        for value in [f64::INFINITY, f64::NEG_INFINITY] {
+            let mut physical = [f64::NAN; EXTERNAL_PHYSICAL_PARAMETERS_WIDTH];
+            physical[0] = value;
+            let (status, message) =
+                raw_foreign_propagation_status(&never_called, Some(&physical), None);
+            assert_eq!(status, EXTERNAL_PROPAGATOR_STATUS_INVALID, "{message}");
+            assert!(message.contains("physical_parameters.h_v[0]"));
+            assert!(message.contains("present but non-finite"));
+
+            let mut non_gravitational = [f64::NAN; EXTERNAL_NON_GRAVITATIONAL_WIDTH];
+            non_gravitational[0] = value;
+            let (status, message) =
+                raw_foreign_propagation_status(&never_called, None, Some(&non_gravitational));
+            assert_eq!(status, EXTERNAL_PROPAGATOR_STATUS_INVALID, "{message}");
+            assert!(message.contains("non_gravitational_parameters.a1[0]"));
+            assert!(message.contains("present but non-finite"));
+        }
+
+        // NaN remains the foreign-call null sentinel for both typed arrays.
+        let accepting = OwnedExternalPropagator::new(
+            RejectSomeStm(TwoBodyPropagator::default()),
+            "accepting",
+            "0",
+        );
+        let physical_nulls = [f64::NAN; EXTERNAL_PHYSICAL_PARAMETERS_WIDTH];
+        let non_gravitational_nulls = [f64::NAN; EXTERNAL_NON_GRAVITATIONAL_WIDTH];
+        let (status, message) = raw_foreign_propagation_status(
+            &accepting,
+            Some(&physical_nulls),
+            Some(&non_gravitational_nulls),
+        );
+        assert_eq!(status, EXTERNAL_PROPAGATOR_STATUS_OK, "{message}");
+    }
+
+    #[test]
     fn safe_consumer_rejects_mismatched_pairwise_lengths() {
         let states = vec![
             [1.1, 0.2, 0.05, -0.003, 0.016, 0.0004],
@@ -2837,6 +3069,75 @@ mod tests {
         let status =
             unsafe { (owned.table.propagate_stm.unwrap())(owned.table.context, &stm_request) };
         assert_eq!(status, EXTERNAL_PROPAGATOR_STATUS_OK, "{:?}", error);
+    }
+
+    #[test]
+    fn stm_request_reserved_words_are_validated() {
+        let owned = two_body_reference::new(TwoBodyPropagator::default());
+        let mut reserved = [0; EXTERNAL_PROPAGATOR_RESERVED_WORDS];
+        reserved[1] = 1;
+        let (status, message) = raw_foreign_stm_status(&owned, None, reserved);
+        assert_eq!(status, EXTERNAL_PROPAGATOR_STATUS_INVALID, "{message}");
+        assert!(message.contains("STM request reserved word 1"));
+    }
+
+    #[test]
+    fn raw_stm_rejects_non_finite_parameters_before_calling_provider() {
+        let owned = OwnedExternalPropagator::new(
+            NeverCalled(TwoBodyPropagator::default()),
+            "never-called-stm",
+            "0",
+        );
+        for value in [f64::INFINITY, f64::NEG_INFINITY] {
+            let mut parameters = [f64::NAN; EXTERNAL_NON_GRAVITATIONAL_WIDTH];
+            parameters[0] = value;
+            let (status, message) = raw_foreign_stm_status(
+                &owned,
+                Some(&parameters),
+                [0; EXTERNAL_PROPAGATOR_RESERVED_WORDS],
+            );
+            assert_eq!(status, EXTERNAL_PROPAGATOR_STATUS_INVALID, "{message}");
+            assert!(message.contains("non_gravitational_parameters.a1[0]"));
+            assert!(message.contains("present but non-finite"));
+        }
+    }
+
+    #[test]
+    fn raw_stm_no_capability_rejects_active_and_accepts_inactive_rows() {
+        let owned = two_body_reference::new(TwoBodyPropagator::default());
+        assert_eq!(
+            unsafe { &*owned.table() }.capabilities & EXTERNAL_PROPAGATOR_CAP_NON_GRAVITATIONAL,
+            0
+        );
+        let mut active = [f64::NAN; EXTERNAL_NON_GRAVITATIONAL_WIDTH];
+        active[0] = 1e-10;
+        let (status, message) = raw_foreign_stm_status(
+            &owned,
+            Some(&active),
+            [0; EXTERNAL_PROPAGATOR_RESERVED_WORDS],
+        );
+        assert_eq!(status, EXTERNAL_PROPAGATOR_STATUS_INVALID, "{message}");
+        assert!(message.contains("unsupported active non-gravitational"));
+
+        for parameters in inactive_stm_parameter_rows() {
+            let encoded = [
+                parameters.a1,
+                parameters.a2,
+                parameters.a3,
+                parameters.aln,
+                parameters.nk,
+                parameters.nm,
+                parameters.nn,
+                parameters.r0,
+            ]
+            .map(|value| value.unwrap_or(f64::NAN));
+            let (status, message) = raw_foreign_stm_status(
+                &owned,
+                Some(&encoded),
+                [0; EXTERNAL_PROPAGATOR_RESERVED_WORDS],
+            );
+            assert_eq!(status, EXTERNAL_PROPAGATOR_STATUS_OK, "{message}");
+        }
     }
 
     #[test]
