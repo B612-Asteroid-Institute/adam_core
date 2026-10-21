@@ -2,9 +2,9 @@ try:
     from ._version import __version__
 except ImportError:
     try:
-        from importlib.metadata import version
+        from importlib.metadata import version as _distribution_version
 
-        __version__ = version("adam-core")
+        __version__ = _distribution_version("adam-core")
     except ImportError:
         __version__ = "0.0.0dev0"
 
