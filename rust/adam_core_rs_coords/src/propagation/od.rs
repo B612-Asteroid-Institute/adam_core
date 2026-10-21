@@ -2912,9 +2912,9 @@ fn select_observation_triplets_bounded_with_limits(
 /// soon as the budget is met. Each pair is visited once.
 /// Search-priority resolution, not a time-scale conversion. The retained
 /// TT/TDB model differs from external high-order models by at most tens of
-/// microseconds over the documented interval. Treat metrics within one
-/// millisecond as the same priority so equivalent external labels cannot
-/// discontinuously select another bounded-search branch.
+/// microseconds over the documented interval. Quantize metrics to nearest
+/// millisecond before deterministic tie-breaking so equivalent external labels
+/// cannot discontinuously select another bounded-search branch.
 const TRIPLET_PRIORITY_RESOLUTION_DAYS: f64 = 1.0e-3 / 86_400.0;
 
 fn triplet_priority_key(days: f64) -> i64 {

@@ -108,6 +108,6 @@ model above. Against geocentric ERFA/SOFA ``eraDtdb``, an external comparison
 over 1900--2100 measured a maximum difference of about 39 microseconds. That
 comparison does not change the conversion policy or its fixture. OD continues
 to consume exact `TimeArray` TDB epochs for dynamics; only bounded triplet
-search priorities coalesce sub-millisecond differences so externally supplied
+search priorities use millisecond-resolution keys so externally supplied
 equivalent labels inside this documented model difference cannot choose a
 wildly different tied candidate.

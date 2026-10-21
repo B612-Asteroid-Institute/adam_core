@@ -245,7 +245,7 @@ IOD_DEFAULTS``), so the signature defaults of ``run_iod`` and
   order (epoch, station, complete physical row content, input row only for
   physically identical ties); the same physical input gives the same orbit
   whatever its row order. A triplet never repeats an epoch. Search-priority
-  metrics within one millisecond are deterministic ties. This does not round
+  metrics are quantized to nearest millisecond before tie-breaking. This does not round
   the epochs used by Gauss or propagation; it only prevents external
   equivalent labels within adam-core's documented TT/TDB model difference
   from selecting a discontinuously different branch of a bounded search.

@@ -21,7 +21,7 @@ This file contains notable changes in adam-core
   observation epochs, rejects non-finite/domain-invalid inputs before provider
   calls, re-gates selection-changing final CMC refits with retained diagnostics,
   and canonicalizes Arrow chunk layout in fingerprints. Bounded triplet-search
-  priorities now treat sub-millisecond epoch differences as ties, preventing
+  priorities now use millisecond-resolution keys, preventing
   external equivalent labels within the documented TT/TDB model difference
   from discontinuously selecting a different spans/prefit branch; dynamical
   epochs remain unrounded and the canonical TT/TDB policy is unchanged.
