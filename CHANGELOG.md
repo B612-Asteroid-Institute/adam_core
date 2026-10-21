@@ -25,10 +25,11 @@ This file contains notable changes in adam-core
   composing the generic adam-core algorithms directly with concrete
   ``Propagator`` implementations. See `docs/source/reference/native_propagator_abi.rst`.
 
-- **Breaking Rust API:** `PropagationError` adds `RowFailure`, `Backend` and
-  `BackendProtocol`; exhaustive downstream matches must handle candidate-local
-  numerical failures separately from fatal provider and ABI/protocol failures.
-  This unreleased contract does not claim 0.6.x compatibility: the eventual
+- **Breaking Rust API:** `PropagationError` adds `RowFailure`; exhaustive
+  downstream matches must now handle candidate-local numerical failures.
+  `Backend` and `BackendProtocol` already exist in released 0.6.1 and continue
+  to represent fatal provider and ABI/protocol failures. This unreleased
+  contract does not claim 0.6.x compatibility: the eventual
   adam-core release version and compatible adam-assist dependency floor remain
   to be settled, and released adam-assist 0.5.0 does not implement this v2 ABI.
 

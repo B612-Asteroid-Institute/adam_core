@@ -44,11 +44,14 @@ The provider must supply batched propagation, the full optional physical
 parameter batch, complete active non-gravitational inputs when it advertises
 that capability, and dynamics-consistent STMs when it advertises STM support.
 The v2 STM callback receives the same fixed A1/A2/A3 and Marsden-law row as
-state propagation, but no physical-parameter row. A provider whose physical
-parameters affect its variational equations must use central differences until
-a future capability appends a physical-aware STM request. Its identity must match `NativeBackend`; callbacks
-must be thread-safe, must not retain request buffers or invoke Python, and
-must catch all panics/exceptions before returning across the C ABI.
+state propagation, but no physical-parameter row. STM capability is table-wide,
+not request-dependent: a provider whose supported propagation model permits
+physical parameters to affect its variational equations must not advertise v2
+STM capability at all. Adam-core will use central differences until a future
+capability appends a physical-aware STM request. The table identity must match
+`NativeBackend`; callbacks must be thread-safe, must not retain request buffers
+or invoke Python, and must catch all panics/exceptions before returning across
+the C ABI.
 
 ## Version and Rust error compatibility
 
@@ -58,10 +61,20 @@ adam-assist dependency are still to be settled. Released adam-core 0.6.1 and
 adam-assist 0.5.0 do not establish compatibility with this v2 layout.
 
 For Rust callers this is also a breaking exhaustive-match change:
-``PropagationError`` adds the public ``RowFailure``, ``Backend`` and
-``BackendProtocol`` variants to distinguish candidate-local numerical failure,
-fatal provider failure and fatal ABI/protocol failure. Downstream matches must
-handle those variants (or use a wildcard) when adopting this contract.
+``PropagationError`` adds the public ``RowFailure`` variant for candidate-local
+numerical failure. ``Backend`` and ``BackendProtocol`` already exist in released
+0.6.1 and retain their fatal provider and ABI/protocol meanings. Downstream
+matches must handle ``RowFailure`` (or use a wildcard) when adopting this
+contract.
+
+## Cross-repository provider testing
+
+The in-repository PyO3 seam can spy on separately acquired IOD and refinement
+capsule descriptors, but cannot manufacture a second independently linked
+provider table without adding a test-only product API. Keep that limitation
+explicit: exact distinct-provider end-to-end coverage belongs in the paired
+adam-assist repository once it has a compatible v2 implementation. Do not infer
+such coverage from two Python class names that return adam-core's same capsule.
 
 ## Rust-only code
 

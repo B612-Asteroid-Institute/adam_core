@@ -56,9 +56,11 @@ field is read. Existing prefix fields must never be reordered or retyped.
 ABI v2 uses the process target's C pointer/``size_t`` layout; provider and
 consumer necessarily share that target because their extensions are loaded in
 one process. The exported prefix constants are computed as the exact end of the
-last required field, and compile-time assertions prove that the copied
-``repr(C)`` prefix ends there without unread tail padding. On 64-bit targets the
-frozen values are ``EXTERNAL_PROPAGATOR_V2_MIN_SIZE = 72``,
+last required field. Compile-time assertions prove that each copied mandatory
+``repr(C)`` prefix ends there without unread tail padding; after its field-end
+size check the optional STM callback is read as one aligned field, never as a
+padded whole-prefix structure. On 64-bit targets the frozen values are
+``EXTERNAL_PROPAGATOR_V2_MIN_SIZE = 72``,
 ``EXTERNAL_PROPAGATOR_V2_STM_SIZE = 80``,
 ``PROPAGATE_REQUEST_V2_MIN_SIZE = 168`` and
 ``PROPAGATE_STM_REQUEST_V2_MIN_SIZE = 112`` bytes. Generic adam-core Rust APIs
@@ -94,12 +96,13 @@ by the current request:
 
 The current state-fitting API consumes state STMs. The v2 STM request carries
 the fixed non-gravitational row but **does not carry physical parameters**.
-A provider whose physical fields affect its state variational equations must
-not advertise v2 STM support for such inputs; adam-core must use central
-finite differences through full propagation instead. Parameter-partial or
-physical-parameter-aware STM support requires an appended request/callback plus
-a new known capability bit; it must not be smuggled into the v2 state STM
-layout.
+STM capability is table-wide, not conditional on a request: a provider whose
+supported propagation model permits physical fields to affect its state
+variational equations must not advertise v2 STM support at all. Adam-core must
+use central finite differences through full propagation instead.
+Parameter-partial or physical-parameter-aware STM support requires an appended
+request/callback plus a new known capability bit; it must not be smuggled into
+the v2 state STM layout.
 
 Propagation request
 -------------------

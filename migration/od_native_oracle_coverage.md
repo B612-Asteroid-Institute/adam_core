@@ -42,9 +42,10 @@ external capsule), while Python
 capsule route with the distinct built-in two-body driver. Solver-budget tests
 assert exact evaluation/iteration limits rather than repeat-run determinism.
 The closed-form native tests above additionally pin an independent
-``normal * covariance = identity`` check,
-warning counts, final-refit accounting, robust-cost probing, and covariance
-formation from the final selected mask. Stage routing is covered by
+``normal * covariance = identity`` check, an independently clipped Huber
+``J^T psi`` stationarity score, the production central Jacobian at its canonical
+step, warning counts, final-refit accounting, robust-cost probing, and
+covariance formation from the final selected mask. Stage routing is covered by
 `iod_refinement_full_od_and_run_od_use_only_their_configured_stage_predictors`,
 which gives IOD and refinement separate counting predictors and verifies the
 configured triplet budget.

@@ -2799,8 +2799,9 @@ pub fn run_iod_linkages_with<T: OriginTranslationProvider>(
 /// [`run_iod_barycentric`] over many linkages in one call: each entry of
 /// `linkage_rows` selects that linkage's observation rows, and the outputs
 /// are in `linkage_rows` order. A linkage whose search finds nothing yields
-/// an [`super::od::IodResult`] without an accepted candidate; only invalid
-/// input (a row out of bounds) or a configuration error fails the batch.
+/// an [`super::od::IodResult`] without an accepted candidate. Fatal backend,
+/// protocol, schema, request and configuration errors abort the entire batch;
+/// an out-of-bounds linkage row is likewise invalid input for the batch.
 #[allow(clippy::too_many_arguments)]
 pub fn run_iod_linkages_barycentric<I, T>(
     iod_propagator: &I,
@@ -3907,6 +3908,36 @@ mod tests {
         let problem = linear_problem(&fixture, &config);
         let residuals = problem.residuals_one(&fit.state).unwrap();
         assert!(residuals[tail_component].abs() > config.f_scale);
+
+        // Independent Huber first-order condition: J^T psi(r) ~= 0, with
+        // psi clipped directly rather than reusing the production IRLS weights.
+        let robust_score_ratio = |state: &[f64; 6]| {
+            let state_residuals = problem.residuals_one(state).unwrap();
+            let jacobian = problem
+                .jacobian(JacobianMethod::Central, state, &state_residuals)
+                .unwrap();
+            let mut robust_score = [0.0_f64; 6];
+            let mut absolute_score = [0.0_f64; 6];
+            for (component, &residual) in state_residuals.iter().enumerate() {
+                let psi = residual.clamp(-config.f_scale, config.f_scale);
+                for axis in 0..6 {
+                    let term = jacobian[component * 6 + axis] * psi;
+                    robust_score[axis] += term;
+                    absolute_score[axis] += term.abs();
+                }
+            }
+            (0..6)
+                .map(|axis| robust_score[axis].abs() / absolute_score[axis].max(1.0))
+                .fold(0.0_f64, f64::max)
+        };
+        let huber_score_ratio = robust_score_ratio(&fit.state);
+        let linear_score_ratio = robust_score_ratio(&linear.state);
+        assert!(huber_score_ratio < 2e-6, "{huber_score_ratio}");
+        assert!(
+            linear_score_ratio > 100.0 * huber_score_ratio,
+            "Huber score {huber_score_ratio} was not stationary relative to linear {linear_score_ratio}"
+        );
+
         for row in 0..NUM_OBS {
             let expected_component_weight = |residual: f64| {
                 if residual.abs() <= config.f_scale {
@@ -3946,9 +3977,18 @@ mod tests {
                 ..WhitenedFitConfig::default()
             },
         );
+        let production_jacobian = problem
+            .jacobian(JacobianMethod::Central, &TRUTH_STATE, &[])
+            .unwrap();
+        let production_covariance = covariance_from_unweighted_jacobian(&production_jacobian);
+        assert!(max_relative_difference(&production_covariance, &expected) < 2e-6);
+
         for relative_step in [0.5e-6, 1.0e-6, 2.0e-6] {
             let jacobian =
                 central_jacobian_with_relative_step(&problem, &TRUTH_STATE, relative_step);
+            if relative_step == 1.0e-6 {
+                assert!(max_abs_diff(&jacobian, &production_jacobian) < 1e-9);
+            }
             let covariance = covariance_from_unweighted_jacobian(&jacobian);
             assert!(
                 max_relative_difference(&covariance, &expected) < 2e-6,

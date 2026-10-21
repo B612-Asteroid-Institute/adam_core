@@ -1,7 +1,5 @@
 """Core-owned OD dispatch must preserve custom model and fitter behavior."""
 
-from pathlib import Path
-
 import numpy.testing as npt
 import pytest
 
@@ -307,27 +305,15 @@ def test_dispatch_requires_a_declared_backend():
     )
 
 
-def test_source_checkout_uses_canonical_native_semver_without_version_module(
+def test_provider_identity_uses_native_semver_with_or_without_version_module(
     monkeypatch,
 ):
     from adam_core.orbit_determination._native_dispatch import native_propagator
-    from adam_core.propagator import NativeBackend
 
-    assert not Path(adam_core.__file__).with_name("_version.py").exists()
-    monkeypatch.setattr(adam_core, "__version__", "1.2.3rc4")
-    monkeypatch.setattr(
-        _rust_native, "two_body_propagator_semver", lambda: "1.2.3-rc.4"
-    )
-
-    class PrereleaseProvider(TwoBodyPropagator):
-        native_backend = NativeBackend(
-            "test.prerelease",
-            _rust_native.two_body_propagator_semver(),
-            frozenset({"propagator_capsule"}),
-        )
-
-    descriptor = native_propagator(PrereleaseProvider())
-    assert descriptor[2] == "1.2.3-rc.4"
+    native_semver = _rust_native.two_body_propagator_semver()
+    monkeypatch.setattr(adam_core, "__version__", "9.9.9rc7")
+    descriptor = native_propagator(TwoBodyPropagator())
+    assert descriptor[2] == native_semver
     assert descriptor[2] != adam_core.__version__
 
 

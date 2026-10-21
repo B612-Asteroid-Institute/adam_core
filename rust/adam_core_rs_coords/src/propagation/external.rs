@@ -187,14 +187,6 @@ struct ExternalPropagatorRequiredV2 {
     propagate: Option<PropagateV2>,
 }
 
-/// Required table fields plus the capability-gated STM slot.
-#[repr(C)]
-#[derive(Clone, Copy)]
-struct ExternalPropagatorStmV2 {
-    required: ExternalPropagatorRequiredV2,
-    propagate_stm: Option<PropagateStmV2>,
-}
-
 /// Required propagation request fields, copied only after header validation.
 #[repr(C)]
 #[derive(Clone, Copy)]
@@ -261,7 +253,6 @@ pub const PROPAGATE_STM_REQUEST_V2_MIN_SIZE: usize =
 // never read target-specific tail padding beyond the advertised byte count.
 const _: () = {
     assert!(size_of::<ExternalPropagatorRequiredV2>() == EXTERNAL_PROPAGATOR_V2_MIN_SIZE);
-    assert!(size_of::<ExternalPropagatorStmV2>() == EXTERNAL_PROPAGATOR_V2_STM_SIZE);
     assert!(size_of::<PropagateRequestPrefixV2>() == PROPAGATE_REQUEST_V2_MIN_SIZE);
     assert!(size_of::<PropagateStmRequestPrefixV2>() == PROPAGATE_STM_REQUEST_V2_MIN_SIZE);
     assert!(
@@ -552,10 +543,18 @@ impl ExternalPropagator {
                     header.struct_size, EXTERNAL_PROPAGATOR_V2_STM_SIZE
                 )));
             }
-            // SAFETY: the validated size covers this exact repr(C) prefix.
-            let with_stm = std::ptr::read(raw.cast::<ExternalPropagatorStmV2>());
-            with_stm
-                .propagate_stm
+            let slot = raw
+                .cast::<u8>()
+                .add(std::mem::offset_of!(ExternalPropagatorV2, propagate_stm))
+                .cast::<Option<PropagateStmV2>>();
+            if !pointer_is_aligned(slot) {
+                return Err(PropagationError::BackendProtocol(
+                    "external propagator: misaligned STM callback slot".to_string(),
+                ));
+            }
+            // SAFETY: the exact field-end size check above covers this slot;
+            // reading only the field avoids target-dependent prefix padding.
+            std::ptr::read(slot)
                 .ok_or_else(|| {
                     PropagationError::BackendProtocol(
                         "external propagator declares STM support without an STM callback"
@@ -1843,12 +1842,11 @@ pub mod two_body_reference {
     use super::OwnedExternalPropagator;
     use crate::propagation::TwoBodyPropagator;
 
+    /// Canonical Cargo SemVer embedded in the native reference provider.
+    pub const SEMVER: &str = env!("CARGO_PKG_VERSION");
+
     pub fn new(propagator: TwoBodyPropagator) -> OwnedExternalPropagator<TwoBodyPropagator> {
-        OwnedExternalPropagator::new(
-            propagator,
-            "adam_core.two_body.external",
-            env!("CARGO_PKG_VERSION"),
-        )
+        OwnedExternalPropagator::new(propagator, "adam_core.two_body.external", SEMVER)
     }
 
     /// A process-lifetime table (tests).
@@ -2086,6 +2084,72 @@ mod tests {
                 StatusMode::Panic => panic!("expected STM panic"),
             }
         }
+    }
+
+    struct RejectSomeStm(TwoBodyPropagator);
+
+    impl Propagator for RejectSomeStm {
+        type Shard = <TwoBodyPropagator as Propagator>::Shard;
+
+        fn integration_time_scale(&self) -> TimeScale {
+            self.0.integration_time_scale()
+        }
+
+        fn supports_stm(&self) -> bool {
+            true
+        }
+
+        fn supports_non_gravitational_parameters(&self) -> bool {
+            true
+        }
+
+        fn supports(&self, mode: CovariancePropagation) -> bool {
+            self.0.supports(mode)
+        }
+
+        fn create_shard(&self) -> Self::Shard {
+            self.0.create_shard()
+        }
+
+        fn propagate(
+            &self,
+            request: &PropagationRequest<'_>,
+            provider: &dyn TimeScaleProvider,
+        ) -> PropagationResultValue<crate::propagation::PropagationResult> {
+            self.0.propagate(request, provider)
+        }
+
+        fn propagate_stm(
+            &self,
+            state: [f64; 6],
+            parameters: Option<crate::NonGravitationalParametersRow>,
+            epoch_tdb: Epoch,
+            times_tdb: &[Epoch],
+        ) -> PropagationResultValue<Vec<crate::propagation::StmRow>> {
+            if parameters.is_some() {
+                return Err(PropagationError::InvalidRequest(
+                    "inactive STM row was not filtered".to_string(),
+                ));
+            }
+            self.0.propagate_stm(state, None, epoch_tdb, times_tdb)
+        }
+    }
+
+    fn inactive_stm_parameter_rows() -> [crate::NonGravitationalParametersRow; 2] {
+        [(Some("source-only"), None), (Some("zero-a1"), Some(0.0))].map(|(source, a1)| {
+            NonGravitationalParametersBatch {
+                source: vec![source.map(str::to_string)],
+                a1: vec![a1],
+                a2: vec![None],
+                a3: vec![None],
+                aln: vec![Some(1.0)],
+                nk: vec![Some(0.0)],
+                nm: vec![Some(2.0)],
+                nn: vec![Some(5.093)],
+                r0: vec![Some(1.0)],
+            }
+            .row(0)
+        })
     }
 
     fn raw_propagation_status(mode: Option<StatusMode>, pairwise: u8) -> i32 {
@@ -2341,6 +2405,100 @@ mod tests {
             assert_eq!(
                 in_tree.orbits.non_gravitational_parameters,
                 Some(parameters)
+            );
+        }
+    }
+
+    #[test]
+    fn public_external_stm_filters_source_only_and_zero_a1_for_gravity_capsule() {
+        let owned = Box::leak(Box::new(two_body_reference::new(
+            TwoBodyPropagator::default(),
+        )));
+        let external = unsafe { ExternalPropagator::from_raw(owned.table()) }.unwrap();
+        assert!(!external.supports_non_gravitational_parameters());
+        let state = [1.0, 0.0, 0.0, 0.0, 0.017, 0.0];
+        let epoch = Epoch::new(60_000, 0);
+        let times = [Epoch::new(60_001, 0)];
+        let expected = external.propagate_stm(state, None, epoch, &times).unwrap();
+        for parameters in inactive_stm_parameter_rows() {
+            assert!(!parameters.is_active());
+            assert_eq!(
+                external
+                    .propagate_stm(state, Some(parameters), epoch, &times)
+                    .unwrap(),
+                expected
+            );
+        }
+    }
+
+    #[test]
+    fn raw_stm_provider_decoding_filters_source_only_and_zero_a1_rows() {
+        let state = [1.0, 0.0, 0.0, 0.0, 0.017, 0.0];
+        let time_days = [60_001_i64];
+        let time_nanos = [0_i64];
+        for parameters in inactive_stm_parameter_rows() {
+            let encoded = [
+                parameters.a1,
+                parameters.a2,
+                parameters.a3,
+                parameters.aln,
+                parameters.nk,
+                parameters.nm,
+                parameters.nn,
+                parameters.r0,
+            ]
+            .map(|value| value.unwrap_or(f64::NAN));
+            let mut out_states = [0.0; 6];
+            let mut out_stm = [0.0; 36];
+            let mut out_valid = [0_u8; 1];
+            let mut error = [0 as c_char; 128];
+            let request = PropagateStmRequestV2 {
+                abi_version: EXTERNAL_PROPAGATOR_ABI_VERSION,
+                struct_size: size_of::<PropagateStmRequestV2>(),
+                state: state.as_ptr(),
+                non_gravitational_parameters: encoded.as_ptr(),
+                epoch_days: 60_000,
+                epoch_nanos: 0,
+                n_times: 1,
+                time_days: time_days.as_ptr(),
+                time_nanos: time_nanos.as_ptr(),
+                out_states: out_states.as_mut_ptr(),
+                out_stm: out_stm.as_mut_ptr(),
+                out_valid: out_valid.as_mut_ptr(),
+                error: error.as_mut_ptr(),
+                error_len: error.len(),
+                reserved: [0; EXTERNAL_PROPAGATOR_RESERVED_WORDS],
+            };
+            let owned = OwnedExternalPropagator::new(
+                RejectSomeStm(TwoBodyPropagator::default()),
+                "reject-some-stm",
+                "0",
+            );
+            let status = unsafe {
+                ((*owned.table()).propagate_stm.unwrap())((*owned.table()).context, &request)
+            };
+            let message = unsafe { CStr::from_ptr(error.as_ptr()) }.to_string_lossy();
+            assert_eq!(status, EXTERNAL_PROPAGATOR_STATUS_OK, "{message}");
+            assert_eq!(out_valid, [1]);
+        }
+    }
+
+    #[test]
+    fn direct_two_body_stm_treats_source_only_and_zero_a1_as_none() {
+        let propagator = TwoBodyPropagator::default();
+        let state = [1.0, 0.0, 0.0, 0.0, 0.017, 0.0];
+        let epoch = Epoch::new(60_000, 0);
+        let times = [Epoch::new(60_001, 0)];
+        let expected = propagator
+            .propagate_stm(state, None, epoch, &times)
+            .unwrap();
+        for parameters in inactive_stm_parameter_rows() {
+            assert!(!parameters.is_active());
+            assert_eq!(
+                propagator
+                    .propagate_stm(state, Some(parameters), epoch, &times)
+                    .unwrap(),
+                expected
             );
         }
     }

@@ -27,7 +27,7 @@ use adam_core_rs_coords::propagation::adapter::{
     PropagatorPredictor, SphericalPredictor,
 };
 use adam_core_rs_coords::propagation::{
-    AstrometrySnapshot, Cmc2003FitConfig, CorrectionConfig, CovariancePropagation,
+    AstrometrySnapshot, BackendIdentity, Cmc2003FitConfig, CorrectionConfig, CovariancePropagation,
     EphemerisOptions, EpochPolicy, ExternalPropagator, ExternalPropagatorV2, FullOdConfig,
     FullOdOutput, IodAcceptance, IodCandidate, IodConfig, IodResult, IterativeFitConfig,
     JacobianMethod, ObservationSelectionMethod, PrefitScope, PropagationOptions,
@@ -558,6 +558,32 @@ fn covariance_36(covariance: &PyReadonlyArray2<'_, f64>) -> PyResult<[f64; 36]> 
 // Running a driver over the chosen backend
 // ---------------------------------------------------------------------------
 
+fn validate_expected_identity(
+    actual: &BackendIdentity,
+    expected_name: &str,
+    expected_version: &str,
+    expected_two_body: bool,
+) -> Result<(), String> {
+    if actual.name == expected_name
+        && actual.version == expected_version
+        && actual.two_body_dynamics == expected_two_body
+    {
+        return Ok(());
+    }
+    Err(format!(
+        concat!(
+            "native propagator identity mismatch: declaration is {} {} ",
+            "(two_body={}), capsule is {} {} (two_body={})"
+        ),
+        expected_name,
+        expected_version,
+        expected_two_body,
+        actual.name,
+        actual.version,
+        actual.two_body_dynamics
+    ))
+}
+
 /// A capsule-backed native propagator handed to a driver.  The retained
 /// Python object owns the table and its context for the whole native call.
 struct PySource {
@@ -606,24 +632,13 @@ impl PySource {
         // whose context lives as long as the capsule, retained by `_capsule`.
         let propagator = unsafe { ExternalPropagator::from_raw(raw) }.map_err(od_error)?;
         if let Some((expected_name, expected_version, expected_two_body)) = expected_identity {
-            let actual = propagator.identity();
-            if actual.name != expected_name
-                || actual.version != expected_version
-                || actual.two_body_dynamics != expected_two_body
-            {
-                return Err(PyValueError::new_err(format!(
-                    concat!(
-                        "native propagator identity mismatch: declaration is {} {} ",
-                        "(two_body={}), capsule is {} {} (two_body={})"
-                    ),
-                    expected_name,
-                    expected_version,
-                    expected_two_body,
-                    actual.name,
-                    actual.version,
-                    actual.two_body_dynamics
-                )));
-            }
+            validate_expected_identity(
+                propagator.identity(),
+                &expected_name,
+                &expected_version,
+                expected_two_body,
+            )
+            .map_err(PyValueError::new_err)?;
         }
         Ok(Self {
             propagator,
@@ -1569,7 +1584,7 @@ fn run_od_2body_ipc<'py>(
 /// never the Python distribution's independently normalized PEP 440 version.
 #[pyfunction]
 pub fn two_body_propagator_semver() -> &'static str {
-    env!("CARGO_PKG_VERSION")
+    adam_core_rs_coords::propagation::two_body_reference::SEMVER
 }
 
 /// adam-core's two-body propagator as an external-propagator capsule: the
@@ -1607,4 +1622,23 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(run_od_ipc, m)?)?;
     m.add_function(wrap_pyfunction!(run_od_2body_ipc, m)?)?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn provider_identity_compares_canonical_cargo_prerelease_spelling_exactly() {
+        let actual = BackendIdentity {
+            name: "test.provider".to_string(),
+            version: "1.2.3-rc.4".to_string(),
+            two_body_dynamics: false,
+        };
+        assert!(validate_expected_identity(&actual, "test.provider", "1.2.3-rc.4", false).is_ok());
+        let error =
+            validate_expected_identity(&actual, "test.provider", "1.2.3rc4", false).unwrap_err();
+        assert!(error.contains("1.2.3rc4"));
+        assert!(error.contains("1.2.3-rc.4"));
+    }
 }
