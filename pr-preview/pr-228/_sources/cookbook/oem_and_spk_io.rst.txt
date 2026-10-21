@@ -75,8 +75,11 @@ CCSDS Labels and Local Frame Covariances
 16 significant digits and millisecond epochs. Without ``version`` the legacy product
 (``REF_FRAME = EME2000``) is written unchanged. ``covariance_frame`` writes the covariance
 blocks in RSW, RTN or TNW, the frames the standard itself lists, or in 3.0 in any SANA
-registry frame such as ``VNC_ROTATING``, which a COMMENT notes. Readers built on OEM 2.0
-take ``version="2.0"`` with ``covariance_frame="TNW"``.
+registry frame such as ``VNC_ROTATING``, which a COMMENT notes. A bare table label is the
+pure rotation of the covariance (the registry's ``_INERTIAL`` meaning). ``covariance_label``
+writes a table label over a registry frame of the same family, so ``covariance_frame=
+"TNW_ROTATING", covariance_label="TNW"`` gives a 2.0 reader the rotating frame velocity
+rows under the label it knows, with a COMMENT naming the content.
 
 .. code-block:: python
 
@@ -86,8 +89,9 @@ take ``version="2.0"`` with ``covariance_frame="TNW"``.
    # One object_id with multiple epochs, as above.
    orbits = propagated_orbits
    orbit_to_oem(orbits, "tnw.oem", version="2.0", covariance_frame="TNW")
+   orbit_to_oem(orbits, "tnw_rotating.oem", version="2.0", covariance_frame="TNW_ROTATING", covariance_label="TNW")
    orbit_to_oem(orbits, "vnc.oem", version="3.0", covariance_frame="VNC_ROTATING")
-   LocalFrameCovariances.from_orbits(orbits, "TNW").to_parquet("tnw.parquet")
+   LocalFrameCovariances.from_orbits(orbits, "TNW_ROTATING").to_parquet("tnw_rotating.parquet")
 
 Read OEM Back into ``Orbits``
 -----------------------------

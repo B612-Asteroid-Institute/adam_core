@@ -511,16 +511,20 @@ table into <code class="docutils literal notranslate"><span class="pre">Orbits</
 16 significant digits and millisecond epochs. Without <code class="docutils literal notranslate"><span class="pre">version</span></code> the legacy product
 (<code class="docutils literal notranslate"><span class="pre">REF_FRAME</span> <span class="pre">=</span> <span class="pre">EME2000</span></code>) is written unchanged. <code class="docutils literal notranslate"><span class="pre">covariance_frame</span></code> writes the covariance
 blocks in RSW, RTN or TNW, the frames the standard itself lists, or in 3.0 in any SANA
-registry frame such as <code class="docutils literal notranslate"><span class="pre">VNC_ROTATING</span></code>, which a COMMENT notes. Readers built on OEM 2.0
-take <code class="docutils literal notranslate"><span class="pre">version=&quot;2.0&quot;</span></code> with <code class="docutils literal notranslate"><span class="pre">covariance_frame=&quot;TNW&quot;</span></code>.</p>
+registry frame such as <code class="docutils literal notranslate"><span class="pre">VNC_ROTATING</span></code>, which a COMMENT notes. A bare table label is the
+pure rotation of the covariance (the registry’s <code class="docutils literal notranslate"><span class="pre">_INERTIAL</span></code> meaning). <code class="docutils literal notranslate"><span class="pre">covariance_label</span></code>
+writes a table label over a registry frame of the same family, so <code class="docutils literal notranslate"><span class="pre">covariance_frame=</span>
+<span class="pre">&quot;TNW_ROTATING&quot;,</span> <span class="pre">covariance_label=&quot;TNW&quot;</span></code> gives a 2.0 reader the rotating frame velocity
+rows under the label it knows, with a COMMENT naming the content.</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.coordinates</span><span class="w"> </span><span class="kn">import</span> <span class="n">LocalFrameCovariances</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.orbits.oem_io</span><span class="w"> </span><span class="kn">import</span> <span class="n">orbit_to_oem</span>
 
 <span class="c1"># One object_id with multiple epochs, as above.</span>
 <span class="n">orbits</span> <span class="o">=</span> <span class="n">propagated_orbits</span>
 <span class="n">orbit_to_oem</span><span class="p">(</span><span class="n">orbits</span><span class="p">,</span> <span class="s2">"tnw.oem"</span><span class="p">,</span> <span class="n">version</span><span class="o">=</span><span class="s2">"2.0"</span><span class="p">,</span> <span class="n">covariance_frame</span><span class="o">=</span><span class="s2">"TNW"</span><span class="p">)</span>
+<span class="n">orbit_to_oem</span><span class="p">(</span><span class="n">orbits</span><span class="p">,</span> <span class="s2">"tnw_rotating.oem"</span><span class="p">,</span> <span class="n">version</span><span class="o">=</span><span class="s2">"2.0"</span><span class="p">,</span> <span class="n">covariance_frame</span><span class="o">=</span><span class="s2">"TNW_ROTATING"</span><span class="p">,</span> <span class="n">covariance_label</span><span class="o">=</span><span class="s2">"TNW"</span><span class="p">)</span>
 <span class="n">orbit_to_oem</span><span class="p">(</span><span class="n">orbits</span><span class="p">,</span> <span class="s2">"vnc.oem"</span><span class="p">,</span> <span class="n">version</span><span class="o">=</span><span class="s2">"3.0"</span><span class="p">,</span> <span class="n">covariance_frame</span><span class="o">=</span><span class="s2">"VNC_ROTATING"</span><span class="p">)</span>
-<span class="n">LocalFrameCovariances</span><span class="o">.</span><span class="n">from_orbits</span><span class="p">(</span><span class="n">orbits</span><span class="p">,</span> <span class="s2">"TNW"</span><span class="p">)</span><span class="o">.</span><span class="n">to_parquet</span><span class="p">(</span><span class="s2">"tnw.parquet"</span><span class="p">)</span>
+<span class="n">LocalFrameCovariances</span><span class="o">.</span><span class="n">from_orbits</span><span class="p">(</span><span class="n">orbits</span><span class="p">,</span> <span class="s2">"TNW_ROTATING"</span><span class="p">)</span><span class="o">.</span><span class="n">to_parquet</span><span class="p">(</span><span class="s2">"tnw_rotating.parquet"</span><span class="p">)</span>
 </pre></div>
 </div>
 </section>
