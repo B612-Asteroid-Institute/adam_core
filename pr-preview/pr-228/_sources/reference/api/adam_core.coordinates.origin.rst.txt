@@ -1,0 +1,7 @@
+adam\_core.coordinates.origin module
+====================================
+
+.. automodule:: adam_core.coordinates.origin
+   :members:
+   :show-inheritance:
+   :undoc-members:

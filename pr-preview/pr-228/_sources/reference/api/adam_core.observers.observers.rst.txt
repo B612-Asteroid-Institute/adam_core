@@ -1,0 +1,7 @@
+adam\_core.observers.observers module
+=====================================
+
+.. automodule:: adam_core.observers.observers
+   :members:
+   :show-inheritance:
+   :undoc-members:
