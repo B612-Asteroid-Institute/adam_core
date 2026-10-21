@@ -309,6 +309,18 @@ fn pointer_is_aligned<T>(pointer: *const T) -> bool {
     (pointer as usize).is_multiple_of(align_of::<T>())
 }
 
+fn validate_provenance_slot_alignment(
+    configuration: *const *const c_char,
+    data: *const *const c_char,
+) -> PropagationResultValue<()> {
+    if !pointer_is_aligned(configuration) || !pointer_is_aligned(data) {
+        return Err(PropagationError::BackendProtocol(
+            "external propagator: misaligned provenance metadata suffix".to_string(),
+        ));
+    }
+    Ok(())
+}
+
 unsafe fn read_header(pointer: *const c_void, label: &str) -> PropagationResultValue<AbiHeaderV2> {
     if pointer.is_null() {
         return Err(PropagationError::BackendProtocol(format!(
@@ -646,11 +658,7 @@ impl ExternalPropagator {
                     .cast::<u8>()
                     .add(std::mem::offset_of!(ExternalPropagatorV2, data_fingerprint))
                     .cast::<*const c_char>();
-                if !pointer_is_aligned(config_slot) || !pointer_is_aligned(data_slot) {
-                    return Err(PropagationError::BackendProtocol(
-                        "external propagator: misaligned provenance metadata suffix".to_string(),
-                    ));
-                }
+                validate_provenance_slot_alignment(config_slot, data_slot)?;
                 let config = c_string(std::ptr::read(config_slot), "configuration_fingerprint")?;
                 let data = c_string(std::ptr::read(data_slot), "data_fingerprint")?;
                 for (name, value) in [
@@ -2726,6 +2734,19 @@ mod tests {
             external.capabilities & EXTERNAL_PROPAGATOR_KNOWN_CAPABILITIES,
             EXTERNAL_PROPAGATOR_CAP_THREAD_SAFE
         );
+    }
+
+    #[test]
+    fn provenance_suffix_slots_require_pointer_alignment() {
+        let aligned = 0x1000_usize as *const *const c_char;
+        let misaligned = 0x1001_usize as *const *const c_char;
+        validate_provenance_slot_alignment(aligned, aligned).unwrap();
+        let error = validate_provenance_slot_alignment(misaligned, aligned)
+            .expect_err("misaligned configuration fingerprint slot must fail");
+        assert!(error.to_string().contains("misaligned provenance metadata"));
+        let error = validate_provenance_slot_alignment(aligned, misaligned)
+            .expect_err("misaligned data fingerprint slot must fail");
+        assert!(error.to_string().contains("misaligned provenance metadata"));
     }
 
     #[test]

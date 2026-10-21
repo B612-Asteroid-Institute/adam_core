@@ -477,6 +477,37 @@ impl OdOutput {
 const OD_DELTA_INCREASE_FACTOR: f64 = 5.0;
 const OD_DELTA_DECREASE_FACTOR: f64 = 100.0;
 
+fn prefit_step_is_acceptable(improved: bool, arc_length: f64, min_arc_length: f64) -> bool {
+    improved && arc_length >= min_arc_length
+}
+
+fn retained_arc_allows_retry(times: &[f64], included: &[bool], min_arc_length: f64) -> bool {
+    let (arc_length, _, _) = masked_arc_length(times, included);
+    arc_length >= min_arc_length
+}
+
+fn prefit_outlier_arc_length(
+    times: &[f64],
+    time_order: &[usize],
+    first_kept: usize,
+    last_kept: usize,
+) -> f64 {
+    if first_kept < time_order.len() {
+        times[time_order[last_kept]] - times[time_order[first_kept]]
+    } else {
+        0.0
+    }
+}
+
+fn prefit_outlier_is_acceptable(
+    reduced_chi2: f64,
+    threshold: f64,
+    arc_length: f64,
+    min_arc_length: f64,
+) -> bool {
+    reduced_chi2 <= threshold && arc_length >= min_arc_length
+}
+
 /// The legacy `adam_core.orbit_determination.od` differential-correction
 /// loop for one orbit, executed entirely in Rust over the backend-generic
 /// ephemeris workflow. Semantics mirror the pinned legacy implementation,
@@ -499,6 +530,22 @@ where
     P: Propagator,
     T: OriginTranslationProvider,
 {
+    let predictor = PropagatorPredictor {
+        propagator,
+        options,
+        provider,
+        translation_provider,
+    };
+    od_fit_with(&predictor, orbit, observed, observers, config)
+}
+
+fn od_fit_with(
+    predictor: &dyn SphericalPredictor,
+    orbit: &OrbitBatch,
+    observed: &CoordinateBatch,
+    observers: &ObserverBatch,
+    config: &OdConfig,
+) -> PropagationResultValue<OdOutput> {
     config
         .validate()
         .map_err(PropagationError::InvalidRequest)?;
@@ -512,7 +559,7 @@ where
     let geometry = OrbitGeometry::from_orbit(orbit)?;
     let observed_flat = spherical_flat(observed, "observed")?;
     let observed_cov = observed_covariance_flat(observed)?;
-    let times_mjd = observed_times_mjd_tdb(observed, provider)?;
+    let times_mjd = predictor.dynamical_times_mjd(observed)?;
     // sigmas[:, 1:3]: sqrt of covariance diagonal entries 1 and 2.
     let sigma_lon_lat: Vec<[f64; 2]> = (0..n_all)
         .map(|row| {
@@ -545,16 +592,9 @@ where
     let mut outliers_tried = 0_usize;
 
     // Initial residuals for the input orbit.
-    let initial_predicted = predict_spherical(
-        propagator,
-        &[geometry.state],
-        &geometry,
-        observers,
-        options,
-        provider,
-        translation_provider,
-    )?
-    .map_err(PropagationError::RowFailure)?;
+    let initial_predicted = predictor
+        .predict_spherical(&[geometry.state], &geometry, observers)?
+        .map_err(PropagationError::RowFailure)?;
     let initial_residuals =
         full_residuals(&observed_flat, &observed_cov, &initial_predicted, n_all)?;
     // Legacy quirk: the normal-equation RHS uses these initial residual
@@ -599,16 +639,9 @@ where
 
         // Nominal ephemeris (legacy computes it every iteration; the finite
         // branch consumes it).
-        let nominal = predict_spherical(
-            propagator,
-            &[current_state],
-            &geometry,
-            observers,
-            options,
-            provider,
-            translation_provider,
-        )?
-        .map_err(PropagationError::RowFailure)?;
+        let nominal = predictor
+            .predict_spherical(&[current_state], &geometry, observers)?
+            .map_err(PropagationError::RowFailure)?;
 
         // Batched perturbed candidates: plus block, then minus block.
         let mut deltas_diag = [0.0_f64; 6];
@@ -629,16 +662,9 @@ where
                 pert_states.push(state);
             }
         }
-        let perturbed = predict_spherical(
-            propagator,
-            &pert_states,
-            &geometry,
-            observers,
-            options,
-            provider,
-            translation_provider,
-        )?
-        .map_err(PropagationError::RowFailure)?;
+        let perturbed = predictor
+            .predict_spherical(&pert_states, &geometry, observers)?
+            .map_err(PropagationError::RowFailure)?;
 
         // Partial derivatives: (num_obs, 2, 6) with mask-filtered rows.
         let masked_rows: Vec<usize> = (0..n_all).filter(|&row| ids_mask[row]).collect();
@@ -752,16 +778,9 @@ where
             continue;
         }
 
-        let predicted_iter = predict_spherical(
-            propagator,
-            &[state_iter],
-            &geometry,
-            observers,
-            options,
-            provider,
-            translation_provider,
-        )?
-        .map_err(PropagationError::RowFailure)?;
+        let predicted_iter = predictor
+            .predict_spherical(&[state_iter], &geometry, observers)?
+            .map_err(PropagationError::RowFailure)?;
         let residuals_iter = full_residuals(&observed_flat, &observed_cov, &predicted_iter, n_all)?;
         let chi2_total_iter: f64 = (0..n_all)
             .filter(|&row| ids_mask[row])
@@ -771,7 +790,11 @@ where
         let included = ids_mask.clone();
         let (arc_length, _, _) = masked_arc_length(&times_mjd, &included);
 
-        if (rchi2_iter < rchi2_prev || first_solution) && arc_length >= config.min_arc_length {
+        if prefit_step_is_acceptable(
+            rchi2_iter < rchi2_prev || first_solution,
+            arc_length,
+            config.min_arc_length,
+        ) {
             first_solution = false;
             current_state = state_iter;
             current_cov = covariance_matrix;
@@ -808,9 +831,10 @@ where
             for (row, slot) in ids_mask.iter_mut().enumerate() {
                 *slot = !outlier_indices.contains(&row);
             }
-            let (arc_length_outlier, _, _) = masked_arc_length(&times_mjd, &ids_mask);
+            let retained_arc_is_long_enough =
+                retained_arc_allows_retry(&times_mjd, &ids_mask, config.min_arc_length);
             outliers_tried += 1;
-            if arc_length_outlier >= config.min_arc_length {
+            if retained_arc_is_long_enough {
                 max_iter_i = config.max_iter * (outliers_tried + 1);
             }
         }
@@ -2454,6 +2478,9 @@ fn run_iod_sorted(
             ))
         }
         Some(budget) => budget,
+        None if config.observation_selection_method == ObservationSelectionMethod::Spans => {
+            config.spans.max_triplets
+        }
         None => 3 * (max_outliers + 1),
     };
     let mut selection_stats = TripletSearchStats::default();
@@ -2687,12 +2714,14 @@ fn run_iod_sorted(
                 let num_obs = n - count;
                 let chi2 = evaluation.orbit_chi2 - removed_chi2;
                 let reduced = chi2 / (2 * num_obs - 6) as f64;
-                let arc_length = if first_kept < n {
-                    times[time_order[last_kept]] - times[time_order[first_kept]]
-                } else {
-                    0.0
-                };
-                if reduced <= config.rchi2_threshold && arc_length >= config.min_arc_length {
+                let arc_length =
+                    prefit_outlier_arc_length(&times, &time_order, first_kept, last_kept);
+                if prefit_outlier_is_acceptable(
+                    reduced,
+                    config.rchi2_threshold,
+                    arc_length,
+                    config.min_arc_length,
+                ) {
                     record.removed = removable[removable.len() - count..].to_vec();
                     record.chi2_total = chi2;
                     record.reduced_chi2 = reduced;
@@ -3191,13 +3220,34 @@ fn grouped_span_pairs(
                 if start >= end {
                     continue;
                 }
-                let target_time = times[order[first]] + config.target_span_days;
-                let split = start
-                    + lasts[start..end].partition_point(|&last| times[order[last]] < target_time);
+                // An endpoint pair is useful only when at least one strictly
+                // interior, distinct epoch exists. For adjacent night blocks
+                // the closest-to-target endpoints can be adjacent rows; move
+                // the right endpoint far enough into its block before ranking
+                // this night pair instead of dropping the pair outright.
+                let first_time = times[order[first]];
+                let middle = first
+                    + 1
+                    + order[first + 1..=hi].partition_point(|&row| times[row] == first_time);
+                if middle >= hi {
+                    continue;
+                }
+                let middle_time = times[order[middle]];
+                let valid_start = start
+                    + lasts[start..end].partition_point(|&last| {
+                        last <= middle || times[order[last]] <= middle_time
+                    });
+                if valid_start >= end {
+                    continue;
+                }
+                let target_time = first_time + config.target_span_days;
+                let split = valid_start
+                    + lasts[valid_start..end]
+                        .partition_point(|&last| times[order[last]] < target_time);
                 for candidate in [split.checked_sub(1), (split < end).then_some(split)]
                     .into_iter()
                     .flatten()
-                    .filter(|&candidate| candidate >= start && candidate < end)
+                    .filter(|&candidate| candidate >= valid_start && candidate < end)
                 {
                     let selected_last = lasts[candidate];
                     let canonical = start
@@ -4770,6 +4820,40 @@ mod tests {
         }
     }
 
+    struct LegacyLinearPredictor {
+        base: Vec<[f64; 6]>,
+        truth: [f64; 6],
+    }
+
+    impl SphericalPredictor for LegacyLinearPredictor {
+        fn predict_spherical(
+            &self,
+            states: &[[f64; 6]],
+            _geometry: &OrbitGeometry,
+            observers: &ObserverBatch,
+        ) -> PropagationResultValue<Result<Vec<f64>, String>> {
+            let mut output = Vec::with_capacity(states.len() * observers.len() * 6);
+            for state in states {
+                for (row, base) in self.base.iter().enumerate() {
+                    let mut predicted = *base;
+                    for component in 0..2 {
+                        let axis = (2 * row + component) % 6;
+                        predicted[1 + component] += state[axis] - self.truth[axis];
+                    }
+                    output.extend_from_slice(&predicted);
+                }
+            }
+            Ok(Ok(output))
+        }
+
+        fn dynamical_times_mjd(
+            &self,
+            observed: &CoordinateBatch,
+        ) -> PropagationResultValue<Vec<f64>> {
+            observed_times_mjd(observed)
+        }
+    }
+
     /// Fault injection around a predictor: `fail_calls` prediction calls
     /// (counting from the first) return `failure`; `garbage_calls` return
     /// the inner prediction displaced by half a degree in longitude (a
@@ -4778,6 +4862,7 @@ mod tests {
         inner: &'a dyn SphericalPredictor,
         civil_calls: std::cell::Cell<usize>,
         dynamical_calls: std::cell::Cell<usize>,
+        civil_override: Option<Vec<f64>>,
     }
 
     impl SphericalPredictor for TimeRoutingPredictor<'_> {
@@ -4792,7 +4877,10 @@ mod tests {
 
         fn civil_times_mjd(&self, observed: &CoordinateBatch) -> PropagationResultValue<Vec<f64>> {
             self.civil_calls.set(self.civil_calls.get() + 1);
-            self.inner.civil_times_mjd(observed)
+            match &self.civil_override {
+                Some(times) => Ok(times.clone()),
+                None => self.inner.civil_times_mjd(observed),
+            }
         }
 
         fn dynamical_times_mjd(
@@ -5190,15 +5278,35 @@ mod tests {
             inner: &inner,
             civil_calls: std::cell::Cell::new(0),
             dynamical_calls: std::cell::Cell::new(0),
+            // Deliberately place every epoch in one civil observing night.
+            // Dynamical epochs remain the multi-night physical intervals.
+            civil_override: Some(
+                (0..NUM_OBS)
+                    .map(|row| 60_000.0 + row as f64 / 1000.0)
+                    .collect(),
+            ),
         };
+        let mut same_station = observers();
+        same_station.code = vec![ObservatoryCode("T00".to_string()); NUM_OBS];
         let result = run_iod(
             &predictor,
             &synthetic_observations(),
-            &observers(),
-            &iod_config(0.0),
+            &same_station,
+            &IodConfig {
+                observation_selection_method: ObservationSelectionMethod::Spans,
+                acceptance: IodAcceptance::Prefit,
+                rchi2_threshold: 1.0e-300,
+                contamination_percentage: 0.0,
+                ..IodConfig::default()
+            },
         )
         .unwrap();
-        assert!(result.found(), "{:?}", result.not_found_reason);
+        assert!(!result.found());
+        // One civil night has one useful grouped night pair. If night labels
+        // are accidentally derived from TDB, this multi-night arc exposes
+        // many pairs instead and tries more than one triplet.
+        assert_eq!(result.triplets_tried, 1);
+        assert_eq!(result.pair_visits, 1);
         assert_eq!(predictor.civil_calls.get(), 1);
         assert!(predictor.dynamical_calls.get() >= 1);
     }
@@ -5266,6 +5374,55 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn prefit_trial_acceptance_and_retry_use_the_retained_time_arc() {
+        assert!(!prefit_step_is_acceptable(true, 0.99, 1.0));
+        assert!(prefit_step_is_acceptable(true, 1.0, 1.0));
+        assert!(!prefit_step_is_acceptable(false, 2.0, 1.0));
+
+        // Rows are deliberately not in time order and both temporal
+        // endpoints are excluded. Row-index endpoints would claim 100 days;
+        // the retained time arc is only one day.
+        let times = [0.0, 100.0, 50.0, 51.0];
+        assert!(!retained_arc_allows_retry(
+            &times,
+            &[false, false, true, true],
+            2.0,
+        ));
+        let order = [0, 2, 3, 1];
+        let retained_arc = prefit_outlier_arc_length(&times, &order, 1, 2);
+        assert_eq!(retained_arc, 1.0);
+        assert!(!prefit_outlier_is_acceptable(0.5, 1.0, retained_arc, 2.0));
+        assert!(prefit_outlier_is_acceptable(0.5, 1.0, retained_arc, 1.0));
+    }
+
+    #[test]
+    fn prefit_linear_fit_cannot_accept_below_minimum_arc() {
+        let observed = synthetic_observations();
+        let base = observed.values.spherical().unwrap().to_vec();
+        let predictor = LegacyLinearPredictor {
+            base,
+            truth: TRUTH_STATE,
+        };
+        let output = od_fit_with(
+            &predictor,
+            &perturbed_start(),
+            &observed,
+            &observers(),
+            &OdConfig {
+                rchi2_threshold: f64::MAX,
+                min_arc_length: 1_000_000.0,
+                contamination_percentage: 0.0,
+                method: OdMethod::Central,
+                min_obs: 6,
+                delta: 1.0e-6,
+                max_iter: 20,
+            },
+        )
+        .unwrap();
+        assert!(!output.found);
     }
 
     #[test]
@@ -6067,7 +6224,7 @@ mod tests {
                 .all(|&row| mjd[row] >= mjd[lo] && mjd[row] <= mjd[hi]));
         }
         assert_near_truth(&result.to_output(observed.len()));
-        // The run-level default is exactly three triplets per allowed outlier.
+        // Spans retain their historical method-specific default budget.
         let none = run_iod(
             &predictor,
             &observed,
@@ -6079,9 +6236,14 @@ mod tests {
         )
         .unwrap();
         assert!(!none.found());
-        let expected_budget =
-            3 * (((observed.len() as f64 * config.contamination_percentage / 100.0) as usize) + 1);
-        assert_eq!(none.triplets_tried, expected_budget);
+        let available = span_triplets(
+            &mjd,
+            &observation_nights(&mjd, None),
+            &config.spans,
+            config.spans.max_triplets,
+        )
+        .len();
+        assert_eq!(none.triplets_tried, available);
     }
 
     #[test]

@@ -628,8 +628,10 @@ def run_iod(
     observation_selection_method, light_time
         As for `iod`.
     max_triplets : int, optional
-        Bound on the triplets searched; None keeps the exact legacy budget of
-        three triplets per allowed outlier for every selection method.
+        Bound on the triplets searched. With None, ``"combinations"`` keeps
+        the legacy ``3 * (max_outliers + 1)`` budget and ``"spans"`` uses
+        ``span_max_triplets`` (32 by default). An explicit value overrides
+        either method-specific default.
     velocity_method : {"gauss", "gibbs", "herrick+gibbs", "auto"}
         Velocity of the Gauss candidates. ``"auto"`` uses Herrick-Gibbs when
         consecutive position vectors are within 5 degrees (Vallado 2013) and
@@ -685,6 +687,13 @@ def run_iod(
         Every scored candidate, the accepted index, the search counters and
         the reason when no orbit was accepted.
     """
+    if (
+        span_settings is not None
+        and "span_max_triplets" in span_settings
+        and isinstance(span_settings["span_max_triplets"], bool)
+    ):
+        raise ValueError("span_max_triplets must be a positive integer, not bool")
+
     iod_settings = {
         "min_obs": min_obs,
         "min_arc_length": min_arc_length,
@@ -695,12 +704,12 @@ def run_iod(
         "mu": MU,
         "speed_of_light": C,
         "max_triplets": (
-            (span_settings or {}).get("span_max_triplets")
+            span_settings["span_max_triplets"]
             if max_triplets is None
-            and isinstance((span_settings or {}).get("span_max_triplets"), int)
-            and (span_settings or {})["span_max_triplets"] > 0
-            and (span_settings or {})["span_max_triplets"]
-            != IOD_DEFAULTS["span_max_triplets"]
+            and observation_selection_method == "spans"
+            and span_settings is not None
+            and isinstance(span_settings.get("span_max_triplets"), int)
+            and span_settings["span_max_triplets"] > 0
             else max_triplets
         ),
         "velocity_method": velocity_method,

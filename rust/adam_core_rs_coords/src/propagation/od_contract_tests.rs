@@ -567,6 +567,30 @@ fn review_input_validation_matrix() {
     assert!(failures.is_empty(), "{failures:#?}");
 }
 
+#[test]
+fn angular_covariance_structure_is_validated_at_the_direct_boundary() {
+    let epochs = [60_002.0, 60_003.0, 60_004.0];
+    let observers = observers_at(&epochs, &["X05"; 3]);
+    let observed = observe(&observers, &[1.0 / 3600.0; 3]);
+    let sigma2 = observed.covariance.as_ref().unwrap().values_row_major[7];
+
+    let error_for = |left: f64, right: f64| {
+        let mut candidate = observed.clone();
+        let covariance = &mut candidate.covariance.as_mut().unwrap().values_row_major;
+        covariance[8] = left;
+        covariance[13] = right;
+        validate_od_observations(&candidate, &observers, true)
+            .expect_err("invalid angular covariance must fail eagerly")
+            .to_string()
+    };
+    let half_null = error_for(f64::NAN, 0.0);
+    assert!(half_null.contains("symmetric finite values or both null"));
+    let asymmetric = error_for(0.25 * sigma2, 0.5 * sigma2);
+    assert!(asymmetric.contains("symmetric finite values or both null"));
+    let semidefinite = error_for(sigma2, sigma2);
+    assert!(semidefinite.contains("positive definite"));
+}
+
 /// Prefit outlier trial: keep-mask rebuilt with `removed.contains` for every
 /// count => O(n * m^2) per candidate (m = contamination * n), plus a
 /// legacy triplet budget 3 * (m + 1) that also grows with n.
@@ -610,6 +634,212 @@ fn review_prefit_outlier_trial_scaling() {
             o.len(), r.found(), r.triplets_tried, r.candidates_evaluated, start.elapsed()
         );
     }
+}
+
+#[test]
+fn grouped_sparse_night_pairs_keep_a_valid_interior_middle() {
+    let mut times = Vec::new();
+    for night in 0..3 {
+        for row in 0..3 {
+            times.push(60_000.0 + 30.0 * night as f64 + 0.2 * row as f64 / 3.0);
+        }
+    }
+    let nights = observation_nights(&times, None);
+    let config = SpanSearchConfig::default();
+    let mut stats = TripletSearchStats::default();
+    let triplets = span_triplets_with_limits(&times, &nights, &config, 32, 32, 32, 32, &mut stats);
+    let pairs: std::collections::HashSet<(usize, usize)> = triplets
+        .iter()
+        .map(|(triplet, _)| (nights[triplet[0]], nights[triplet[2]]))
+        .collect();
+    assert_eq!(pairs.len(), 6, "{triplets:?}");
+    assert_eq!(stats.pair_visits, 6);
+    assert_eq!(stats.raw_pair_visits, 6);
+    assert_eq!(stats.middle_visits, 6);
+    assert!(!stats.exhausted());
+    for (triplet, _) in triplets {
+        assert!(times[triplet[0]] < times[triplet[1]]);
+        assert!(times[triplet[1]] < times[triplet[2]]);
+    }
+}
+
+#[test]
+fn grouped_raw_pair_cap_stops_before_scanning_another_night_pair() {
+    let mut times = Vec::new();
+    for night in 0..3 {
+        for row in 0..3 {
+            times.push(30.0 * night as f64 + 0.1 * row as f64);
+        }
+    }
+    let nights = observation_nights(&times, None);
+    let mut stats = TripletSearchStats::default();
+    let triplets = span_triplets_with_limits(
+        &times,
+        &nights,
+        &SpanSearchConfig {
+            max_span_days: 40.0,
+            ..SpanSearchConfig::default()
+        },
+        32,
+        32,
+        1,
+        32,
+        &mut stats,
+    );
+    assert_eq!(stats.raw_pair_visits, 1);
+    assert!(stats.raw_pair_cap_exhausted);
+    assert!(triplets.len() <= 1);
+}
+
+#[test]
+fn lazy_sparse_night_pairs_are_not_marked_before_a_valid_middle() {
+    let mut times = Vec::new();
+    for night in 0..65 {
+        for row in 0..3 {
+            times.push(30.0 * night as f64 + 0.1 * row as f64);
+        }
+    }
+    let nights = observation_nights(&times, None);
+    assert_eq!(
+        nights
+            .iter()
+            .copied()
+            .collect::<std::collections::HashSet<_>>()
+            .len(),
+        65
+    );
+    let mut stats = TripletSearchStats::default();
+    let triplets = span_triplets_with_limits(
+        &times,
+        &nights,
+        &SpanSearchConfig {
+            min_span_days: 1.0,
+            max_span_days: 40.0,
+            // Make every search window the full arc so this oracle reaches
+            // the >64-night lazy path before a grouped window can consume
+            // the same adjacent-night pairs.
+            dense_window_days: [2_000.0, 2_000.0],
+            edge_window_days: 2_000.0,
+            ..SpanSearchConfig::default()
+        },
+        32,
+        10_000,
+        10_000,
+        10_000,
+        &mut stats,
+    );
+    assert_eq!(triplets.len(), 32, "{triplets:?}");
+    for (triplet, _) in triplets {
+        assert!(times[triplet[0]] < times[triplet[1]]);
+        assert!(times[triplet[1]] < times[triplet[2]]);
+    }
+}
+
+#[test]
+fn default_triplet_budget_is_method_specific_and_explicit_override_wins() {
+    let epochs: Vec<f64> = (0..80)
+        .map(|row| 60_002.0 + (row / 8) as f64 + 0.2 * (row % 8) as f64 / 8.0)
+        .collect();
+    let observers = observers_at(&epochs, &vec!["X05"; epochs.len()]);
+    let observed = observe(&observers, &vec![1.0 / 3600.0; epochs.len()]);
+    let propagator = TwoBodyPropagator::default();
+    let options = options();
+    let predictor = predictor(&propagator, &options);
+
+    let run = |method, max_triplets| {
+        run_iod(
+            &predictor,
+            &observed,
+            &observers,
+            &IodConfig {
+                observation_selection_method: method,
+                contamination_percentage: 20.0,
+                rchi2_threshold: 1.0e-30,
+                max_triplets,
+                ..IodConfig::default()
+            },
+        )
+        .unwrap()
+    };
+    let spans = run(ObservationSelectionMethod::Spans, None);
+    assert_eq!(
+        spans.triplets_tried,
+        SpanSearchConfig::default().max_triplets
+    );
+    let combinations = run(ObservationSelectionMethod::Combinations, None);
+    let max_outliers = ((epochs.len() as f64 * 0.2) as usize).min(epochs.len() - 6);
+    assert_eq!(combinations.triplets_tried, 3 * (max_outliers + 1));
+    for method in [
+        ObservationSelectionMethod::Spans,
+        ObservationSelectionMethod::Combinations,
+    ] {
+        assert_eq!(run(method, Some(7)).triplets_tried, 7);
+    }
+}
+
+#[test]
+fn corrected_iod_recovers_three_sparse_nights() {
+    use super::super::od_refine::{run_iod_corrected, WhitenedFitConfig};
+    let mut epochs = Vec::new();
+    for night in 0..3 {
+        for row in 0..3 {
+            epochs.push(60_002.0 + 30.0 * night as f64 + row as f64 / 48.0);
+        }
+    }
+    let observers = observers_at(&epochs, &vec!["X05"; epochs.len()]);
+    let observed = observe(&observers, &vec![0.3 / 3600.0; epochs.len()]);
+    let propagator = TwoBodyPropagator::default();
+    let options = options();
+    let predictor = predictor(&propagator, &options);
+    let result = run_iod_corrected(
+        &predictor,
+        &observed,
+        &observers,
+        &IodConfig::default(),
+        &WhitenedFitConfig::default(),
+        &NoopProvider,
+        &ZeroTranslationProvider,
+    )
+    .unwrap();
+    assert!(result.found(), "{:?}", result.not_found_reason);
+}
+
+#[test]
+fn corrected_iod_retains_broad_multinight_arc_yield() {
+    use super::super::od_refine::{run_iod_corrected, WhitenedFitConfig};
+    let propagator = TwoBodyPropagator::default();
+    let options = options();
+    let predictor = predictor(&propagator, &options);
+    let mut found = 0_usize;
+    let mut outcomes = Vec::new();
+    for nights in [3_usize, 4, 6, 10] {
+        for span in [6.0_f64, 14.0, 30.0, 60.0, 120.0] {
+            let mut epochs = Vec::new();
+            for night in 0..nights {
+                let night_start = 60_002.0 + span * night as f64 / (nights - 1) as f64;
+                for row in 0..3 {
+                    epochs.push(night_start + row as f64 / 48.0);
+                }
+            }
+            let observers = observers_at(&epochs, &vec!["X05"; epochs.len()]);
+            let observed = observe(&observers, &vec![0.3 / 3600.0; epochs.len()]);
+            let result = run_iod_corrected(
+                &predictor,
+                &observed,
+                &observers,
+                &IodConfig::default(),
+                &WhitenedFitConfig::default(),
+                &NoopProvider,
+                &ZeroTranslationProvider,
+            )
+            .unwrap_or_else(|error| panic!("{nights} nights/{span} days aborted: {error}"));
+            found += usize::from(result.found());
+            outcomes.push((nights, span, result.found(), result.not_found_reason));
+        }
+    }
+    // The frozen historical implementation found 18/20 exact matrix arcs.
+    // Preserve that broad yield while allowing its two legitimate no-solutions.
+    assert!(found >= 18, "found {found}/20: {outcomes:#?}");
 }
 
 /// Default corrected acceptance end-to-end on duplicate-heavy and

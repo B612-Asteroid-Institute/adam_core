@@ -746,7 +746,21 @@ fn covariance_from_jacobian(
 ) -> Option<[f64; 36]> {
     let (jac_scaled, _) = scaled_problem(jac, residuals, loss, f_scale);
     let (a, _) = normal_equations(&jac_scaled, residuals);
-    inverse_6x6(&a).filter(|cov| cov.iter().all(|v| v.is_finite()))
+    inverse_6x6(&a)
+        .filter(|cov| cov.iter().all(|v| v.is_finite()))
+        .map(|mut covariance| {
+            // Numerical elimination can round the two triangles differently
+            // on weak short arcs. A covariance is symmetric by construction;
+            // canonicalize that identity before structural validation.
+            for row in 0..6 {
+                for col in row + 1..6 {
+                    let value = 0.5 * (covariance[row * 6 + col] + covariance[col * 6 + row]);
+                    covariance[row * 6 + col] = value;
+                    covariance[col * 6 + row] = value;
+                }
+            }
+            covariance
+        })
 }
 
 // ---------------------------------------------------------------------------
@@ -860,6 +874,26 @@ fn trust_region_step(
     (p, alpha)
 }
 
+fn remaining_fit_config(
+    config: &WhitenedFitConfig,
+    used_iterations: usize,
+    used_nfev: usize,
+    jacobian: JacobianMethod,
+) -> Option<WhitenedFitConfig> {
+    let max_iterations = config.max_iterations.saturating_sub(used_iterations);
+    let max_nfev = config.max_nfev.map(|limit| limit.saturating_sub(used_nfev));
+    if max_iterations == 0 || max_nfev == Some(0) {
+        None
+    } else {
+        Some(WhitenedFitConfig {
+            jacobian,
+            max_iterations,
+            max_nfev,
+            ..*config
+        })
+    }
+}
+
 /// Trust-region Gauss-Newton on the robust cost: scipy's `least_squares`
 /// `method="trf"` without bounds and with `x_scale="jac"`, the solver the
 /// Python baseline used. See the contract on [`WhitenedFitConfig`].
@@ -892,22 +926,16 @@ fn solve_with_fallback(
         } else {
             initial_state
         };
-        let remaining_iterations = config
-            .max_iterations
-            .saturating_sub(approximate.optimizer_iterations);
-        let remaining_nfev = config
-            .max_nfev
-            .map(|limit| limit.saturating_sub(approximate.nfev));
-        if remaining_iterations == 0 || remaining_nfev == Some(0) {
+        let Some(exact_config) = remaining_fit_config(
+            config,
+            approximate.optimizer_iterations,
+            approximate.nfev,
+            JacobianMethod::Propagator,
+        ) else {
             // The requested backend Jacobian never ran, so convergence of
             // the cheap seed phase is not convergence of the requested solve.
             approximate.status = STATUS_LIMIT;
             return Ok((approximate, JacobianMethod::Propagator));
-        }
-        let exact_config = WhitenedFitConfig {
-            max_iterations: remaining_iterations,
-            max_nfev: remaining_nfev,
-            ..*config
         };
         let (exact, method) =
             solve_with_nonfinite_fallback(problem, start, &exact_config, warnings)?;
@@ -950,20 +978,13 @@ fn solve_with_nonfinite_fallback(
             "propagator's"
         }
     ));
-    let remaining_iterations = config
-        .max_iterations
-        .saturating_sub(solution.optimizer_iterations);
-    let remaining_nfev = config
-        .max_nfev
-        .map(|limit| limit.saturating_sub(solution.nfev));
-    if remaining_iterations == 0 || remaining_nfev == Some(0) {
+    let Some(central) = remaining_fit_config(
+        config,
+        solution.optimizer_iterations,
+        solution.nfev,
+        JacobianMethod::Central,
+    ) else {
         return Ok((solution, config.jacobian));
-    }
-    let central = WhitenedFitConfig {
-        jacobian: JacobianMethod::Central,
-        max_iterations: remaining_iterations,
-        max_nfev: remaining_nfev,
-        ..*config
     };
     let retry = solve(problem, solution.state, &central)?;
     Ok((
@@ -1210,9 +1231,13 @@ fn weak_direction_delta_cost(
 /// any other prediction. Only an in-band row failure is a rejected trial.
 const COVARIANCE_SYMMETRY_RELATIVE_TOLERANCE: f64 = 1.0e-12;
 const COVARIANCE_MIN_RELATIVE_EIGENVALUE: f64 = 1.0e-12;
+/// A numerically converged state without a finite symmetric positive-definite
+/// covariance is not a successful scientific fit. This remains candidate-local
+/// in corrected IOD; CMC applies its stricter conditioning/probe policy later.
+const STATUS_INVALID_COVARIANCE: i64 = -3;
 
-/// Structural/rank gate required before a covariance may calibrate CMC2003.
-fn covariance_spectrum(covariance: &[f64; 36]) -> Result<(f64, f64), String> {
+/// Finite/symmetry gate shared by general fits and CMC calibration.
+fn symmetric_covariance(covariance: &[f64; 36]) -> Result<[[f64; 6]; 6], String> {
     if covariance.iter().any(|value| !value.is_finite()) {
         return Err("the fitted state covariance is non-finite".to_string());
     }
@@ -1240,6 +1265,37 @@ fn covariance_spectrum(covariance: &[f64; 36]) -> Result<(f64, f64), String> {
             symmetric[col][row] = value;
         }
     }
+    Ok(symmetric)
+}
+
+/// Scale-invariant structural validity for every successful fit. Position and
+/// velocity carry unlike units, so definiteness is tested on the congruent
+/// unit-diagonal matrix rather than on raw eigenvalues. This retains finite,
+/// full-rank SPD covariances even when their raw condition number is extreme.
+fn covariance_validity(covariance: &[f64; 36]) -> Result<(), String> {
+    let symmetric = symmetric_covariance(covariance)?;
+    let mut scales = [0.0_f64; 6];
+    for axis in 0..6 {
+        let diagonal = symmetric[axis][axis];
+        if !diagonal.is_finite() || diagonal <= 0.0 {
+            return Err("the fitted state covariance is not positive-definite".to_string());
+        }
+        scales[axis] = diagonal.sqrt();
+    }
+    let scaled: [[f64; 6]; 6] = std::array::from_fn(|row| {
+        std::array::from_fn(|col| symmetric[row][col] / (scales[row] * scales[col]))
+    });
+    let (eigenvalues, _) = symmetric_eigen_6x6(&scaled);
+    let lambda_min = eigenvalues.iter().copied().fold(f64::INFINITY, f64::min);
+    if !lambda_min.is_finite() || lambda_min <= 0.0 {
+        return Err("the fitted state covariance is not positive-definite".to_string());
+    }
+    Ok(())
+}
+
+/// Raw spectrum used only for CMC2003's stricter conditioning threshold.
+fn covariance_spectrum(covariance: &[f64; 36]) -> Result<(f64, f64), String> {
+    let symmetric = symmetric_covariance(covariance)?;
     let (eigenvalues, _) = symmetric_eigen_6x6(&symmetric);
     let lambda_max = eigenvalues
         .iter()
@@ -1507,13 +1563,26 @@ fn fit_orbit_whitened_impl<T: OriginTranslationProvider>(
             &mut warnings,
         )?;
     }
-    if solution.status > 0 && covariance_problem.is_none() {
-        covariance_quality(&covariance).map_err(|reason| {
-            PropagationError::InvalidRequest(format!(
-                "successful fit covariance unavailable: {reason}"
-            ))
-        })?;
+    // Outside CMC, a finite symmetric positive-definite covariance is enough:
+    // mixed position/velocity units make a universal condition-number cutoff
+    // scientifically inappropriate for otherwise valid short arcs. Structural
+    // failures make this fit unsuccessful (and therefore candidate-local), not
+    // an InvalidRequest that aborts a wider IOD search. CMC uses
+    // `covariance_quality` plus the weak-direction probe below.
+    let covariance_failure = covariance_problem
+        .is_none()
+        .then(|| covariance_validity(&covariance).err())
+        .flatten();
+    if let Some(reason) = &covariance_failure {
+        warnings.push(format!(
+            "The fit did not produce a usable state covariance: {reason}. The state and statistics are retained, but the fit is marked unsuccessful."
+        ));
     }
+    let status_code = if covariance_failure.is_some() && solution.status != STATUS_NON_FINITE {
+        STATUS_INVALID_COVARIANCE
+    } else {
+        solution.status
+    };
 
     let evaluation = evaluate_orbit(
         predictor,
@@ -1542,8 +1611,8 @@ fn fit_orbit_whitened_impl<T: OriginTranslationProvider>(
             covariance,
             iterations: solution.nfev,
             optimizer_iterations: solution.optimizer_iterations,
-            converged: solution.status > 0,
-            status_code: solution.status,
+            converged: status_code > 0,
+            status_code,
             cost: solution.cost,
             fit_chi2,
             weights,
@@ -2391,14 +2460,20 @@ fn stage_fit<T: OriginTranslationProvider>(
     // Any finite fit within the threshold is a usable seed for the next
     // stage, converged or not (the walk-forward accepted budget-exhausted
     // fits at a good state); a non-finite derivative (status -2) is not.
-    let usable = output.status_code != STATUS_NON_FINITE;
+    let usable =
+        output.status_code != STATUS_NON_FINITE && output.status_code != STATUS_INVALID_COVARIANCE;
     if !usable || !rchi2.is_finite() || rchi2 > rchi2_threshold {
         return Ok(Err((
             format!(
-                "stage fit on {} observations: reduced chi2 {:.4}, status {}",
+                "stage fit on {} observations: reduced chi2 {:.4}, status {}{}",
                 mask.iter().filter(|&&keep| keep).count(),
                 rchi2,
-                output.status_code
+                output.status_code,
+                output
+                    .warnings
+                    .last()
+                    .map(|warning| format!(" ({warning})"))
+                    .unwrap_or_default()
             ),
             false,
         )));
@@ -4873,6 +4948,22 @@ mod tests {
     }
 
     #[test]
+    fn remaining_solver_config_never_refreshes_either_budget() {
+        let config = WhitenedFitConfig {
+            jacobian: JacobianMethod::Analytic,
+            max_iterations: 7,
+            max_nfev: Some(20),
+            ..WhitenedFitConfig::default()
+        };
+        let remaining = remaining_fit_config(&config, 3, 4, JacobianMethod::Propagator).unwrap();
+        assert_eq!(remaining.jacobian, JacobianMethod::Propagator);
+        assert_eq!(remaining.max_iterations, 4);
+        assert_eq!(remaining.max_nfev, Some(16));
+        assert!(remaining_fit_config(&config, 7, 4, JacobianMethod::Central).is_none());
+        assert!(remaining_fit_config(&config, 3, 20, JacobianMethod::Central).is_none());
+    }
+
+    #[test]
     fn propagator_phases_report_and_share_exact_combined_budgets() {
         let propagator = TwoBodyPropagator::default();
         let options = ephemeris_options();
@@ -4902,7 +4993,9 @@ mod tests {
         let config = WhitenedFitConfig {
             jacobian: JacobianMethod::Propagator,
             max_iterations: seed.optimizer_iterations + 2,
-            max_nfev: Some(seed.nfev + 64),
+            // Leave evaluation count unbounded so the iteration assertion
+            // independently detects a fresh second-phase budget.
+            max_nfev: None,
             ..WhitenedFitConfig::default()
         };
         let approximate = solve(
@@ -4939,7 +5032,6 @@ mod tests {
             combined.optimizer_iterations,
             approximate.optimizer_iterations + exact.optimizer_iterations
         );
-        assert!(combined.nfev <= config.max_nfev.unwrap());
         assert!(combined.optimizer_iterations <= config.max_iterations);
     }
 
@@ -4974,13 +5066,15 @@ mod tests {
         assert!(plain.optimizer_iterations > 0);
         let config = WhitenedFitConfig {
             max_iterations: plain.optimizer_iterations + 1,
-            max_nfev: Some(plain.nfev + 14),
+            // Leave evaluation count unbounded so the fallback cannot hide
+            // a fresh iteration budget behind a tighter nfev cap.
+            max_nfev: None,
             ..base
         };
         let retry_config = WhitenedFitConfig {
             jacobian: JacobianMethod::Central,
             max_iterations: 1,
-            max_nfev: Some(14),
+            max_nfev: None,
             ..config
         };
         let retry = solve(&problem, plain.state, &retry_config).unwrap();
@@ -4995,7 +5089,6 @@ mod tests {
             combined.optimizer_iterations,
             plain.optimizer_iterations + retry.optimizer_iterations
         );
-        assert!(combined.nfev <= config.max_nfev.unwrap());
         assert!(combined.optimizer_iterations <= config.max_iterations);
     }
 
@@ -5508,6 +5601,131 @@ mod tests {
         }
     }
 
+    struct DistortsOrRejectsCmcProbe<'a> {
+        inner: &'a dyn SphericalPredictor,
+        reject_probe: Option<usize>,
+        distort: bool,
+        probes: std::cell::Cell<usize>,
+    }
+
+    impl SphericalPredictor for DistortsOrRejectsCmcProbe<'_> {
+        fn predict_spherical(
+            &self,
+            states: &[[f64; 6]],
+            geometry: &OrbitGeometry,
+            observers: &ObserverBatch,
+        ) -> PropagationResultValue<Result<Vec<f64>, String>> {
+            let result = self.inner.predict_spherical(states, geometry, observers)?;
+            if states.len() != 2 {
+                return Ok(result);
+            }
+            let probe = self.probes.get() + 1;
+            self.probes.set(probe);
+            if self.reject_probe == Some(probe) {
+                return Ok(Err(format!("deliberately rejected CMC probe {probe}")));
+            }
+            let mut result = match result {
+                Ok(result) => result,
+                Err(message) => return Ok(Err(message)),
+            };
+            if self.distort {
+                for prediction in result.chunks_exact_mut(6) {
+                    prediction[1] += 1.0;
+                }
+            }
+            Ok(Ok(result))
+        }
+    }
+
+    #[test]
+    fn cmc_fails_closed_on_probe_mismatch_and_probe_rejection() {
+        let propagator = TwoBodyPropagator::default();
+        let options = ephemeris_options();
+        let inner = PropagatorPredictor {
+            propagator: &propagator,
+            options: &options,
+            provider: &NoopProvider,
+            translation_provider: &ZeroTranslationProvider,
+        };
+        let observed = synthetic_observations(None);
+        let run = |predictor: &dyn SphericalPredictor| {
+            cmc2003_fit_with(
+                predictor,
+                &perturbed_start(),
+                &observed,
+                &observers(),
+                &Cmc2003FitConfig {
+                    fit: WhitenedFitConfig {
+                        jacobian: JacobianMethod::Central,
+                        validate_covariance: false,
+                        ..WhitenedFitConfig::default()
+                    },
+                    ..Cmc2003FitConfig::default()
+                },
+                &NoopProvider,
+                &ZeroTranslationProvider,
+            )
+        };
+
+        let distorted = DistortsOrRejectsCmcProbe {
+            inner: &inner,
+            reject_probe: None,
+            distort: true,
+            probes: std::cell::Cell::new(0),
+        };
+        let mismatch = run(&distorted).expect_err("CMC must reject a mismatched chi2 surface");
+        assert!(mismatch.to_string().contains("consistency check failed"));
+        assert_eq!(distorted.probes.get(), 1);
+
+        let rejected = DistortsOrRejectsCmcProbe {
+            inner: &inner,
+            reject_probe: Some(1),
+            distort: false,
+            probes: std::cell::Cell::new(0),
+        };
+        let failure = run(&rejected).expect_err("CMC must reject a failed probe prediction");
+        assert!(failure.to_string().contains("probe failed"));
+        assert_eq!(rejected.probes.get(), 1);
+    }
+
+    #[test]
+    fn cmc_regates_the_final_selection_refit() {
+        let propagator = TwoBodyPropagator::default();
+        let options = ephemeris_options();
+        let inner = PropagatorPredictor {
+            propagator: &propagator,
+            options: &options,
+            provider: &NoopProvider,
+            translation_provider: &ZeroTranslationProvider,
+        };
+        let predictor = DistortsOrRejectsCmcProbe {
+            inner: &inner,
+            reject_probe: Some(2),
+            distort: false,
+            probes: std::cell::Cell::new(0),
+        };
+        let failure = cmc2003_fit_with(
+            &predictor,
+            &perturbed_start(),
+            &synthetic_observations(Some(3)),
+            &observers(),
+            &Cmc2003FitConfig {
+                max_iterations: 1,
+                fit: WhitenedFitConfig {
+                    jacobian: JacobianMethod::Central,
+                    validate_covariance: false,
+                    ..WhitenedFitConfig::default()
+                },
+                ..Cmc2003FitConfig::default()
+            },
+            &NoopProvider,
+            &ZeroTranslationProvider,
+        )
+        .expect_err("the post-selection fit requires the same covariance gate");
+        assert!(failure.to_string().contains("probe failed"));
+        assert_eq!(predictor.probes.get(), 2);
+    }
+
     #[test]
     fn probe_backend_error_propagates_and_in_band_failure_warns() {
         let propagator = TwoBodyPropagator::default();
@@ -5961,6 +6179,106 @@ mod tests {
     }
 
     #[test]
+    fn general_fit_accepts_spd_ill_conditioning_but_cmc_refuses_it() {
+        let mut fixture = linear_fixture(0.0);
+        // Preserve full rank while making one state direction much more weakly
+        // constrained than CMC permits. General differential correction must
+        // not apply CMC's dimensionful conditioning heuristic.
+        for row in &mut fixture.predictor.design {
+            row[5] *= 1.0e-7;
+        }
+        let config = WhitenedFitConfig {
+            jacobian: JacobianMethod::Central,
+            validate_covariance: false,
+            ..WhitenedFitConfig::default()
+        };
+        let direct = fit_orbit_whitened_with(
+            &fixture.predictor,
+            &perturbed_start(),
+            &fixture.observed,
+            &observers(),
+            &[false; NUM_OBS],
+            &config,
+            &NoopProvider,
+            &ZeroTranslationProvider,
+        )
+        .unwrap();
+        assert!(direct.converged, "{:?}", direct.warnings);
+        assert!(covariance_validity(&direct.covariance).is_ok());
+        let (minimum, maximum) = covariance_spectrum(&direct.covariance).unwrap();
+        assert!(minimum / maximum < COVARIANCE_MIN_RELATIVE_EIGENVALUE);
+        assert!(covariance_quality(&direct.covariance).is_err());
+
+        let cmc = cmc2003_fit_with(
+            &fixture.predictor,
+            &perturbed_start(),
+            &fixture.observed,
+            &observers(),
+            &Cmc2003FitConfig {
+                fit: config,
+                ..Cmc2003FitConfig::default()
+            },
+            &NoopProvider,
+            &ZeroTranslationProvider,
+        )
+        .expect_err("CMC must retain its stricter conditioning gate");
+        assert!(cmc.to_string().contains("ill-conditioned"), "{cmc}");
+    }
+
+    #[test]
+    fn two_epoch_fit_is_rejected_before_numerical_work() {
+        let fixture = linear_fixture(0.0);
+        let rows = vec![0, 1];
+        let observed = super::super::od::take_coordinate_batch(&fixture.observed, &rows).unwrap();
+        let observers = super::super::od::take_observer_batch(&observers(), &rows).unwrap();
+        let error = fit_orbit_whitened_with(
+            &fixture.predictor,
+            &perturbed_start(),
+            &observed,
+            &observers,
+            &[false; 2],
+            &WhitenedFitConfig::default(),
+            &NoopProvider,
+            &ZeroTranslationProvider,
+        )
+        .expect_err("a two-epoch six-state fit is structurally underdetermined");
+        assert!(error.to_string().contains("at least 3 are required"));
+        assert!(fixture.predictor.batches.borrow().is_empty());
+    }
+
+    #[test]
+    fn invalid_covariance_is_candidate_local_unsuccessful_output() {
+        let mut fixture = linear_fixture(0.0);
+        // Predictions remain finite and the optimizer can terminate, but one
+        // unconstrained state axis makes the normal matrix exactly singular.
+        for row in &mut fixture.predictor.design {
+            row[5] = 0.0;
+        }
+        let output = fit_orbit_whitened_with(
+            &fixture.predictor,
+            &perturbed_start(),
+            &fixture.observed,
+            &observers(),
+            &[false; NUM_OBS],
+            &WhitenedFitConfig {
+                jacobian: JacobianMethod::Central,
+                validate_covariance: false,
+                ..WhitenedFitConfig::default()
+            },
+            &NoopProvider,
+            &ZeroTranslationProvider,
+        )
+        .expect("candidate-local covariance failure must remain an output");
+        assert!(!output.converged);
+        assert_eq!(output.status_code, STATUS_INVALID_COVARIANCE);
+        assert!(output.covariance.iter().any(|value| !value.is_finite()));
+        assert!(output
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("usable state covariance")));
+    }
+
+    #[test]
     fn cmc_covariance_refusal_retains_actionable_fit_diagnostics() {
         let fixture = linear_fixture(0.0);
         let output = fit_orbit_whitened_with(
@@ -6000,34 +6318,46 @@ mod tests {
         for axis in 0..6 {
             identity[axis * 6 + axis] = 1.0;
         }
+        assert!(covariance_validity(&identity).is_ok());
         assert!(covariance_quality(&identity).is_ok());
 
         let mut invalid = identity;
         invalid[0] = f64::NAN;
+        assert!(covariance_validity(&invalid).is_err());
         assert!(covariance_quality(&invalid)
             .unwrap_err()
             .contains("non-finite"));
 
         invalid = identity;
         invalid[1] = 1.0e-3;
+        assert!(covariance_validity(&invalid).is_err());
         assert!(covariance_quality(&invalid)
             .unwrap_err()
             .contains("symmetric"));
 
         invalid = identity;
         invalid[0] = -1.0;
+        assert!(covariance_validity(&invalid).is_err());
         assert!(covariance_quality(&invalid)
             .unwrap_err()
             .contains("positive-definite"));
 
         invalid = identity;
         invalid[0] = 0.0;
+        assert!(covariance_validity(&invalid).is_err());
         assert!(covariance_quality(&invalid)
             .unwrap_err()
             .contains("positive-definite"));
 
         invalid = identity;
+        invalid[1] = 1.0;
+        invalid[6] = 1.0;
+        assert!(covariance_validity(&invalid).is_err());
+        assert!(covariance_quality(&invalid).is_err());
+
+        invalid = identity;
         invalid[0] = 1.0e-13;
+        assert!(covariance_validity(&invalid).is_ok());
         assert!(covariance_quality(&invalid)
             .unwrap_err()
             .contains("ill-conditioned"));
