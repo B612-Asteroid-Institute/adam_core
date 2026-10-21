@@ -17,9 +17,8 @@ import pyarrow as pa
 import pytest
 
 from ..rejection import _expected_residual_chi2, cmc2003_fit_detailed
-from .test_cmc2003_rejection import select, state_of
+from .test_cmc2003_rejection import select
 from .test_differential_correction import (
-    TRUTH_STATE,
     TwoBodyPropagator,
     make_initial_guess,
     make_synthetic_observations,

@@ -241,14 +241,12 @@ def model_descriptor(model: object) -> dict[str, Any]:
     """Reproducible model implementation, configuration, and content."""
     cls = type(model)
     apply = getattr(model, "apply", None)
-    if not callable(apply):
-        raise TypeError(
-            f"observation model {cls.__module__}.{cls.__qualname__} has no callable apply"
-        )
+    implementation = apply if callable(apply) else cls.__init__
     descriptor: dict[str, Any] = {
         "type": f"{cls.__module__}.{cls.__qualname__}",
         "implementation_version": _package_version(cls.__module__),
-        "implementation": _callable_identity(apply, {id(model)}),
+        "implementation_entrypoint": "apply" if callable(apply) else "__init__",
+        "implementation": _callable_identity(implementation, {id(model)}),
     }
     parameters: dict[str, Any] = {}
     tables: dict[str, str] = {}

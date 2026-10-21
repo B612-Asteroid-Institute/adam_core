@@ -76,11 +76,6 @@ def test_build_identity_is_exact_clean_head():
 # ------------------------------------------------------------------ input identity
 
 
-def _with(obs, path, fn):
-    col = obs.column(path) if "." not in path else None
-    return fn(obs)
-
-
 def _set_np(obs, path, transform, dtype=None):
     parts = path.split(".")
     node = obs
@@ -261,7 +256,9 @@ def test_model_descriptor_numpy_variants():
         def apply(self, o):
             return o
 
-    sha = lambda v: model_descriptor(ArrayModel(v))["descriptor_sha256"]
+    def sha(v):
+        return model_descriptor(ArrayModel(v))["descriptor_sha256"]
+
     base = np.arange(6, dtype=np.float64).reshape(2, 3)
     variants = {
         "f32": base.astype(np.float32),
