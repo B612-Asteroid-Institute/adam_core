@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 fn git_commit(repo: &PathBuf) -> Option<String> {
@@ -20,13 +20,16 @@ fn git_commit(repo: &PathBuf) -> Option<String> {
 }
 
 fn git_dirty(repo: &PathBuf) -> Option<bool> {
-    let output = Command::new("git")
+    // Tracked edits/staging anywhere in Core affect the source identity. The
+    // exact adam-assist checkout used by the release workflow is a separate
+    // repository and is deliberately outside Core's identity.
+    let tracked = Command::new("git")
         .args([
             "-c",
             &format!("safe.directory={}", repo.display()),
             "status",
             "--porcelain",
-            "--untracked-files=normal",
+            "--untracked-files=no",
             "--",
             ".",
             ":(exclude)adam-assist",
@@ -34,7 +37,60 @@ fn git_dirty(repo: &PathBuf) -> Option<bool> {
         .current_dir(repo)
         .output()
         .ok()?;
-    output.status.success().then_some(!output.stdout.is_empty())
+    if !tracked.status.success() {
+        return None;
+    }
+    if !tracked.stdout.is_empty() {
+        return Some(true);
+    }
+
+    // Only untracked files that can enter the Python package or a Rust crate
+    // make the build dirty. Caches, wheelhouse/, docs output and the nested
+    // Assist checkout cannot affect the compiled/native package.
+    let untracked = Command::new("git")
+        .args([
+            "-c",
+            &format!("safe.directory={}", repo.display()),
+            "ls-files",
+            "--others",
+            "--exclude-standard",
+            "-z",
+            "--",
+            "src/adam_core",
+            "rust",
+        ])
+        .current_dir(repo)
+        .output()
+        .ok()?;
+    if !untracked.status.success() {
+        return None;
+    }
+    let relevant = untracked.stdout.split(|byte| *byte == 0).any(|raw| {
+        let Ok(path) = std::str::from_utf8(raw) else {
+            return true;
+        };
+        path.starts_with("src/adam_core/")
+            || (path.starts_with("rust/")
+                && (path.contains("/src/")
+                    || path.ends_with("/Cargo.toml")
+                    || path.ends_with("/build.rs")))
+    });
+    Some(relevant)
+}
+
+fn emit_source_directory_watches(repo: &Path) {
+    // Directory watches are needed for additions/removals: a newly-created
+    // untracked source file cannot be listed by an earlier build-script run.
+    // Restrict them to source roots so target/, wheelhouse/ and the nested
+    // adam-assist checkout never cause rebuild loops.
+    let python = repo.join("src/adam_core");
+    if python.is_dir() {
+        println!("cargo:rerun-if-changed={}", python.display());
+    }
+    let rust = repo.join("rust");
+    if rust.is_dir() {
+        println!("cargo:rerun-if-changed={}", rust.display());
+    }
 }
 
 fn emit_git_path_watch(repo: &PathBuf, git_path: &str) {
@@ -134,6 +190,8 @@ fn main() {
             }
         }
     }
+    emit_source_directory_watches(&repo);
+
     // The index detects staged paths and the current branch ref detects a
     // commit even though `.git/HEAD` still contains the same symbolic name.
     for git_path in ["HEAD", "index", "packed-refs"] {
@@ -157,7 +215,6 @@ fn main() {
             }
         }
     }
-    // The known release-matrix `adam-assist/` checkout is deliberately
-    // excluded from Core dirtiness; its exact SHA is verified independently
-    // by that workflow. No other untracked path is ignored.
+    // The release-matrix `adam-assist/` checkout is deliberately excluded;
+    // its exact SHA is verified independently by that workflow.
 }

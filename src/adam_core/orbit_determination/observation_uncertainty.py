@@ -645,7 +645,7 @@ class EFCC18DebiasModel(ObservationUncertaintyModel):
                 f"bias_table has shape {bias_table.shape}, expected {expected_shape}"
             )
         self.bias_table = bias_table
-        self.exclude_astcats = tuple(exclude_astcats)
+        self.exclude_astcats = tuple(sorted(set(exclude_astcats)))
         self._bias_table_f32 = np.ascontiguousarray(bias_table, dtype=np.float32)
 
     def apply(

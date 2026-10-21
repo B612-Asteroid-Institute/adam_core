@@ -1,5 +1,6 @@
 """Run-level OD provenance (`OdProvenance`) on both run_od routes."""
 
+import hashlib
 import json
 import subprocess
 from pathlib import Path
@@ -337,3 +338,241 @@ def test_ambiguous_iod_survives_refinement():
     # A refinement that recorded its own IOD fields keeps them.
     assert carry_iod_provenance(iod, orbits) is orbits
     assert _record(orbits)["iod_ambiguous"] is False
+
+
+def test_model_descriptor_is_stable_across_python_hash_seeds(tmp_path):
+    import os
+    import sys
+
+    module_path = tmp_path / "seed_model.py"
+    module_path.write_text(
+        "class Model:\n"
+        "    def __init__(self):\n"
+        "        self.excluded = {'V', 'a', 'b', 'c'}\n"
+        "    def apply(self, observations):\n"
+        "        return observations\n",
+        encoding="utf-8",
+    )
+    script = (
+        "from seed_model import Model; "
+        "from adam_core.orbit_determination.provenance import model_descriptor; "
+        "print(model_descriptor(Model())['descriptor_sha256'])"
+    )
+    hashes = set()
+    for seed in ("0", "1", "12345", "random"):
+        environment = dict(os.environ, PYTHONHASHSEED=seed)
+        pythonpath = os.pathsep.join(
+            part for part in (str(tmp_path), environment.get("PYTHONPATH")) if part
+        )
+        environment["PYTHONPATH"] = pythonpath
+        hashes.add(
+            subprocess.check_output(
+                [sys.executable, "-c", script],
+                env=environment,
+                text=True,
+            ).strip()
+        )
+    assert len(hashes) == 1
+
+
+def test_callable_identity_is_source_based_and_captures_delegated_helpers(tmp_path, monkeypatch):
+    import importlib
+    import linecache
+    import sys
+
+    module_name = "_adam_core_provenance_helper_fixture"
+    module_path = tmp_path / f"{module_name}.py"
+
+    def write(helper_value: int) -> None:
+        module_path.write_text(
+            "def helper():\n"
+            f"    return {helper_value}\n\n"
+            "class Model:\n"
+            "    def apply(self, observations):\n"
+            "        helper()\n"
+            "        return observations\n",
+            encoding="utf-8",
+        )
+        importlib.invalidate_caches()
+        linecache.clearcache()
+
+    monkeypatch.syspath_prepend(str(tmp_path))
+    write(1)
+    module = importlib.import_module(module_name)
+    first = model_descriptor(module.Model())
+    implementation = first["implementation"]
+    assert "bytecode_sha256" not in json.dumps(implementation)
+    assert len(implementation["entrypoint_source_sha256"]) == 64
+    assert len(implementation["module_source_sha256"]) == 64
+
+    write(2)
+    source = compile(module_path.read_text(encoding="utf-8"), str(module_path), "exec")
+    spec = module.__spec__
+    module.__dict__.clear()
+    module.__dict__.update(
+        {
+            "__name__": module_name,
+            "__file__": str(module_path),
+            "__package__": "",
+            "__spec__": spec,
+        }
+    )
+    exec(source, module.__dict__)
+    second = model_descriptor(module.Model())
+    assert (
+        first["implementation"]["entrypoint_source_sha256"]
+        == second["implementation"]["entrypoint_source_sha256"]
+    )
+    assert (
+        first["implementation"]["module_source_sha256"]
+        != second["implementation"]["module_source_sha256"]
+    )
+    assert first["descriptor_sha256"] != second["descriptor_sha256"]
+    sys.modules.pop(module_name, None)
+
+
+def test_callable_identity_preserves_closure_defaults_path_and_enum(tmp_path):
+    from enum import Enum
+
+    def make_apply(marker):
+        def apply(observations, default="default-value"):
+            if marker:
+                return observations
+            return observations
+
+        return apply
+
+    class Mode(Enum):
+        FIRST = "same-value"
+        SECOND = "same-value-too"
+
+    class Model:
+        def __init__(self, marker, path, mode):
+            self.apply = make_apply(marker)
+            self.path = path
+            self.mode = mode
+
+    path = tmp_path / "configuration.dat"
+    path.write_text("first", encoding="utf-8")
+    first = model_descriptor(Model("closure-a", path, Mode.FIRST))
+    implementation = first["implementation"]
+    assert implementation["closure"] == ["closure-a"]
+    assert implementation["defaults"] == ["default-value"]
+    assert first["parameters"]["path"]["sha256"] == hashlib.sha256(
+        b"first"
+    ).hexdigest()
+    assert first["parameters"]["mode"]["name"] == "FIRST"
+
+    closure_changed = model_descriptor(Model("closure-b", path, Mode.FIRST))
+    enum_changed = model_descriptor(Model("closure-a", path, Mode.SECOND))
+    path.write_text("second", encoding="utf-8")
+    path_changed = model_descriptor(Model("closure-a", path, Mode.FIRST))
+    assert first["descriptor_sha256"] != closure_changed["descriptor_sha256"]
+    assert first["descriptor_sha256"] != enum_changed["descriptor_sha256"]
+    assert first["descriptor_sha256"] != path_changed["descriptor_sha256"]
+
+
+def test_builtin_callable_identity_is_named_and_interpreter_independent():
+    class Model:
+        def __init__(self, callback):
+            self.callback = callback
+
+        def apply(self, observations):
+            return observations
+
+    length = model_descriptor(Model(len))
+    absolute = model_descriptor(Model(abs))
+    encoded = json.dumps(length["parameters"]["callback"], sort_keys=True)
+    assert "bytecode" not in encoded
+    assert '"implementation_kind": "builtin"' in encoded
+    assert length["descriptor_sha256"] != absolute["descriptor_sha256"]
+
+
+def test_dynamic_callable_without_module_fails_closed():
+    class Model:
+        def apply(self, observations):
+            return observations
+
+    Model.apply.__module__ = None
+    with pytest.raises(TypeError, match="no reproducible Python module identity"):
+        model_descriptor(Model())
+
+
+def test_preflight_failure_happens_before_fitter_work(monkeypatch):
+    import adam_core.orbit_determination.od_orchestration as orchestration
+
+    calls = 0
+
+    class CountingFitter:
+        def full_od(self, *args, **kwargs):
+            nonlocal calls
+            calls += 1
+            raise AssertionError("fit must not run before provenance preflight")
+
+    def refuse(*args, **kwargs):
+        raise TypeError("deliberate provenance refusal")
+
+    monkeypatch.setattr(orchestration, "_preflight_provenance", refuse)
+    with pytest.raises(TypeError, match="deliberate provenance refusal"):
+        run_od(
+            make_synthetic_observations(),
+            CountingFitter(),
+            None,
+            propagator=TwoBodyPropagator(),
+        )
+    assert calls == 0
+
+
+def test_uniform_provider_rejects_disagreement_and_partial_omission():
+    from adam_core.orbit_determination.provenance import _uniform_provider
+
+    assert _uniform_provider(["a", "a"], "IOD") == "a"
+    with pytest.raises(RuntimeError, match="omitted or disagreed"):
+        _uniform_provider(["a", "b"], "IOD")
+    with pytest.raises(RuntimeError, match="omitted or disagreed"):
+        _uniform_provider(["a", None], "IOD")
+
+
+def test_complete_provenance_keeps_distinct_native_stage_providers():
+    observations = make_synthetic_observations()
+    fitter = NativeOrbitFitter(TwoBodyPropagator())
+    fitted, members = run_od(
+        observations,
+        fitter,
+        None,
+        propagator=TwoBodyPropagator(),
+    )
+    assert len(fitted) == 1
+    base = fitted.provenance
+    iod = {
+        "name": "iod-native",
+        "version": "1",
+        "abi_version": 2,
+    }
+    refinement = {
+        "name": "refinement-native",
+        "version": "2",
+        "abi_version": 2,
+    }
+    modified = fitted.set_column(
+        "provenance",
+        OdProvenance.from_kwargs(
+            **{
+                **{name: base.table.column(name) for name in OdProvenance.schema.names},
+                "iod_provider": [json.dumps(iod, sort_keys=True)],
+                "refinement_provider": [json.dumps(refinement, sort_keys=True)],
+            }
+        ),
+    )
+    stamped = complete_provenance(
+        modified,
+        members,
+        fitter=fitter,
+        propagator=TwoBodyPropagator(),
+        models=[],
+        route="fused",
+        observations=observations,
+    )
+    record = _record(stamped)
+    assert json.loads(record["iod_provider"])["name"] == "iod-native"
+    assert json.loads(record["refinement_provider"])["name"] == "refinement-native"

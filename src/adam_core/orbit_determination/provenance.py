@@ -17,9 +17,8 @@ import json
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from enum import Enum
-from importlib import metadata
+from importlib import import_module, metadata
 from pathlib import Path
-from types import CodeType
 from typing import TYPE_CHECKING, Any, Optional, cast
 
 import numpy as np
@@ -33,7 +32,16 @@ if TYPE_CHECKING:
     from ..propagator import Propagator
 
 
+def _module_name(value: object, *, kind: str) -> str:
+    module = getattr(value, "__module__", None)
+    if not isinstance(module, str) or not module:
+        raise TypeError(f"{kind} has no reproducible Python module identity")
+    return module
+
+
 def _package_version(module: str) -> Optional[str]:
+    if not isinstance(module, str) or not module:
+        raise TypeError("provenance module identity must be a non-empty string")
     top = module.split(".")[0]
     if top == "adam_core":
         from .. import __version__
@@ -45,6 +53,69 @@ def _package_version(module: str) -> Optional[str]:
         except metadata.PackageNotFoundError:
             continue
     return None
+
+
+def _module_source(module_name: str) -> str:
+    """Stable module source or a fail-closed reproducibility error."""
+    try:
+        module = import_module(module_name)
+    except Exception as error:
+        raise TypeError(
+            f"cannot import provenance module {module_name!r} reproducibly"
+        ) from error
+    spec = getattr(module, "__spec__", None)
+    loader = getattr(spec, "loader", None)
+    get_source = getattr(loader, "get_source", None)
+    source = None
+    if callable(get_source):
+        try:
+            source = get_source(module_name)
+        except Exception:
+            source = None
+    if not isinstance(source, str):
+        source_file = inspect.getsourcefile(module)
+        if source_file is not None:
+            try:
+                source = Path(source_file).read_text(encoding="utf-8")
+            except (OSError, UnicodeError):
+                source = None
+    if not isinstance(source, str):
+        raise TypeError(
+            f"provenance module {module_name!r} has no reproducible source content"
+        )
+    return source
+
+
+def _source_identity(value: object, *, kind: str) -> dict[str, Any]:
+    """Interpreter-independent implementation identity.
+
+    Entrypoint source distinguishes implementations with the same configuration;
+    whole-module source also captures delegated helper changes. CPython bytecode
+    is deliberately excluded so one release artifact hashes identically on
+    Python 3.11--3.13.
+    """
+    module_name = _module_name(value, kind=kind)
+    qualname = getattr(value, "__qualname__", None)
+    if not isinstance(qualname, str) or not qualname:
+        raise TypeError(f"{kind} has no reproducible qualified name")
+    try:
+        entrypoint_source = inspect.getsource(value)
+    except (OSError, TypeError) as error:
+        raise TypeError(
+            f"{kind} {module_name}.{qualname} has no reproducible source content"
+        ) from error
+    module_source = _module_source(module_name)
+    return {
+        "module": module_name,
+        "qualname": qualname,
+        "implementation_version": _package_version(module_name),
+        "entrypoint_source_sha256": hashlib.sha256(
+            entrypoint_source.encode("utf-8")
+        ).hexdigest(),
+        "module_source_sha256": hashlib.sha256(
+            module_source.encode("utf-8")
+        ).hexdigest(),
+    }
 
 
 def backend_identity(propagator: object) -> Optional[str]:
@@ -121,53 +192,57 @@ def _arrow_array_sha256(value: pa.Array | pa.ChunkedArray) -> str:
     return _table_sha256(pa.table({"value": value}))
 
 
-def _code_identity(code: CodeType) -> dict[str, Any]:
-    constants: list[Any] = []
-    for value in code.co_consts:
-        if isinstance(value, CodeType):
-            constants.append({"code": _code_identity(value)})
-        elif value is None or isinstance(value, (bool, int, float, str)):
-            constants.append(value)
-        elif isinstance(value, bytes):
-            constants.append({"bytes_sha256": hashlib.sha256(value).hexdigest()})
-        else:
-            constants.append(_canonical_parameter(value, set()))
-    return {
-        "bytecode_sha256": hashlib.sha256(code.co_code).hexdigest(),
-        "constants": constants,
-        "names": list(code.co_names),
-        "varnames": list(code.co_varnames),
-        "freevars": list(code.co_freevars),
-        "cellvars": list(code.co_cellvars),
-        "argcount": code.co_argcount,
-        "posonlyargcount": code.co_posonlyargcount,
-        "kwonlyargcount": code.co_kwonlyargcount,
-        "flags": code.co_flags,
+def _builtin_identity(value: Any) -> dict[str, Any]:
+    """Stable identity for a named Python/runtime or extension builtin.
+
+    Builtins expose no Python source. Their public module/qualified name is the
+    reproducible entrypoint; an owning distribution version and module source
+    hash are included when available. This deliberately excludes interpreter
+    bytecode and interpreter-minor-version details.
+    """
+    module_name = _module_name(value, kind="builtin callable")
+    qualname = getattr(value, "__qualname__", None)
+    if not isinstance(qualname, str) or not qualname:
+        raise TypeError("builtin callable has no reproducible qualified name")
+    identity: dict[str, Any] = {
+        "module": module_name,
+        "qualname": qualname,
+        "implementation_version": _package_version(module_name),
+        "implementation_kind": "builtin",
     }
+    try:
+        source = _module_source(module_name)
+    except TypeError:
+        # Language builtins and extension-only modules have no Python source;
+        # their stable named API (plus package version, for extensions) is the
+        # strongest portable identity available across supported CPython minors.
+        identity["source_identity"] = "named-builtin-v1"
+    else:
+        identity["module_source_sha256"] = hashlib.sha256(
+            source.encode("utf-8")
+        ).hexdigest()
+    return identity
 
 
 def _callable_identity(value: Any, seen: set[int]) -> dict[str, Any]:
     function = value.__func__ if inspect.ismethod(value) else value
-    code = getattr(function, "__code__", None)
-    if not isinstance(code, CodeType):
-        raise TypeError(
-            f"unsupported callable provenance {type(value).__module__}.{type(value).__qualname__}"
-        )
-    closure = []
-    for cell in function.__closure__ or ():
-        closure.append(_canonical_parameter(cell.cell_contents, seen))
-    return {
-        "module": function.__module__,
-        "qualname": function.__qualname__,
-        "implementation_version": _package_version(function.__module__),
-        "code": _code_identity(code),
-        "defaults": _canonical_parameter(function.__defaults__, seen),
-        "kwdefaults": _canonical_parameter(function.__kwdefaults__, seen),
-        "closure": closure,
-        "bound_to_model": bool(
-            inspect.ismethod(value) and id(getattr(value, "__self__", None)) in seen
-        ),
-    }
+    identity = _source_identity(function, kind="callable")
+    closure = [
+        _canonical_parameter(cell.cell_contents, seen)
+        for cell in function.__closure__ or ()
+    ]
+    identity.update(
+        {
+            "defaults": _canonical_parameter(function.__defaults__, seen),
+            "kwdefaults": _canonical_parameter(function.__kwdefaults__, seen),
+            "closure": closure,
+            "bound_to_model": bool(
+                inspect.ismethod(value)
+                and id(getattr(value, "__self__", None)) in seen
+            ),
+        }
+    )
+    return identity
 
 
 def _canonical_parameter(value: Any, seen: set[int]) -> Any:
@@ -183,16 +258,12 @@ def _canonical_parameter(value: Any, seen: set[int]) -> Any:
             "sha256": hashlib.sha256(value.read_bytes()).hexdigest(),
         }
     if isinstance(value, type):
-        return {
-            "class": f"{value.__module__}.{value.__qualname__}",
-            "implementation_version": _package_version(value.__module__),
-        }
+        return {"class": _source_identity(value, kind="class")}
     if isinstance(value, Enum):
         cls = type(value)
         return {
-            "enum": f"{cls.__module__}.{cls.__qualname__}",
+            "enum": _source_identity(cls, kind="enum class"),
             "name": value.name,
-            "implementation_version": _package_version(cls.__module__),
         }
     identity = id(value)
     if identity in seen:
@@ -205,6 +276,8 @@ def _canonical_parameter(value: Any, seen: set[int]) -> Any:
         return {"arrow_sha256": _arrow_array_sha256(value)}
     if inspect.isfunction(value) or inspect.ismethod(value):
         return {"callable": _callable_identity(value, seen)}
+    if inspect.isbuiltin(value):
+        return {"callable": _builtin_identity(value)}
     seen.add(identity)
     try:
         if isinstance(value, Mapping):
@@ -228,8 +301,7 @@ def _canonical_parameter(value: Any, seen: set[int]) -> Any:
         if isinstance(fields, dict):
             cls = type(value)
             return {
-                "object": f"{cls.__module__}.{cls.__qualname__}",
-                "implementation_version": _package_version(cls.__module__),
+                "object": _source_identity(cls, kind="object class"),
                 "fields": {
                     name: _canonical_parameter(item, seen)
                     for name, item in sorted(fields.items())
@@ -245,21 +317,20 @@ def _canonical_parameter(value: Any, seen: set[int]) -> Any:
 def model_descriptor(model: object) -> dict[str, Any]:
     """Reproducible model implementation, configuration, and content."""
     cls = type(model)
+    cls_module = _module_name(cls, kind="model class")
     apply = getattr(model, "apply", None)
     descriptor: dict[str, Any] = {
-        "type": f"{cls.__module__}.{cls.__qualname__}",
-        "implementation_version": _package_version(cls.__module__),
+        "type": f"{cls_module}.{cls.__qualname__}",
+        "implementation_version": _package_version(cls_module),
     }
     if callable(apply):
         descriptor["implementation_entrypoint"] = "apply"
         descriptor["implementation"] = _callable_identity(apply, {id(model)})
     else:
         descriptor["implementation_entrypoint"] = "class"
-        descriptor["implementation"] = {
-            "module": cls.__module__,
-            "qualname": cls.__qualname__,
-            "implementation_version": _package_version(cls.__module__),
-        }
+        descriptor["implementation"] = _source_identity(
+            cls, kind="model class"
+        )
     parameters: dict[str, Any] = {}
     tables: dict[str, str] = {}
     nested: list[dict[str, Any]] = []

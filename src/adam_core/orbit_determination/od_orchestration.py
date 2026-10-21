@@ -402,6 +402,14 @@ def run_od(
         order of observations, if the fitter returns members referencing
         unknown observation ids, or if ``models`` is a string other than
         ``"default"``.
+    RuntimeError
+        If the native extension version differs from Python or its embedded
+        source identity is dirty or unknown. ``run_od`` requires an official
+        wheel or an exact clean-checkout build so its provenance is
+        reproducible; this check runs before models or fitting.
+    TypeError
+        If a model or fitter configuration has no reproducible source/content
+        identity. This provenance preflight also runs before models or fitting.
     ImportError, FileNotFoundError
         If ``models="default"`` and the ``adam-observatory-uncertainties``
         data package or JPL's EFCC18 ``bias.dat`` is not installed: one

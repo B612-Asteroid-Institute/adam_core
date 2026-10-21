@@ -164,9 +164,14 @@ def test_fused_equals_composed_every_provenance_field():
     c = _record(_run(obs, [PythonAppliedModel(table)])[0])
     assert f["route"] == "fused" and c["route"] == "composed"
     diffs = {k: (f[k], c[k]) for k in f if f[k] != c[k] and k not in ("route",)}
-    # models differ only by the declared Python class name
+    # The composed route genuinely executes a different Python entrypoint;
+    # implementation identity must therefore differ while model configuration
+    # and table content remain identical.
     if "models" in diffs:
         fm, cm = (json.loads(x) for x in diffs.pop("models"))
+        assert isinstance(fm[0]["implementation"], dict)
+        assert isinstance(cm[0]["implementation"], dict)
+        assert fm[0]["implementation"] != cm[0]["implementation"]
         for d in (fm, cm):
             for m in d:
                 for key in (
@@ -295,6 +300,16 @@ def test_efcc_descriptor_content_version_exclusions():
     t2[123, 4, 2] = 1e-9
     b = model_descriptor(EFCC18DebiasModel(bias_table=t2))
     c = model_descriptor(EFCC18DebiasModel(bias_table=table, exclude_astcats=["V"]))
+    unordered_model = EFCC18DebiasModel(
+        bias_table=table,
+        exclude_astcats={"V", "a", "b", "c"},
+    )
+    ordered_model = EFCC18DebiasModel(
+        bias_table=table,
+        exclude_astcats=["V", "a", "b", "c"],
+    )
+    assert unordered_model.exclude_astcats == tuple(sorted({"V", "a", "b", "c"}))
+    assert model_descriptor(unordered_model) == model_descriptor(ordered_model)
     assert a["implementation_version"] == adam_core.__version__
     assert a["descriptor_sha256"] != b["descriptor_sha256"] != c["descriptor_sha256"]
     assert a["descriptor_sha256"] != c["descriptor_sha256"]
