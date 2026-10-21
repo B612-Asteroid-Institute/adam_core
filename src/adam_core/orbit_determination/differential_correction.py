@@ -731,6 +731,8 @@ def _fit_least_squares(
     weak-direction consistency check probes the robust cost instead of chi2.
     """
     assert len(orbit) == 1, "Only one orbit can be differentially corrected"
+    if np.isfinite(observations.coordinates.rho.to_numpy(zero_copy_only=False)).any():
+        raise ValueError("orbit determination requires angular observations")
     _validate_loss(loss, f_scale)
     if jacobian not in ("auto", "analytic", "propagator", "central", "2-point"):
         raise ValueError(

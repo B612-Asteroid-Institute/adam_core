@@ -3643,14 +3643,6 @@ pub(super) fn validate_od_observations(
         )
     })?;
     for (row, value) in values.iter().enumerate() {
-        if [value[0], value[3], value[4], value[5]]
-            .iter()
-            .any(|item| item.is_finite())
-        {
-            return Err(PropagationError::InvalidRequest(format!(
-                "observation row {row}: orbit determination requires angular observations"
-            )));
-        }
         if !value[1].is_finite() || !(0.0..360.0).contains(&value[1]) {
             return Err(PropagationError::InvalidRequest(format!(
                 "observation row {row} longitude must be finite and within [0, 360) degrees"
