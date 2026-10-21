@@ -6326,13 +6326,34 @@ mod tests {
         assert_eq!(control.state, roots[0]);
 
         // The first root's prediction made hopeless: the second root of the
-        // same triplet is scored before any other triplet is tried.
-        let predictor = FaultyPredictor {
-            inner: &inner,
+        // same triplet is scored before any other triplet is tried. Use exact
+        // observed coordinates after the injected rejection so acceptance is
+        // independent of numerical margins in the synthetic two-body fixture.
+        struct RejectThenPerfectPredictor {
+            calls: std::cell::Cell<usize>,
+            perfect: Vec<f64>,
+        }
+        impl SphericalPredictor for RejectThenPerfectPredictor {
+            fn predict_spherical(
+                &self,
+                _states: &[[f64; 6]],
+                _geometry: &OrbitGeometry,
+                _observers: &ObserverBatch,
+            ) -> PropagationResultValue<Result<Vec<f64>, String>> {
+                let call = self.calls.get();
+                self.calls.set(call + 1);
+                let mut predicted = self.perfect.clone();
+                if call == 0 {
+                    for row in predicted.chunks_exact_mut(6) {
+                        row[1] += 0.5;
+                    }
+                }
+                Ok(Ok(predicted))
+            }
+        }
+        let predictor = RejectThenPerfectPredictor {
             calls: std::cell::Cell::new(0),
-            fail_calls: 0,
-            failure: None,
-            garbage_calls: 1,
+            perfect: spherical_flat(&observed, "observed").unwrap(),
         };
         let output = iod_fit(&predictor, &observed, &observers, &config).unwrap();
         assert!(output.found, "{:?}", output.not_found_reason);
