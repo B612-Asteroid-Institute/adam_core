@@ -13,10 +13,35 @@ import pytest
 from adam_core import _rust_native
 
 from ..differential_correction import _native_problem
-from ..iod import IodReport, _placeholder_orbit, iod, run_iod
+from ..fitted_orbits import FittedOrbitMembers
+from ..iod import (
+    IodReport,
+    _placeholder_orbit,
+    initial_orbit_determination,
+    iod,
+    run_iod,
+)
 from ..native_orbit_fitter import NativeOrbitFitter
 from .test_differential_correction import NativeTwoBodyPropagator, TwoBodyPropagator
 from .test_run_od_null_covariance import two_body_arc  # noqa: F401
+
+
+def test_linkage_api_validates_settings_before_empty_exit(
+    two_body_arc,  # noqa: F811
+) -> None:
+    empty_members = FittedOrbitMembers.empty()
+    for observations, members in (
+        (two_body_arc[0:0], empty_members),
+        (two_body_arc, empty_members),
+    ):
+        with pytest.raises(ValueError):
+            initial_orbit_determination(
+                observations,
+                members,
+                TwoBodyPropagator,
+                rchi2_threshold=np.nan,
+                min_obs=1,
+            )
 
 
 def test_iod_is_the_accepted_orbit_of_run_iod(two_body_arc) -> None:  # noqa: F811

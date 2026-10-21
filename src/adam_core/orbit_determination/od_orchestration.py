@@ -59,7 +59,7 @@ from .observation_uncertainty import (
     native_model_specs,
 )
 from .orbit_fitter import OrbitFitter
-from .provenance import complete_provenance
+from .provenance import _preflight_provenance, complete_provenance
 from .veres2017 import SigmaFillModel
 
 __all__ = [
@@ -474,6 +474,10 @@ def run_od(
 
         iod_settings, refinement, fit_settings = fitter.native_settings()
         _rust_native.validate_full_od_settings(iod_settings, refinement, fit_settings)
+    if isinstance(models, str):
+        models = _default_models()
+    model_list = _model_list(models)
+    provenance = _preflight_provenance(fitter, model_list)
     if len(observations) == 0:
         return FittedOrbits.empty(), FittedOrbitMembers.empty()
 
@@ -481,14 +485,11 @@ def run_od(
     if ids.null_count > 0 or pc.count_distinct(ids).as_py() != len(ids):
         raise ValueError("Observation ids must be unique and non-null")
 
-    if isinstance(models, str):
-        models = _default_models()
-
     # adam-core runs the whole step in one native crossing: models, IOD,
     # refinement and the provenance snapshots. The propagator supplies only
     # its capsule; the
     # veneer keeps id validation, object ids and table assembly.
-    fused = _fused_run_od(observations, fitter, models, propagator, object_id)
+    fused = _fused_run_od(observations, fitter, model_list, propagator, object_id)
     if fused is not None:
         fitted_orbits, fitted_orbit_members = fused
         return (
@@ -497,14 +498,15 @@ def run_od(
                 fitted_orbit_members,
                 fitter=fitter,
                 propagator=propagator,
-                models=_model_list(models),
+                models=model_list,
                 route="fused",
                 observations=observations,
+                preflight=provenance,
             ),
             fitted_orbit_members,
         )
 
-    used = apply_observation_models(observations, models)
+    used = apply_observation_models(observations, model_list)
 
     backend_object_id = object_id if object_id is not None else uuid.uuid4().hex
     fitted_orbits, fitted_orbit_members = fitter.full_od(
@@ -521,9 +523,10 @@ def run_od(
         fitted_orbit_members,
         fitter=fitter,
         propagator=propagator,
-        models=_model_list(models),
+        models=model_list,
         route="composed",
         observations=observations,
+        preflight=provenance,
     )
     return fitted_orbits, fitted_orbit_members
 
@@ -536,8 +539,8 @@ def refine(
     rejection: Literal["cmc2003", "worst_residual", "none"] = cast(
         Literal["cmc2003", "worst_residual", "none"], OD_DEFAULTS["refinement"]
     ),
-    rejection_settings: Optional[dict] = None,
-    fit_settings: Optional[dict] = None,
+    rejection_settings: Optional[dict[str, object]] = None,
+    fit_settings: Optional[dict[str, object]] = None,
 ) -> tuple[FittedOrbits, FittedOrbitMembers]:
     """
     The refinement stage: differential correction of ``orbit`` (e.g. the

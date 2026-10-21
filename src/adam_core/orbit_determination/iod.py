@@ -628,8 +628,8 @@ def run_iod(
     observation_selection_method, light_time
         As for `iod`.
     max_triplets : int, optional
-        Bound on the triplets searched; None keeps the legacy budget of three
-        triplets per allowed outlier (``"spans"``: its own default budget).
+        Bound on the triplets searched; None keeps the exact legacy budget of
+        three triplets per allowed outlier for every selection method.
     velocity_method : {"gauss", "gibbs", "herrick+gibbs", "auto"}
         Velocity of the Gauss candidates. ``"auto"`` uses Herrick-Gibbs when
         consecutive position vectors are within 5 degrees (Vallado 2013) and
@@ -966,6 +966,25 @@ def initial_orbit_determination(
     time_start = time.perf_counter()
     logger.info("Running initial orbit determination...")
 
+    iod_settings = {
+        "min_obs": min_obs,
+        "min_arc_length": min_arc_length,
+        "contamination_percentage": contamination_percentage,
+        "rchi2_threshold": rchi2_threshold,
+        "observation_selection_method": observation_selection_method,
+        "light_time": light_time,
+        "mu": MU,
+        "speed_of_light": C,
+        "max_triplets": IOD_DEFAULTS["max_triplets"],
+        "velocity_method": velocity_method,
+        "acceptance": acceptance,
+        **(span_settings or {}),
+        **(correction_settings or {}),
+    }
+    from adam_core import _rust_native
+
+    _rust_native.validate_iod_settings(iod_settings, fit_settings)
+
     if observatory_bias_model is not None:
         observations = observatory_bias_model.apply(observations)
 
@@ -976,8 +995,6 @@ def initial_orbit_determination(
         iod_orbits = FittedOrbits.empty()
         iod_orbit_members = FittedOrbitMembers.empty()
     else:
-        from adam_core import _rust_native
-
         from .differential_correction import _native_problem
 
         native_prop = propagator(**propagator_kwargs)
@@ -1002,21 +1019,6 @@ def initial_orbit_determination(
             rows.sort(key=lambda row: (days[row], nanos[row], codes[row], row))
             linkage_rows.append(rows)
 
-        iod_settings = {
-            "min_obs": min_obs,
-            "min_arc_length": min_arc_length,
-            "contamination_percentage": contamination_percentage,
-            "rchi2_threshold": rchi2_threshold,
-            "observation_selection_method": observation_selection_method,
-            "light_time": light_time,
-            "mu": MU,
-            "speed_of_light": C,
-            "max_triplets": IOD_DEFAULTS["max_triplets"],
-            "velocity_method": velocity_method,
-            "acceptance": acceptance,
-            **(span_settings or {}),
-            **(correction_settings or {}),
-        }
         _, observed_ipc, observers_ipc = _native_problem(
             _placeholder_orbit(observations), observations
         )

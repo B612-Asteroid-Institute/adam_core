@@ -121,8 +121,8 @@ class OdProvenance(qv.Table):
 
     #: adam-core version that produced the orbit.
     adam_core_version = qv.LargeStringColumn(nullable=True)
-    #: Source commit embedded by the native build; ``dirty:<commit>`` for a
-    #: modified checkout, or explicit ``unknown`` when no source identity exists.
+    #: Exact clean source commit embedded by the native build. ``run_od``
+    #: refuses dirty or unknown build identities before fitting.
     adam_core_build = qv.LargeStringColumn(nullable=True)
     #: SHA-256 of the ordered caller table plus exact used-astrometry rows.
     input_fingerprint = qv.LargeStringColumn(nullable=True)

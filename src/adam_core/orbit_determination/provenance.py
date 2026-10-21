@@ -12,10 +12,15 @@ and CMC diagnostics, and the outliers the final fit rejected.
 from __future__ import annotations
 
 import hashlib
+import inspect
 import json
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
+from enum import Enum
 from importlib import metadata
-from typing import Any, Optional
+from pathlib import Path
+from types import CodeType
+from typing import TYPE_CHECKING, Any, Optional, cast
 
 import numpy as np
 import pyarrow as pa
@@ -24,16 +29,19 @@ import quivr as qv
 from ._native_dispatch import native_backend
 from .fitted_orbits import FittedOrbitMembers, FittedOrbits, OdProvenance
 
+if TYPE_CHECKING:
+    from ..propagator import Propagator
+
 
 def _package_version(module: str) -> Optional[str]:
     top = module.split(".")[0]
     if top == "adam_core":
         from .. import __version__
 
-        return __version__
+        return str(__version__)
     for name in (top, top.replace("_", "-")):
         try:
-            return metadata.version(name)
+            return str(metadata.version(name))
         except metadata.PackageNotFoundError:
             continue
     return None
@@ -60,10 +68,14 @@ def backend_identity(propagator: object) -> Optional[str]:
 def _table_bytes(table: pa.Table | qv.Table) -> bytes:
     if isinstance(table, qv.Table):
         table = table.table
+    # IPC stream bytes otherwise retain arbitrary caller chunk boundaries.
+    # One canonical chunk per typed column preserves order/schema/content but
+    # makes logically identical Arrow layouts hash identically.
+    table = table.combine_chunks()
     sink = pa.BufferOutputStream()
     with pa.ipc.new_stream(sink, table.schema) as writer:
         writer.write_table(table)
-    return sink.getvalue().to_pybytes()
+    return bytes(sink.getvalue().to_pybytes())
 
 
 def _table_sha256(table: pa.Table | qv.Table) -> str:
@@ -109,9 +121,74 @@ def _arrow_array_sha256(value: pa.Array | pa.ChunkedArray) -> str:
     return _table_sha256(pa.table({"value": value}))
 
 
+def _code_identity(code: CodeType) -> dict[str, Any]:
+    constants: list[Any] = []
+    for value in code.co_consts:
+        if isinstance(value, CodeType):
+            constants.append({"code": _code_identity(value)})
+        elif value is None or isinstance(value, (bool, int, float, str)):
+            constants.append(value)
+        elif isinstance(value, bytes):
+            constants.append({"bytes_sha256": hashlib.sha256(value).hexdigest()})
+        else:
+            constants.append(_canonical_parameter(value, set()))
+    return {
+        "bytecode_sha256": hashlib.sha256(code.co_code).hexdigest(),
+        "constants": constants,
+        "names": list(code.co_names),
+        "varnames": list(code.co_varnames),
+        "freevars": list(code.co_freevars),
+        "cellvars": list(code.co_cellvars),
+        "argcount": code.co_argcount,
+        "posonlyargcount": code.co_posonlyargcount,
+        "kwonlyargcount": code.co_kwonlyargcount,
+        "flags": code.co_flags,
+    }
+
+
+def _callable_identity(value: Any, seen: set[int]) -> dict[str, Any]:
+    function = value.__func__ if inspect.ismethod(value) else value
+    code = getattr(function, "__code__", None)
+    if not isinstance(code, CodeType):
+        raise TypeError(
+            f"unsupported callable provenance {type(value).__module__}.{type(value).__qualname__}"
+        )
+    closure = []
+    for cell in function.__closure__ or ():
+        closure.append(_canonical_parameter(cell.cell_contents, seen))
+    return {
+        "module": function.__module__,
+        "qualname": function.__qualname__,
+        "implementation_version": _package_version(function.__module__),
+        "code": _code_identity(code),
+        "defaults": _canonical_parameter(function.__defaults__, seen),
+        "kwdefaults": _canonical_parameter(function.__kwdefaults__, seen),
+        "closure": closure,
+        "bound_to_model": bool(
+            inspect.ismethod(value) and id(getattr(value, "__self__", None)) in seen
+        ),
+    }
+
+
 def _canonical_parameter(value: Any, seen: set[int]) -> Any:
     if value is None or isinstance(value, (bool, int, float, str)):
         return value
+    if isinstance(value, bytes):
+        return {"bytes_sha256": hashlib.sha256(value).hexdigest()}
+    if isinstance(value, Path):
+        if not value.is_file():
+            raise ValueError(f"provenance path is not a readable file: {value}")
+        return {
+            "path": str(value),
+            "sha256": hashlib.sha256(value.read_bytes()).hexdigest(),
+        }
+    if isinstance(value, Enum):
+        cls = type(value)
+        return {
+            "enum": f"{cls.__module__}.{cls.__qualname__}",
+            "name": value.name,
+            "implementation_version": _package_version(cls.__module__),
+        }
     identity = id(value)
     if identity in seen:
         raise ValueError("cyclic provenance configuration is not supported")
@@ -121,6 +198,8 @@ def _canonical_parameter(value: Any, seen: set[int]) -> Any:
         return {"arrow_sha256": _table_sha256(value)}
     if isinstance(value, (pa.Array, pa.ChunkedArray)):
         return {"arrow_sha256": _arrow_array_sha256(value)}
+    if inspect.isfunction(value) or inspect.ismethod(value):
+        return {"callable": _callable_identity(value, seen)}
     seen.add(identity)
     try:
         if isinstance(value, Mapping):
@@ -140,6 +219,17 @@ def _canonical_parameter(value: Any, seen: set[int]) -> Any:
         if isinstance(value, (set, frozenset)):
             encoded = [_canonical_parameter(item, seen) for item in value]
             return sorted(encoded, key=lambda item: _json(item))
+        fields = getattr(value, "__dict__", None)
+        if isinstance(fields, dict):
+            cls = type(value)
+            return {
+                "object": f"{cls.__module__}.{cls.__qualname__}",
+                "implementation_version": _package_version(cls.__module__),
+                "fields": {
+                    name: _canonical_parameter(item, seen)
+                    for name, item in sorted(fields.items())
+                },
+            }
     finally:
         seen.remove(identity)
     raise TypeError(
@@ -150,17 +240,23 @@ def _canonical_parameter(value: Any, seen: set[int]) -> Any:
 def model_descriptor(model: object) -> dict[str, Any]:
     """Reproducible model implementation, configuration, and content."""
     cls = type(model)
+    apply = getattr(model, "apply", None)
+    if not callable(apply):
+        raise TypeError(
+            f"observation model {cls.__module__}.{cls.__qualname__} has no callable apply"
+        )
     descriptor: dict[str, Any] = {
         "type": f"{cls.__module__}.{cls.__qualname__}",
         "implementation_version": _package_version(cls.__module__),
+        "implementation": _callable_identity(apply, {id(model)}),
     }
     parameters: dict[str, Any] = {}
     tables: dict[str, str] = {}
     nested: list[dict[str, Any]] = []
     for name, value in sorted(vars(model).items()):
-        public_name = name.lstrip("_")
+        field_name = name
         if isinstance(value, (pa.Table, qv.Table)):
-            tables[public_name] = _table_sha256(value)
+            tables[field_name] = _table_sha256(value)
         elif (
             isinstance(value, (list, tuple))
             and value
@@ -168,7 +264,7 @@ def model_descriptor(model: object) -> dict[str, Any]:
         ):
             nested.extend(model_descriptor(item) for item in value)
         else:
-            parameters[public_name] = _canonical_parameter(value, set())
+            parameters[field_name] = _canonical_parameter(value, {id(model)})
     if parameters:
         descriptor["parameters"] = parameters
     if tables:
@@ -185,18 +281,25 @@ def _json(value: Any) -> str:
     return json.dumps(value, sort_keys=True, default=str, separators=(",", ":"))
 
 
+def _provenance_with_fields(current: OdProvenance, **updates: object) -> OdProvenance:
+    """Replace named fields without erasing independently recorded stages."""
+    fields = {name: current.table.column(name) for name in OdProvenance.schema.names}
+    fields.update(updates)
+    return OdProvenance.from_kwargs(**fields)
+
+
 def with_iod_provenance(
     fitted_orbits: FittedOrbits, ambiguous_with: Optional[Sequence[int]]
 ) -> FittedOrbits:
-    """Record the IOD's ambiguity (``ambiguous_with`` of its report) on every
-    row of ``fitted_orbits``."""
+    """Record IOD ambiguity without erasing native provider diagnostics."""
     n = len(fitted_orbits)
     if n == 0 or ambiguous_with is None:
         return fitted_orbits
     alternatives = len(ambiguous_with)
     return fitted_orbits.set_column(
         "provenance",
-        OdProvenance.from_kwargs(
+        _provenance_with_fields(
+            fitted_orbits.provenance,
             iod_ambiguous=[alternatives > 0] * n,
             iod_alternatives=[alternatives] * n,
         ),
@@ -206,23 +309,78 @@ def with_iod_provenance(
 def carry_iod_provenance(
     iod_orbits: FittedOrbits, refined: FittedOrbits
 ) -> FittedOrbits:
-    """Copy the IOD's ambiguity onto the refinement of its (single) orbit
-    when the refinement recorded none."""
+    """Fill absent IOD-stage fields on a refinement from its exact seed.
+
+    Refinement-stage fields are never copied from the seed. Existing fields on
+    the refinement win, which also makes this operation idempotent.
+    """
     if len(iod_orbits) != 1 or len(refined) == 0:
         return refined
-    # The refinement's own IOD record wins; an empty one is filled.
-    if refined.provenance.iod_ambiguous.null_count != len(refined):
-        return refined
     source = iod_orbits.provenance
-    if source.iod_ambiguous.null_count == 1:
+    target = refined.provenance
+    updates: dict[str, object] = {}
+    for name in (
+        "iod_provider",
+        "iod_diagnostics",
+        "iod_ambiguous",
+        "iod_alternatives",
+    ):
+        destination = target.table.column(name)
+        value = source.table.column(name)[0].as_py()
+        if destination.null_count == len(refined) and value is not None:
+            updates[name] = [value] * len(refined)
+    if not updates:
         return refined
-    return refined.set_column(
-        "provenance",
-        OdProvenance.from_kwargs(
-            iod_ambiguous=[source.iod_ambiguous[0].as_py()] * len(refined),
-            iod_alternatives=[source.iod_alternatives[0].as_py()] * len(refined),
-        ),
-    )
+    return refined.set_column("provenance", _provenance_with_fields(target, **updates))
+
+
+@dataclass(frozen=True)
+class _ProvenancePreflight:
+    adam_core_version: str
+    adam_core_build: str
+    settings: Optional[str]
+    models: str
+
+
+def _preflight_provenance(
+    fitter: object, models: Sequence[object]
+) -> _ProvenancePreflight:
+    """Validate and freeze every Python-owned provenance field before fitting."""
+    from .. import __version__
+    from .native_orbit_fitter import NativeOrbitFitter
+
+    settings: Optional[str] = None
+    if isinstance(fitter, NativeOrbitFitter):
+        iod_settings, refinement, fit_settings = fitter.native_settings()
+        settings = _json(
+            {"iod": iod_settings, "refinement": refinement, "fit": fit_settings}
+        )
+    descriptors = _json([model_descriptor(model) for model in models])
+    from adam_core import _rust_native
+
+    build_version, build_commit = _rust_native.build_identity()
+    if build_version != __version__:
+        raise RuntimeError(
+            f"native adam-core version {build_version!r} does not match Python {__version__!r}"
+        )
+    if len(build_commit) != 40 or any(
+        character not in "0123456789abcdef" for character in build_commit
+    ):
+        raise RuntimeError(
+            "native adam-core build identity must be an exact clean source commit"
+        )
+    return _ProvenancePreflight(__version__, build_commit, settings, descriptors)
+
+
+def _uniform_provider(values: list[Optional[str]], stage: str) -> Optional[str]:
+    present = [value for value in values if value is not None]
+    if not present:
+        return None
+    if len(present) != len(values) or len(set(present)) != 1:
+        raise RuntimeError(
+            f"native OD output omitted or disagreed on exact {stage} provider metadata"
+        )
+    return present[0]
 
 
 def complete_provenance(
@@ -234,60 +392,40 @@ def complete_provenance(
     models: Sequence[object],
     route: str,
     observations: Optional[qv.Table] = None,
+    preflight: Optional[_ProvenancePreflight] = None,
 ) -> FittedOrbits:
     """The `run_od` record on every orbit, keeping the IOD fields already
     present."""
     n = len(fitted_orbits)
     if n == 0:
         return fitted_orbits
-    from .. import __version__
     from .native_orbit_fitter import NativeOrbitFitter
 
+    frozen = preflight or _preflight_provenance(fitter, models)
     fitter_cls = type(fitter)
-    settings: Optional[str] = None
     iod_backend: Optional[str] = None
     refinement_backend: Optional[str] = backend_identity(propagator)
     iod_provider: Optional[str] = None
     refinement_provider: Optional[str] = None
     if isinstance(fitter, NativeOrbitFitter):
-        iod_settings, refinement, fit_settings = fitter.native_settings()
-        settings = _json(
-            {"iod": iod_settings, "refinement": refinement, "fit": fit_settings}
-        )
-        # These values were decoded from the exact retained capsules before
-        # the native driver released the GIL. Do not call the Python provider
-        # again here: it could return a different capsule (TOCTOU).
         native_record = fitted_orbits.provenance
-        iod_values = native_record.iod_provider.to_pylist()
-        refinement_values = native_record.refinement_provider.to_pylist()
-        if (
-            any(value is None for value in iod_values)
-            or any(value is None for value in refinement_values)
-            or len(set(iod_values)) != 1
-            or len(set(refinement_values)) != 1
-        ):
-            raise RuntimeError(
-                "native OD output omitted or disagreed on exact provider metadata"
+        iod_provider = _uniform_provider(native_record.iod_provider.to_pylist(), "IOD")
+        refinement_provider = _uniform_provider(
+            native_record.refinement_provider.to_pylist(), "refinement"
+        )
+        if iod_provider is not None:
+            iod_metadata = json.loads(iod_provider)
+            iod_backend = f"{iod_metadata['name']} {iod_metadata['version']}"
+        else:
+            iod_backend = backend_identity(
+                fitter.iod_propagator_for(cast("Propagator", propagator))
             )
-        iod_provider = iod_values[0]
-        refinement_provider = refinement_values[0]
-        iod_metadata = json.loads(iod_provider)
-        refinement_metadata = json.loads(refinement_provider)
-        iod_backend = f"{iod_metadata['name']} {iod_metadata['version']}"
-        refinement_backend = (
-            f"{refinement_metadata['name']} {refinement_metadata['version']}"
-        )
+        if refinement_provider is not None:
+            refinement_metadata = json.loads(refinement_provider)
+            refinement_backend = (
+                f"{refinement_metadata['name']} {refinement_metadata['version']}"
+            )
 
-    try:
-        from adam_core import _rust_native
-
-        build_version, build_commit = _rust_native.build_identity()
-    except (ImportError, AttributeError):
-        build_version, build_commit = __version__, "unknown"
-    if build_version != __version__:
-        raise RuntimeError(
-            f"native adam-core version {build_version!r} does not match Python {__version__!r}"
-        )
     input_fingerprint = (
         _fit_input_sha256(observations, members) if observations is not None else None
     )
@@ -313,8 +451,8 @@ def complete_provenance(
         rejected_fraction.append(rejected / total)
 
     record = OdProvenance.from_kwargs(
-        adam_core_version=[__version__] * n,
-        adam_core_build=[build_commit] * n,
+        adam_core_version=[frozen.adam_core_version] * n,
+        adam_core_build=[frozen.adam_core_build] * n,
         input_fingerprint=[input_fingerprint] * n,
         route=[route] * n,
         fitter=[f"{fitter_cls.__module__}.{fitter_cls.__qualname__}"] * n,
@@ -330,8 +468,8 @@ def complete_provenance(
             if has_existing
             else pa.nulls(n, pa.large_string())
         ),
-        settings=[settings] * n,
-        models=[_json([model_descriptor(model) for model in models])] * n,
+        settings=[frozen.settings] * n,
+        models=[frozen.models] * n,
         iod_ambiguous=(
             previous.iod_ambiguous if has_existing else pa.nulls(n, pa.bool_())
         ),

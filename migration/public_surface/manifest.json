@@ -38,9 +38,9 @@
     },
     "by_implementation_class": {
       "compatibility_data_or_external_generic": 216,
-      "mixed_rust_python_gap": 103,
+      "mixed_rust_python_gap": 102,
       "plotting_exemption_candidate": 16,
-      "python_gap_or_external_boundary": 288,
+      "python_gap_or_external_boundary": 289,
       "rust_veneer_candidate_see_domain_audit": 138
     },
     "plotting_exemption_candidates": 16,
@@ -10565,7 +10565,7 @@
       "kind": "function",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/iod.py",
-      "line": 1098,
+      "line": 1100,
       "explicit_export": false,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -10593,7 +10593,7 @@
       "kind": "function",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/iod.py",
-      "line": 1106,
+      "line": 1108,
       "explicit_export": false,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -12021,7 +12021,7 @@
       "kind": "function",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/od_orchestration.py",
-      "line": 531,
+      "line": 534,
       "explicit_export": false,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -12245,7 +12245,7 @@
       "kind": "function",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/provenance.py",
-      "line": 42,
+      "line": 50,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -12273,13 +12273,13 @@
       "kind": "function",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/provenance.py",
-      "line": 206,
+      "line": 309,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
         "plotting": false,
         "rust_reference": false,
-        "python_loop": false,
+        "python_loop": true,
         "numpy_reference": false,
         "pyarrow_reference": false,
         "quivr_reference": false,
@@ -12301,12 +12301,12 @@
       "kind": "function",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/provenance.py",
-      "line": 228,
+      "line": 386,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
         "plotting": false,
-        "rust_reference": true,
+        "rust_reference": false,
         "python_loop": true,
         "numpy_reference": true,
         "pyarrow_reference": true,
@@ -12314,10 +12314,10 @@
         "external_io_reference": false
       },
       "review_status": "domain_audited",
-      "implementation_class": "mixed_rust_python_gap",
+      "implementation_class": "python_gap_or_external_boundary",
       "rust_entrypoint": null,
       "parity_coverage": "see_domain_audit",
-      "native_timing": "missing_or_partial_see_domain_audit",
+      "native_timing": "missing_or_not_applicable_see_domain_audit",
       "tracking_issue": "personal-cmy.37.3",
       "audit_document": "migration/public_surface/dynamics_od.md"
     },
@@ -12329,7 +12329,7 @@
       "kind": "function",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/provenance.py",
-      "line": 150,
+      "line": 240,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -12357,7 +12357,7 @@
       "kind": "function",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/provenance.py",
-      "line": 188,
+      "line": 291,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {

@@ -774,7 +774,7 @@ def test_run_od_rejects_unknown_models_string() -> None:
         )
 
 
-def test_run_od_default_models_name_the_missing_data_package(
+def test_run_od_explicit_default_models_name_the_missing_data_package(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Without the data package the default stack fails before any fit,
@@ -789,7 +789,7 @@ def test_run_od_default_models_name_the_missing_data_package(
     assert len(members) == 3
 
 
-def test_run_od_default_models_report_every_missing_input_at_once(
+def test_run_od_explicit_default_models_report_every_missing_input_at_once(
     monkeypatch: pytest.MonkeyPatch, tmp_path
 ) -> None:
     """Without the data package AND bias.dat, one error raised before any
@@ -810,7 +810,7 @@ def test_run_od_default_models_report_every_missing_input_at_once(
     assert fitter.received == []
 
 
-def test_run_od_default_models_missing_bias_dat_alone_is_file_not_found(
+def test_run_od_explicit_default_models_missing_bias_dat_is_file_not_found(
     monkeypatch: pytest.MonkeyPatch, tmp_path
 ) -> None:
     """With the data package installed, a missing bias.dat alone is still a
