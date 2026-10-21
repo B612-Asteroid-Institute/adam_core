@@ -323,6 +323,13 @@ impl<'a> WhitenedProblem<'a> {
         translation_provider: &T,
     ) -> PropagationResultValue<Self> {
         let m = observed.len();
+        super::od::validate_od_observations(observed, observers, true)?;
+        let distinct_epochs = super::od::distinct_observation_epochs(observed)?;
+        if distinct_epochs < 3 {
+            return Err(PropagationError::InvalidRequest(format!(
+                "rank-deficient fit: {distinct_epochs} distinct observation epochs; at least 3 are required"
+            )));
+        }
         if m == 0 {
             return Err(PropagationError::InvalidRequest(
                 "least-squares fitting requires at least one included observation".to_string(),
@@ -1205,7 +1212,7 @@ const COVARIANCE_SYMMETRY_RELATIVE_TOLERANCE: f64 = 1.0e-12;
 const COVARIANCE_MIN_RELATIVE_EIGENVALUE: f64 = 1.0e-12;
 
 /// Structural/rank gate required before a covariance may calibrate CMC2003.
-fn covariance_quality(covariance: &[f64; 36]) -> Result<(), String> {
+fn covariance_spectrum(covariance: &[f64; 36]) -> Result<(f64, f64), String> {
     if covariance.iter().any(|value| !value.is_finite()) {
         return Err("the fitted state covariance is non-finite".to_string());
     }
@@ -1245,6 +1252,12 @@ fn covariance_quality(covariance: &[f64; 36]) -> Result<(), String> {
     if lambda_min <= 0.0 {
         return Err("the fitted state covariance is not positive-definite".to_string());
     }
+    Ok((lambda_min, lambda_max))
+}
+
+/// Structural/rank gate required before a covariance may calibrate CMC2003.
+fn covariance_quality(covariance: &[f64; 36]) -> Result<(), String> {
+    let (lambda_min, lambda_max) = covariance_spectrum(covariance)?;
     if lambda_min <= COVARIANCE_MIN_RELATIVE_EIGENVALUE * lambda_max {
         return Err(format!(
             "the fitted state covariance is rank-deficient or ill-conditioned (minimum/maximum eigenvalue ratio = {:.3e})",
@@ -1493,6 +1506,13 @@ fn fit_orbit_whitened_impl<T: OriginTranslationProvider>(
             config,
             &mut warnings,
         )?;
+    }
+    if solution.status > 0 && covariance_problem.is_none() {
+        covariance_quality(&covariance).map_err(|reason| {
+            PropagationError::InvalidRequest(format!(
+                "successful fit covariance unavailable: {reason}"
+            ))
+        })?;
     }
 
     let evaluation = evaluate_orbit(
@@ -1973,6 +1993,24 @@ where
     )
 }
 
+fn cmc_covariance_error(
+    reason: impl AsRef<str>,
+    output: &WhitenedFitOutput,
+    selected: &[bool],
+    pass: usize,
+) -> PropagationError {
+    PropagationError::CmcCovarianceUnavailable(format!(
+        "{}; retained_fit={{pass:{pass}, selected:{}, status:{}, converged:{}, cost:{:.17e}, state:{:?}, covariance:{:?}}}",
+        reason.as_ref(),
+        selected.iter().filter(|&&keep| keep).count(),
+        output.status_code,
+        output.converged,
+        output.cost,
+        output.state,
+        output.covariance,
+    ))
+}
+
 /// [`cmc2003_fit_barycentric`] over any [`SphericalPredictor`].
 #[allow(clippy::too_many_arguments)]
 pub fn cmc2003_fit_with<T: OriginTranslationProvider>(
@@ -2051,6 +2089,50 @@ pub fn cmc2003_fit_with<T: OriginTranslationProvider>(
             Some(&full_problem),
         )
     };
+    let validate_cmc_fit = |seed: &OrbitBatch,
+                            selected: &[bool],
+                            output: &WhitenedFitOutput,
+                            pass: usize|
+     -> PropagationResultValue<()> {
+        covariance_quality(&output.covariance)
+            .map_err(|reason| cmc_covariance_error(reason, output, selected, pass))?;
+        let observed_selected = filter_coordinate_batch(observed, selected)?;
+        let observers_selected = filter_observer_batch(observers, selected)?;
+        let covariance_problem = WhitenedProblem::new(
+            predictor,
+            seed,
+            &observed_selected,
+            &observers_selected,
+            &cmc_fit_config,
+            provider,
+            translation_provider,
+        )?;
+        let probe = weak_direction_delta_cost(
+            &covariance_problem,
+            &output.state,
+            &output.covariance,
+            output.cost,
+            &cmc_fit_config,
+        )?;
+        let (lower, upper) = DELTA_CHI2_WINDOW;
+        match probe {
+            Ok(delta) if (lower..=upper).contains(&delta) => Ok(()),
+            Ok(delta) => Err(cmc_covariance_error(
+                format!(
+                    "weak-direction covariance consistency check failed (delta-chi2 = {delta:.3})"
+                ),
+                output,
+                selected,
+                pass,
+            )),
+            Err(reason) => Err(cmc_covariance_error(
+                format!("weak-direction covariance probe failed: {reason}"),
+                output,
+                selected,
+                pass,
+            )),
+        }
+    };
 
     let mut selected = vec![true; n];
     let mut flags: BTreeSet<Cmc2003Flag> = BTreeSet::new();
@@ -2068,40 +2150,7 @@ pub fn cmc2003_fit_with<T: OriginTranslationProvider>(
         let (mut output, rejection_jacobian) = run_fit(&seed, &selected)?;
         warnings.append(&mut output.warnings);
 
-        covariance_quality(&output.covariance)
-            .map_err(PropagationError::CmcCovarianceUnavailable)?;
-        let observed_selected = filter_coordinate_batch(observed, &selected)?;
-        let observers_selected = filter_observer_batch(observers, &selected)?;
-        let covariance_problem = WhitenedProblem::new(
-            predictor,
-            &seed,
-            &observed_selected,
-            &observers_selected,
-            &cmc_fit_config,
-            provider,
-            translation_provider,
-        )?;
-        let probe = weak_direction_delta_cost(
-            &covariance_problem,
-            &output.state,
-            &output.covariance,
-            output.cost,
-            &cmc_fit_config,
-        )?;
-        let (lower, upper) = DELTA_CHI2_WINDOW;
-        match probe {
-            Ok(delta) if (lower..=upper).contains(&delta) => {}
-            Ok(delta) => {
-                return Err(PropagationError::CmcCovarianceUnavailable(format!(
-                    "weak-direction covariance consistency check failed (delta-chi2 = {delta:.3})"
-                )))
-            }
-            Err(reason) => {
-                return Err(PropagationError::CmcCovarianceUnavailable(format!(
-                    "weak-direction covariance probe failed: {reason}"
-                )))
-            }
-        }
+        validate_cmc_fit(&seed, &selected, &output, n_iterations)?;
 
         seed = orbit_with_state(orbit, output.state)?;
 
@@ -2181,6 +2230,7 @@ pub fn cmc2003_fit_with<T: OriginTranslationProvider>(
         flags.insert(Cmc2003Flag::MaxIterations);
         let (mut output, _) = run_fit(&seed, &selected)?;
         warnings.append(&mut output.warnings);
+        validate_cmc_fit(&seed, &selected, &output, n_iterations + 1)?;
         output
     };
     fit.warnings = warnings;
@@ -4417,7 +4467,7 @@ mod tests {
                 assert_eq!(output.fit.iterations, 1);
                 assert_eq!(
                     fixture.predictor.batches.borrow().len(),
-                    4 * max_iterations + 3,
+                    4 * (max_iterations + 1),
                     "{jacobian:?} {raw_chi2}"
                 );
             }
@@ -4683,6 +4733,76 @@ mod tests {
     }
 
     #[test]
+    fn fit_rejects_fewer_than_three_distinct_epochs_before_prediction() {
+        let propagator = TwoBodyPropagator::default();
+        let options = ephemeris_options();
+        let inner = PropagatorPredictor {
+            propagator: &propagator,
+            options: &options,
+            provider: &NoopProvider,
+            translation_provider: &ZeroTranslationProvider,
+        };
+        let predictor = CountingPredictor {
+            inner: &inner,
+            batches: std::cell::RefCell::new(Vec::new()),
+            mode: PredictorMode::Normal,
+        };
+        let mut observed = synthetic_observations(None);
+        let epochs = observed.times.as_ref().unwrap().epochs.clone();
+        let times = observed.times.as_mut().unwrap();
+        for (row, epoch) in times.epochs.iter_mut().enumerate() {
+            *epoch = epochs[row % 2];
+        }
+        let error = WhitenedProblem::new(
+            &predictor,
+            &perturbed_start(),
+            &observed,
+            &observers(),
+            &WhitenedFitConfig::default(),
+            &NoopProvider,
+            &ZeroTranslationProvider,
+        )
+        .err()
+        .expect("two-epoch fit must be refused");
+        assert!(error.to_string().contains("2 distinct observation epochs"));
+        assert!(predictor.batches.borrow().is_empty());
+
+        if let crate::CoordinateValues::Spherical(values) = &mut observed.values {
+            values[0][1] = f64::NAN;
+        }
+        let error = WhitenedProblem::new(
+            &predictor,
+            &perturbed_start(),
+            &observed,
+            &observers(),
+            &WhitenedFitConfig::default(),
+            &NoopProvider,
+            &ZeroTranslationProvider,
+        )
+        .err()
+        .expect("non-finite observation must be refused");
+        assert!(error.to_string().contains("longitude"));
+        assert!(predictor.batches.borrow().is_empty());
+
+        let error = fit_orbit_whitened_with(
+            &predictor,
+            &perturbed_start(),
+            &synthetic_observations(None),
+            &observers(),
+            &[false; NUM_OBS],
+            &WhitenedFitConfig {
+                max_iterations: 0,
+                ..WhitenedFitConfig::default()
+            },
+            &NoopProvider,
+            &ZeroTranslationProvider,
+        )
+        .unwrap_err();
+        assert!(error.to_string().contains("max_iterations"));
+        assert!(predictor.batches.borrow().is_empty());
+    }
+
+    #[test]
     fn non_finite_analytic_jacobian_continues_with_central_differences() {
         // Analytic terms poisoned (as the two-body STM is on very long arcs):
         // the plain solver stops with status -2, the fit continues from that
@@ -4751,7 +4871,7 @@ mod tests {
         if let crate::CoordinateValues::Spherical(values) = &mut nan_observed.values {
             values[2][1] = f64::NAN;
         }
-        let nan_problem = WhitenedProblem::new(
+        let error = WhitenedProblem::new(
             &predictor,
             &perturbed_start(),
             &nan_observed,
@@ -4760,18 +4880,9 @@ mod tests {
             &NoopProvider,
             &ZeroTranslationProvider,
         )
-        .unwrap();
-        let mut warnings = Vec::new();
-        let (solution, method) = solve_with_fallback(
-            &nan_problem,
-            nan_problem.geometry.state,
-            &config,
-            &mut warnings,
-        )
-        .unwrap();
-        assert_eq!(solution.status, STATUS_NON_FINITE);
-        assert_eq!(method, JacobianMethod::Analytic);
-        assert!(warnings.is_empty());
+        .err()
+        .expect("non-finite input must fail before the predictor runs");
+        assert!(error.to_string().contains("longitude must be finite"));
     }
 
     #[test]
@@ -5649,6 +5760,40 @@ mod tests {
                 // warning option.
                 assert_eq!(*counting.batches.borrow(), vec![1, 12, 1, 2]);
             }
+        }
+    }
+
+    #[test]
+    fn cmc_covariance_refusal_retains_actionable_fit_diagnostics() {
+        let fixture = linear_fixture(0.0);
+        let output = fit_orbit_whitened_with(
+            &fixture.predictor,
+            &orbit(TRUTH_STATE),
+            &fixture.observed,
+            &observers(),
+            &[false; NUM_OBS],
+            &WhitenedFitConfig {
+                jacobian: JacobianMethod::Central,
+                validate_covariance: false,
+                ..WhitenedFitConfig::default()
+            },
+            &NoopProvider,
+            &ZeroTranslationProvider,
+        )
+        .unwrap();
+        let error = cmc_covariance_error("deliberate probe refusal", &output, &[true; NUM_OBS], 7);
+        let message = error.to_string();
+        for field in [
+            "deliberate probe refusal",
+            "pass:7",
+            "selected:12",
+            "status:",
+            "converged:",
+            "cost:",
+            "state:",
+            "covariance:",
+        ] {
+            assert!(message.contains(field), "missing {field}: {message}");
         }
     }
 

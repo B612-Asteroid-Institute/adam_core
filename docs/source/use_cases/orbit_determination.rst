@@ -244,7 +244,11 @@ IOD_DEFAULTS``), so the signature defaults of ``run_iod`` and
 * **Ordering and determinism.** Observations are searched in a canonical
   order (epoch, station, complete physical row content, input row only for
   physically identical ties); the same physical input gives the same orbit
-  whatever its row order. A triplet never repeats an epoch.
+  whatever its row order. A triplet never repeats an epoch. Search-priority
+  metrics within one millisecond are deterministic ties. This does not round
+  the epochs used by Gauss or propagation; it only prevents external
+  equivalent labels within adam-core's documented TT/TDB model difference
+  from selecting a discontinuously different branch of a bounded search.
 * **Inputs.** Ecliptic observations and equatorial observers are rotated to
   the frames Gauss uses; observers not centred on the Sun are refused. An
   arc shorter than ``min_arc_length`` (1 day) is not searched, and a fit
@@ -257,7 +261,8 @@ IOD_DEFAULTS``), so the signature defaults of ``run_iod`` and
   chi2 grows from about 1e4 at a 3-day span to 1e9 at 67 days). The search
   visits the densest 10 days, the densest 30 days, the last and first 30
   days and the whole arc, and in each prefers triplets spanning about 6
-  days, at most one per pair of nights, 32 triplets in all
+  days, at most one per pair of nights. The default triplet budget is exactly
+  ``3 * (max_outliers + 1)``; an explicit ``max_triplets`` overrides it.
   (``span_settings``).
 * **Velocity.** ``velocity_method="auto"`` by default, which switches to
   Herrick-Gibbs when consecutive positions are within 5 degrees (Vallado
@@ -292,8 +297,10 @@ IOD_DEFAULTS``), so the signature defaults of ``run_iod`` and
   sample (``IodReport.ranging``): the attributable (position and rates) is
   completed at every range and range rate of the admissible region (bound
   to the Sun, not to the Earth; Milani et al. 2004), each orbit scored on
-  the observations and weighted by ``exp(-delta_chi2/2)`` (Farnocchia,
-  Chesley & Micheli 2015). ``RangingSample.to_variant_orbits`` gives the
+  the observations and integrated with the physical grid-cell weight
+  ``exp(-chi2/2) * rho * delta(ln rho) * delta(rho_dot)`` (evaluated in a
+  log-stable equivalent form; Farnocchia, Chesley & Micheli 2015).
+  ``RangingSample.to_variant_orbits`` gives the
   sample as weighted ``VariantOrbits``. When no Gauss candidate converges,
   the best 3 ranging orbits are corrected exactly like Gauss candidates
   (``IodCandidate.source == "ranging"``). Ranging runs on arcs of at most
@@ -427,8 +434,11 @@ Native IOD canonicalizes rows by exact epoch, station code, and complete
 observed/observer physical row content. The caller's row index is used only to
 break ties between physically identical rows; candidate triplet indices and
 all residual/member arrays are mapped back to the caller's order. Triplets are
-generated lazily and stop at ``max_triplets`` (the spans default is 32), rather
-than materializing or globally sorting all :math:`{n \choose 3}` choices.
+generated lazily and stop at ``max_triplets`` (when omitted, exactly
+``3 * (max_outliers + 1)``), rather than materializing or globally sorting
+all :math:`{n \choose 3}` choices. Pair, raw-pair and middle-row visits have
+independent caps; repeated rows from a dense observing night are collapsed
+before raw-pair work is charged, so they cannot starve later-night geometry.
 Every physical root is retained as a scientifically distinct candidate.
 ``velocity_method="auto"`` resolves each root independently, but convergence
 of one root schedules every sibling from its triplet even when that resolution
@@ -442,12 +452,23 @@ errors still abort. Corrected acceptance ranks every converged candidate by one
 whole-arc score. Legacy ``acceptance="prefit"`` takes the first canonical
 candidate satisfying both the chi-square threshold and ``min_arc_length``.
 
-All IOD, ranging, fitting, and refinement settings are validated by their Rust
-configuration types, regardless of which Python or Rust entry point invokes
-them. Counts and budgets needed by an algorithm must be positive, minimum
-observation counts must permit a three-observation orbit, percentages and
-fractions must be in range, and thresholds/tolerances must be finite with the
-required sign.
+All IOD, ranging, fitting, and refinement settings and observation domains are
+validated by their Rust configuration types before a propagation provider is
+called, regardless of which Python or Rust entry point invokes them. Counts and
+budgets needed by an algorithm must be positive, minimum observation counts
+must permit a three-observation orbit, percentages and fractions must be in
+range, and thresholds/tolerances must be finite with the required sign. An OD
+arc must contain at least three distinct epochs; duplicated rows at only one or
+two epochs are refused as rank deficient.
+
+A converged fit is returned only with a finite, symmetric, positive-definite,
+full-rank covariance. CMC2003 additionally probes the selected-mask covariance
+along its weakest direction after every refit, including a final refit caused
+by a selection change. A refusal raises ``CmcCovarianceUnavailable`` in Rust
+(``RuntimeError`` at the Python boundary) and includes the retained pass,
+selected count, status, convergence flag, cost, state and covariance so the
+failed fit remains diagnosable without being presented as a scientific
+solution.
 
 Solver budgets
 ~~~~~~~~~~~~~~

@@ -6,7 +6,7 @@
 //! ephemeris + residual kernels validated in slice 3 (`propagate_2body_flat6`,
 //! `generate_ephemeris_2body_flat6`, `compute_residuals_chi2_flat`).
 //!
-//! This is a Rust-native optimizer (Gauss-Newton with a 2-point finite-difference
+//! This is a Rust-native optimizer (Gauss-Newton with a finite-difference
 //! Jacobian). It converges to the *same least-squares minimum* and covariance
 //! (`inv(JᵀJ)`) as adam_core's scipy-based `fit_least_squares`, but is **not** a
 //! bit-exact reproduction of scipy's trust-region iterates. Inputs are
@@ -132,13 +132,14 @@ fn chi_residuals(
 /// predicted spherical coordinates, `(M * N, 6)` row-major in candidate-major
 /// order — typically one `generate_ephemeris::<P>` crossing per call, which is
 /// what makes propagator-backed fits cheap: each Gauss-Newton iteration costs
-/// one base prediction plus ONE batched 6-state Jacobian prediction (the
-/// ASSIST same-epoch multi-particle fast path integrates all seven candidates
+/// one base prediction plus ONE batched 12-state central Jacobian prediction (the
+/// ASSIST same-epoch multi-particle fast path integrates all candidates
 /// in a single simulation) instead of legacy scipy's seven sequential Python
 /// propagator round-trips.
 ///
-/// The algorithm mirrors [`fit_orbit_2body_least_squares`]: 2-point
-/// finite-difference Jacobian, normal equations, backtracking line search,
+/// The algorithm mirrors [`fit_orbit_2body_least_squares`] but uses a central
+/// finite-difference Jacobian to avoid a platform-dependent forward-difference
+/// floor near the minimum, followed by normal equations, backtracking line search,
 /// chi²-plateau convergence, `inv(JᵀJ)` covariance.
 pub fn fit_orbit_least_squares_with_predictor<F>(
     initial_state: [f64; 6],
@@ -155,22 +156,24 @@ where
         return Err("observed/observed_cov shapes must be (N, 6)/(N, 36)".to_string());
     }
 
-    fn perturbations(state: &[f64; 6]) -> ([[f64; 6]; 6], [f64; 6]) {
+    fn perturbations(state: &[f64; 6]) -> (Vec<[f64; 6]>, [f64; 6]) {
         let mut steps = [0.0_f64; 6];
-        let mut perturbed_states = [[0.0_f64; 6]; 6];
+        let mut perturbed_states = Vec::with_capacity(12);
         for k in 0..6 {
             let h = 1.490_116_119_384_765_6e-8 * state[k].abs().max(1.0);
-            let mut perturbed = *state;
-            perturbed[k] += h;
-            steps[k] = perturbed[k] - state[k];
-            perturbed_states[k] = perturbed;
+            let mut plus = *state;
+            let mut minus = *state;
+            plus[k] += h;
+            minus[k] -= h;
+            steps[k] = plus[k] - minus[k];
+            perturbed_states.push(plus);
+            perturbed_states.push(minus);
         }
         (perturbed_states, steps)
     }
 
     fn jacobian_from_batch(
         predicted_all: &[f64],
-        base: &[f64],
         steps: &[f64; 6],
         observed: &[f64],
         observed_cov: &[f64],
@@ -178,14 +181,23 @@ where
     ) -> Vec<f64> {
         let mut jac = vec![0.0_f64; n * 6];
         for k in 0..6 {
-            let (rk, _) = chi_residuals_from_predicted(
-                &predicted_all[k * n * 6..(k + 1) * n * 6],
+            let row_size = n * 6;
+            let plus_offset = (2 * k) * row_size;
+            let minus_offset = (2 * k + 1) * row_size;
+            let (plus, _) = chi_residuals_from_predicted(
+                &predicted_all[plus_offset..plus_offset + row_size],
+                observed,
+                observed_cov,
+                n,
+            );
+            let (minus, _) = chi_residuals_from_predicted(
+                &predicted_all[minus_offset..minus_offset + row_size],
                 observed,
                 observed_cov,
                 n,
             );
             for i in 0..n {
-                jac[i * 6 + k] = (rk[i] - base[i]) / steps[k];
+                jac[i * 6 + k] = (plus[i] - minus[i]) / steps[k];
             }
         }
         jac
@@ -219,8 +231,8 @@ where
         previous_chi2 = chi2;
         let (perturbed_states, steps) = perturbations(&state);
         let predicted_all = predict(&perturbed_states)?;
-        expect_rows(&predicted_all, 6)?;
-        let jac = jacobian_from_batch(&predicted_all, &base, &steps, observed, observed_cov, n);
+        expect_rows(&predicted_all, 12)?;
+        let jac = jacobian_from_batch(&predicted_all, &steps, observed, observed_cov, n);
         let a = normal_matrix(&jac, n);
         let mut rhs = [0.0_f64; 6];
         for i in 0..n {
@@ -258,11 +270,11 @@ where
 
     let predicted = predict(&[state])?;
     expect_rows(&predicted, 1)?;
-    let (base, chi2) = chi_residuals_from_predicted(&predicted, observed, observed_cov, n);
+    let (_, chi2) = chi_residuals_from_predicted(&predicted, observed, observed_cov, n);
     let (perturbed_states, steps) = perturbations(&state);
     let predicted_all = predict(&perturbed_states)?;
-    expect_rows(&predicted_all, 6)?;
-    let jac = jacobian_from_batch(&predicted_all, &base, &steps, observed, observed_cov, n);
+    expect_rows(&predicted_all, 12)?;
+    let jac = jacobian_from_batch(&predicted_all, &steps, observed, observed_cov, n);
     let covariance = inverse_6x6(&normal_matrix(&jac, n)).unwrap_or([f64::NAN; 36]);
 
     Ok(LeastSquaresFit {

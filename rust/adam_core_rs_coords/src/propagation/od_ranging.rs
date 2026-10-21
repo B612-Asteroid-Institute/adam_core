@@ -567,3 +567,7 @@ mod tests {
         assert!(error.to_string().contains("only geocentric/Earth-near"));
     }
 }
+
+#[cfg(test)]
+#[path = "od_ranging_contract_tests.rs"]
+mod contract_tests;

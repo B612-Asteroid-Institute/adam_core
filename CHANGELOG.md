@@ -15,7 +15,16 @@ This file contains notable changes in adam-core
   OD dynamics use centralized TDB epochs, systematic-ranging probabilities
   integrate the physical ``d rho d rho_dot`` cell measure, bounded triplet
   search reports independent work counters/caps, and CMC2003 fails closed when
-  a trustworthy fit covariance is unavailable.
+  a trustworthy fit covariance is unavailable. Follow-up hardening restores
+  the exact default triplet budget ``3 * (max_outliers + 1)``, prevents dense
+  repeated nights from starving later geometry, requires three distinct
+  observation epochs, rejects non-finite/domain-invalid inputs before provider
+  calls, re-gates selection-changing final CMC refits with retained diagnostics,
+  and canonicalizes Arrow chunk layout in fingerprints. Bounded triplet-search
+  priorities now treat sub-millisecond epoch differences as ties, preventing
+  external equivalent labels within the documented TT/TDB model difference
+  from discontinuously selecting a different spans/prefit branch; dynamical
+  epochs remain unrounded and the canonical TT/TDB policy is unchanged.
 
 - Orbit determination now owns every IOD, least-squares, rejection, linkage
   and ``run_od`` loop in adam-core. Separately built propagators contribute

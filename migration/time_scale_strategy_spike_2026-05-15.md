@@ -100,3 +100,14 @@ Fixture version 2 replaces the former rounded-offset UTC/TAI expectation with
 absolute ERFA ``Utctai``/``Taiutc`` two-part-JD results. This matters on leap
 second days because UTC is a SOFA quasi-JD. All UTC edges now route through the
 shared Rust time service; the project-local TT/TDB policy is unchanged.
+
+## External TT/TDB model comparison (2026-10-21)
+
+The accepted adam-core contract remains the project-local leading-term TT/TDB
+model above. Against geocentric ERFA/SOFA ``eraDtdb``, an external comparison
+over 1900--2100 measured a maximum difference of about 39 microseconds. That
+comparison does not change the conversion policy or its fixture. OD continues
+to consume exact `TimeArray` TDB epochs for dynamics; only bounded triplet
+search priorities coalesce sub-millisecond differences so externally supplied
+equivalent labels inside this documented model difference cannot choose a
+wildly different tied candidate.

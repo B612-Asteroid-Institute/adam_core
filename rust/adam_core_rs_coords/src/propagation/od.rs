@@ -61,7 +61,8 @@
 //!   search visits windows (densest 10 d, densest 30 d, last 30 d, first
 //!   30 d, whole arc) and in each walks (first, last) pairs by distance of
 //!   their span from 6 days, one triplet per pair and per pair of nights,
-//!   lazily, stopping at the explicit `max_triplets` budget (32 by default)
+//!   lazily, stopping at the explicit `max_triplets` budget (when omitted,
+//!   exactly `3 * (max_outliers + 1)`)
 //!   without materializing or globally sorting all `C(n, 3)` combinations.
 //! * **Velocity** ([`VelocityMethod`]). `Auto` by default:
 //!   Herrick-Gibbs when consecutive position vectors are within 5 degrees
@@ -1309,9 +1310,9 @@ pub struct SpanSearchConfig {
     pub dense_window_days: [f64; 2],
     /// Length of the last- and first-window searches.
     pub edge_window_days: f64,
-    /// Triplet budget when `IodConfig::max_triplets` is None: the order of
-    /// the study ladder's candidate count (two triplets x two selections x
-    /// up to four windows, times the roots).
+    /// Legacy span-ladder tuning retained for source compatibility. The
+    /// run-level budget is `IodConfig::max_triplets`; when that is None the
+    /// deterministic default is `3 * (max_outliers + 1)` for every method.
     pub max_triplets: usize,
 }
 
@@ -2114,6 +2115,15 @@ pub fn run_iod(
             format!("{n} observations, fewer than min_obs = {}", config.min_obs),
         ));
     }
+    let distinct_epochs = distinct_observation_epochs(observed)?;
+    if distinct_epochs < 3 {
+        return Ok(IodResult::not_found(
+            epoch_scale,
+            format!(
+                "rank-deficient arc: {distinct_epochs} distinct observation epochs; at least 3 are required"
+            ),
+        ));
+    }
     let order = iod_observation_order(observed, observers)?;
     let sorted_observed = take_coordinate_batch(observed, &order)?;
     let sorted_observers = take_observer_batch(observers, &order)?;
@@ -2152,6 +2162,15 @@ pub(super) fn iod_candidate_pool(
         return Ok(IodResult::not_found(
             epoch_scale,
             format!("{n} observations, fewer than min_obs = {}", config.min_obs),
+        ));
+    }
+    let distinct_epochs = distinct_observation_epochs(observed)?;
+    if distinct_epochs < 3 {
+        return Ok(IodResult::not_found(
+            epoch_scale,
+            format!(
+                "rank-deficient arc: {distinct_epochs} distinct observation epochs; at least 3 are required"
+            ),
         ));
     }
     // A short arc does not determine an orbit (a night cannot fix six
@@ -2435,10 +2454,7 @@ fn run_iod_sorted(
             ))
         }
         Some(budget) => budget,
-        None if config.observation_selection_method == ObservationSelectionMethod::Spans => {
-            config.spans.max_triplets.max(1)
-        }
-        None => config.max_pair_visits.min(config.max_middle_visits),
+        None => 3 * (max_outliers + 1),
     };
     let mut selection_stats = TripletSearchStats::default();
     let triplets: Vec<([usize; 3], (usize, usize))> =
@@ -2450,6 +2466,7 @@ fn run_iod_sorted(
                 budget,
                 config.max_pair_visits,
                 config.max_raw_pair_visits,
+                config.max_middle_visits,
                 &mut selection_stats,
             )
         } else {
@@ -2866,6 +2883,7 @@ fn select_observation_triplets_bounded_with_limits(
             budget,
             max_pair_visits,
             max_pair_visits.saturating_mul(256),
+            max_middle_visits,
             &mut stats,
         )
         .into_iter()
@@ -2892,6 +2910,17 @@ fn select_observation_triplets_bounded_with_limits(
 /// non-increasing arc order; only the pairs sharing the current arc have
 /// their middle observations enumerated and sorted, and the walk stops as
 /// soon as the budget is met. Each pair is visited once.
+/// Search-priority resolution, not a time-scale conversion. The retained
+/// TT/TDB model differs from external high-order models by at most tens of
+/// microseconds over the documented interval. Treat metrics within one
+/// millisecond as the same priority so equivalent external labels cannot
+/// discontinuously select another bounded-search branch.
+const TRIPLET_PRIORITY_RESOLUTION_DAYS: f64 = 1.0e-3 / 86_400.0;
+
+fn triplet_priority_key(days: f64) -> i64 {
+    (days / TRIPLET_PRIORITY_RESOLUTION_DAYS).round() as i64
+}
+
 #[derive(Debug, Default)]
 struct TripletSearchStats {
     pair_visits: usize,
@@ -2920,6 +2949,7 @@ fn combination_triplets_with_stats(
 
     #[derive(PartialEq)]
     struct Pair {
+        arc_key: i64,
         arc: f64,
         first: usize,
         last: usize,
@@ -2927,8 +2957,8 @@ fn combination_triplets_with_stats(
     impl Eq for Pair {}
     impl Ord for Pair {
         fn cmp(&self, other: &Self) -> Ordering {
-            self.arc
-                .total_cmp(&other.arc)
+            self.arc_key
+                .cmp(&other.arc_key)
                 .then_with(|| other.first.cmp(&self.first))
                 .then_with(|| other.last.cmp(&self.last))
         }
@@ -2951,8 +2981,10 @@ fn combination_triplets_with_stats(
     let mut seen = HashSet::new();
     let mut visit = |heap: &mut BinaryHeap<Pair>, first: usize, last: usize| {
         if first < last && seen.insert((first, last)) {
+            let arc = t(last) - t(first);
             heap.push(Pair {
-                arc: t(last) - t(first),
+                arc_key: triplet_priority_key(arc),
+                arc,
                 first,
                 last,
             });
@@ -2970,7 +3002,7 @@ fn combination_triplets_with_stats(
         let mut group = vec![(top.first, top.last)];
         visit(&mut heap, top.first + 1, top.last);
         visit(&mut heap, top.first, top.last - 1);
-        while heap.peek().is_some_and(|next| next.arc == arc) {
+        while heap.peek().is_some_and(|next| next.arc_key == top.arc_key) {
             if stats.pair_visits == max_pair_visits {
                 stats.pair_cap_exhausted = true;
                 break;
@@ -2997,14 +3029,19 @@ fn combination_triplets_with_stats(
                 if t(middle) == t(first) || t(middle) == t(last) {
                     continue;
                 }
-                candidates.push(((midpoint - t(middle)).abs(), first, middle, last));
+                candidates.push((
+                    triplet_priority_key((midpoint - t(middle)).abs()),
+                    first,
+                    middle,
+                    last,
+                ));
             }
             if stats.middle_cap_exhausted {
                 break;
             }
         }
         candidates.sort_by(|a, b| {
-            a.0.total_cmp(&b.0)
+            a.0.cmp(&b.0)
                 .then(a.1.cmp(&b.1))
                 .then(a.2.cmp(&b.2))
                 .then(a.3.cmp(&b.3))
@@ -3077,8 +3114,8 @@ pub(super) fn observation_nights(
         let t = times[row];
         let (start, id) = match last_seen.get(&key) {
             Some(&(start, last, id))
-                if t - last <= OBSERVING_NIGHT_GAP_DAYS
-                    && t - start <= OBSERVING_NIGHT_MAX_DAYS =>
+                if t - last <= OBSERVING_NIGHT_GAP_DAYS + TRIPLET_PRIORITY_RESOLUTION_DAYS
+                    && t - start <= OBSERVING_NIGHT_MAX_DAYS + TRIPLET_PRIORITY_RESOLUTION_DAYS =>
             {
                 (start, id)
             }
@@ -3108,8 +3145,96 @@ fn span_triplets(
         budget,
         usize::MAX,
         usize::MAX,
+        usize::MAX,
         &mut stats,
     )
+}
+
+/// Best endpoint row for every distinct observing-night pair in one window.
+/// Dense nights are collapsed before any global raw-pair budget is charged,
+/// so repeated rows from one night cannot starve later night geometry.
+fn grouped_span_pairs(
+    times: &[f64],
+    order: &[usize],
+    nights: &[usize],
+    lo: usize,
+    hi: usize,
+    config: &SpanSearchConfig,
+) -> Vec<(i64, usize, usize, (usize, usize))> {
+    use std::collections::BTreeMap;
+
+    let mut groups: BTreeMap<usize, Vec<usize>> = BTreeMap::new();
+    for position in lo..=hi {
+        groups
+            .entry(nights[order[position]])
+            .or_default()
+            .push(position);
+    }
+    let groups: Vec<(usize, Vec<usize>)> = groups.into_iter().collect();
+    let mut pairs = Vec::new();
+    for left in 0..groups.len() {
+        for right in left..groups.len() {
+            let (left_night, firsts) = &groups[left];
+            let (right_night, lasts) = &groups[right];
+            let mut best: Option<(i64, usize, usize)> = None;
+            for &first in firsts {
+                let start = lasts.partition_point(|&last| {
+                    let span = times[order[last]] - times[order[first]];
+                    last <= first
+                        || span <= 0.0
+                        || span + TRIPLET_PRIORITY_RESOLUTION_DAYS < config.min_span_days
+                });
+                let end = lasts.partition_point(|&last| {
+                    times[order[last]] - times[order[first]]
+                        <= config.max_span_days + TRIPLET_PRIORITY_RESOLUTION_DAYS
+                });
+                if start >= end {
+                    continue;
+                }
+                let target_time = times[order[first]] + config.target_span_days;
+                let split = start
+                    + lasts[start..end].partition_point(|&last| times[order[last]] < target_time);
+                for candidate in [split.checked_sub(1), (split < end).then_some(split)]
+                    .into_iter()
+                    .flatten()
+                    .filter(|&candidate| candidate >= start && candidate < end)
+                {
+                    let selected_last = lasts[candidate];
+                    let canonical = start
+                        + lasts[start..=candidate].partition_point(|&last| {
+                            times[order[last]] < times[order[selected_last]]
+                        });
+                    let last = lasts[canonical];
+                    let deviation = triplet_priority_key(
+                        ((times[order[last]] - times[order[first]]) - config.target_span_days)
+                            .abs(),
+                    );
+                    let value = (deviation, first, last);
+                    if best.is_none_or(|current| {
+                        value
+                            .0
+                            .cmp(&current.0)
+                            .then(value.1.cmp(&current.1))
+                            .then(value.2.cmp(&current.2))
+                            .is_lt()
+                    }) {
+                        best = Some(value);
+                    }
+                }
+            }
+            if let Some((deviation, first, last)) = best {
+                pairs.push((deviation, first, last, (*left_night, *right_night)));
+            }
+        }
+    }
+    pairs.sort_by(|left, right| {
+        left.0
+            .cmp(&right.0)
+            .then(left.1.cmp(&right.1))
+            .then(left.2.cmp(&right.2))
+            .then(left.3.cmp(&right.3))
+    });
+    pairs
 }
 
 fn span_triplets_with_limits(
@@ -3119,6 +3244,7 @@ fn span_triplets_with_limits(
     budget: usize,
     max_pair_visits: usize,
     max_raw_pair_visits: usize,
+    max_middle_visits: usize,
     stats: &mut TripletSearchStats,
 ) -> Vec<([usize; 3], (usize, usize))> {
     use std::cmp::{Ordering, Reverse};
@@ -3139,7 +3265,7 @@ fn span_triplets_with_limits(
             if hi < lo {
                 hi = lo;
             }
-            while hi + 1 < n && t[hi + 1] - t[lo] <= length {
+            while hi + 1 < n && t[hi + 1] - t[lo] <= length + TRIPLET_PRIORITY_RESOLUTION_DAYS {
                 hi += 1;
             }
             if hi - lo + 1 > best_count {
@@ -3149,9 +3275,13 @@ fn span_triplets_with_limits(
         }
         best
     };
-    let last_from = t.partition_point(|&v| v < t[n - 1] - config.edge_window_days);
+    let last_from = t.partition_point(|&v| {
+        v < t[n - 1] - config.edge_window_days - TRIPLET_PRIORITY_RESOLUTION_DAYS
+    });
     let first_to = t
-        .partition_point(|&v| v <= t[0] + config.edge_window_days)
+        .partition_point(|&v| {
+            v <= t[0] + config.edge_window_days + TRIPLET_PRIORITY_RESOLUTION_DAYS
+        })
         .saturating_sub(1);
     let mut windows = Vec::new();
     for w in [
@@ -3166,12 +3296,12 @@ fn span_triplets_with_limits(
         }
     }
     #[derive(PartialEq)]
-    struct Key(f64, usize, usize);
+    struct Key(i64, usize, usize);
     impl Eq for Key {}
     impl Ord for Key {
         fn cmp(&self, o: &Self) -> Ordering {
             self.0
-                .total_cmp(&o.0)
+                .cmp(&o.0)
                 .then(self.1.cmp(&o.1))
                 .then(self.2.cmp(&o.2))
         }
@@ -3184,12 +3314,82 @@ fn span_triplets_with_limits(
     let target = config.target_span_days;
     let span_ok = |f: usize, l: usize| {
         let d = t[l] - t[f];
-        d > 0.0 && d >= config.min_span_days && d <= config.max_span_days
+        d > 0.0
+            && d + TRIPLET_PRIORITY_RESOLUTION_DAYS >= config.min_span_days
+            && d <= config.max_span_days + TRIPLET_PRIORITY_RESOLUTION_DAYS
     };
-    let deviation = |f: usize, l: usize| ((t[l] - t[f]) - target).abs();
+    let deviation = |f: usize, l: usize| triplet_priority_key(((t[l] - t[f]) - target).abs());
     let mut used_night_pairs = HashSet::new();
     'windows: for (lo, hi) in windows {
         if hi < lo + 2 {
+            continue;
+        }
+        let distinct_nights = order[lo..=hi]
+            .iter()
+            .map(|&row| nights[row])
+            .collect::<HashSet<_>>()
+            .len();
+        // For dense arcs the number of observing nights is tiny compared
+        // with the row count. Traverse night pairs directly; for sparse
+        // arcs retain the lazy row frontier so a million one-row nights do
+        // not imply an O(n^2) night-pair materialization.
+        if distinct_nights <= 64 {
+            for (_, first, last, night_pair) in
+                grouped_span_pairs(times, &order, nights, lo, hi, config)
+            {
+                if used_night_pairs.contains(&night_pair) {
+                    continue;
+                }
+                if stats.raw_pair_visits == max_raw_pair_visits {
+                    stats.raw_pair_cap_exhausted = true;
+                    break 'windows;
+                }
+                stats.raw_pair_visits += 1;
+                let begin = first + 1 + t[first + 1..last].partition_point(|&v| v == t[first]);
+                let end = first + 1 + t[first + 1..last].partition_point(|&v| v < t[last]);
+                if begin >= end {
+                    continue;
+                }
+                let midpoint = (t[first] + t[last]) / 2.0;
+                let split = begin + t[begin..end].partition_point(|&v| v < midpoint);
+                let canonical_run_start = |middle: usize| {
+                    begin + t[begin..=middle].partition_point(|&value| value < t[middle])
+                };
+                let Some(middle) = [
+                    split
+                        .checked_sub(1)
+                        .filter(|&middle| middle >= begin)
+                        .map(canonical_run_start),
+                    (split < end).then_some(split).map(canonical_run_start),
+                ]
+                .into_iter()
+                .flatten()
+                .min_by(|&a, &b| {
+                    triplet_priority_key((t[a] - midpoint).abs())
+                        .cmp(&triplet_priority_key((t[b] - midpoint).abs()))
+                        .then(a.cmp(&b))
+                }) else {
+                    continue;
+                };
+                if stats.pair_visits == max_pair_visits {
+                    stats.pair_cap_exhausted = true;
+                    break 'windows;
+                }
+                if stats.middle_visits == max_middle_visits {
+                    stats.middle_cap_exhausted = true;
+                    break 'windows;
+                }
+                stats.pair_visits += 1;
+                stats.middle_visits += 1;
+                used_night_pairs.insert(night_pair);
+                out.push((
+                    [order[first], order[middle], order[last]],
+                    (order[lo], order[hi]),
+                ));
+                if out.len() == budget {
+                    return out;
+                }
+            }
             continue;
         }
         type Down = Option<(usize, usize)>;
@@ -3268,14 +3468,17 @@ fn span_triplets_with_limits(
             .into_iter()
             .flatten()
             .min_by(|&a, &b| {
-                (t[a] - midpoint)
-                    .abs()
-                    .total_cmp(&(t[b] - midpoint).abs())
+                triplet_priority_key((t[a] - midpoint).abs())
+                    .cmp(&triplet_priority_key((t[b] - midpoint).abs()))
                     .then(a.cmp(&b))
             })
             .expect("middle");
             if stats.pair_visits == max_pair_visits {
                 stats.pair_cap_exhausted = true;
+                break 'windows;
+            }
+            if stats.middle_visits == max_middle_visits {
+                stats.middle_cap_exhausted = true;
                 break 'windows;
             }
             stats.pair_visits += 1;
@@ -3406,6 +3609,24 @@ observed covariance with finite, positive lon/lat variances; observations withou
 reported uncertainties need a SigmaFillModel among the run_od observation models to \
 supply them";
 
+pub(super) fn distinct_observation_epochs(
+    observed: &CoordinateBatch,
+) -> PropagationResultValue<usize> {
+    let times = observed.times.as_ref().ok_or_else(|| {
+        PropagationError::InvalidRequest(
+            "orbit determination requires observation times".to_string(),
+        )
+    })?;
+    let mut epochs = times
+        .epochs
+        .iter()
+        .map(|epoch| (epoch.days, epoch.nanos))
+        .collect::<Vec<_>>();
+    epochs.sort_unstable();
+    epochs.dedup();
+    Ok(epochs.len())
+}
+
 pub(super) fn validate_od_observations(
     observed: &CoordinateBatch,
     observers: &ObserverBatch,
@@ -3422,9 +3643,9 @@ pub(super) fn validate_od_observations(
         )
     })?;
     for (row, value) in values.iter().enumerate() {
-        if !value[1].is_finite() {
+        if !value[1].is_finite() || !(0.0..360.0).contains(&value[1]) {
             return Err(PropagationError::InvalidRequest(format!(
-                "observation row {row} longitude must be finite"
+                "observation row {row} longitude must be finite and within [0, 360) degrees"
             )));
         }
         if !value[2].is_finite() || !(-90.0..=90.0).contains(&value[2]) {
@@ -3480,11 +3701,23 @@ pub(super) fn validate_od_observations(
             }
             let cross_left = block[8];
             let cross_right = block[2 * 6 + 1];
-            if !((cross_left.is_nan() && cross_right.is_nan())
-                || (cross_left.is_finite() && cross_right.is_finite()))
+            let angular_cross = if cross_left.is_nan() && cross_right.is_nan() {
+                // CovarianceBatch uses paired NaNs for a null, unreported
+                // correlation. Its documented numerical meaning is zero.
+                0.0
+            } else if cross_left.is_finite() && cross_right.is_finite() && cross_left == cross_right
             {
+                cross_left
+            } else {
                 return Err(PropagationError::InvalidRequest(format!(
                     "observation row {row} angular cross-covariance must be symmetric finite values or both null for zero"
+                )));
+            };
+            let longitude_variance = block[7];
+            let latitude_variance = block[14];
+            if longitude_variance * latitude_variance - angular_cross * angular_cross <= 0.0 {
+                return Err(PropagationError::InvalidRequest(format!(
+                    "observation row {row} angular covariance must be positive definite"
                 )));
             }
             for dimension in [0_usize, 3, 4, 5] {
@@ -4296,7 +4529,12 @@ mod tests {
         }
         // The cross-platform Gauss-Newton finite-difference floor is about
         // 1.1e-2 on musl/aarch64 and remains negligible relative to one dof.
-        assert!(output.evaluation.orbit_chi2 < 2e-2);
+        assert!(
+            output.evaluation.orbit_chi2 < 1e-2,
+            "orbit chi2 {} state {:?}",
+            output.evaluation.orbit_chi2,
+            output.fit.state
+        );
         assert_eq!(output.evaluation.num_obs, NUM_OBS);
         assert_eq!(output.evaluation.outlier, vec![false; NUM_OBS]);
         assert!((output.evaluation.arc_length - 21.0).abs() < 1e-9);
@@ -4420,9 +4658,7 @@ mod tests {
             light_time: true,
             mu: crate::types::origin_mu_au3_day2(&OriginId::from_code("SUN")).unwrap(),
             speed_of_light: 173.144_632_674_240_3,
-            max_triplets: Some(
-                3 * (((NUM_OBS as f64 * contamination_percentage / 100.0) as usize) + 1),
-            ),
+            max_triplets: None,
             max_pair_visits: 20_000,
             max_raw_pair_visits: 200_000,
             max_middle_visits: 200_000,
@@ -4888,9 +5124,9 @@ mod tests {
         }
     }
 
-    /// The materialized legacy selection: every combination, sorted by
-    /// (arc descending, midpoint offset ascending) with a stable sort, then
-    /// filtered to distinct epochs.
+    /// The materialized selection oracle: every combination, sorted by
+    /// robust search-priority arc descending, midpoint offset ascending and
+    /// canonical index, then filtered to distinct epochs.
     fn legacy_combination_triplets(times: &[f64]) -> Vec<[usize; 3]> {
         let n = times.len();
         let mut rows = Vec::new();
@@ -4906,7 +5142,10 @@ mod tests {
             let arc_b = times[b[2]] - times[b[0]];
             let mid_a = ((times[a[2]] + times[a[0]]) / 2.0 - times[a[1]]).abs();
             let mid_b = ((times[b[2]] + times[b[0]]) / 2.0 - times[b[1]]).abs();
-            arc_b.total_cmp(&arc_a).then(mid_a.total_cmp(&mid_b))
+            triplet_priority_key(arc_b)
+                .cmp(&triplet_priority_key(arc_a))
+                .then(triplet_priority_key(mid_a).cmp(&triplet_priority_key(mid_b)))
+                .then(a.cmp(b))
         });
         rows.retain(|row| {
             times[row[0]] != times[row[1]]
@@ -4976,6 +5215,34 @@ mod tests {
     }
 
     #[test]
+    fn dense_grouped_span_caps_pair_and_middle_work_independently() {
+        let times: Vec<f64> = (0..8)
+            .flat_map(|night| (0..50).map(move |row| night as f64 + row as f64 / 200.0))
+            .collect();
+        let nights = observation_nights(&times, None);
+        for (pair_cap, middle_cap, expected_pair, expected_middle) in [(2, 99, 2, 2), (99, 3, 3, 3)]
+        {
+            let mut stats = TripletSearchStats::default();
+            let triplets = span_triplets_with_limits(
+                &times,
+                &nights,
+                &SpanSearchConfig::default(),
+                32,
+                pair_cap,
+                100,
+                middle_cap,
+                &mut stats,
+            );
+            assert_eq!(stats.pair_visits, expected_pair);
+            assert_eq!(stats.middle_visits, expected_middle);
+            assert_eq!(triplets.len(), expected_pair.min(expected_middle));
+            assert_eq!(stats.pair_cap_exhausted, pair_cap <= middle_cap);
+            assert_eq!(stats.middle_cap_exhausted, middle_cap < pair_cap);
+            assert!(stats.exhausted());
+        }
+    }
+
+    #[test]
     fn independent_span_raw_pair_cap_bounds_sparse_scans() {
         let times: Vec<f64> = (0..10_000).map(|row| row as f64 * 100.0).collect();
         let nights = observation_nights(&times, None);
@@ -4987,6 +5254,7 @@ mod tests {
             1_000,
             7,
             11,
+            13,
             &mut stats,
         );
         assert!(triplets.is_empty());
@@ -5358,6 +5626,35 @@ mod tests {
     }
 
     #[test]
+    fn triplet_order_is_stable_within_external_tt_tdb_model_difference() {
+        // This is an ordering policy only: the physical epochs passed to
+        // Gauss remain untouched. Forty microseconds brackets the documented
+        // leading-term-vs-external-model difference in the 1900--2100 probe.
+        let times: Vec<f64> = (0..24).map(|day| 60_000.0 + day as f64).collect();
+        let delta = 40.0e-6 / 86_400.0;
+        let shifted: Vec<f64> = times
+            .iter()
+            .enumerate()
+            .map(|(row, &time)| time + if row % 2 == 0 { delta } else { -delta })
+            .collect();
+        let config = SpanSearchConfig::default();
+        let base_spans = span_triplets(&times, &observation_nights(&times, None), &config, 12);
+        let shifted_spans =
+            span_triplets(&shifted, &observation_nights(&shifted, None), &config, 12);
+        assert_eq!(shifted_spans, base_spans);
+
+        let mut base_stats = TripletSearchStats::default();
+        let mut shifted_stats = TripletSearchStats::default();
+        let base_combinations =
+            combination_triplets_with_stats(&times, 12, 256, 4096, &mut base_stats);
+        let shifted_combinations =
+            combination_triplets_with_stats(&shifted, 12, 256, 4096, &mut shifted_stats);
+        assert_eq!(shifted_combinations, base_combinations);
+        assert!(base_stats.pair_visits <= 256 && shifted_stats.pair_visits <= 256);
+        assert!(base_stats.middle_visits <= 4096 && shifted_stats.middle_visits <= 4096);
+    }
+
+    #[test]
     fn span_triplets_prefer_the_target_span_in_the_densest_window() {
         // 3000 observations every six hours: the first triplet spans the
         // target exactly, its middle at the pair's midpoint, inside the
@@ -5412,7 +5709,7 @@ mod tests {
                 .all(|&row| mjd[row] >= mjd[lo] && mjd[row] <= mjd[hi]));
         }
         assert_near_truth(&result.to_output(observed.len()));
-        // Budget: the spans default when max_triplets is None.
+        // The run-level default is exactly three triplets per allowed outlier.
         let none = run_iod(
             &predictor,
             &observed,
@@ -5424,7 +5721,55 @@ mod tests {
         )
         .unwrap();
         assert!(!none.found());
-        assert!(none.triplets_tried <= config.spans.max_triplets);
+        let expected_budget =
+            3 * (((observed.len() as f64 * config.contamination_percentage / 100.0) as usize) + 1);
+        assert_eq!(none.triplets_tried, expected_budget);
+    }
+
+    #[test]
+    fn spans_prefit_is_continuous_for_external_equivalent_label_offsets() {
+        let config = IodConfig {
+            observation_selection_method: ObservationSelectionMethod::Spans,
+            acceptance: IodAcceptance::Prefit,
+            velocity_method: VelocityMethod::Auto,
+            ..iod_config(0.0)
+        };
+        let propagator = TwoBodyPropagator::default();
+        let options = ephemeris_options();
+        let predictor = two_body_predictor(&propagator, &options);
+        let observed = synthetic_observations();
+        let observer_rows = observers();
+        let base = run_iod(&predictor, &observed, &observer_rows, &config).unwrap();
+        let base = base.accepted_candidate().expect("base arc accepted");
+
+        let mut shifted_observed = observed.clone();
+        let mut shifted_observers = observer_rows.clone();
+        for times in [
+            shifted_observed.times.as_mut().unwrap(),
+            shifted_observers.coordinates.times.as_mut().unwrap(),
+        ] {
+            for (row, epoch) in times.epochs.iter_mut().enumerate() {
+                let offset = if row % 2 == 0 { 40_000 } else { -40_000 };
+                *epoch = crate::Epoch::new(epoch.days, epoch.nanos + offset);
+            }
+        }
+        let shifted = run_iod(&predictor, &shifted_observed, &shifted_observers, &config).unwrap();
+        let shifted = shifted
+            .accepted_candidate()
+            .expect("externally shifted arc accepted");
+        assert_eq!(shifted.triplet, base.triplet);
+        assert_eq!(shifted.root_index, base.root_index);
+        assert_eq!(shifted.velocity_method, base.velocity_method);
+        assert!(
+            shifted
+                .state
+                .iter()
+                .zip(base.state)
+                .take(3)
+                .map(|(a, b)| (a - b).abs())
+                .fold(0.0_f64, f64::max)
+                < 1.0e-3
+        );
     }
 
     #[test]
@@ -5809,3 +6154,7 @@ mod tests {
         assert!(output.covariance.iter().all(|value| value.is_finite()));
     }
 }
+
+#[cfg(test)]
+#[path = "od_contract_tests.rs"]
+mod contract_tests;
