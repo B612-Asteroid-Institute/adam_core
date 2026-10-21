@@ -441,9 +441,12 @@ walk-forward and consistency runs exposed.
 * A non-finite Jacobian / gradient / normal matrix ends the fit with
   `status_code = -2`, `success = False`, iterate untouched (was: NaN ignored
   by the gradient norm, status 1 "converged").
-* `max_nfev` is scipy's `nfev` (initial evaluation plus trial steps); the
-  finite-difference Jacobian evaluations stay in the `iterations` column but
-  are not budget, as in the baseline and the study harness's `max_nfev=200`.
+* Historical 2026-09-16 contract: `max_nfev` matched scipy's trial-only
+  `nfev`. **Superseded on the 0.7 correctness line:** one honest `max_nfev`
+  now includes the initial residual, every finite-difference column, and every
+  trial across approximate/exact/fallback phases. `iterations` reports that
+  residual-evaluation count and `optimizer_iterations` reports Jacobian/step
+  iterations.
 * The contract (objective, derivatives and their exactness, scaling, step and
   acceptance, every status code, limits, covariance) lives on
   `WhitenedFitConfig` and in the `fit_least_squares` Notes.

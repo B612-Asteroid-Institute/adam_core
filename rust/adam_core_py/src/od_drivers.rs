@@ -29,10 +29,10 @@ use adam_core_rs_coords::propagation::adapter::{
 use adam_core_rs_coords::propagation::{
     AstrometrySnapshot, BackendIdentity, Cmc2003FitConfig, CorrectionConfig, CovariancePropagation,
     EphemerisOptions, EpochPolicy, ExternalPropagator, ExternalPropagatorV2, FullOdConfig,
-    FullOdOutput, IodAcceptance, IodCandidate, IodConfig, IodResult, IterativeFitConfig,
-    JacobianMethod, ObservationSelectionMethod, PrefitScope, PropagationOptions,
-    PropagationResultValue, RangingConfig, RangingResult, RangingSample, RefinementConfig,
-    SpanSearchConfig, TwoBodyPropagator, TwoBodyPropagatorConfig, VelocityMethod,
+    FullOdOutput, IodAcceptance, IodCandidate, IodCandidateFailure, IodConfig, IodResult,
+    IterativeFitConfig, JacobianMethod, ObservationSelectionMethod, PrefitScope,
+    PropagationOptions, PropagationResultValue, RangingConfig, RangingResult, RangingSample,
+    RefinementConfig, SpanSearchConfig, TwoBodyPropagator, TwoBodyPropagatorConfig, VelocityMethod,
     WhitenedFitConfig, WhitenedFitOutput, EXTERNAL_PROPAGATOR_CAPSULE,
 };
 use adam_core_rs_coords::veres2017::{SigmaFillModel, VeresFloorModel, VeresReplaceModel};
@@ -162,6 +162,7 @@ fn parse_fit_settings(settings: Option<&Bound<'_, PyDict>>) -> PyResult<FitSetti
             max_lt_iter,
         },
     };
+    config.validate().map_err(value_error)?;
     let options = EphemerisOptions {
         propagation: PropagationOptions {
             chunk_size: None,
@@ -315,7 +316,7 @@ fn parse_iod_settings_over(
             Some(method) => ObservationSelectionMethod::parse(&method).map_err(value_error)?,
             None => defaults.observation_selection_method,
         };
-    Ok(IodConfig {
+    let config = IodConfig {
         min_obs: setting(settings, "min_obs", defaults.min_obs)?,
         min_arc_length: setting(settings, "min_arc_length", defaults.min_arc_length)?,
         contamination_percentage: setting(
@@ -394,7 +395,9 @@ fn parse_iod_settings_over(
                 defaults.ranging.max_arc_days,
             )?,
         },
-    })
+    };
+    config.validate().map_err(value_error)?;
+    Ok(config)
 }
 
 /// `RefinementConfig` from the ``refinement`` dict: ``method`` is
@@ -405,7 +408,7 @@ fn parse_refinement(
     fit: WhitenedFitConfig,
 ) -> PyResult<RefinementConfig> {
     let method: String = setting(settings, "method", "cmc2003".to_string())?;
-    match method.as_str() {
+    let config = match method.as_str() {
         "cmc2003" => {
             let defaults = Cmc2003FitConfig::default();
             Ok(RefinementConfig::Cmc2003(Cmc2003FitConfig {
@@ -445,7 +448,9 @@ fn parse_refinement(
         other => Err(value_error(format!(
             "refinement method must be 'cmc2003' or 'worst_residual'; got {other:?}"
         ))),
-    }
+    }?;
+    config.validate().map_err(value_error)?;
+    Ok(config)
 }
 
 fn required<'py, T: FromPyObject<'py>>(spec: &Bound<'py, PyDict>, key: &str) -> PyResult<T> {
@@ -744,6 +749,7 @@ fn fit_output_dict<'py>(
         .map_err(|err| value_error(format!("failed to shape covariance: {err}")))?;
     out.set_item("covariance", covariance.into_pyarray(py))?;
     out.set_item("iterations", output.iterations)?;
+    out.set_item("optimizer_iterations", output.optimizer_iterations)?;
     out.set_item("converged", output.converged)?;
     out.set_item("status_code", output.status_code)?;
     out.set_item("cost", output.cost)?;
@@ -806,6 +812,17 @@ fn ranging_dict<'py>(py: Python<'py>, ranging: &RangingResult) -> PyResult<Bound
     out.set_item("grid_points", ranging.grid_points)?;
     out.set_item("admissible_points", ranging.admissible_points)?;
     out.set_item("num_obs", ranging.num_obs)?;
+    Ok(out)
+}
+
+fn candidate_failure_dict<'py>(
+    py: Python<'py>,
+    failure: &IodCandidateFailure,
+) -> PyResult<Bound<'py, PyDict>> {
+    let out = PyDict::new(py);
+    out.set_item("triplet", failure.triplet.to_vec())?;
+    out.set_item("root_index", failure.root_index)?;
+    out.set_item("message", &failure.message)?;
     Ok(out)
 }
 
@@ -885,6 +902,11 @@ fn iod_dict<'py>(py: Python<'py>, result: IodResult, n: usize) -> PyResult<Bound
     out.set_item("triplets_tried", iod.triplets_tried)?;
     out.set_item("candidates_evaluated", iod.candidates_evaluated)?;
     out.set_item("candidates_failed", iod.candidates_failed)?;
+    let candidate_failures = PyList::empty(py);
+    for failure in &result.candidate_failures {
+        candidate_failures.append(candidate_failure_dict(py, failure)?)?;
+    }
+    out.set_item("candidate_failures", candidate_failures)?;
     out.set_item("corrections_run", result.corrections_run)?;
     out.set_item("not_found_reason", iod.not_found_reason)?;
     out.set_item("accepted", result.accepted)?;

@@ -156,7 +156,10 @@ class FittedOrbits(qv.Table):
     num_obs = qv.Int64Column()
     chi2 = qv.Float64Column()
     reduced_chi2 = qv.Float64Column()
+    #: Residual-vector evaluations, including numerical-Jacobian columns.
     iterations = qv.Int64Column(nullable=True)
+    #: Jacobian/step iterations completed by the optimizer.
+    optimizer_iterations = qv.Int64Column(nullable=True)
     success = qv.BooleanColumn(nullable=True)
     status_code = qv.Int64Column(nullable=True)
     #: Compact provenance (`OdProvenance`); null outside `run_od` and IOD.

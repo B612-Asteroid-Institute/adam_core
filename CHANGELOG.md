@@ -383,10 +383,14 @@ This file contains notable changes in adam-core
   Levenberg-Marquardt loop that accepted any decrease; the solver contract
   (objective, scaling, step acceptance, every `status_code`, limits,
   covariance) is written once on `WhitenedFitConfig` and in the
-  `fit_least_squares` Notes. `max_nfev` now bounds scipy's `nfev` (the
-  initial evaluation plus trial steps); finite-difference Jacobian
-  evaluations are reported in `iterations` but are no longer budget, as in
-  the Python baseline.
+  `fit_least_squares` Notes. `max_nfev` is one honest residual-vector
+  evaluation budget: the initial state, every finite-difference column and
+  every trial share it across approximate/exact propagator-Jacobian phases
+  and analytic-to-central fallback. `max_iterations` is shared across those
+  phases too. The legacy `iterations` column reports residual evaluations;
+  the new nullable `optimizer_iterations` column reports Jacobian/step
+  iterations. Final covariance validation and reporting remain outside both
+  solver budgets.
 
 - The IOD epoch crosses the Rust boundary exactly: `IodOutput.epoch`
   (integer days and nanoseconds, `None` unless found) and
@@ -466,7 +470,20 @@ This file contains notable changes in adam-core
 
 - Adam-core's one-crossing `run_od` driver runs observation models before requiring an observed covariance, so observations without reported uncertainties can be filled by a `SigmaFillModel` exactly as when core applies the model first; after the models every observation must carry finite, positive lon/lat variances, else `ValueError` names `SigmaFillModel` as the remedy.
 
-- Gauss IOD (`iod`, `NativeOrbitFitter.initial_fit` / `full_od`, `run_od`, the linkage batch) is deterministic in the caller's row order: the Rust driver sorts observations by epoch, station code and input row before selecting triplets and maps every member array back to the input order. A zero contamination percentage only disables outlier removal (a rejected candidate is followed by the next candidate and triplet instead of ending the search), a candidate with an in-band failed prediction row is counted and skipped while request, protocol, panic, thread-pool and schema errors propagate, and the IOD dict carries `triplets_tried`, `candidates_evaluated`, `candidates_failed` and `not_found_reason`, logged at debug level when no orbit is accepted.
+- Gauss IOD (`iod`, `NativeOrbitFitter.initial_fit` / `full_od`, `run_od`,
+  the linkage batch) is deterministic independently of caller row order: Rust
+  canonicalizes by exact epoch, station and complete observed/observer
+  physical row content, using the input index only for physically identical
+  ties, and maps every externally meaningful index and member array back to
+  caller order. Triplets stay lazily bounded (never a global `C(n, 3)` sort).
+  Zero contamination disables only outlier removal; later roots and triplets
+  still run. Candidate-local row failures are skipped and retained as typed
+  `candidate_failures`, while fatal request/protocol/panic/thread/schema
+  errors propagate. Corrected acceptance explores every sibling root of a
+  converged triplet even when `velocity_method="auto"` resolves differently;
+  one failed sibling cannot suppress a later one. Prefit acceptance now also
+  enforces `min_arc_length`. IOD/ranging/fit/refinement configuration is
+  validated centrally by the Rust types at every entry point.
 ## [0.6.1] - 2026-10-16
 
 ### Fixed

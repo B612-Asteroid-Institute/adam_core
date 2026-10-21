@@ -552,6 +552,7 @@ def _fitted_tables_from_native_output(
         chi2=[output["chi2"]],
         reduced_chi2=[output["reduced_chi2"]],
         iterations=[output["iterations"]],
+        optimizer_iterations=[output["optimizer_iterations"]],
         success=[converged],
         status_code=[int(output.get("status_code", 1 if converged else 0))],
     )
@@ -676,12 +677,12 @@ def _fit_least_squares(
         ``gtol`` (default 1e-12 each, scipy's stopping rules), ``max_iterations``
         (positive integer, default 100: optimizer iterations, one Jacobian
         each), and ``max_nfev`` (positive integer or None, default None:
-        scipy's ``nfev``, the initial residual vector plus every trial step,
-        accepted or rejected). Residual evaluations spent on finite-difference
-        Jacobians (six forward or twelve central per iteration) are not
-        budget, as in ``scipy.optimize.least_squares(method="trf")``; they
-        are still reported in the ``iterations`` column. Final covariance
-        calculation/validation and fit reporting are outside both limits.
+        every residual-vector evaluation: the initial state, each accepted or
+        rejected trial, and finite-difference Jacobian columns (six forward or
+        twelve central per iteration). The ``iterations`` column reports that
+        count and ``optimizer_iterations`` reports completed Jacobian/step
+        iterations. Final covariance calculation/validation and fit reporting
+        are outside both limits.
         Any other keyword raises a `ValueError`: the fit runs natively and no
         longer forwards arguments to `scipy.optimize.least_squares`.
 
@@ -719,8 +720,10 @@ def _fit_least_squares(
     minimum (see `Propagator.two_body_dynamics`); ``jacobian="central"`` is
     exact for any propagator. The legacy ``iterations`` output column records
     every solver residual-vector evaluation, including numerical Jacobians,
-    rather than optimizer iterations. Rejection loops receive a fresh budget
-    for each fit.
+    rather than optimizer iterations; ``optimizer_iterations`` reports the
+    latter. Approximate/exact propagator-Jacobian phases and analytic-to-central
+    fallback share the remaining budgets. Rejection loops receive a fresh
+    budget for each distinct fit.
 
     With ``loss="huber"`` the reported ``chi2`` / ``reduced_chi2`` remain the
     plain (unweighted) chi2 of the included observations, so they stay

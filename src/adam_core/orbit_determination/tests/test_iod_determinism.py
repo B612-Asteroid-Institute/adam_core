@@ -1,9 +1,9 @@
 """
-IOD is deterministic in the caller's row order (PR #217 review round 2,
-phase 1, item 4): the Rust driver sorts observations by epoch, station and
-original index before searching triplets and maps every member array back
-to the input order, so a shuffled copy of the observations yields the same
-accepted orbit and the same per-observation flags.
+IOD is deterministic independently of the caller's row order (PR #217
+review round 2, phase 1, item 4): the Rust driver sorts observations by exact
+epoch, station, and complete physical row content, using the original index
+only for physically identical ties. It maps every member array back to input
+order, so a shuffled copy yields the same accepted orbit and flags.
 """
 
 from __future__ import annotations

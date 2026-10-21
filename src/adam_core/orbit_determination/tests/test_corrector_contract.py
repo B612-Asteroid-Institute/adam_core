@@ -129,8 +129,9 @@ def test_limits_report_status_zero_without_success() -> None:
     assert fitted.status_code[0].as_py() == 0
     assert fitted.iterations[0].as_py() == 2  # initial evaluation + one trial
 
-    # max_nfev bounds trials, not finite-difference columns: one central
-    # Jacobian (12 evaluations) plus the initial and one trial evaluation.
+    # max_nfev bounds every residual evaluation. A central Jacobian is
+    # atomic (12 columns), so it is not started when only one evaluation
+    # remains after the initial residual.
     fitted, _ = fit_least_squares(
         orbit_from_state(seed),
         observations,
@@ -144,4 +145,5 @@ def test_limits_report_status_zero_without_success() -> None:
     )
     assert not fitted.success[0].as_py()
     assert fitted.status_code[0].as_py() == 0
-    assert fitted.iterations[0].as_py() == 14
+    assert fitted.iterations[0].as_py() == 1
+    assert fitted.optimizer_iterations[0].as_py() == 0

@@ -58,6 +58,33 @@ pub struct RangingConfig {
     pub max_arc_days: f64,
 }
 
+impl RangingConfig {
+    /// Validate every ranging setting independently of the caller or language binding.
+    pub fn validate(&self) -> Result<(), String> {
+        if !self.rho_min_au.is_finite() || self.rho_min_au <= 0.0 {
+            return Err("ranging.rho_min_au must be positive and finite".to_string());
+        }
+        if !self.rho_max_au.is_finite() || self.rho_max_au <= self.rho_min_au {
+            return Err(
+                "ranging.rho_max_au must be finite and greater than rho_min_au".to_string(),
+            );
+        }
+        if self.n_rho == 0 || self.n_rho_dot == 0 {
+            return Err("ranging.n_rho and ranging.n_rho_dot must be positive".to_string());
+        }
+        if self.max_corrections == 0 {
+            return Err("ranging.max_corrections must be positive".to_string());
+        }
+        if self.chunk_size == 0 {
+            return Err("ranging.chunk_size must be positive".to_string());
+        }
+        if !self.max_arc_days.is_finite() || self.max_arc_days < 0.0 {
+            return Err("ranging.max_arc_days must be finite and non-negative".to_string());
+        }
+        Ok(())
+    }
+}
+
 impl Default for RangingConfig {
     fn default() -> Self {
         Self {
@@ -322,15 +349,12 @@ pub fn systematic_ranging_with<T: OriginTranslationProvider>(
     provider: &dyn TimeScaleProvider,
     translation_provider: &T,
 ) -> PropagationResultValue<RangingResult> {
-    if config.n_rho == 0
-        || config.n_rho_dot == 0
-        || config.rho_min_au.is_nan()
-        || config.rho_max_au.is_nan()
-        || config.rho_min_au <= 0.0
-        || config.rho_max_au <= config.rho_min_au
-    {
+    config
+        .validate()
+        .map_err(PropagationError::InvalidRequest)?;
+    if !mu.is_finite() || mu <= 0.0 {
         return Err(PropagationError::InvalidRequest(
-            "ranging needs n_rho, n_rho_dot > 0 and rho_max_au > rho_min_au > 0".to_string(),
+            "systematic-ranging mu must be positive and finite".to_string(),
         ));
     }
     let attributable = attributable(observed, observers)?;

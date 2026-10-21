@@ -7,6 +7,7 @@ explicit native propagation capsules for both stages.
 
 import numpy as np
 import numpy.testing as npt
+import pyarrow as pa
 import pytest
 
 from adam_core import _rust_native
@@ -472,3 +473,122 @@ def test_ranging_for_short_arcs_and_gauss_failures(two_body_arc) -> None:  # noq
     )
     assert not disabled.found and disabled.ranging is None
     assert IOD_DEFAULTS["ranging_enabled"] is True
+
+
+@pytest.mark.parametrize(
+    "kwargs, message",
+    [
+        ({"min_obs": 2}, "min_obs"),
+        ({"min_arc_length": float("nan")}, "min_arc_length"),
+        ({"contamination_percentage": 101.0}, "contamination_percentage"),
+        ({"rchi2_threshold": 0.0}, "rchi2_threshold"),
+        ({"max_triplets": 0}, "max_triplets"),
+        ({"span_settings": {"span_max_triplets": 0}}, "span.*max_triplets"),
+        ({"correction_settings": {"max_stages": 0}}, "max_stages"),
+        ({"ranging_settings": {"ranging_n_rho": 0}}, "n_rho"),
+        ({"fit_settings": {"max_nfev": 0}}, "max_nfev"),
+        ({"fit_settings": {"prop_tol": -1.0}}, "propagation_tol"),
+    ],
+)
+def test_native_iod_rejects_invalid_settings_centrally(
+    two_body_arc, kwargs, message  # noqa: F811
+) -> None:
+    with pytest.raises(ValueError, match=message):
+        run_iod(two_body_arc, TwoBodyPropagator(), **kwargs)
+
+
+def test_prefit_acceptance_enforces_minimum_arc(two_body_arc) -> None:  # noqa: F811
+    orbit, _, report = run_iod(
+        two_body_arc,
+        TwoBodyPropagator(),
+        acceptance="prefit",
+        observation_selection_method="combinations",
+        rchi2_threshold=1e20,
+        min_arc_length=100.0,
+        max_triplets=3,
+    )
+    assert len(orbit) == 0 and not report.found
+    assert report.triplets_tried == 3
+    assert report.candidates
+    assert all(candidate.arc_length < 100.0 for candidate in report.candidates)
+
+
+def test_zero_contamination_still_searches_later_triplets(
+    two_body_arc,  # noqa: F811
+) -> None:
+    _, _, report = run_iod(
+        two_body_arc,
+        TwoBodyPropagator(),
+        acceptance="prefit",
+        observation_selection_method="combinations",
+        contamination_percentage=0.0,
+        rchi2_threshold=1e-30,
+        max_triplets=3,
+    )
+    assert not report.found
+    assert report.triplets_tried == 3
+    assert report.candidates_evaluated >= 3
+
+
+def test_equal_epoch_station_rows_are_canonicalized_by_content(
+    two_body_arc,  # noqa: F811
+) -> None:
+    # Make rows 0 and 1 share epoch and station while retaining distinct
+    # astrometry and observer states. Their canonical order must therefore be
+    # physical-content order, not caller order.
+    equal = two_body_arc
+    for prefix in ("coordinates.time", "observers.coordinates.time"):
+        time = (
+            equal.coordinates.time
+            if prefix == "coordinates.time"
+            else equal.observers.coordinates.time
+        )
+        days = time.days.to_pylist()
+        nanos = time.nanos.to_pylist()
+        days[1], nanos[1] = days[0], nanos[0]
+        equal = equal.set_column(f"{prefix}.days", pa.array(days, type=pa.int64()))
+        equal = equal.set_column(f"{prefix}.nanos", pa.array(nanos, type=pa.int64()))
+
+    kwargs = dict(
+        acceptance="prefit",
+        observation_selection_method="combinations",
+        rchi2_threshold=1e20,
+        max_triplets=6,
+    )
+    _, _, direct = run_iod(equal, TwoBodyPropagator(), **kwargs)
+    permutation = np.array([1, 0, *range(2, len(equal))])
+    swapped_input = equal.take(permutation)
+    _, _, swapped = run_iod(swapped_input, TwoBodyPropagator(), **kwargs)
+
+    direct_states = [candidate.state for candidate in direct.candidates]
+    swapped_states = [candidate.state for candidate in swapped.candidates]
+    npt.assert_array_equal(swapped_states, direct_states)
+    direct_ids = [
+        tuple(equal.id[row].as_py() for row in candidate.triplet)
+        for candidate in direct.candidates
+    ]
+    swapped_ids = [
+        tuple(swapped_input.id[row].as_py() for row in candidate.triplet)
+        for candidate in swapped.candidates
+    ]
+    assert swapped_ids == direct_ids
+
+
+def test_candidate_failure_diagnostics_are_public_and_typed() -> None:
+    from adam_core.orbit_determination import IodCandidateFailure
+    from adam_core.orbit_determination.iod import report_from_iod_output
+
+    report = report_from_iod_output(
+        {
+            "candidate_failures": [
+                {
+                    "triplet": [4, 1, 3],
+                    "root_index": 2,
+                    "message": "row failure: no convergence",
+                }
+            ]
+        }
+    )
+    assert report.candidate_failures == (
+        IodCandidateFailure((4, 1, 3), 2, "row failure: no convergence"),
+    )

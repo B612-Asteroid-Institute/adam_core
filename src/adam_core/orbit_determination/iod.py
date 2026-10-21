@@ -35,7 +35,13 @@ IOD_DEFAULTS = MappingProxyType(_rust_native.iod_defaults())
 
 logger = logging.getLogger(__name__)
 
-__all__ = ["IodCandidate", "IodReport", "initial_orbit_determination", "run_iod"]
+__all__ = [
+    "IodCandidate",
+    "IodCandidateFailure",
+    "IodReport",
+    "initial_orbit_determination",
+    "run_iod",
+]
 
 
 def sort_by_id_and_time(
@@ -422,6 +428,16 @@ def _ranging_from_output(ranging: Optional[dict]) -> Optional[RangingSample]:
 
 
 @dataclass(frozen=True)
+class IodCandidateFailure:
+    """Candidate-local numerical failure retained by the bounded IOD search."""
+
+    #: Caller-order rows of the triplet whose root failed.
+    triplet: tuple[int, int, int]
+    root_index: int
+    message: str
+
+
+@dataclass(frozen=True)
 class IodReport:
     """
     What `run_iod` searched: every scored candidate (`IodCandidate`), which
@@ -438,6 +454,8 @@ class IodReport:
     candidates_failed: int
     corrections_run: int
     not_found_reason: Optional[str]
+    #: Candidate-local row failures skipped while later roots/triplets ran.
+    candidate_failures: tuple[IodCandidateFailure, ...] = ()
     #: Indices of converged candidates that are distinct solutions (outside
     #: the accepted orbit's 3-sigma region) fitting about as well (chi2
     #: within the same margin); non-empty means the IOD is ambiguous.
@@ -504,6 +522,14 @@ def report_from_iod_output(output: dict) -> IodReport:
         candidates_failed=int(output.get("candidates_failed", 0)),
         corrections_run=int(output.get("corrections_run", 0)),
         not_found_reason=output.get("not_found_reason"),
+        candidate_failures=tuple(
+            IodCandidateFailure(
+                triplet=tuple(int(row) for row in failure["triplet"]),
+                root_index=int(failure["root_index"]),
+                message=str(failure["message"]),
+            )
+            for failure in output.get("candidate_failures") or ()
+        ),
         ambiguous_with=tuple(int(i) for i in output.get("ambiguous_with") or ()),
         ranging=_ranging_from_output(output.get("ranging")),
     )
@@ -561,7 +587,9 @@ def run_iod(
     ----------
     observations : `OrbitDeterminationObservations`
         Observations believed to belong to one object (any row order; the
-        search sorts by epoch, station and row and reports in input order).
+        search sorts by epoch, station, and complete physical row content,
+        using input row only for physically identical ties, then reports all
+        row references in input order).
     propagator : `~adam_core.propagator.Propagator`
         The propagator instance that scores candidates.
     min_obs, min_arc_length, contamination_percentage, rchi2_threshold,

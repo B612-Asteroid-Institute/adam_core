@@ -51,10 +51,10 @@ pub use od::{
     fit_orbit_least_squares_barycentric, fit_orbit_least_squares_evaluated_barycentric, iod_fit,
     iod_fit_barycentric, iod_fit_linkages_barycentric, od_fit_barycentric,
     vallado_least_squares_barycentric, CorrectionConfig, EvaluatedLeastSquaresFit, FitEvaluation,
-    IodAcceptance, IodCandidate, IodConfig, IodOutput, IodResult, ObservationSelectionMethod,
-    OdConfig, OdMethod, OdOutput, OrbitGeometry, PrefitScope, SpanSearchConfig, ValladoConfig,
-    ValladoIteration, ValladoResult, ValladoStatus, VelocityMethod, INVALID_LIGHT_TIME_MESSAGE,
-    IOD_DEFAULT_MU, IOD_DEFAULT_SPEED_OF_LIGHT,
+    IodAcceptance, IodCandidate, IodCandidateFailure, IodConfig, IodOutput, IodResult,
+    ObservationSelectionMethod, OdConfig, OdMethod, OdOutput, OrbitGeometry, PrefitScope,
+    SpanSearchConfig, ValladoConfig, ValladoIteration, ValladoResult, ValladoStatus,
+    VelocityMethod, INVALID_LIGHT_TIME_MESSAGE, IOD_DEFAULT_MU, IOD_DEFAULT_SPEED_OF_LIGHT,
 };
 pub use od_ranging::{
     admissible_rho_dot_interval, attributable, ranging_state, Attributable, RangingConfig,

@@ -39,9 +39,10 @@
 //! source; the Python signature defaults are read from these (`IOD_DEFAULTS`).
 //!
 //! * **Ordering.** Observations are searched in a canonical order (epoch,
-//!   then station code, then input row), whatever order the caller supplies;
-//!   every output array keeps the caller's order. Identical inputs give
-//!   identical results.
+//!   station code, complete observed/observer physical row content, then the
+//!   input index only for physically identical ties), whatever order the
+//!   caller supplies. Every output array and candidate row index is mapped
+//!   back to the caller's order.
 //! * **Inputs.** Gauss takes equatorial directions and heliocentric
 //!   ecliptic observer positions; ecliptic observations and equatorial
 //!   observers are rotated, observers not centred on the Sun are refused.
@@ -60,7 +61,8 @@
 //!   search visits windows (densest 10 d, densest 30 d, last 30 d, first
 //!   30 d, whole arc) and in each walks (first, last) pairs by distance of
 //!   their span from 6 days, one triplet per pair and per pair of nights,
-//!   lazily, up to 32 triplets.
+//!   lazily, stopping at the explicit `max_triplets` budget (32 by default)
+//!   without materializing or globally sorting all `C(n, 3)` combinations.
 //! * **Velocity** ([`VelocityMethod`]). `Auto` by default:
 //!   Herrick-Gibbs when consecutive position vectors are within 5 degrees
 //!   (Vallado 2013, sec. 7.5.2), Gibbs otherwise.
@@ -69,7 +71,8 @@
 //!   Gronchi 2009): real to a relative 1e-6 (so a near-double root is kept),
 //!   de-duplicated, with all three topocentric ranges at least 1e-4 au (the
 //!   spurious zero-range root and negative ranges are dropped). When one
-//!   converges, its sibling roots are corrected too.
+//!   converges, every sibling root is corrected too, including siblings for
+//!   which `Auto` independently resolved a different velocity method.
 //! * **Acceptance** ([`IodAcceptance::Corrected`], [`CorrectionConfig`]).
 //!   Candidates are corrected in increasing prefit reduced chi2, each raw
 //!   Gauss orbit scored on the observations of its first stage
@@ -100,9 +103,15 @@
 //!   Micheli 2015) instead of an orbit; when no Gauss candidate converges,
 //!   the 3 best ranging orbits are corrected like Gauss candidates. Ranging
 //!   runs on arcs of at most 5 days (`RangingConfig::max_arc_days`).
-//! * **Continuation and failure.** A candidate whose prediction fails is
-//!   counted and skipped; caller errors propagate. When nothing is accepted
-//!   the result says why (`not_found_reason`), naming the last stall.
+//! * **Continuation and failure.** Zero contamination disables rejection,
+//!   not search: later roots and triplets still run. Candidate-local row
+//!   failures are skipped and retained as typed `candidate_failures`; fatal
+//!   request/backend/protocol errors propagate. When nothing is accepted the
+//!   result summarizes the bounded search and all typed diagnostics remain
+//!   available.
+//! * **Legacy prefit.** When selected explicitly, roots and triplets use the
+//!   same canonical bounded traversal; the first candidate satisfying both
+//!   reduced-chi2 and `min_arc_length` (after any bounded rejection) wins.
 //! * **Evidence.** On the first solutions of 126 walk-forward objects
 //!   (ASSIST, MPC observations, 2026-10-14) this policy seeded 116 of 122
 //!   against 16 for the legacy `combinations` + prefit gate and 114 for the
@@ -1262,7 +1271,7 @@ pub struct SpanSearchConfig {
     /// Pairs spanning less than this are never used (0 = any two distinct
     /// epochs).
     pub min_span_days: f64,
-    /// Pairs spanning more than this are never used (infinite = no bound).
+    /// Pairs spanning more than this are never used (`f64::MAX` = no practical bound).
     pub max_span_days: f64,
     /// Lengths of the two densest-window searches, in this order.
     pub dense_window_days: [f64; 2],
@@ -1274,12 +1283,42 @@ pub struct SpanSearchConfig {
     pub max_triplets: usize,
 }
 
+impl SpanSearchConfig {
+    pub fn validate(&self) -> Result<(), String> {
+        for (name, value) in [
+            ("target_span_days", self.target_span_days),
+            ("min_span_days", self.min_span_days),
+            ("max_span_days", self.max_span_days),
+            ("dense_window_days[0]", self.dense_window_days[0]),
+            ("dense_window_days[1]", self.dense_window_days[1]),
+            ("edge_window_days", self.edge_window_days),
+        ] {
+            if !value.is_finite() || value < 0.0 {
+                return Err(format!("spans.{name} must be finite and non-negative"));
+            }
+        }
+        if self.target_span_days == 0.0 {
+            return Err("spans.target_span_days must be positive".to_string());
+        }
+        if self.dense_window_days.contains(&0.0) || self.edge_window_days == 0.0 {
+            return Err("span window lengths must be positive".to_string());
+        }
+        if self.min_span_days > self.max_span_days {
+            return Err("spans.min_span_days must not exceed max_span_days".to_string());
+        }
+        if self.max_triplets == 0 {
+            return Err("spans.max_triplets must be positive".to_string());
+        }
+        Ok(())
+    }
+}
+
 impl Default for SpanSearchConfig {
     fn default() -> Self {
         Self {
             target_span_days: 6.0,
             min_span_days: 0.0,
-            max_span_days: f64::INFINITY,
+            max_span_days: f64::MAX,
             dense_window_days: [10.0, 30.0],
             edge_window_days: 30.0,
             max_triplets: 32,
@@ -1403,6 +1442,30 @@ pub struct CorrectionConfig {
     pub prefit_scope: PrefitScope,
 }
 
+impl CorrectionConfig {
+    pub fn validate(&self) -> Result<(), String> {
+        for (name, value) in [
+            ("max_corrections", self.max_corrections),
+            ("max_converged", self.max_converged),
+            ("max_stages", self.max_stages),
+        ] {
+            if value == 0 {
+                return Err(format!("correction.{name} must be positive"));
+            }
+        }
+        if self.max_converged > self.max_corrections {
+            return Err("correction.max_converged must not exceed max_corrections".to_string());
+        }
+        if self.min_stage_obs < 3 {
+            return Err("correction.min_stage_obs must be at least 3".to_string());
+        }
+        if !self.growth.is_finite() || self.growth <= 1.0 {
+            return Err("correction.growth must be finite and greater than 1".to_string());
+        }
+        Ok(())
+    }
+}
+
 impl Default for CorrectionConfig {
     fn default() -> Self {
         Self {
@@ -1449,6 +1512,41 @@ pub struct IodConfig {
     /// sample instead of an orbit; an arc where no Gauss candidate converges
     /// has its best ranging orbits corrected like Gauss candidates.
     pub ranging: super::od_ranging::RangingConfig,
+}
+
+impl IodConfig {
+    /// Validate the complete IOD/search/correction/ranging policy.
+    pub fn validate(&self) -> Result<(), String> {
+        if self.min_obs < 3 {
+            return Err("min_obs must be at least 3".to_string());
+        }
+        if !self.min_arc_length.is_finite() || self.min_arc_length < 0.0 {
+            return Err("min_arc_length must be finite and non-negative".to_string());
+        }
+        if !self.contamination_percentage.is_finite()
+            || !(0.0..=100.0).contains(&self.contamination_percentage)
+        {
+            return Err(
+                "contamination_percentage must be finite and between 0 and 100".to_string(),
+            );
+        }
+        if !self.rchi2_threshold.is_finite() || self.rchi2_threshold <= 0.0 {
+            return Err("rchi2_threshold must be positive and finite".to_string());
+        }
+        if !self.mu.is_finite() || self.mu <= 0.0 {
+            return Err("mu must be positive and finite".to_string());
+        }
+        if !self.speed_of_light.is_finite() || self.speed_of_light <= 0.0 {
+            return Err("speed_of_light must be positive and finite".to_string());
+        }
+        if self.max_triplets == Some(0) {
+            return Err("max_triplets must be positive or None".to_string());
+        }
+        self.spans.validate()?;
+        self.correction.validate()?;
+        self.ranging.validate()?;
+        Ok(())
+    }
 }
 
 impl Default for IodConfig {
@@ -1682,6 +1780,15 @@ impl CandidateSource {
     }
 }
 
+/// One candidate-local prediction failure retained without aborting the IOD
+/// linkage. Row indices are in the caller's observation order.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IodCandidateFailure {
+    pub triplet: [usize; 3],
+    pub root_index: usize,
+    pub message: String,
+}
+
 /// Product of [`run_iod`]: every scored candidate, which one was accepted,
 /// the search counters and the reason when none was.
 #[derive(Debug, Clone)]
@@ -1697,6 +1804,8 @@ pub struct IodResult {
     pub candidates_evaluated: usize,
     /// Candidates skipped because their prediction failed.
     pub candidates_failed: usize,
+    /// Typed, deterministic diagnostics for every skipped candidate.
+    pub candidate_failures: Vec<IodCandidateFailure>,
     /// Bounded corrections run on candidates (0 until bead a6w.4).
     pub corrections_run: usize,
     /// Why no orbit was accepted; `None` when one was.
@@ -1758,6 +1867,7 @@ impl IodResult {
             triplets_tried: 0,
             candidates_evaluated: 0,
             candidates_failed: 0,
+            candidate_failures: Vec::new(),
             corrections_run: 0,
             not_found_reason: Some(reason),
             ambiguous_with: Vec::new(),
@@ -1769,6 +1879,7 @@ impl IodResult {
         self.triplets_tried = counters.triplets_tried;
         self.candidates_evaluated = counters.candidates_evaluated;
         self.candidates_failed = counters.candidates_failed;
+        self.candidate_failures = counters.candidate_failures.clone();
         self
     }
 
@@ -1851,6 +1962,7 @@ struct SearchCounters {
     triplets_tried: usize,
     candidates_evaluated: usize,
     candidates_failed: usize,
+    candidate_failures: Vec<IodCandidateFailure>,
     /// Message of the last candidate prediction failure.
     last_failure: Option<String>,
     /// Lowest reduced chi2 among the scored candidates (before outlier
@@ -1861,8 +1973,9 @@ struct SearchCounters {
 /// Complete legacy `iod()` work unit: triplet selection, fused Gauss
 /// candidate generation, backend ephemeris/residual scoring, outlier trials,
 /// and first-acceptable-candidate selection. Observations are searched in a
-/// canonical order (epoch, then station code, then input row) whatever
-/// order the caller supplies them in; all output member arrays keep the
+/// canonical order (epoch, station, then physical row content) whatever
+/// order the caller supplies them in; the input index only breaks ties between
+/// physically identical rows, and all output member arrays keep the
 /// caller's order.
 #[allow(clippy::too_many_arguments)]
 pub fn iod_fit_barycentric<P, T>(
@@ -1889,9 +2002,10 @@ where
 
 /// [`iod_fit_barycentric`] over any [`SphericalPredictor`].
 ///
-/// The search is deterministic in the caller's row order: observations are
-/// sorted by epoch (integer days and nanoseconds), then station code, then
-/// input row before triplets are selected, and every member array of the
+/// The search is deterministic independently of the caller's row order: observations are
+/// sorted by epoch (integer days and nanoseconds), station code, and complete
+/// physical row content before triplets are selected; input row only breaks
+/// physically identical ties, and every member array of the
 /// output is mapped back to the input order. A zero contamination
 /// percentage only disables outlier removal; a rejected candidate is
 /// followed by the next candidate and the next triplet. A candidate whose
@@ -1914,6 +2028,9 @@ pub fn run_iod(
     observers: &ObserverBatch,
     config: &IodConfig,
 ) -> PropagationResultValue<IodResult> {
+    config
+        .validate()
+        .map_err(PropagationError::InvalidRequest)?;
     let n = observed.len();
     if observers.len() != n {
         return Err(PropagationError::InvalidRequest(
@@ -1950,6 +2067,9 @@ pub(super) fn iod_candidate_pool(
     observers: &ObserverBatch,
     config: &IodConfig,
 ) -> PropagationResultValue<IodResult> {
+    config
+        .validate()
+        .map_err(PropagationError::InvalidRequest)?;
     let n = observed.len();
     if observers.len() != n {
         return Err(PropagationError::InvalidRequest(
@@ -2016,23 +2136,80 @@ fn observation_time_scale(observed: &CoordinateBatch) -> PropagationResultValue<
         .scale)
 }
 
-/// Permutation putting the observations in the canonical IOD search order:
-/// epoch (days, then nanoseconds), station code, input row.
+/// Permutation putting observations in the canonical IOD search order.
+/// Epoch and station are followed by the complete physical row content:
+/// observed direction/state and covariance, observed origin, observer state
+/// and origin. The caller's row index is only the final tie-break for rows
+/// that are physically identical, so exchanging equal epoch+station rows with
+/// distinct measurements cannot alter triplets, candidates, or acceptance.
+/// [`restore_input_order`] still maps all externally meaningful row indices
+/// and member arrays back to the caller's order.
 pub(super) fn iod_observation_order(
     observed: &CoordinateBatch,
     observers: &ObserverBatch,
 ) -> PropagationResultValue<Vec<usize>> {
+    use std::cmp::Ordering;
+
     let times = observed.times.as_ref().ok_or_else(|| {
         PropagationError::InvalidRequest(
             "orbit determination requires observation times".to_string(),
         )
     })?;
+    let compare_values = |left: &[f64], right: &[f64]| {
+        left.iter()
+            .zip(right)
+            .map(|(a, b)| a.total_cmp(b))
+            .find(|ordering| *ordering != Ordering::Equal)
+            .unwrap_or(Ordering::Equal)
+    };
+    let compare_covariance = |left: usize, right: usize| match &observed.covariance {
+        None => Ordering::Equal,
+        Some(covariance) => covariance
+            .is_row_valid(left)
+            .cmp(&covariance.is_row_valid(right))
+            .then_with(|| {
+                compare_values(covariance.row_values(left), covariance.row_values(right))
+            }),
+    };
+    let observed_values = observed.values.raw_values();
+    let observer_values = observers.coordinates.values.raw_values();
+    let compare_observer_covariance =
+        |left: usize, right: usize| match &observers.coordinates.covariance {
+            None => Ordering::Equal,
+            Some(covariance) => covariance
+                .is_row_valid(left)
+                .cmp(&covariance.is_row_valid(right))
+                .then_with(|| {
+                    compare_values(covariance.row_values(left), covariance.row_values(right))
+                }),
+        };
     let mut order: Vec<usize> = (0..observed.len()).collect();
     order.sort_by(|&a, &b| {
         let (ea, eb) = (times.epochs[a], times.epochs[b]);
         (ea.days, ea.nanos)
             .cmp(&(eb.days, eb.nanos))
             .then_with(|| observers.code[a].0.cmp(&observers.code[b].0))
+            .then_with(|| compare_values(&observed_values[a], &observed_values[b]))
+            .then_with(|| compare_covariance(a, b))
+            .then_with(|| {
+                observed.origins.origins[a]
+                    .code()
+                    .cmp(&observed.origins.origins[b].code())
+            })
+            .then_with(|| match &observers.coordinates.times {
+                None => Ordering::Equal,
+                Some(observer_times) => {
+                    let (ta, tb) = (observer_times.epochs[a], observer_times.epochs[b]);
+                    (ta.days, ta.nanos).cmp(&(tb.days, tb.nanos))
+                }
+            })
+            .then_with(|| compare_values(&observer_values[a], &observer_values[b]))
+            .then_with(|| compare_observer_covariance(a, b))
+            .then_with(|| {
+                observers.coordinates.origins.origins[a]
+                    .code()
+                    .cmp(&observers.coordinates.origins.origins[b].code())
+            })
             .then(a.cmp(&b))
     });
     Ok(order)
@@ -2052,6 +2229,9 @@ pub(super) fn restore_input_order(mut result: IodResult, order: &[usize]) -> Iod
                 .clone_from_slice(&sorted[k * width..(k + 1) * width]);
         }
         out
+    }
+    for failure in result.candidate_failures.iter_mut() {
+        failure.triplet = std::array::from_fn(|slot| order[failure.triplet[slot]]);
     }
     for candidate in result.candidates.iter_mut() {
         candidate.window = (order[candidate.window.0], order[candidate.window.1]);
@@ -2284,8 +2464,14 @@ fn run_iod_sorted(
                 Ok(evaluation) => evaluation,
                 // Only an in-band failed row is local to this candidate.
                 Err(err @ PropagationError::RowFailure(_)) => {
+                    let message = err.to_string();
                     counters.candidates_failed += 1;
-                    counters.last_failure = Some(err.to_string());
+                    counters.last_failure = Some(message.clone());
+                    counters.candidate_failures.push(IodCandidateFailure {
+                        triplet,
+                        root_index: candidate,
+                        message,
+                    });
                     continue;
                 }
                 Err(err) => return Err(err),
@@ -2325,7 +2511,9 @@ fn run_iod_sorted(
                 candidates.push(record);
                 continue;
             }
-            if evaluation.reduced_chi2 <= config.rchi2_threshold {
+            if evaluation.reduced_chi2 <= config.rchi2_threshold
+                && evaluation.arc_length >= config.min_arc_length
+            {
                 record.accepted = true;
                 record.evaluation = Some(evaluation);
                 candidates.push(record);
@@ -2336,6 +2524,7 @@ fn run_iod_sorted(
                     triplets_tried: 0,
                     candidates_evaluated: 0,
                     candidates_failed: 0,
+                    candidate_failures: Vec::new(),
                     corrections_run: 0,
                     ambiguous_with: Vec::new(),
                     ranging: None,
@@ -2382,6 +2571,7 @@ fn run_iod_sorted(
                         triplets_tried: 0,
                         candidates_evaluated: 0,
                         candidates_failed: 0,
+                        candidate_failures: Vec::new(),
                         corrections_run: 0,
                         ambiguous_with: Vec::new(),
                         ranging: None,
@@ -2424,6 +2614,7 @@ fn run_iod_sorted(
         triplets_tried: 0,
         candidates_evaluated: 0,
         candidates_failed: 0,
+        candidate_failures: Vec::new(),
         corrections_run: 0,
         ambiguous_with: Vec::new(),
         ranging: None,
@@ -3928,6 +4119,153 @@ mod tests {
     }
 
     #[test]
+    fn iod_observation_order_canonicalizes_equal_epoch_station_rows_by_content() {
+        let times = TimeArray::new(
+            TimeScale::Tdb,
+            vec![
+                Epoch::new(60_000, 0),
+                Epoch::new(60_000, 0),
+                Epoch::new(60_001, 0),
+            ],
+        )
+        .unwrap();
+        let mut values = vec![[0.0; 6]; 3];
+        values[0][1] = 20.0;
+        values[1][1] = 10.0;
+        values[2][1] = 30.0;
+        let observed = CoordinateBatch::spherical(
+            values,
+            Frame::Equatorial,
+            OriginArray::repeat(OriginId::Named("SUN".to_string()), 3),
+            Some(times.clone()),
+            None,
+        )
+        .unwrap();
+        let observers = ObserverBatch::new(
+            vec![ObservatoryCode("500".to_string()); 3],
+            CoordinateBatch::cartesian(
+                vec![[0.0; 6]; 3],
+                Frame::Ecliptic,
+                OriginArray::repeat(OriginId::Named("SUN".to_string()), 3),
+                Some(times),
+                None,
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        let canonical = iod_observation_order(&observed, &observers).unwrap();
+        assert_eq!(canonical, vec![1, 0, 2]);
+
+        let permutation = [1_usize, 0, 2];
+        let shuffled_observed = take_coordinate_batch(&observed, &permutation).unwrap();
+        let shuffled_observers = take_observer_batch(&observers, &permutation).unwrap();
+        let shuffled = iod_observation_order(&shuffled_observed, &shuffled_observers).unwrap();
+        let physical_rows: Vec<usize> = shuffled.iter().map(|&row| permutation[row]).collect();
+        assert_eq!(physical_rows, canonical);
+    }
+
+    #[test]
+    fn iod_settings_validation_rejects_every_invalid_family() {
+        let invalid = [
+            IodConfig {
+                min_obs: 2,
+                ..IodConfig::default()
+            },
+            IodConfig {
+                min_arc_length: -1.0,
+                ..IodConfig::default()
+            },
+            IodConfig {
+                contamination_percentage: f64::NAN,
+                ..IodConfig::default()
+            },
+            IodConfig {
+                contamination_percentage: 101.0,
+                ..IodConfig::default()
+            },
+            IodConfig {
+                rchi2_threshold: f64::INFINITY,
+                ..IodConfig::default()
+            },
+            IodConfig {
+                mu: 0.0,
+                ..IodConfig::default()
+            },
+            IodConfig {
+                speed_of_light: f64::NAN,
+                ..IodConfig::default()
+            },
+            IodConfig {
+                max_triplets: Some(0),
+                ..IodConfig::default()
+            },
+            IodConfig {
+                spans: SpanSearchConfig {
+                    max_triplets: 0,
+                    ..SpanSearchConfig::default()
+                },
+                ..IodConfig::default()
+            },
+            IodConfig {
+                spans: SpanSearchConfig {
+                    min_span_days: 2.0,
+                    max_span_days: 1.0,
+                    ..SpanSearchConfig::default()
+                },
+                ..IodConfig::default()
+            },
+            IodConfig {
+                correction: CorrectionConfig {
+                    max_corrections: 0,
+                    ..CorrectionConfig::default()
+                },
+                ..IodConfig::default()
+            },
+            IodConfig {
+                correction: CorrectionConfig {
+                    growth: 1.0,
+                    ..CorrectionConfig::default()
+                },
+                ..IodConfig::default()
+            },
+            IodConfig {
+                correction: CorrectionConfig {
+                    max_corrections: 1,
+                    max_converged: 2,
+                    ..CorrectionConfig::default()
+                },
+                ..IodConfig::default()
+            },
+            IodConfig {
+                ranging: super::super::od_ranging::RangingConfig {
+                    n_rho: 0,
+                    ..super::super::od_ranging::RangingConfig::default()
+                },
+                ..IodConfig::default()
+            },
+            IodConfig {
+                ranging: super::super::od_ranging::RangingConfig {
+                    max_arc_days: f64::INFINITY,
+                    ..super::super::od_ranging::RangingConfig::default()
+                },
+                ..IodConfig::default()
+            },
+            IodConfig {
+                ranging: super::super::od_ranging::RangingConfig {
+                    rho_min_au: 1.0,
+                    rho_max_au: 0.5,
+                    ..super::super::od_ranging::RangingConfig::default()
+                },
+                ..IodConfig::default()
+            },
+        ];
+        for config in invalid {
+            assert!(config.validate().is_err(), "accepted {config:?}");
+        }
+        assert!(IodConfig::default().validate().is_ok());
+    }
+
+    #[test]
     fn iod_fit_accepts_the_noise_free_arc_in_input_order() {
         let output = iod_fit_barycentric(
             &TwoBodyPropagator::default(),
@@ -3993,6 +4331,29 @@ mod tests {
     }
 
     #[test]
+    fn prefit_acceptance_enforces_minimum_arc_before_every_acceptance() {
+        let config = IodConfig {
+            min_arc_length: 1_000_000.0,
+            rchi2_threshold: f64::MAX,
+            acceptance: IodAcceptance::Prefit,
+            ..iod_config(0.0)
+        };
+        let result = iod_fit_barycentric(
+            &TwoBodyPropagator::default(),
+            &synthetic_observations(),
+            &observers(),
+            &config,
+            &ephemeris_options(),
+            &NoopProvider,
+            &ZeroTranslationProvider,
+        )
+        .unwrap();
+        assert!(!result.found);
+        assert!(result.candidates_evaluated > 0);
+        assert!(result.arc_length.is_nan());
+    }
+
+    #[test]
     fn iod_fit_zero_contamination_continues_past_a_rejected_triplet() {
         let observed = synthetic_observations();
         let observers = observers();
@@ -4054,9 +4415,12 @@ mod tests {
             failure: None,
             garbage_calls: 0,
         };
-        let output = iod_fit(&predictor, &observed, &observers, &iod_config(20.0)).unwrap();
-        assert!(output.found, "{:?}", output.not_found_reason);
-        assert_eq!(output.candidates_failed, 1);
+        let result = run_iod(&predictor, &observed, &observers, &iod_config(20.0)).unwrap();
+        assert!(result.found(), "{:?}", result.not_found_reason);
+        assert_eq!(result.candidates_failed, 1);
+        assert_eq!(result.candidate_failures.len(), 1);
+        assert!(result.candidate_failures[0].message.contains("row failure"));
+        let output = result.to_output(observed.len());
         assert!(output.candidates_evaluated >= 1);
         assert_eq!(output.outlier, vec![false; NUM_OBS]);
     }

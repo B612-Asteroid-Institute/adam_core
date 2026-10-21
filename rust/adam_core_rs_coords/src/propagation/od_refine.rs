@@ -134,8 +134,8 @@ impl JacobianMethod {
 ///   When the analytic Jacobian turns non-finite at an iterate whose
 ///   residuals are finite (two-body STM on very long arcs: 3200 Phaethon,
 ///   15,000 days), the fit continues from that iterate with `Central`
-///   (with a warning, and a fresh `max_nfev` / `max_iterations` budget), and
-///   the covariance uses `Central` too.
+///   (with a warning and only the remaining shared `max_nfev` /
+///   `max_iterations` budget), and the covariance uses `Central` too.
 /// * **Scaling.** Marquardt / scipy `x_scale="jac"`: each parameter is
 ///   scaled by the (non-decreasing) norm of its Jacobian column, with 1 for a
 ///   zero column; the trust region lives in scaled coordinates with initial
@@ -161,14 +161,15 @@ impl JacobianMethod {
 ///   the current iterate (for `Analytic`, under the central-difference
 ///   continuation as well, or with non-finite residuals). A non-finite quantity never yields a positive
 ///   status.
-/// * **Limits.** `max_iterations` bounds optimizer iterations (one Jacobian
-///   each). `max_nfev` bounds scipy's `nfev`: the initial residual
-///   evaluation plus every trial step, accepted or rejected; evaluations
-///   spent on finite-difference Jacobians are not budget (scipy `trf`
-///   semantics, the Python baseline's). The `iterations` output still
-///   reports every residual evaluation including Jacobian columns. Reaching
-///   either limit returns the current iterate with status 0 unless a
-///   stopping rule was met on the last permitted step.
+/// * **Limits.** `max_iterations` is one shared optimizer-iteration budget and
+///   `max_nfev` is one shared residual-vector evaluation budget for the whole
+///   solve, including analytic-to-central fallback and the approximate then
+///   exact phases of a propagator Jacobian. The latter counts the initial
+///   residual, every finite-difference column, and every accepted or rejected
+///   trial. No phase receives a fresh nominal budget. `iterations` retains its
+///   legacy meaning (residual evaluations); `optimizer_iterations` reports
+///   actual Jacobian/step iterations. Reaching either limit returns the current
+///   iterate with status 0 unless a stopping rule was already met.
 /// * **Covariance.** `inv(J^T J)` of the robust-cost Jacobian at the
 ///   solution, NaN when singular (with a warning), validated by the
 ///   weak-direction probe when `validate_covariance` (central-difference
@@ -183,11 +184,11 @@ pub struct WhitenedFitConfig {
     pub xtol: f64,
     pub ftol: f64,
     pub gtol: f64,
-    /// Maximum optimizer iterations, independently of the evaluation budget.
+    /// Shared maximum optimizer iterations across every solver phase.
     pub max_iterations: usize,
-    /// Optional solver residual-vector evaluation budget. Includes the initial
-    /// state, rejected trials and every finite-difference candidate (not just
-    /// batch crossings). Final covariance/probe/reporting work is separate.
+    /// Shared solver residual-vector evaluation budget. Includes each phase's
+    /// initial state, rejected trials and every finite-difference column (not
+    /// just batch crossings). Final covariance/probe/reporting work is separate.
     pub max_nfev: Option<usize>,
     /// Universal-Kepler / light-time settings of the analytic 2-body model.
     pub two_body: TwoBodyModelConfig,
@@ -233,6 +234,21 @@ impl WhitenedFitConfig {
         if self.max_nfev == Some(0) {
             return Err("max_nfev must be positive or None".to_string());
         }
+        if self.two_body.propagation_max_iter == 0
+            || self.two_body.ephemeris_max_iter == 0
+            || self.two_body.max_lt_iter == 0
+        {
+            return Err("two-body iteration budgets must be positive".to_string());
+        }
+        for (name, value) in [
+            ("propagation_tol", self.two_body.propagation_tol),
+            ("lt_tol", self.two_body.lt_tol),
+            ("ephemeris_tol", self.two_body.ephemeris_tol),
+        ] {
+            if !value.is_finite() || value <= 0.0 {
+                return Err(format!("two_body.{name} must be positive and finite"));
+            }
+        }
         Ok(())
     }
 }
@@ -250,8 +266,11 @@ pub struct WhitenedFitOutput {
     pub covariance: [f64; 36],
     /// Residual-vector evaluations spent by the solver, including numerical
     /// Jacobians. Retains the legacy field name; excludes final diagnostics.
-    /// (`max_nfev` bounds trial evaluations only; see [`WhitenedFitConfig`].)
+    /// `max_nfev` bounds this count; see [`WhitenedFitConfig`].
     pub iterations: usize,
+    /// Actual optimizer iterations (Jacobian/step iterations), shared across
+    /// approximate, exact, and fallback phases.
+    pub optimizer_iterations: usize,
     /// Whether a convergence stopping rule was met within both solver limits
     /// (`status_code > 0`; see the contract on [`WhitenedFitConfig`]).
     pub converged: bool,
@@ -733,6 +752,8 @@ struct Solution {
     cost: f64,
     /// Every residual-vector evaluation, Jacobian columns included.
     nfev: usize,
+    /// Jacobian/step iterations actually entered.
+    optimizer_iterations: usize,
     status: i64,
 }
 
@@ -851,7 +872,7 @@ fn solve_with_fallback(
     // of the backend's dynamics; the exact iterations move it there, so the
     // solution and its covariance are exact at a few STM evaluations.
     if config.jacobian == JacobianMethod::Propagator && problem.analytic_terms.is_some() {
-        let approximate = solve(
+        let mut approximate = solve(
             problem,
             initial_state,
             &WhitenedFitConfig {
@@ -864,10 +885,29 @@ fn solve_with_fallback(
         } else {
             initial_state
         };
-        let (exact, method) = solve_with_nonfinite_fallback(problem, start, config, warnings)?;
+        let remaining_iterations = config
+            .max_iterations
+            .saturating_sub(approximate.optimizer_iterations);
+        let remaining_nfev = config
+            .max_nfev
+            .map(|limit| limit.saturating_sub(approximate.nfev));
+        if remaining_iterations == 0 || remaining_nfev == Some(0) {
+            // The requested backend Jacobian never ran, so convergence of
+            // the cheap seed phase is not convergence of the requested solve.
+            approximate.status = STATUS_LIMIT;
+            return Ok((approximate, JacobianMethod::Propagator));
+        }
+        let exact_config = WhitenedFitConfig {
+            max_iterations: remaining_iterations,
+            max_nfev: remaining_nfev,
+            ..*config
+        };
+        let (exact, method) =
+            solve_with_nonfinite_fallback(problem, start, &exact_config, warnings)?;
         return Ok((
             Solution {
                 nfev: approximate.nfev + exact.nfev,
+                optimizer_iterations: approximate.optimizer_iterations + exact.optimizer_iterations,
                 ..exact
             },
             method,
@@ -903,14 +943,26 @@ fn solve_with_nonfinite_fallback(
             "propagator's"
         }
     ));
+    let remaining_iterations = config
+        .max_iterations
+        .saturating_sub(solution.optimizer_iterations);
+    let remaining_nfev = config
+        .max_nfev
+        .map(|limit| limit.saturating_sub(solution.nfev));
+    if remaining_iterations == 0 || remaining_nfev == Some(0) {
+        return Ok((solution, config.jacobian));
+    }
     let central = WhitenedFitConfig {
         jacobian: JacobianMethod::Central,
+        max_iterations: remaining_iterations,
+        max_nfev: remaining_nfev,
         ..*config
     };
     let retry = solve(problem, solution.state, &central)?;
     Ok((
         Solution {
             nfev: solution.nfev + retry.nfev,
+            optimizer_iterations: solution.optimizer_iterations + retry.optimizer_iterations,
             ..retry
         },
         JacobianMethod::Central,
@@ -931,12 +983,11 @@ fn solve(
     // flag and drop the offending observation.
     let mut residuals = problem.residuals_one(&state)?;
     let mut cost = robust_cost(&residuals, loss, f_scale);
-    // `nfev` counts every residual evaluation (the legacy `iterations`
-    // column); `trials` counts the initial evaluation and each trial step,
-    // scipy's `nfev`, which `max_nfev` bounds.
+    // One honest budget: `nfev` counts every residual evaluation (the
+    // legacy `iterations` column), including finite-difference columns.
     let mut nfev = 1_usize;
-    let mut trials = 1_usize;
-    let max_trials = config.max_nfev.unwrap_or(usize::MAX);
+    let max_nfev = config.max_nfev.unwrap_or(usize::MAX);
+    let mut optimizer_iterations = 0_usize;
     let jacobian_nfev = match config.jacobian {
         JacobianMethod::Analytic | JacobianMethod::Propagator | JacobianMethod::Auto => 0,
         JacobianMethod::Central => 12,
@@ -949,9 +1000,10 @@ fn solve(
     let mut alpha = 0.0_f64;
 
     'iterations: for iteration in 0..config.max_iterations {
-        if trials >= max_trials {
+        if nfev >= max_nfev || jacobian_nfev > max_nfev.saturating_sub(nfev) {
             break;
         }
+        optimizer_iterations += 1;
         nfev += jacobian_nfev;
         let jac = problem.jacobian(config.jacobian, &state, &residuals)?;
         let (jac_weighted, f_weighted) = irls_problem(&jac, &residuals, loss, f_scale);
@@ -1004,7 +1056,7 @@ fn solve(
 
         let mut accepted = false;
         for _attempt in 0..MAX_STEP_ATTEMPTS {
-            if trials >= max_trials {
+            if nfev >= max_nfev {
                 // Budget exhaustion is neither a stall nor convergence.
                 break 'iterations;
             }
@@ -1024,7 +1076,6 @@ fn solve(
                 trial[k] += step[k];
             }
             nfev += 1;
-            trials += 1;
             let trial_residuals = match problem.residuals(&[trial])? {
                 Ok(mut batch) => batch.swap_remove(0),
                 Err(_) => {
@@ -1092,6 +1143,7 @@ fn solve(
         residuals,
         cost,
         nfev,
+        optimizer_iterations,
         status,
     })
 }
@@ -1416,6 +1468,7 @@ fn fit_orbit_whitened_impl<T: OriginTranslationProvider>(
             state: solution.state,
             covariance,
             iterations: solution.nfev,
+            optimizer_iterations: solution.optimizer_iterations,
             converged: solution.status > 0,
             status_code: solution.status,
             cost: solution.cost,
@@ -1596,6 +1649,29 @@ impl Default for IterativeFitConfig {
     }
 }
 
+impl IterativeFitConfig {
+    pub fn validate(&self) -> Result<(), String> {
+        self.fit.validate()?;
+        if self.min_obs < 3 {
+            return Err("min_obs must be at least 3".to_string());
+        }
+        if !self.rchi2_threshold.is_finite() || self.rchi2_threshold <= 0.0 {
+            return Err("rchi2_threshold must be positive and finite".to_string());
+        }
+        if !self.min_arc_length.is_finite() || self.min_arc_length < 0.0 {
+            return Err("min_arc_length must be finite and non-negative".to_string());
+        }
+        if !self.contamination_percentage.is_finite()
+            || !(0.0..=100.0).contains(&self.contamination_percentage)
+        {
+            return Err(
+                "contamination_percentage must be finite and between 0 and 100".to_string(),
+            );
+        }
+        Ok(())
+    }
+}
+
 /// Product of the worst-residual loop: the selected pass and the number of
 /// passes run. `fit.evaluation.outlier` is the final ignore mask.
 #[derive(Debug, Clone)]
@@ -1653,6 +1729,9 @@ pub fn iterative_fit_with<T: OriginTranslationProvider>(
     provider: &dyn TimeScaleProvider,
     translation_provider: &T,
 ) -> PropagationResultValue<IterativeFitOutput> {
+    config
+        .validate()
+        .map_err(PropagationError::InvalidRequest)?;
     let n = observed.len();
     if observers.len() != n {
         return Err(PropagationError::InvalidRequest(
@@ -1761,6 +1840,37 @@ impl Default for Cmc2003FitConfig {
     }
 }
 
+impl Cmc2003FitConfig {
+    pub fn validate(&self) -> Result<(), String> {
+        self.fit.validate()?;
+        for (name, value) in [
+            ("chi2_reject", self.chi2_reject),
+            ("chi2_recover", self.chi2_recover),
+            ("chi2_frac", self.chi2_frac),
+            ("max_rejected_fraction", self.max_rejected_fraction),
+            ("apparition_gap_days", self.apparition_gap_days),
+            ("psd_floor_frac", self.psd_floor_frac),
+        ] {
+            if !value.is_finite() || value < 0.0 {
+                return Err(format!("cmc2003.{name} must be finite and non-negative"));
+            }
+        }
+        if self.chi2_reject <= self.chi2_recover {
+            return Err("cmc2003.chi2_reject must exceed chi2_recover".to_string());
+        }
+        if self.chi2_frac > 1.0 || self.max_rejected_fraction > 1.0 {
+            return Err("cmc2003 fractions must not exceed 1".to_string());
+        }
+        if self.max_iterations == 0 {
+            return Err("cmc2003.max_iterations must be positive".to_string());
+        }
+        if self.min_kept < 3 {
+            return Err("cmc2003.min_kept must be at least 3".to_string());
+        }
+        Ok(())
+    }
+}
+
 /// Product of the CMC2003 loop: the final fit (members flag rejected
 /// observations as outliers) and the run diagnostics of `CMC2003Fit`.
 #[derive(Debug, Clone)]
@@ -1827,6 +1937,9 @@ pub fn cmc2003_fit_with<T: OriginTranslationProvider>(
     };
     use std::collections::BTreeSet;
 
+    config
+        .validate()
+        .map_err(PropagationError::InvalidRequest)?;
     let n = observed.len();
     if n == 0 {
         return Err(PropagationError::InvalidRequest(
@@ -1996,6 +2109,15 @@ pub enum RefinementConfig {
     Cmc2003(Cmc2003FitConfig),
 }
 
+impl RefinementConfig {
+    pub fn validate(&self) -> Result<(), String> {
+        match self {
+            Self::WorstResidual(config) => config.validate(),
+            Self::Cmc2003(config) => config.validate(),
+        }
+    }
+}
+
 impl Default for RefinementConfig {
     /// `NativeOrbitFitter`'s default: CMC2003 rejection with OrbFit's
     /// constants.
@@ -2010,6 +2132,14 @@ impl Default for RefinementConfig {
 pub struct FullOdConfig {
     pub iod: super::od::IodConfig,
     pub refinement: RefinementConfig,
+}
+
+impl FullOdConfig {
+    pub fn validate(&self) -> Result<(), String> {
+        self.iod.validate()?;
+        self.refinement.validate()?;
+        Ok(())
+    }
 }
 
 /// The refined orbit of a full OD run with the loop diagnostics
@@ -2051,6 +2181,10 @@ pub fn run_iod_with<T: OriginTranslationProvider>(
     provider: &dyn TimeScaleProvider,
     translation_provider: &T,
 ) -> PropagationResultValue<super::od::IodResult> {
+    config
+        .validate()
+        .map_err(PropagationError::InvalidRequest)?;
+    fit.validate().map_err(PropagationError::InvalidRequest)?;
     match config.acceptance {
         super::od::IodAcceptance::Prefit => {
             super::od::run_iod(iod_predictor, observed, observers, config)
@@ -2078,7 +2212,7 @@ fn stage_fit<T: OriginTranslationProvider>(
     rchi2_threshold: f64,
     provider: &dyn TimeScaleProvider,
     translation_provider: &T,
-) -> PropagationResultValue<Result<WhitenedFitOutput, String>> {
+) -> PropagationResultValue<Result<WhitenedFitOutput, (String, bool)>> {
     let ignore: Vec<bool> = mask.iter().map(|&keep| !keep).collect();
     // A non-finite analytic Jacobian is handled inside the fit (central
     // differences from that iterate).
@@ -2096,7 +2230,7 @@ fn stage_fit<T: OriginTranslationProvider>(
         // Only a failed row returned in-band by an otherwise successful
         // propagation request is local to this candidate.
         Err(err @ PropagationError::RowFailure(_)) => {
-            return Ok(Err(format!("prediction failed: {err}")))
+            return Ok(Err((format!("prediction failed: {err}"), true)))
         }
         Err(err) => return Err(err),
     };
@@ -2113,11 +2247,14 @@ fn stage_fit<T: OriginTranslationProvider>(
     // fits at a good state); a non-finite derivative (status -2) is not.
     let usable = output.status_code != STATUS_NON_FINITE;
     if !usable || !rchi2.is_finite() || rchi2 > rchi2_threshold {
-        return Ok(Err(format!(
-            "stage fit on {} observations: reduced chi2 {:.4}, status {}",
-            mask.iter().filter(|&&keep| keep).count(),
-            rchi2,
-            output.status_code
+        return Ok(Err((
+            format!(
+                "stage fit on {} observations: reduced chi2 {:.4}, status {}",
+                mask.iter().filter(|&&keep| keep).count(),
+                rchi2,
+                output.status_code
+            ),
+            false,
         )));
     }
     Ok(Ok(output))
@@ -2294,7 +2431,8 @@ pub(super) fn first_stage_mask(
 /// most `contamination_percentage` of the arc) and passes if that brings it
 /// within the threshold. The search stops once `max_converged`
 /// candidates reached the whole arc; every other Gauss root of a converged
-/// candidate's triplet (Charlier: up to three per triplet) is corrected too
+/// candidate's triplet (Charlier: up to three per triplet) is corrected too,
+/// including roots for which `Auto` resolved a different velocity method,
 /// before the search moves on or stops, outside the `max_corrections`
 /// budget. The accepted candidate is the converged one with the lowest
 /// whole-arc score (chi2 over every observation, each clipped at the CMC2003
@@ -2573,8 +2711,19 @@ fn correct_candidates<T: OriginTranslationProvider>(
                 translation_provider,
             )? {
                 Ok(output) => output,
-                Err(message) => {
-                    note = Some(format!("stalled at stage {stages}: {message}"));
+                Err((message, prediction_failed)) => {
+                    let message = format!("stalled at stage {stages}: {message}");
+                    if prediction_failed {
+                        result.candidates_failed += 1;
+                        result
+                            .candidate_failures
+                            .push(super::od::IodCandidateFailure {
+                                triplet: candidate.triplet,
+                                root_index: candidate.root_index,
+                                message: message.clone(),
+                            });
+                    }
+                    note = Some(message);
                     break;
                 }
             };
@@ -2608,9 +2757,17 @@ fn correct_candidates<T: OriginTranslationProvider>(
                 ) {
                     Ok(rejected) => rejected.fit,
                     Err(err @ PropagationError::RowFailure(_)) => {
-                        note = Some(format!(
-                            "whole-arc rejection failed at stage {stages}: {err}"
-                        ));
+                        let message =
+                            format!("whole-arc rejection failed at stage {stages}: {err}");
+                        result.candidates_failed += 1;
+                        result
+                            .candidate_failures
+                            .push(super::od::IodCandidateFailure {
+                                triplet: candidate.triplet,
+                                root_index: candidate.root_index,
+                                message: message.clone(),
+                            });
+                        note = Some(message);
                         break;
                     }
                     Err(err) => return Err(err),
@@ -2654,8 +2811,7 @@ fn correct_candidates<T: OriginTranslationProvider>(
                     .collect();
                 record.evaluation = Some(output.evaluation);
                 converged += 1;
-                let (window, triplet, velocity_method) =
-                    (record.window, record.triplet, record.velocity_method);
+                let (window, triplet) = (record.window, record.triplet);
                 let mut roots: Vec<usize> = (0..result.candidates.len())
                     .filter(|&other| {
                         let c = &result.candidates[other];
@@ -2663,7 +2819,6 @@ fn correct_candidates<T: OriginTranslationProvider>(
                             && c.stages == 0
                             && c.window == window
                             && c.triplet == triplet
-                            && c.velocity_method == velocity_method
                             && !siblings.contains(&other)
                     })
                     .collect();
@@ -2882,6 +3037,9 @@ pub fn refine_with<T: OriginTranslationProvider>(
     provider: &dyn TimeScaleProvider,
     translation_provider: &T,
 ) -> PropagationResultValue<RefinedOutput> {
+    config
+        .validate()
+        .map_err(PropagationError::InvalidRequest)?;
     Ok(match config {
         RefinementConfig::WorstResidual(loop_config) => {
             let output = iterative_fit_with(
@@ -2978,6 +3136,9 @@ pub fn full_od_with<T: OriginTranslationProvider>(
     provider: &dyn TimeScaleProvider,
     translation_provider: &T,
 ) -> PropagationResultValue<FullOdOutput> {
+    config
+        .validate()
+        .map_err(PropagationError::InvalidRequest)?;
     let refinement_fit = match &config.refinement {
         RefinementConfig::WorstResidual(loop_config) => loop_config.fit,
         RefinementConfig::Cmc2003(loop_config) => loop_config.fit,
@@ -3127,6 +3288,9 @@ pub fn run_od_with<T: OriginTranslationProvider>(
     provider: &dyn TimeScaleProvider,
     translation_provider: &T,
 ) -> PropagationResultValue<RunOdOutput> {
+    config
+        .validate()
+        .map_err(PropagationError::InvalidRequest)?;
     let n = observed.len();
     if observers.len() != n || obs_code.len() != n || band.len() != n || astcat.len() != n {
         return Err(PropagationError::InvalidRequest(
@@ -4297,11 +4461,7 @@ mod tests {
     }
 
     #[test]
-    fn evaluation_budget_bounds_trials_not_jacobian_columns() {
-        // `max_nfev` is scipy's `nfev`: the initial evaluation plus every
-        // trial step. Finite-difference Jacobian batches (6 or 12 predictions)
-        // are reported in `nfev` but are not budget. Zero tolerances never
-        // stop the solver, so every run spends its whole budget.
+    fn evaluation_budget_bounds_every_residual_evaluation() {
         for (jacobian, columns) in [
             (JacobianMethod::Analytic, 0_usize),
             (JacobianMethod::Central, 12),
@@ -4318,23 +4478,53 @@ mod tests {
                 };
                 let (solution, batches) = solve_counted(&config, false);
                 assert_eq!(solution.nfev, batches.iter().sum::<usize>());
-                let trials = batches.iter().filter(|&&size| size == 1).count();
-                assert_eq!(trials, budget, "{jacobian:?} {budget}: {batches:?}");
-                assert_eq!(solution.status, 0, "{jacobian:?} {budget}: {batches:?}");
+                assert!(
+                    solution.nfev <= budget,
+                    "{jacobian:?} {budget}: {batches:?}"
+                );
+                assert_eq!(
+                    solution.status, STATUS_LIMIT,
+                    "{jacobian:?} {budget}: {batches:?}"
+                );
                 if budget == 1 {
                     assert_eq!(batches, vec![1]);
-                    assert_eq!(
-                        solution.state,
-                        OrbitGeometry::from_orbit(&perturbed_start()).unwrap().state
-                    );
-                } else if columns > 0 {
+                    assert_eq!(solution.optimizer_iterations, 0);
+                } else if columns > 0 && budget > columns {
                     assert!(
                         batches.contains(&columns),
-                        "{jacobian:?} {budget}: a Jacobian batch is not budget: {batches:?}"
+                        "{jacobian:?} {budget}: {batches:?}"
                     );
+                } else if columns > 0 {
+                    assert_eq!(batches, vec![1], "{jacobian:?} {budget}: {batches:?}");
                 }
             }
         }
+    }
+
+    #[test]
+    fn propagator_jacobian_phases_share_one_solver_budget() {
+        let output = fit_orbit_whitened_barycentric(
+            &TwoBodyPropagator::default(),
+            &perturbed_start(),
+            &synthetic_observations(None),
+            &observers(),
+            &[false; NUM_OBS],
+            &WhitenedFitConfig {
+                jacobian: JacobianMethod::Propagator,
+                max_nfev: Some(1),
+                max_iterations: 1,
+                validate_covariance: false,
+                ..WhitenedFitConfig::default()
+            },
+            &ephemeris_options(),
+            &NoopProvider,
+            &ZeroTranslationProvider,
+        )
+        .unwrap();
+        assert_eq!(output.iterations, 1);
+        assert_eq!(output.optimizer_iterations, 0);
+        assert_eq!(output.status_code, STATUS_LIMIT);
+        assert!(!output.converged);
     }
 
     #[test]
@@ -4490,6 +4680,120 @@ mod tests {
         assert_eq!(solution.status, STATUS_NON_FINITE);
         assert_eq!(method, JacobianMethod::Analytic);
         assert!(warnings.is_empty());
+    }
+
+    #[test]
+    fn centralized_fit_and_refinement_validation_rejects_invalid_families() {
+        let invalid_fit = [
+            WhitenedFitConfig {
+                f_scale: f64::NAN,
+                ..WhitenedFitConfig::default()
+            },
+            WhitenedFitConfig {
+                xtol: f64::INFINITY,
+                ..WhitenedFitConfig::default()
+            },
+            WhitenedFitConfig {
+                max_iterations: 0,
+                ..WhitenedFitConfig::default()
+            },
+            WhitenedFitConfig {
+                two_body: TwoBodyModelConfig {
+                    propagation_tol: -1.0,
+                    ..TwoBodyModelConfig::default()
+                },
+                ..WhitenedFitConfig::default()
+            },
+        ];
+        for config in invalid_fit {
+            assert!(config.validate().is_err(), "accepted {config:?}");
+        }
+        let invalid_iterative = [
+            IterativeFitConfig {
+                min_obs: 2,
+                ..IterativeFitConfig::default()
+            },
+            IterativeFitConfig {
+                min_arc_length: -1.0,
+                ..IterativeFitConfig::default()
+            },
+            IterativeFitConfig {
+                contamination_percentage: f64::INFINITY,
+                ..IterativeFitConfig::default()
+            },
+            IterativeFitConfig {
+                rchi2_threshold: f64::NAN,
+                ..IterativeFitConfig::default()
+            },
+        ];
+        for config in invalid_iterative {
+            assert!(config.validate().is_err(), "accepted {config:?}");
+        }
+        let invalid_cmc = [
+            Cmc2003FitConfig {
+                max_iterations: 0,
+                ..Cmc2003FitConfig::default()
+            },
+            Cmc2003FitConfig {
+                chi2_reject: f64::NAN,
+                ..Cmc2003FitConfig::default()
+            },
+            Cmc2003FitConfig {
+                chi2_reject: 1.0,
+                chi2_recover: 2.0,
+                ..Cmc2003FitConfig::default()
+            },
+            Cmc2003FitConfig {
+                max_rejected_fraction: 1.1,
+                ..Cmc2003FitConfig::default()
+            },
+            Cmc2003FitConfig {
+                apparition_gap_days: -1.0,
+                ..Cmc2003FitConfig::default()
+            },
+        ];
+        for config in invalid_cmc {
+            assert!(config.validate().is_err(), "accepted {config:?}");
+        }
+        assert!(IterativeFitConfig::default().validate().is_ok());
+        assert!(Cmc2003FitConfig::default().validate().is_ok());
+        assert!(RefinementConfig::default().validate().is_ok());
+
+        // Full OD validates refinement even when IOD cannot produce a seed;
+        // no control-flow branch may defer configuration validation.
+        let observed = synthetic_observations(None);
+        let observer_rows = observers();
+        let (propagator, options) = two_body();
+        let predictor = PropagatorPredictor {
+            propagator: &propagator,
+            options: &options,
+            provider: &NoopProvider,
+            translation_provider: &ZeroTranslationProvider,
+        };
+        let invalid_full = FullOdConfig {
+            iod: super::super::od::IodConfig {
+                min_obs: NUM_OBS + 1,
+                ..corrected_iod_config(50.0)
+            },
+            refinement: RefinementConfig::Cmc2003(Cmc2003FitConfig {
+                max_iterations: 0,
+                ..Cmc2003FitConfig::default()
+            }),
+        };
+        let error = full_od_with(
+            &predictor,
+            &predictor,
+            &observed,
+            &observer_rows,
+            &invalid_full,
+            &NoopProvider,
+            &ZeroTranslationProvider,
+        )
+        .unwrap_err();
+        assert!(
+            error.to_string().contains("cmc2003.max_iterations"),
+            "{error}"
+        );
     }
 
     #[test]
@@ -6454,11 +6758,7 @@ mod tests {
         let siblings: Vec<&super::super::od::IodCandidate> = result
             .candidates
             .iter()
-            .filter(|c| {
-                c.window == accepted.window
-                    && c.triplet == accepted.triplet
-                    && c.velocity_method == accepted.velocity_method
-            })
+            .filter(|c| c.window == accepted.window && c.triplet == accepted.triplet)
             .collect();
         assert!(
             siblings.len() >= 2,
@@ -6503,6 +6803,103 @@ mod tests {
         assert_eq!(distinct.len(), 1);
         assert!(distinct[0].postfit_reduced_chi2.unwrap() > rchi2);
         assert!(!result.ambiguous(), "{:?}", result.ambiguous_with);
+
+        // Force the accepted root's metadata to differ from its siblings and
+        // make the first sibling fail in-band. The second sibling must still
+        // be corrected successfully. This directly kills both the old
+        // velocity-method filter and an early-return-on-sibling-failure.
+        let primary = result.accepted.unwrap();
+        let mut fresh = super::super::od::iod_candidate_pool(
+            &predictor,
+            &observed,
+            &observers,
+            &corrected_iod_config(50.0),
+        )
+        .unwrap();
+        let mut group: Vec<usize> = fresh
+            .candidates
+            .iter()
+            .enumerate()
+            .filter_map(|(index, candidate)| {
+                (candidate.triplet == fresh.candidates[primary].triplet
+                    && candidate.window == fresh.candidates[primary].window)
+                    .then_some(index)
+            })
+            .collect();
+        group.sort_by_key(|&index| fresh.candidates[index].root_index);
+        let siblings_after_primary: Vec<usize> = group
+            .iter()
+            .copied()
+            .filter(|&index| index != primary)
+            .collect();
+        assert!(siblings_after_primary.len() >= 2);
+        let failed_sibling = siblings_after_primary[0];
+        let later_sibling = siblings_after_primary[1];
+        fresh.candidates[primary].velocity_method = super::super::od::VelocityMethod::Gibbs;
+        for &index in &siblings_after_primary {
+            fresh.candidates[index].velocity_method =
+                super::super::od::VelocityMethod::HerrickGibbs;
+        }
+
+        struct FailOnceAtState<'a> {
+            inner: &'a dyn SphericalPredictor,
+            target: [f64; 6],
+            failed: std::cell::Cell<bool>,
+        }
+        impl SphericalPredictor for FailOnceAtState<'_> {
+            fn predict_spherical(
+                &self,
+                states: &[[f64; 6]],
+                geometry: &OrbitGeometry,
+                observers: &ObserverBatch,
+            ) -> PropagationResultValue<Result<Vec<f64>, String>> {
+                if !self.failed.get()
+                    && states.len() == 1
+                    && max_abs_diff(&states[0], &self.target) < 1e-14
+                {
+                    self.failed.set(true);
+                    return Ok(Err("forced sibling row failure".to_string()));
+                }
+                self.inner.predict_spherical(states, geometry, observers)
+            }
+
+            fn backend(&self) -> crate::propagation::BackendIdentity {
+                self.inner.backend()
+            }
+        }
+        let failing = FailOnceAtState {
+            inner: &predictor,
+            target: fresh.candidates[failed_sibling].state,
+            failed: std::cell::Cell::new(false),
+        };
+        correct_candidates(
+            &failing,
+            &observed,
+            &observers,
+            &corrected_iod_config(50.0),
+            &WhitenedFitConfig::default(),
+            &NoopProvider,
+            &ZeroTranslationProvider,
+            &mut fresh,
+            &[primary],
+        )
+        .unwrap();
+        assert!(failing.failed.get());
+        assert!(fresh.candidates[primary].converged);
+        assert!(fresh.candidates[failed_sibling]
+            .correction_note
+            .as_deref()
+            .is_some_and(|note| note.contains("forced sibling row failure")));
+        assert!(fresh.candidate_failures.iter().any(|failure| {
+            failure.triplet == fresh.candidates[failed_sibling].triplet
+                && failure.root_index == fresh.candidates[failed_sibling].root_index
+                && failure.message.contains("forced sibling row failure")
+        }));
+        assert!(
+            fresh.candidates[later_sibling].converged,
+            "later sibling was not continued: {:?}",
+            fresh.candidates[later_sibling].correction_note
+        );
     }
 
     #[test]

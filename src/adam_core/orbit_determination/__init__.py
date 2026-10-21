@@ -14,6 +14,7 @@ from .herrick_gibbs import calcHerrickGibbs
 from .iod import (
     IOD_DEFAULTS,
     IodCandidate,
+    IodCandidateFailure,
     IodReport,
     RangingSample,
     initial_orbit_determination,

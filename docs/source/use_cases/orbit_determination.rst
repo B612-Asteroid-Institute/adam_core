@@ -236,7 +236,8 @@ IOD_DEFAULTS``), so the signature defaults of ``run_iod`` and
 ``NativeOrbitFitter`` cannot drift from Rust.
 
 * **Ordering and determinism.** Observations are searched in a canonical
-  order (epoch, station, input row); the same input gives the same orbit
+  order (epoch, station, complete physical row content, input row only for
+  physically identical ties); the same physical input gives the same orbit
   whatever its row order. A triplet never repeats an epoch.
 * **Inputs.** Ecliptic observations and equatorial observers are rotated to
   the frames Gauss uses; observers not centred on the Sun are refused. An
@@ -413,12 +414,43 @@ by finite differences. Pass ``jacobian="2-point"`` to make adam-core's Rust Gaus
 use the legacy forward-difference covariance through the same propagation
 capsule.
 
+Deterministic IOD search
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+Native IOD canonicalizes rows by exact epoch, station code, and complete
+observed/observer physical row content. The caller's row index is used only to
+break ties between physically identical rows; candidate triplet indices and
+all residual/member arrays are mapped back to the caller's order. Triplets are
+generated lazily and stop at ``max_triplets`` (the spans default is 32), rather
+than materializing or globally sorting all :math:`{n \choose 3}` choices.
+Every physical root is retained as a scientifically distinct candidate.
+``velocity_method="auto"`` resolves each root independently, but convergence
+of one root schedules every sibling from its triplet even when that resolution
+differs.
+
+Zero contamination disables outlier removal only. Search continues through
+later roots and triplets within the configured budget. Candidate-local native
+row failures likewise do not abort a linkage: ``candidate_failures`` contains
+their triplet, root index, and message, while fatal request/backend/protocol
+errors still abort. Corrected acceptance ranks every converged candidate by one
+whole-arc score. Legacy ``acceptance="prefit"`` takes the first canonical
+candidate satisfying both the chi-square threshold and ``min_arc_length``.
+
+All IOD, ranging, fitting, and refinement settings are validated by their Rust
+configuration types, regardless of which Python or Rust entry point invokes
+them. Counts and budgets needed by an algorithm must be positive, minimum
+observation counts must permit a three-observation orbit, percentages and
+fractions must be in range, and thresholds/tolerances must be finite with the
+required sign.
+
 Solver budgets
 ~~~~~~~~~~~~~~
 
 The solver accepts two independent limits (``refine`` ``fit_settings``): ``max_iterations``
 (default 100) caps optimizer iterations, while ``max_nfev`` (default None)
-caps solver residual-vector evaluations. Supplying both enforces both.
+caps solver residual-vector evaluations. Supplying both enforces both. Approximate and exact
+``jacobian="propagator"`` phases and analytic-to-central fallback share the
+remaining limits rather than restarting them.
 The evaluation budget includes the initial state, rejected trial steps, and
 every finite-difference candidate: a forward-difference Jacobian costs six
 evaluations and a central-difference Jacobian costs twelve, even when batched
@@ -429,8 +461,10 @@ are outside this solver budget.
 Budget exhaustion returns the current solution with ``success=False`` and
 ``status_code=0`` unless convergence was established on the final permitted
 evaluation. The legacy ``FittedOrbits.iterations`` column records solver
-residual-vector evaluations, including numerical Jacobians. Each fit within
-a rejection loop gets a fresh evaluation budget; CMC2003's ``max_iterations``
+residual-vector evaluations, including numerical Jacobians;
+``FittedOrbits.optimizer_iterations`` reports actual Jacobian/step iterations.
+Each distinct fit within a rejection loop gets a fresh evaluation budget;
+CMC2003's ``max_iterations``
 continues to control its rejection loop.
 
 When to Use This Pattern
