@@ -245,11 +245,11 @@ def test_model_descriptor_canonicalizes_colliding_sets_and_mapping_order():
     names = ["alpha", "beta", "gamma", "delta", "epsilon"]
     first = Model(
         set(Key(name) for name in names),
-        dict((name, index) for index, name in enumerate(names)),
+        dict((Key(name), index) for index, name in enumerate(names)),
     )
     reverse = Model(
         set(Key(name) for name in reversed(names)),
-        dict((name, names.index(name)) for name in reversed(names)),
+        dict((Key(name), names.index(name)) for name in reversed(names)),
     )
     assert model_descriptor(first) == model_descriptor(reverse)
 

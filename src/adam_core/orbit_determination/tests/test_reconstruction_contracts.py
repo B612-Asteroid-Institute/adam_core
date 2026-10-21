@@ -269,12 +269,13 @@ def test_model_descriptor_numpy_variants():
     def sha(v):
         return model_descriptor(ArrayModel(v))["descriptor_sha256"]
 
-    base = np.arange(6, dtype=np.float64).reshape(2, 3)
+    # Equal all-zero payload bytes make dtype and shape independently material.
+    base = np.zeros((2, 3), dtype=np.float64)
     variants = {
         "f32": base.astype(np.float32),
         "i8": base.astype(np.int64),
         "shape": base.reshape(3, 2),
-        "1ulp": np.where(base == 5, np.nextafter(5.0, 6.0), base),
+        "1ulp": np.where(np.arange(6).reshape(2, 3) == 5, np.nextafter(0.0, 1.0), base),
         "-0.0": np.where(base == 0, -0.0, base),
     }
     same = {
