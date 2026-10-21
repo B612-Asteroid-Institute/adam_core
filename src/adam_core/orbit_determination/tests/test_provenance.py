@@ -266,7 +266,11 @@ def test_input_fingerprint_hashes_caller_and_used_astrometry_independently():
     baseline = _fit_input_sha256(observations, members)
 
     renamed = observations.set_column(
-        "id", pa.array([f"renamed-{row}" for row in range(len(observations))])
+        "id",
+        pa.array(
+            [f"renamed-{row}" for row in range(len(observations))],
+            type=observations.table.schema.field("id").type,
+        ),
     )
     assert _fit_input_sha256(renamed, members) != baseline
 
