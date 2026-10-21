@@ -182,6 +182,11 @@ def _canonical_parameter(value: Any, seen: set[int]) -> Any:
             "path": str(value),
             "sha256": hashlib.sha256(value.read_bytes()).hexdigest(),
         }
+    if isinstance(value, type):
+        return {
+            "class": f"{value.__module__}.{value.__qualname__}",
+            "implementation_version": _package_version(value.__module__),
+        }
     if isinstance(value, Enum):
         cls = type(value)
         return {
@@ -241,13 +246,20 @@ def model_descriptor(model: object) -> dict[str, Any]:
     """Reproducible model implementation, configuration, and content."""
     cls = type(model)
     apply = getattr(model, "apply", None)
-    implementation = apply if callable(apply) else cls.__init__
     descriptor: dict[str, Any] = {
         "type": f"{cls.__module__}.{cls.__qualname__}",
         "implementation_version": _package_version(cls.__module__),
-        "implementation_entrypoint": "apply" if callable(apply) else "__init__",
-        "implementation": _callable_identity(implementation, {id(model)}),
     }
+    if callable(apply):
+        descriptor["implementation_entrypoint"] = "apply"
+        descriptor["implementation"] = _callable_identity(apply, {id(model)})
+    else:
+        descriptor["implementation_entrypoint"] = "class"
+        descriptor["implementation"] = {
+            "module": cls.__module__,
+            "qualname": cls.__qualname__,
+            "implementation_version": _package_version(cls.__module__),
+        }
     parameters: dict[str, Any] = {}
     tables: dict[str, str] = {}
     nested: list[dict[str, Any]] = []

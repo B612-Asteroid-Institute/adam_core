@@ -782,7 +782,12 @@ def test_run_od_explicit_default_models_name_the_missing_data_package(
     monkeypatch.setitem(sys.modules, SIGMA_TABLE_PACKAGE, None)
     observations = make_observations(["500", "500", "500"], [0.0, 1.0, 2.0])
     with pytest.raises(ImportError, match="adam-observatory-uncertainties"):
-        run_od(observations, RecordingFitter(), propagator=UNUSED_PROPAGATOR)
+        run_od(
+            observations,
+            RecordingFitter(),
+            "default",
+            propagator=UNUSED_PROPAGATOR,
+        )
     _, members = run_od(
         observations, RecordingFitter(), None, propagator=UNUSED_PROPAGATOR
     )
@@ -801,7 +806,7 @@ def test_run_od_explicit_default_models_report_every_missing_input_at_once(
     observations = make_observations(["500", "500", "500"], [0.0, 1.0, 2.0])
     fitter = RecordingFitter()
     with pytest.raises(ImportError) as info:
-        run_od(observations, fitter, propagator=UNUSED_PROPAGATOR)
+        run_od(observations, fitter, "default", propagator=UNUSED_PROPAGATOR)
     message = str(info.value)
     assert "adam-observatory-uncertainties" in message
     assert "bias.dat" in message

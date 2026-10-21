@@ -694,7 +694,11 @@ def run_iod(
         "light_time": light_time,
         "mu": MU,
         "speed_of_light": C,
-        "max_triplets": max_triplets,
+        "max_triplets": (
+            (span_settings or {}).get("span_max_triplets")
+            if max_triplets is None and "span_max_triplets" in (span_settings or {})
+            else max_triplets
+        ),
         "velocity_method": velocity_method,
         "acceptance": acceptance,
         **(span_settings or {}),
