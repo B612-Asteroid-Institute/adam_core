@@ -161,6 +161,9 @@ pub struct ExternalPropagatorV2 {
     pub propagate_stm: Option<PropagateStmV2>,
     /// Reserved forever. Every advertised complete word must be zero.
     pub reserved: [usize; EXTERNAL_PROPAGATOR_RESERVED_WORDS],
+    /// Optional append-only immutable lowercase SHA-256 provenance metadata.
+    pub configuration_fingerprint: *const c_char,
+    pub data_fingerprint: *const c_char,
 }
 
 /// The two fields that may be read before any v2 structure size is known.
@@ -242,6 +245,12 @@ pub const EXTERNAL_PROPAGATOR_V2_MIN_SIZE: usize =
 /// Table prefix required when the STM capability is declared.
 pub const EXTERNAL_PROPAGATOR_V2_STM_SIZE: usize =
     std::mem::offset_of!(ExternalPropagatorV2, propagate_stm) + size_of::<Option<PropagateStmV2>>();
+/// Complete legacy v2 table through the frozen reserved words.
+pub const EXTERNAL_PROPAGATOR_V2_LEGACY_FULL_SIZE: usize =
+    std::mem::offset_of!(ExternalPropagatorV2, configuration_fingerprint);
+/// Append-only v2 reproducibility suffix through both fingerprint pointers.
+pub const EXTERNAL_PROPAGATOR_V2_METADATA_SIZE: usize =
+    std::mem::offset_of!(ExternalPropagatorV2, data_fingerprint) + size_of::<*const c_char>();
 /// Required v2 propagation request prefix. Reserved words are not required.
 pub const PROPAGATE_REQUEST_V2_MIN_SIZE: usize =
     std::mem::offset_of!(PropagateRequestV2, error_len) + size_of::<usize>();
@@ -258,6 +267,11 @@ const _: () = {
     assert!(
         std::mem::offset_of!(ExternalPropagatorV2, reserved) == EXTERNAL_PROPAGATOR_V2_STM_SIZE
     );
+    assert!(
+        std::mem::offset_of!(ExternalPropagatorV2, configuration_fingerprint)
+            == std::mem::offset_of!(ExternalPropagatorV2, reserved)
+                + size_of::<[usize; EXTERNAL_PROPAGATOR_RESERVED_WORDS]>()
+    );
     assert!(std::mem::offset_of!(PropagateRequestV2, reserved) == PROPAGATE_REQUEST_V2_MIN_SIZE);
     assert!(
         std::mem::offset_of!(PropagateStmRequestV2, reserved) == PROPAGATE_STM_REQUEST_V2_MIN_SIZE
@@ -268,8 +282,20 @@ const _: () = {
 const _: () = {
     assert!(EXTERNAL_PROPAGATOR_V2_MIN_SIZE == 72);
     assert!(EXTERNAL_PROPAGATOR_V2_STM_SIZE == 80);
+    assert!(EXTERNAL_PROPAGATOR_V2_LEGACY_FULL_SIZE == 112);
+    assert!(EXTERNAL_PROPAGATOR_V2_METADATA_SIZE == 128);
     assert!(PROPAGATE_REQUEST_V2_MIN_SIZE == 168);
     assert!(PROPAGATE_STM_REQUEST_V2_MIN_SIZE == 112);
+};
+
+#[cfg(target_pointer_width = "32")]
+const _: () = {
+    assert!(EXTERNAL_PROPAGATOR_V2_MIN_SIZE == 40);
+    assert!(EXTERNAL_PROPAGATOR_V2_STM_SIZE == 44);
+    assert!(EXTERNAL_PROPAGATOR_V2_LEGACY_FULL_SIZE == 60);
+    assert!(EXTERNAL_PROPAGATOR_V2_METADATA_SIZE == 68);
+    assert!(PROPAGATE_REQUEST_V2_MIN_SIZE == 84);
+    assert!(PROPAGATE_STM_REQUEST_V2_MIN_SIZE == 64);
 };
 
 /// Signature of [`ExternalPropagatorV2::propagate`].
@@ -486,6 +512,8 @@ pub struct ExternalPropagator {
     identity: BackendIdentity,
     integration_scale: TimeScale,
     capabilities: u64,
+    configuration_fingerprint: Option<String>,
+    data_fingerprint: Option<String>,
 }
 
 // SAFETY: the ABI requires every declared callback to be callable from any
@@ -597,6 +625,52 @@ impl ExternalPropagator {
                 "external propagator identity must have non-empty name and version".to_string(),
             ));
         }
+        if header.struct_size > EXTERNAL_PROPAGATOR_V2_LEGACY_FULL_SIZE
+            && header.struct_size < EXTERNAL_PROPAGATOR_V2_METADATA_SIZE
+        {
+            return Err(PropagationError::BackendProtocol(format!(
+                "external propagator table has a partial provenance metadata suffix ({} bytes; use exactly {} for legacy v2 or at least {} for both fingerprints)",
+                header.struct_size, EXTERNAL_PROPAGATOR_V2_LEGACY_FULL_SIZE, EXTERNAL_PROPAGATOR_V2_METADATA_SIZE
+            )));
+        }
+        let (configuration_fingerprint, data_fingerprint) =
+            if header.struct_size >= EXTERNAL_PROPAGATOR_V2_METADATA_SIZE {
+                let config_slot = raw
+                    .cast::<u8>()
+                    .add(std::mem::offset_of!(
+                        ExternalPropagatorV2,
+                        configuration_fingerprint
+                    ))
+                    .cast::<*const c_char>();
+                let data_slot = raw
+                    .cast::<u8>()
+                    .add(std::mem::offset_of!(ExternalPropagatorV2, data_fingerprint))
+                    .cast::<*const c_char>();
+                if !pointer_is_aligned(config_slot) || !pointer_is_aligned(data_slot) {
+                    return Err(PropagationError::BackendProtocol(
+                        "external propagator: misaligned provenance metadata suffix".to_string(),
+                    ));
+                }
+                let config = c_string(std::ptr::read(config_slot), "configuration_fingerprint")?;
+                let data = c_string(std::ptr::read(data_slot), "data_fingerprint")?;
+                for (name, value) in [
+                    ("configuration_fingerprint", &config),
+                    ("data_fingerprint", &data),
+                ] {
+                    if value.len() != 64
+                        || !value
+                            .bytes()
+                            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+                    {
+                        return Err(PropagationError::BackendProtocol(format!(
+                            "external propagator {name} must be 64 lowercase SHA-256 hex characters"
+                        )));
+                    }
+                }
+                (Some(config), Some(data))
+            } else {
+                (None, None)
+            };
         Ok(Self {
             context: table.context,
             propagate_callback,
@@ -604,12 +678,33 @@ impl ExternalPropagator {
             identity,
             integration_scale,
             capabilities: table.capabilities,
+            configuration_fingerprint,
+            data_fingerprint,
         })
     }
 
     /// Identity read from the immutable external table.
     pub fn identity(&self) -> &BackendIdentity {
         &self.identity
+    }
+
+    pub fn abi_version(&self) -> u32 {
+        EXTERNAL_PROPAGATOR_ABI_VERSION
+    }
+    pub fn capabilities(&self) -> u64 {
+        self.capabilities
+    }
+    pub fn known_capabilities(&self) -> u64 {
+        self.capabilities & EXTERNAL_PROPAGATOR_KNOWN_CAPABILITIES
+    }
+    pub fn integration_scale(&self) -> TimeScale {
+        self.integration_scale
+    }
+    pub fn configuration_fingerprint(&self) -> Option<&str> {
+        self.configuration_fingerprint.as_deref()
+    }
+    pub fn data_fingerprint(&self) -> Option<&str> {
+        self.data_fingerprint.as_deref()
     }
 }
 
@@ -1050,6 +1145,8 @@ pub struct ExternalContext<P> {
     scale: CString,
     name: CString,
     version: CString,
+    configuration_fingerprint: Option<CString>,
+    data_fingerprint: Option<CString>,
 }
 
 /// Any [`Propagator`] behind the external ABI: the table (first field, so a
@@ -1068,11 +1165,56 @@ unsafe impl<P: Propagator + Send> Send for OwnedExternalPropagator<P> {}
 
 impl<P: Propagator + Send + 'static> OwnedExternalPropagator<P> {
     pub fn new(propagator: P, name: &str, version: &str) -> Self {
+        Self::new_inner(propagator, name, version, None, None)
+    }
+
+    pub fn new_with_fingerprints(
+        propagator: P,
+        name: &str,
+        version: &str,
+        configuration_fingerprint: &str,
+        data_fingerprint: &str,
+    ) -> Self {
+        Self::new_inner(
+            propagator,
+            name,
+            version,
+            Some(configuration_fingerprint),
+            Some(data_fingerprint),
+        )
+    }
+
+    fn new_inner(
+        propagator: P,
+        name: &str,
+        version: &str,
+        configuration_fingerprint: Option<&str>,
+        data_fingerprint: Option<&str>,
+    ) -> Self {
+        assert_eq!(
+            configuration_fingerprint.is_some(),
+            data_fingerprint.is_some()
+        );
+        for value in [configuration_fingerprint, data_fingerprint]
+            .into_iter()
+            .flatten()
+        {
+            assert!(
+                value.len() == 64
+                    && value
+                        .bytes()
+                        .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)),
+                "fingerprints must be lowercase SHA-256"
+            );
+        }
         let identity = propagator.backend();
         let context = Box::new(ExternalContext {
             scale: CString::new(propagator.integration_time_scale().as_str()).expect("no NUL"),
             name: CString::new(name).expect("no NUL in name"),
             version: CString::new(version).expect("no NUL in version"),
+            configuration_fingerprint: configuration_fingerprint
+                .map(|v| CString::new(v).expect("no NUL")),
+            data_fingerprint: data_fingerprint.map(|v| CString::new(v).expect("no NUL")),
             propagator,
         });
         let mut capabilities = EXTERNAL_PROPAGATOR_CAP_THREAD_SAFE;
@@ -1084,7 +1226,11 @@ impl<P: Propagator + Send + 'static> OwnedExternalPropagator<P> {
         }
         let table = ExternalPropagatorV2 {
             abi_version: EXTERNAL_PROPAGATOR_ABI_VERSION,
-            struct_size: size_of::<ExternalPropagatorV2>(),
+            struct_size: if context.configuration_fingerprint.is_some() {
+                EXTERNAL_PROPAGATOR_V2_METADATA_SIZE
+            } else {
+                EXTERNAL_PROPAGATOR_V2_LEGACY_FULL_SIZE
+            },
             capabilities,
             integration_time_scale: context.scale.as_ptr(),
             two_body_dynamics: u8::from(identity.two_body_dynamics),
@@ -1097,6 +1243,14 @@ impl<P: Propagator + Send + 'static> OwnedExternalPropagator<P> {
                 .supports_stm()
                 .then_some(propagate_stm_with::<P> as PropagateStmV2),
             reserved: [0; EXTERNAL_PROPAGATOR_RESERVED_WORDS],
+            configuration_fingerprint: context
+                .configuration_fingerprint
+                .as_ref()
+                .map_or(std::ptr::null(), |value| value.as_ptr()),
+            data_fingerprint: context
+                .data_fingerprint
+                .as_ref()
+                .map_or(std::ptr::null(), |value| value.as_ptr()),
         };
         Self { table, context }
     }
@@ -1888,13 +2042,37 @@ unsafe fn run_request<P: Propagator>(
 /// implementation (and the test double of the external route).
 pub mod two_body_reference {
     use super::OwnedExternalPropagator;
-    use crate::propagation::TwoBodyPropagator;
+    use crate::propagation::{TwoBodyPropagator, TwoBodyPropagatorConfig};
+    use sha2::{Digest, Sha256};
 
-    /// Canonical Cargo SemVer embedded in the native reference provider.
+    /// SHA-256 of the canonical default two-body configuration representation.
+    pub const CONFIGURATION_FINGERPRINT: &str =
+        "e972e3728c9ea2914e11db1ce59751845e7eb1016c40df08b60e9b1b57c2ab46";
+    /// SHA-256 of the empty byte string: the two-body backend has no data files.
+    pub const DATA_FINGERPRINT: &str =
+        "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
     pub const SEMVER: &str = env!("CARGO_PKG_VERSION");
 
+    /// Hash every dynamics-affecting two-body provider setting in a stable,
+    /// locale-independent representation. Floating point values use bits.
+    pub fn configuration_fingerprint(config: TwoBodyPropagatorConfig) -> String {
+        let canonical = format!(
+            "adam-core-two-body-v1\nmax_iter={}\ntol_bits={:016x}",
+            config.max_iter,
+            config.tol.to_bits()
+        );
+        format!("{:x}", Sha256::digest(canonical.as_bytes()))
+    }
+
     pub fn new(propagator: TwoBodyPropagator) -> OwnedExternalPropagator<TwoBodyPropagator> {
-        OwnedExternalPropagator::new(propagator, "adam_core.two_body.external", SEMVER)
+        let configuration = configuration_fingerprint(propagator.config());
+        OwnedExternalPropagator::new_with_fingerprints(
+            propagator,
+            "adam_core.two_body.external",
+            SEMVER,
+            &configuration,
+            DATA_FINGERPRINT,
+        )
     }
 
     /// A process-lifetime table (tests).
@@ -1909,7 +2087,9 @@ pub mod two_body_reference {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::propagation::{PropagationInput, PropagationOptions, TwoBodyPropagator};
+    use crate::propagation::{
+        PropagationInput, PropagationOptions, TwoBodyPropagator, TwoBodyPropagatorConfig,
+    };
     use crate::{
         CoordinateBatch, NonGravitationalParametersBatch, OrbitBatch, OrbitId, OriginArray,
         OriginId, PhysicalParametersBatch, TimeArray,
@@ -2545,6 +2725,79 @@ mod tests {
         assert_eq!(
             external.capabilities & EXTERNAL_PROPAGATOR_KNOWN_CAPABILITIES,
             EXTERNAL_PROPAGATOR_CAP_THREAD_SAFE
+        );
+    }
+
+    #[test]
+    fn provenance_suffix_is_atomic_strict_and_legacy_propagation_compatible() {
+        let mut metadata = two_body_reference::new(TwoBodyPropagator::default());
+        let decoded = unsafe { ExternalPropagator::from_raw(metadata.table()) }.unwrap();
+        assert_eq!(
+            decoded.configuration_fingerprint(),
+            Some(two_body_reference::CONFIGURATION_FINGERPRINT)
+        );
+        assert_eq!(
+            decoded.data_fingerprint(),
+            Some(two_body_reference::DATA_FINGERPRINT)
+        );
+
+        let legacy =
+            OwnedExternalPropagator::new(TwoBodyPropagator::default(), "legacy.two_body", "0.7.0");
+        assert_eq!(
+            legacy.table.struct_size,
+            EXTERNAL_PROPAGATOR_V2_LEGACY_FULL_SIZE
+        );
+        let decoded = unsafe { ExternalPropagator::from_raw(legacy.table()) }.unwrap();
+        assert_eq!(decoded.configuration_fingerprint(), None);
+        assert_eq!(decoded.data_fingerprint(), None);
+
+        metadata.table.struct_size = EXTERNAL_PROPAGATOR_V2_LEGACY_FULL_SIZE + size_of::<usize>();
+        let error = unsafe { ExternalPropagator::from_raw(metadata.table()) }
+            .err()
+            .expect("partial metadata suffix must fail");
+        assert!(error
+            .to_string()
+            .contains("partial provenance metadata suffix"));
+
+        metadata.table.struct_size = EXTERNAL_PROPAGATOR_V2_METADATA_SIZE;
+        metadata.table.configuration_fingerprint = std::ptr::null();
+        let error = unsafe { ExternalPropagator::from_raw(metadata.table()) }
+            .err()
+            .expect("null metadata must fail");
+        assert!(error
+            .to_string()
+            .contains("configuration_fingerprint is null"));
+
+        let uppercase =
+            CString::new("E972E3728C9EA2914E11DB1CE59751845E7EB1016C40DF08B60E9B1B57C2AB46")
+                .unwrap();
+        metadata.table.configuration_fingerprint = uppercase.as_ptr();
+        let error = unsafe { ExternalPropagator::from_raw(metadata.table()) }
+            .err()
+            .expect("non-lowercase metadata must fail");
+        assert!(error.to_string().contains("lowercase SHA-256"));
+    }
+
+    #[test]
+    fn two_body_configuration_fingerprint_covers_every_provider_setting() {
+        let defaults = TwoBodyPropagatorConfig::default();
+        assert_eq!(
+            two_body_reference::configuration_fingerprint(defaults),
+            two_body_reference::CONFIGURATION_FINGERPRINT
+        );
+        assert_ne!(
+            two_body_reference::configuration_fingerprint(TwoBodyPropagatorConfig {
+                max_iter: defaults.max_iter + 1,
+                ..defaults
+            }),
+            two_body_reference::CONFIGURATION_FINGERPRINT
+        );
+        assert_ne!(
+            two_body_reference::configuration_fingerprint(TwoBodyPropagatorConfig {
+                tol: defaults.tol * 2.0,
+                ..defaults
+            }),
+            two_body_reference::CONFIGURATION_FINGERPRINT
         );
     }
 
@@ -3398,6 +3651,15 @@ mod tests {
         assert_eq!(
             EXTERNAL_PROPAGATOR_V2_MIN_SIZE,
             std::mem::offset_of!(ExternalPropagatorV2, propagate_stm)
+        );
+        assert_eq!(
+            EXTERNAL_PROPAGATOR_V2_LEGACY_FULL_SIZE,
+            std::mem::offset_of!(ExternalPropagatorV2, configuration_fingerprint)
+        );
+        assert_eq!(
+            EXTERNAL_PROPAGATOR_V2_METADATA_SIZE,
+            std::mem::offset_of!(ExternalPropagatorV2, data_fingerprint)
+                + size_of::<*const c_char>()
         );
         let mut owned = two_body_reference::new(TwoBodyPropagator::default());
         owned.table.abi_version = EXTERNAL_PROPAGATOR_ABI_VERSION - 1;

@@ -29,8 +29,14 @@ mod timestamp_ops;
 mod trajectory;
 mod variant_ephemeris;
 
+#[pyfunction]
+fn build_identity() -> (&'static str, &'static str) {
+    (env!("CARGO_PKG_VERSION"), env!("ADAM_CORE_BUILD_COMMIT"))
+}
+
 #[pymodule]
 fn _rust_native(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_function(wrap_pyfunction!(build_identity, m)?)?;
     bandpass_vendor::register(m)?;
     coordinate_ops::register(m)?;
     coordinates::register(m)?;

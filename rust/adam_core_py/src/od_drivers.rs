@@ -31,9 +31,9 @@ use adam_core_rs_coords::propagation::{
     EphemerisOptions, EpochPolicy, ExternalPropagator, ExternalPropagatorV2, FullOdConfig,
     FullOdOutput, IodAcceptance, IodCandidate, IodCandidateFailure, IodConfig, IodResult,
     IterativeFitConfig, JacobianMethod, ObservationSelectionMethod, PrefitScope,
-    PropagationOptions, PropagationResultValue, RangingConfig, RangingResult, RangingSample,
-    RefinementConfig, SpanSearchConfig, TwoBodyPropagator, TwoBodyPropagatorConfig, VelocityMethod,
-    WhitenedFitConfig, WhitenedFitOutput, EXTERNAL_PROPAGATOR_CAPSULE,
+    PropagationOptions, PropagationResultValue, Propagator, RangingConfig, RangingResult,
+    RangingSample, RefinementConfig, SpanSearchConfig, TwoBodyPropagator, TwoBodyPropagatorConfig,
+    VelocityMethod, WhitenedFitConfig, WhitenedFitOutput, EXTERNAL_PROPAGATOR_CAPSULE,
 };
 use adam_core_rs_coords::veres2017::{SigmaFillModel, VeresFloorModel, VeresReplaceModel};
 use adam_core_rs_coords::{
@@ -196,6 +196,35 @@ fn parse_iod_settings(settings: Option<&Bound<'_, PyDict>>) -> PyResult<IodConfi
     parse_iod_settings_over(settings, IodConfig::default())
 }
 
+#[pyfunction]
+#[pyo3(signature = (iod_settings=None, fit_settings=None))]
+fn validate_iod_settings(
+    iod_settings: Option<&Bound<'_, PyDict>>,
+    fit_settings: Option<&Bound<'_, PyDict>>,
+) -> PyResult<()> {
+    parse_fit_settings(fit_settings)?;
+    parse_iod_settings(iod_settings)?
+        .validate()
+        .map_err(value_error)
+}
+
+/// Eagerly validate fused/composed OD settings before data-dependent exits.
+#[pyfunction]
+#[pyo3(signature = (iod_settings=None, refinement=None, fit_settings=None))]
+fn validate_full_od_settings(
+    iod_settings: Option<&Bound<'_, PyDict>>,
+    refinement: Option<&Bound<'_, PyDict>>,
+    fit_settings: Option<&Bound<'_, PyDict>>,
+) -> PyResult<()> {
+    let fit = parse_fit_settings(fit_settings)?;
+    FullOdConfig {
+        iod: parse_iod_settings(iod_settings)?,
+        refinement: parse_refinement(refinement, fit.config)?,
+    }
+    .validate()
+    .map_err(value_error)
+}
+
 /// The pre-a6w.4 IOD defaults (combination triplets, prefit acceptance) of
 /// the deprecated `iod_fit_ipc`.
 fn legacy_iod_defaults() -> IodConfig {
@@ -225,6 +254,9 @@ pub fn iod_defaults(py: Python<'_>) -> PyResult<Bound<'_, PyDict>> {
     )?;
     out.set_item("light_time", config.light_time)?;
     out.set_item("max_triplets", config.max_triplets)?;
+    out.set_item("max_pair_visits", config.max_pair_visits)?;
+    out.set_item("max_raw_pair_visits", config.max_raw_pair_visits)?;
+    out.set_item("max_middle_visits", config.max_middle_visits)?;
     out.set_item("velocity_method", config.velocity_method.as_str())?;
     out.set_item("acceptance", config.acceptance.as_str())?;
     out.set_item("span_target_days", config.spans.target_span_days)?;
@@ -330,6 +362,13 @@ fn parse_iod_settings_over(
         mu: setting(settings, "mu", defaults.mu)?,
         speed_of_light: setting(settings, "speed_of_light", defaults.speed_of_light)?,
         max_triplets: setting(settings, "max_triplets", defaults.max_triplets)?,
+        max_pair_visits: setting(settings, "max_pair_visits", defaults.max_pair_visits)?,
+        max_raw_pair_visits: setting(
+            settings,
+            "max_raw_pair_visits",
+            defaults.max_raw_pair_visits,
+        )?,
+        max_middle_visits: setting(settings, "max_middle_visits", defaults.max_middle_visits)?,
         velocity_method: match setting::<Option<String>>(settings, "velocity_method", None)? {
             Some(method) => VelocityMethod::parse(&method).map_err(value_error)?,
             None => defaults.velocity_method,
@@ -636,6 +675,13 @@ impl PySource {
         // SAFETY: a capsule of this name holds an `ExternalPropagatorV2`
         // whose context lives as long as the capsule, retained by `_capsule`.
         let propagator = unsafe { ExternalPropagator::from_raw(raw) }.map_err(od_error)?;
+        if propagator.configuration_fingerprint().is_none()
+            || propagator.data_fingerprint().is_none()
+        {
+            return Err(PyValueError::new_err(
+                "native OD requires the ABI v2 provenance metadata suffix (configuration_fingerprint and data_fingerprint); this provider is propagation-compatible but not provenance-complete",
+            ));
+        }
         if let Some((expected_name, expected_version, expected_two_body)) = expected_identity {
             validate_expected_identity(
                 propagator.identity(),
@@ -650,6 +696,117 @@ impl PySource {
             _capsule: object.clone().unbind(),
         })
     }
+}
+
+#[derive(Clone)]
+struct ProviderMetadata {
+    name: String,
+    version: String,
+    abi_version: u32,
+    identity_validated_by_capsule: bool,
+    capabilities: u64,
+    known_capabilities: u64,
+    integration_time_scale: String,
+    two_body_dynamics: bool,
+    configuration_fingerprint: String,
+    data_fingerprint: String,
+}
+
+impl ProviderMetadata {
+    fn external(propagator: &ExternalPropagator) -> Self {
+        let identity = propagator.identity();
+        Self {
+            name: identity.name.clone(),
+            version: identity.version.clone(),
+            abi_version: propagator.abi_version(),
+            identity_validated_by_capsule: true,
+            capabilities: propagator.capabilities(),
+            known_capabilities: propagator.known_capabilities(),
+            integration_time_scale: propagator.integration_scale().as_str().to_string(),
+            two_body_dynamics: identity.two_body_dynamics,
+            configuration_fingerprint: propagator
+                .configuration_fingerprint()
+                .expect("PySource requires metadata")
+                .to_string(),
+            data_fingerprint: propagator
+                .data_fingerprint()
+                .expect("PySource requires metadata")
+                .to_string(),
+        }
+    }
+
+    fn two_body(settings: &FitSettings) -> Self {
+        let identity = settings.propagator.backend();
+        let mut capabilities =
+            adam_core_rs_coords::propagation::EXTERNAL_PROPAGATOR_CAP_THREAD_SAFE;
+        if settings.propagator.supports_stm() {
+            capabilities |= adam_core_rs_coords::propagation::EXTERNAL_PROPAGATOR_CAP_STM;
+        }
+        if settings.propagator.supports_non_gravitational_parameters() {
+            capabilities |=
+                adam_core_rs_coords::propagation::EXTERNAL_PROPAGATOR_CAP_NON_GRAVITATIONAL;
+        }
+        Self {
+            name: identity.name,
+            version: identity.version,
+            abi_version: adam_core_rs_coords::propagation::EXTERNAL_PROPAGATOR_ABI_VERSION,
+            identity_validated_by_capsule: false,
+            capabilities,
+            known_capabilities: capabilities,
+            integration_time_scale: settings
+                .propagator
+                .integration_time_scale()
+                .as_str()
+                .to_string(),
+            two_body_dynamics: identity.two_body_dynamics,
+            configuration_fingerprint:
+                adam_core_rs_coords::propagation::two_body_reference::configuration_fingerprint(
+                    settings.propagator.config(),
+                ),
+            data_fingerprint:
+                adam_core_rs_coords::propagation::two_body_reference::DATA_FINGERPRINT.to_string(),
+        }
+    }
+}
+
+fn provider_metadata_dict<'py>(
+    py: Python<'py>,
+    metadata: &ProviderMetadata,
+) -> PyResult<Bound<'py, PyDict>> {
+    let out = PyDict::new(py);
+    out.set_item("name", &metadata.name)?;
+    out.set_item("version", &metadata.version)?;
+    out.set_item("abi_version", metadata.abi_version)?;
+    out.set_item(
+        "identity_validated_by_capsule",
+        metadata.identity_validated_by_capsule,
+    )?;
+    out.set_item("capabilities", metadata.capabilities)?;
+    out.set_item("known_capabilities", metadata.known_capabilities)?;
+    out.set_item("integration_time_scale", &metadata.integration_time_scale)?;
+    out.set_item("two_body_dynamics", metadata.two_body_dynamics)?;
+    out.set_item(
+        "configuration_fingerprint",
+        &metadata.configuration_fingerprint,
+    )?;
+    out.set_item("data_fingerprint", &metadata.data_fingerprint)?;
+    Ok(out)
+}
+
+#[pyfunction]
+#[pyo3(signature = (propagator=None, fit_settings=None))]
+fn native_provider_metadata<'py>(
+    py: Python<'py>,
+    propagator: Option<&Bound<'py, PyAny>>,
+    fit_settings: Option<&Bound<'py, PyDict>>,
+) -> PyResult<Bound<'py, PyDict>> {
+    let settings = parse_fit_settings(fit_settings)?;
+    let source = propagator.map(PySource::new).transpose()?;
+    let metadata = source.as_ref().map_or_else(
+        || ProviderMetadata::two_body(&settings),
+        |source| ProviderMetadata::external(&source.propagator),
+    );
+    provider_metadata_dict(py, &metadata)
 }
 
 /// [`PropagatorPredictor`] over an external propagator with the driver's
@@ -673,22 +830,28 @@ fn run_with_predictor<R: Send>(
     propagator: Option<&Bound<'_, PyAny>>,
     settings: &FitSettings,
     driver: impl for<'p> FnOnce(&'p dyn SphericalPredictor) -> PropagationResultValue<R> + Send,
-) -> PyResult<R> {
+) -> PyResult<(R, ProviderMetadata)> {
     let source = propagator.map(PySource::new).transpose()?;
-    py.allow_threads(|| {
-        if let Some(source) = &source {
-            driver(&external_predictor(&source.propagator, settings))
-        } else {
-            let predictor = PropagatorPredictor {
-                propagator: &settings.propagator,
-                options: &settings.options,
-                provider: &ErfaTimeProvider,
-                translation_provider: &LockingSpiceTranslation,
-            };
-            driver(&predictor)
-        }
-    })
-    .map_err(od_error)
+    let metadata = source.as_ref().map_or_else(
+        || ProviderMetadata::two_body(settings),
+        |source| ProviderMetadata::external(&source.propagator),
+    );
+    let output = py
+        .allow_threads(|| {
+            if let Some(source) = &source {
+                driver(&external_predictor(&source.propagator, settings))
+            } else {
+                let predictor = PropagatorPredictor {
+                    propagator: &settings.propagator,
+                    options: &settings.options,
+                    provider: &ErfaTimeProvider,
+                    translation_provider: &LockingSpiceTranslation,
+                };
+                driver(&predictor)
+            }
+        })
+        .map_err(od_error)?;
+    Ok((output, metadata))
 }
 
 /// Two-stage native driver.  `iod_propagator` and `propagator` are capsules;
@@ -704,29 +867,39 @@ fn run_with_predictors<R: Send>(
             &'p dyn SphericalPredictor,
         ) -> PropagationResultValue<R>
         + Send,
-) -> PyResult<R> {
+) -> PyResult<(R, ProviderMetadata, ProviderMetadata)> {
     let iod_source = iod_propagator.map(PySource::new).transpose()?;
     let refine_source = propagator.map(PySource::new).transpose()?;
-    py.allow_threads(|| {
-        let two_body = PropagatorPredictor {
-            propagator: &settings.propagator,
-            options: &settings.options,
-            provider: &ErfaTimeProvider,
-            translation_provider: &LockingSpiceTranslation,
-        };
-        let refine_external = refine_source
-            .as_ref()
-            .map(|source| external_predictor(&source.propagator, settings));
-        let iod_external = iod_source
-            .as_ref()
-            .map(|source| external_predictor(&source.propagator, settings));
-        let refine: &dyn SphericalPredictor = refine_external
-            .as_ref()
-            .map_or(&two_body as &dyn SphericalPredictor, |value| value);
-        let iod: &dyn SphericalPredictor = iod_external.as_ref().map_or(refine, |value| value);
-        driver(iod, refine)
-    })
-    .map_err(od_error)
+    let refine_metadata = refine_source.as_ref().map_or_else(
+        || ProviderMetadata::two_body(settings),
+        |source| ProviderMetadata::external(&source.propagator),
+    );
+    let iod_metadata = iod_source.as_ref().map_or_else(
+        || refine_metadata.clone(),
+        |source| ProviderMetadata::external(&source.propagator),
+    );
+    let output = py
+        .allow_threads(|| {
+            let two_body = PropagatorPredictor {
+                propagator: &settings.propagator,
+                options: &settings.options,
+                provider: &ErfaTimeProvider,
+                translation_provider: &LockingSpiceTranslation,
+            };
+            let refine_external = refine_source
+                .as_ref()
+                .map(|source| external_predictor(&source.propagator, settings));
+            let iod_external = iod_source
+                .as_ref()
+                .map(|source| external_predictor(&source.propagator, settings));
+            let refine: &dyn SphericalPredictor = refine_external
+                .as_ref()
+                .map_or(&two_body as &dyn SphericalPredictor, |value| value);
+            let iod: &dyn SphericalPredictor = iod_external.as_ref().map_or(refine, |value| value);
+            driver(iod, refine)
+        })
+        .map_err(od_error)?;
+    Ok((output, iod_metadata, refine_metadata))
 }
 
 // ---------------------------------------------------------------------------
@@ -907,6 +1080,10 @@ fn iod_dict<'py>(py: Python<'py>, result: IodResult, n: usize) -> PyResult<Bound
         candidate_failures.append(candidate_failure_dict(py, failure)?)?;
     }
     out.set_item("candidate_failures", candidate_failures)?;
+    out.set_item("pair_visits", result.pair_visits)?;
+    out.set_item("raw_pair_visits", result.raw_pair_visits)?;
+    out.set_item("middle_visits", result.middle_visits)?;
+    out.set_item("search_cap_exhausted", result.search_cap_exhausted)?;
     out.set_item("corrections_run", result.corrections_run)?;
     out.set_item("not_found_reason", iod.not_found_reason)?;
     out.set_item("accepted", result.accepted)?;
@@ -1002,7 +1179,7 @@ fn fit_orbit_whitened_ipc<'py>(
     let problem = decode_observations(observed_ipc, observers_ipc)?;
     let settings = parse_fit_settings(fit_settings)?;
     let n = problem.observed.len();
-    let output = run_with_predictor(py, propagator, &settings, |predictor| {
+    let (output, provider) = run_with_predictor(py, propagator, &settings, |predictor| {
         fit_orbit_whitened_with(
             predictor,
             &orbit,
@@ -1014,7 +1191,12 @@ fn fit_orbit_whitened_ipc<'py>(
             &LockingSpiceTranslation,
         )
     })?;
-    fit_output_dict(py, output, n)
+    let out = fit_output_dict(py, output, n)?;
+    out.set_item(
+        "refinement_provider",
+        provider_metadata_dict(py, &provider)?,
+    )?;
+    Ok(out)
 }
 
 /// `fit_orbit_whitened_ipc` over adam_core's two-body propagator.
@@ -1062,7 +1244,7 @@ fn validate_fit_covariance_ipc<'py>(
     let settings = parse_fit_settings(fit_settings)?;
     let covariance = covariance_36(&covariance)?;
     let jacobian = JacobianMethod::parse(jacobian).map_err(value_error)?;
-    let output = run_with_predictor(py, propagator, &settings, |predictor| {
+    let (output, provider) = run_with_predictor(py, propagator, &settings, |predictor| {
         validate_fit_covariance_with(
             predictor,
             &orbit,
@@ -1082,6 +1264,10 @@ fn validate_fit_covariance_ipc<'py>(
     out.set_item("covariance", validated.into_pyarray(py))?;
     out.set_item("delta_cost", output.delta_cost)?;
     out.set_item("warnings", output.warnings)?;
+    out.set_item(
+        "refinement_provider",
+        provider_metadata_dict(py, &provider)?,
+    )?;
     Ok(out)
 }
 
@@ -1123,7 +1309,7 @@ fn iterative_fit_ipc<'py>(
         fit: settings.config,
     };
     let n = problem.observed.len();
-    let output = run_with_predictor(py, propagator, &settings, |predictor| {
+    let (output, provider) = run_with_predictor(py, propagator, &settings, |predictor| {
         iterative_fit_with(
             predictor,
             &orbit,
@@ -1136,6 +1322,10 @@ fn iterative_fit_ipc<'py>(
     })?;
     let out = fit_output_dict(py, output.fit, n)?;
     out.set_item("passes", output.passes)?;
+    out.set_item(
+        "refinement_provider",
+        provider_metadata_dict(py, &provider)?,
+    )?;
     Ok(out)
 }
 
@@ -1226,7 +1416,7 @@ fn cmc2003_fit_ipc<'py>(
         fit: settings.config,
     };
     let n = problem.observed.len();
-    let output = run_with_predictor(py, propagator, &settings, |predictor| {
+    let (output, provider) = run_with_predictor(py, propagator, &settings, |predictor| {
         cmc2003_fit_with(
             predictor,
             &orbit,
@@ -1242,6 +1432,10 @@ fn cmc2003_fit_ipc<'py>(
     out.set_item("n_rejected", output.n_rejected)?;
     out.set_item("n_recovered", output.n_recovered)?;
     out.set_item("flags", output.flags)?;
+    out.set_item(
+        "refinement_provider",
+        provider_metadata_dict(py, &provider)?,
+    )?;
     Ok(out)
 }
 
@@ -1333,7 +1527,7 @@ fn run_iod_linkages_ipc<'py>(
     let config = parse_iod_settings(iod_settings)?;
     let settings = parse_fit_settings(fit_settings)?;
     let row_counts: Vec<usize> = linkage_rows.iter().map(Vec::len).collect();
-    let results = run_with_predictor(py, iod_propagator, &settings, |predictor| {
+    let (results, provider) = run_with_predictor(py, iod_propagator, &settings, |predictor| {
         run_iod_linkages_with(
             predictor,
             &problem.observed,
@@ -1347,7 +1541,9 @@ fn run_iod_linkages_ipc<'py>(
     })?;
     let output = PyList::empty(py);
     for (result, row_count) in results.into_iter().zip(row_counts) {
-        output.append(iod_dict(py, result, row_count)?)?;
+        let item = iod_dict(py, result, row_count)?;
+        item.set_item("iod_provider", provider_metadata_dict(py, &provider)?)?;
+        output.append(item)?;
     }
     Ok(output)
 }
@@ -1363,7 +1559,7 @@ fn run_iod_impl<'py>(
     let problem = decode_observations(observed_ipc, observers_ipc)?;
     let settings = parse_fit_settings(fit_settings)?;
     let n = problem.observed.len();
-    let result = run_with_predictor(py, iod_propagator, &settings, |predictor| {
+    let (result, provider) = run_with_predictor(py, iod_propagator, &settings, |predictor| {
         run_iod_with(
             predictor,
             &problem.observed,
@@ -1374,7 +1570,9 @@ fn run_iod_impl<'py>(
             &LockingSpiceTranslation,
         )
     })?;
-    iod_dict(py, result, n)
+    let out = iod_dict(py, result, n)?;
+    out.set_item("iod_provider", provider_metadata_dict(py, &provider)?)?;
+    Ok(out)
 }
 
 /// `run_iod_ipc` over adam_core's two-body propagator.
@@ -1443,7 +1641,7 @@ fn full_od_ipc<'py>(
         refinement: parse_refinement(refinement, settings.config)?,
     };
     let n = problem.observed.len();
-    let output = run_with_predictors(
+    let (output, iod_provider, refinement_provider) = run_with_predictors(
         py,
         iod_propagator,
         propagator,
@@ -1460,7 +1658,13 @@ fn full_od_ipc<'py>(
             )
         },
     )?;
-    full_od_dict(py, output, n)
+    let out = full_od_dict(py, output, n)?;
+    out.set_item("iod_provider", provider_metadata_dict(py, &iod_provider)?)?;
+    out.set_item(
+        "refinement_provider",
+        provider_metadata_dict(py, &refinement_provider)?,
+    )?;
+    Ok(out)
 }
 
 /// `full_od_ipc` over adam_core's two-body propagator. ``iod_propagator`` may
@@ -1529,7 +1733,7 @@ fn run_od_ipc<'py>(
     };
     let models = models_from_specs(models)?;
     let n = problem.observed.len();
-    let output = run_with_predictors(
+    let (output, iod_provider, refinement_provider) = run_with_predictors(
         py,
         iod_propagator,
         propagator,
@@ -1554,6 +1758,11 @@ fn run_od_ipc<'py>(
     out.set_item("original_astrometry", snapshot_dict(py, output.original)?)?;
     out.set_item("used_astrometry", snapshot_dict(py, output.used)?)?;
     out.set_item("models_changed", output.models_changed)?;
+    out.set_item("iod_provider", provider_metadata_dict(py, &iod_provider)?)?;
+    out.set_item(
+        "refinement_provider",
+        provider_metadata_dict(py, &refinement_provider)?,
+    )?;
     Ok(out)
 }
 
@@ -1637,6 +1846,9 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(run_iod_ipc, m)?)?;
     m.add_function(wrap_pyfunction!(run_iod_linkages_ipc, m)?)?;
     m.add_function(wrap_pyfunction!(iod_defaults, m)?)?;
+    m.add_function(wrap_pyfunction!(validate_iod_settings, m)?)?;
+    m.add_function(wrap_pyfunction!(validate_full_od_settings, m)?)?;
+    m.add_function(wrap_pyfunction!(native_provider_metadata, m)?)?;
     m.add_function(wrap_pyfunction!(od_defaults, m)?)?;
     m.add_function(wrap_pyfunction!(run_iod_2body_ipc, m)?)?;
     m.add_function(wrap_pyfunction!(full_od_ipc, m)?)?;

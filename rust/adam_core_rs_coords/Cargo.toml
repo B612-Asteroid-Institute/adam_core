@@ -26,6 +26,7 @@ faer = "0.22"
 serde_json = { version = "1", features = ["preserve_order"] }
 statrs = "0.18"
 nalgebra = "0.33"
+sha2 = "0.10"
 
 [lib]
 path = "src/lib.rs"
