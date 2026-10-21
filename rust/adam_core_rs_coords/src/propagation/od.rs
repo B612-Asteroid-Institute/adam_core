@@ -4616,6 +4616,94 @@ mod tests {
     }
 
     #[test]
+    fn od_fit_arc_is_scale_invariant_across_a_utc_leap() {
+        let mut observer_rows = observers();
+        let tdb_times = TimeArray::new(
+            TimeScale::Tdb,
+            (0..NUM_OBS)
+                .map(|row| Epoch::new(57_753 + 3 * row as i64, 70_000_000_000))
+                .collect(),
+        )
+        .unwrap();
+        observer_rows.coordinates.times = Some(tdb_times.clone());
+        let generated = generate_ephemeris_barycentric(
+            &TwoBodyPropagator::default(),
+            &truth_orbit(TRUTH_STATE),
+            &observer_rows,
+            &ephemeris_options(),
+            &NoopProvider,
+            &ZeroTranslationProvider,
+        )
+        .unwrap()
+        .ephemeris
+        .coordinates;
+        let sigma = 1.0 / 3600.0;
+        let mut covariance = vec![0.0_f64; NUM_OBS * 36];
+        for row in 0..NUM_OBS {
+            covariance[row * 36] = 1.0;
+            covariance[row * 36 + 7] = sigma * sigma;
+            covariance[row * 36 + 14] = sigma * sigma;
+            covariance[row * 36 + 21] = 1.0;
+            covariance[row * 36 + 28] = 1.0;
+            covariance[row * 36 + 35] = 1.0;
+        }
+        let observed = CoordinateBatch::new(
+            generated.values,
+            generated.frame,
+            generated.origins,
+            Some(tdb_times.clone()),
+            Some(
+                CovarianceBatch::new(
+                    NUM_OBS,
+                    6,
+                    covariance,
+                    CovarianceUnits::Coordinate(crate::CoordinateRepresentation::Spherical),
+                )
+                .unwrap(),
+            ),
+        )
+        .unwrap();
+        let config = OdConfig {
+            rchi2_threshold: 10.0,
+            min_obs: 5,
+            min_arc_length: 1.0,
+            contamination_percentage: 0.0,
+            delta: 1e-6,
+            max_iter: 20,
+            method: OdMethod::Central,
+        };
+        let run = |observed: &CoordinateBatch, observers: &ObserverBatch| {
+            od_fit_barycentric(
+                &TwoBodyPropagator::default(),
+                &perturbed_start(),
+                observed,
+                observers,
+                &config,
+                &ephemeris_options(),
+                &NoopProvider,
+                &ZeroTranslationProvider,
+            )
+            .unwrap()
+        };
+        let tdb = run(&observed, &observer_rows);
+        assert!(tdb.found);
+
+        let utc_times = tdb_times.rescale(TimeScale::Utc).unwrap();
+        let mut utc_observed = observed;
+        let mut utc_observers = observer_rows;
+        utc_observed.times = Some(utc_times.clone());
+        utc_observers.coordinates.times = Some(utc_times);
+        let utc = run(&utc_observed, &utc_observers);
+        assert!(utc.found);
+        assert!((utc.arc_length - tdb.arc_length).abs() < 1.0e-10);
+        assert!(utc
+            .state
+            .iter()
+            .zip(tdb.state)
+            .all(|(left, right)| (left - right).abs() < 1.0e-10));
+    }
+
+    #[test]
     fn od_fit_below_min_obs_is_not_found() {
         let observed = synthetic_observations();
         let observers = observers();
@@ -4686,6 +4774,44 @@ mod tests {
     /// (counting from the first) return `failure`; `garbage_calls` return
     /// the inner prediction displaced by half a degree in longitude (a
     /// finite but hopeless candidate).
+    struct TimeRoutingPredictor<'a> {
+        inner: &'a dyn SphericalPredictor,
+        civil_calls: std::cell::Cell<usize>,
+        dynamical_calls: std::cell::Cell<usize>,
+    }
+
+    impl SphericalPredictor for TimeRoutingPredictor<'_> {
+        fn predict_spherical(
+            &self,
+            states: &[[f64; 6]],
+            geometry: &OrbitGeometry,
+            observers: &ObserverBatch,
+        ) -> PropagationResultValue<Result<Vec<f64>, String>> {
+            self.inner.predict_spherical(states, geometry, observers)
+        }
+
+        fn civil_times_mjd(&self, observed: &CoordinateBatch) -> PropagationResultValue<Vec<f64>> {
+            self.civil_calls.set(self.civil_calls.get() + 1);
+            self.inner.civil_times_mjd(observed)
+        }
+
+        fn dynamical_times_mjd(
+            &self,
+            observed: &CoordinateBatch,
+        ) -> PropagationResultValue<Vec<f64>> {
+            self.dynamical_calls.set(self.dynamical_calls.get() + 1);
+            self.inner.dynamical_times_mjd(observed)
+        }
+
+        fn dynamical_epoch_in_scale(
+            &self,
+            mjd_tdb: f64,
+            scale: crate::TimeScale,
+        ) -> PropagationResultValue<crate::Epoch> {
+            self.inner.dynamical_epoch_in_scale(mjd_tdb, scale)
+        }
+    }
+
     struct FaultyPredictor<'a> {
         inner: &'a dyn SphericalPredictor,
         calls: std::cell::Cell<usize>,
@@ -4838,6 +4964,95 @@ mod tests {
     }
 
     #[test]
+    fn iod_observation_order_uses_every_observer_content_tie_break() {
+        let observed_times =
+            TimeArray::new(TimeScale::Tdb, vec![Epoch::new(60_000, 0); 2]).unwrap();
+        let observed = CoordinateBatch::spherical(
+            vec![[f64::NAN, 10.0, 20.0, f64::NAN, f64::NAN, f64::NAN]; 2],
+            Frame::Equatorial,
+            OriginArray::repeat(OriginId::Named("SUN".to_string()), 2),
+            Some(observed_times),
+            None,
+        )
+        .unwrap();
+        let assert_invariant = |observers: ObserverBatch| {
+            let canonical = iod_observation_order(&observed, &observers).unwrap();
+            assert_eq!(canonical, vec![0, 1]);
+            let permutation = [1_usize, 0];
+            let shuffled_observed = take_coordinate_batch(&observed, &permutation).unwrap();
+            let shuffled_observers = take_observer_batch(&observers, &permutation).unwrap();
+            let shuffled = iod_observation_order(&shuffled_observed, &shuffled_observers).unwrap();
+            let physical_rows: Vec<usize> = shuffled.iter().map(|&row| permutation[row]).collect();
+            assert_eq!(physical_rows, canonical);
+        };
+        let codes = vec![ObservatoryCode("500".to_string()); 2];
+        let origins = OriginArray::repeat(OriginId::Named("SUN".to_string()), 2);
+        let same_times = TimeArray::new(TimeScale::Tdb, vec![Epoch::new(60_000, 0); 2]).unwrap();
+
+        let distinct_times = TimeArray::new(
+            TimeScale::Tdb,
+            vec![Epoch::new(60_000, 0), Epoch::new(60_000, 1)],
+        )
+        .unwrap();
+        assert_invariant(
+            ObserverBatch::new(
+                codes.clone(),
+                CoordinateBatch::cartesian(
+                    vec![[0.0; 6]; 2],
+                    Frame::Ecliptic,
+                    origins.clone(),
+                    Some(distinct_times),
+                    None,
+                )
+                .unwrap(),
+            )
+            .unwrap(),
+        );
+
+        let mut states = vec![[0.0; 6]; 2];
+        states[1][0] = 1.0;
+        assert_invariant(
+            ObserverBatch::new(
+                codes.clone(),
+                CoordinateBatch::cartesian(
+                    states,
+                    Frame::Ecliptic,
+                    origins.clone(),
+                    Some(same_times.clone()),
+                    None,
+                )
+                .unwrap(),
+            )
+            .unwrap(),
+        );
+
+        let mut covariance = vec![0.0; 2 * 36];
+        covariance[36] = 1.0;
+        assert_invariant(
+            ObserverBatch::new(
+                codes,
+                CoordinateBatch::cartesian(
+                    vec![[0.0; 6]; 2],
+                    Frame::Ecliptic,
+                    origins,
+                    Some(same_times),
+                    Some(
+                        CovarianceBatch::new(
+                            2,
+                            6,
+                            covariance,
+                            CovarianceUnits::Coordinate(crate::CoordinateRepresentation::Cartesian),
+                        )
+                        .unwrap(),
+                    ),
+                )
+                .unwrap(),
+            )
+            .unwrap(),
+        );
+    }
+
+    #[test]
     fn iod_settings_validation_rejects_every_invalid_family() {
         let invalid = [
             IodConfig {
@@ -4870,6 +5085,18 @@ mod tests {
             },
             IodConfig {
                 max_triplets: Some(0),
+                ..IodConfig::default()
+            },
+            IodConfig {
+                max_pair_visits: 0,
+                ..IodConfig::default()
+            },
+            IodConfig {
+                max_raw_pair_visits: 0,
+                ..IodConfig::default()
+            },
+            IodConfig {
+                max_middle_visits: 0,
                 ..IodConfig::default()
             },
             IodConfig {
@@ -4936,6 +5163,44 @@ mod tests {
             assert!(config.validate().is_err(), "accepted {config:?}");
         }
         assert!(IodConfig::default().validate().is_ok());
+
+        let bad = IodConfig {
+            min_obs: 2,
+            ..IodConfig::default()
+        };
+        let error = iod_fit_barycentric(
+            &TwoBodyPropagator::default(),
+            &synthetic_observations(),
+            &observers(),
+            &bad,
+            &ephemeris_options(),
+            &NoopProvider,
+            &ZeroTranslationProvider,
+        )
+        .unwrap_err();
+        assert!(matches!(error, PropagationError::InvalidRequest(_)));
+    }
+
+    #[test]
+    fn iod_routes_nights_to_civil_time_and_intervals_to_dynamical_time() {
+        let propagator = TwoBodyPropagator::default();
+        let options = ephemeris_options();
+        let inner = two_body_predictor(&propagator, &options);
+        let predictor = TimeRoutingPredictor {
+            inner: &inner,
+            civil_calls: std::cell::Cell::new(0),
+            dynamical_calls: std::cell::Cell::new(0),
+        };
+        let result = run_iod(
+            &predictor,
+            &synthetic_observations(),
+            &observers(),
+            &iod_config(0.0),
+        )
+        .unwrap();
+        assert!(result.found(), "{:?}", result.not_found_reason);
+        assert_eq!(predictor.civil_calls.get(), 1);
+        assert!(predictor.dynamical_calls.get() >= 1);
     }
 
     #[test]
@@ -5027,6 +5292,37 @@ mod tests {
     }
 
     #[test]
+    fn prefit_outlier_removal_rechecks_the_retained_time_arc() {
+        let mut observed = synthetic_observations();
+        let values = match &mut observed.values {
+            CoordinateValues::Spherical(values) => values,
+            _ => panic!("synthetic observations are spherical"),
+        };
+        values[0][1] += 10.0;
+        let config = IodConfig {
+            acceptance: IodAcceptance::Prefit,
+            observation_selection_method: ObservationSelectionMethod::Thirds,
+            contamination_percentage: 20.0,
+            rchi2_threshold: 1.0e-6,
+            min_arc_length: 20.0,
+            max_triplets: Some(1),
+            ..IodConfig::default()
+        };
+        let result = iod_fit_barycentric(
+            &TwoBodyPropagator::default(),
+            &observed,
+            &observers(),
+            &config,
+            &ephemeris_options(),
+            &NoopProvider,
+            &ZeroTranslationProvider,
+        )
+        .unwrap();
+        assert!(!result.found);
+        assert!(result.candidates_evaluated >= 1);
+    }
+
+    #[test]
     fn iod_fit_zero_contamination_continues_past_a_rejected_triplet() {
         let observed = synthetic_observations();
         let observers = observers();
@@ -5088,14 +5384,37 @@ mod tests {
             failure: None,
             garbage_calls: 0,
         };
-        let result = run_iod(&predictor, &observed, &observers, &iod_config(20.0)).unwrap();
+        let result = run_iod(&predictor, &observed, &observers, &iod_config(0.0)).unwrap();
         assert!(result.found(), "{:?}", result.not_found_reason);
         assert_eq!(result.candidates_failed, 1);
         assert_eq!(result.candidate_failures.len(), 1);
         assert!(result.candidate_failures[0].message.contains("row failure"));
         let output = result.to_output(observed.len());
-        assert!(output.candidates_evaluated >= 1);
+        assert!(output.candidates_evaluated >= 2);
         assert_eq!(output.outlier, vec![false; NUM_OBS]);
+
+        let permutation = [5_usize, 2, 7, 0, 3, 6, 1, 4];
+        let shuffled_observed = take_coordinate_batch(&observed, &permutation).unwrap();
+        let shuffled_observers = take_observer_batch(&observers, &permutation).unwrap();
+        let shuffled_predictor = FaultyPredictor {
+            inner: &inner,
+            calls: std::cell::Cell::new(0),
+            fail_calls: 1,
+            failure: None,
+            garbage_calls: 0,
+        };
+        let shuffled = run_iod(
+            &shuffled_predictor,
+            &shuffled_observed,
+            &shuffled_observers,
+            &iod_config(0.0),
+        )
+        .unwrap();
+        assert_eq!(shuffled.candidate_failures.len(), 1);
+        let mapped = shuffled.candidate_failures[0]
+            .triplet
+            .map(|row| permutation[row]);
+        assert_eq!(mapped, result.candidate_failures[0].triplet);
     }
 
     #[test]
@@ -5212,6 +5531,15 @@ mod tests {
         assert!(stats.middle_cap_exhausted);
         assert!(stats.exhausted());
         assert_eq!(triplets.len(), 3);
+
+        let times: Vec<f64> = (0..100).map(|row| row as f64).collect();
+        let mut stats = TripletSearchStats::default();
+        let triplets = combination_triplets_with_stats(&times, 10_000, 2, 10_000, &mut stats);
+        assert_eq!(stats.pair_visits, 2);
+        assert_eq!(stats.raw_pair_visits, 2);
+        assert_eq!(triplets.len(), 195);
+        assert!(stats.pair_cap_exhausted);
+        assert!(!stats.middle_cap_exhausted);
     }
 
     #[test]
@@ -5261,6 +5589,36 @@ mod tests {
         assert!(stats.raw_pair_visits <= 11);
         assert!(stats.raw_pair_cap_exhausted);
         assert!(stats.exhausted());
+    }
+
+    #[test]
+    fn sparse_span_useful_pair_count_excludes_duplicate_night_pairs() {
+        let times: Vec<f64> = (0..66)
+            .flat_map(|night| [night as f64 + 0.1, night as f64 + 0.2])
+            .collect();
+        let nights = observation_nights(&times, None);
+        assert!(
+            nights
+                .iter()
+                .copied()
+                .collect::<std::collections::HashSet<_>>()
+                .len()
+                > 64
+        );
+        let mut stats = TripletSearchStats::default();
+        let triplets = span_triplets_with_limits(
+            &times,
+            &nights,
+            &SpanSearchConfig::default(),
+            1_000,
+            1_000,
+            10_000,
+            1_000,
+            &mut stats,
+        );
+        assert!(!triplets.is_empty());
+        assert_eq!(stats.pair_visits, triplets.len());
+        assert_eq!(stats.middle_visits, triplets.len());
     }
 
     #[test]
@@ -5979,10 +6337,8 @@ mod tests {
         let output = iod_fit(&predictor, &observed, &observers, &config).unwrap();
         assert!(output.found, "{:?}", output.not_found_reason);
         assert!(output.candidates_evaluated >= 2);
-        assert_ne!(output.state, roots[0]);
-        if output.triplets_tried == 1 {
-            assert_eq!(output.state, roots[1]);
-        }
+        assert_eq!(output.triplets_tried, 1);
+        assert_eq!(output.state, roots[1]);
     }
 
     #[test]
@@ -6012,6 +6368,30 @@ mod tests {
             "{reason}"
         );
         assert!(reason.contains("light-time iteration failed"), "{reason}");
+    }
+
+    #[test]
+    fn iod_result_reports_exhausted_search_caps() {
+        let observed = synthetic_observations();
+        let observers = observers();
+        let propagator = TwoBodyPropagator::default();
+        let options = ephemeris_options();
+        let inner = two_body_predictor(&propagator, &options);
+        let predictor = FaultyPredictor {
+            inner: &inner,
+            calls: std::cell::Cell::new(0),
+            fail_calls: usize::MAX,
+            failure: None,
+            garbage_calls: 0,
+        };
+        let config = IodConfig {
+            max_triplets: Some(100),
+            max_pair_visits: 1,
+            ..iod_config(20.0)
+        };
+        let result = run_iod(&predictor, &observed, &observers, &config).unwrap();
+        assert!(result.search_cap_exhausted);
+        assert_eq!(result.pair_visits, 1);
     }
 
     #[test]

@@ -4803,6 +4803,203 @@ mod tests {
     }
 
     #[test]
+    fn iterative_fit_routes_arc_lengths_to_dynamical_time() {
+        struct RoutingPredictor<'a> {
+            inner: &'a dyn SphericalPredictor,
+            civil_calls: std::cell::Cell<usize>,
+            dynamical_calls: std::cell::Cell<usize>,
+        }
+        impl SphericalPredictor for RoutingPredictor<'_> {
+            fn predict_spherical(
+                &self,
+                states: &[[f64; 6]],
+                geometry: &OrbitGeometry,
+                observers: &ObserverBatch,
+            ) -> PropagationResultValue<Result<Vec<f64>, String>> {
+                self.inner.predict_spherical(states, geometry, observers)
+            }
+            fn civil_times_mjd(
+                &self,
+                observed: &CoordinateBatch,
+            ) -> PropagationResultValue<Vec<f64>> {
+                self.civil_calls.set(self.civil_calls.get() + 1);
+                self.inner.civil_times_mjd(observed)
+            }
+            fn dynamical_times_mjd(
+                &self,
+                observed: &CoordinateBatch,
+            ) -> PropagationResultValue<Vec<f64>> {
+                self.dynamical_calls.set(self.dynamical_calls.get() + 1);
+                self.inner.dynamical_times_mjd(observed)
+            }
+        }
+
+        let propagator = TwoBodyPropagator::default();
+        let options = ephemeris_options();
+        let inner = PropagatorPredictor {
+            propagator: &propagator,
+            options: &options,
+            provider: &NoopProvider,
+            translation_provider: &ZeroTranslationProvider,
+        };
+        let predictor = RoutingPredictor {
+            inner: &inner,
+            civil_calls: std::cell::Cell::new(0),
+            dynamical_calls: std::cell::Cell::new(0),
+        };
+        let output = super::iterative_fit_with(
+            &predictor,
+            &perturbed_start(),
+            &synthetic_observations(None),
+            &observers(),
+            &IterativeFitConfig {
+                rchi2_threshold: f64::MAX,
+                min_arc_length: 0.0,
+                contamination_percentage: 0.0,
+                fit: WhitenedFitConfig {
+                    jacobian: JacobianMethod::Central,
+                    validate_covariance: false,
+                    ..WhitenedFitConfig::default()
+                },
+                ..IterativeFitConfig::default()
+            },
+            &NoopProvider,
+            &ZeroTranslationProvider,
+        )
+        .unwrap();
+        assert_eq!(output.passes, 1);
+        assert_eq!(predictor.civil_calls.get(), 0);
+        assert_eq!(predictor.dynamical_calls.get(), 2);
+    }
+
+    #[test]
+    fn propagator_phases_report_and_share_exact_combined_budgets() {
+        let propagator = TwoBodyPropagator::default();
+        let options = ephemeris_options();
+        let predictor = PropagatorPredictor {
+            propagator: &propagator,
+            options: &options,
+            provider: &NoopProvider,
+            translation_provider: &ZeroTranslationProvider,
+        };
+        let observed = synthetic_observations(None);
+        let seed_config = WhitenedFitConfig {
+            jacobian: JacobianMethod::Analytic,
+            ..WhitenedFitConfig::default()
+        };
+        let problem = WhitenedProblem::new(
+            &predictor,
+            &perturbed_start(),
+            &observed,
+            &observers(),
+            &seed_config,
+            &NoopProvider,
+            &ZeroTranslationProvider,
+        )
+        .unwrap();
+        let seed = solve(&problem, problem.geometry.state, &seed_config).unwrap();
+        assert!(seed.optimizer_iterations > 0);
+        let config = WhitenedFitConfig {
+            jacobian: JacobianMethod::Propagator,
+            max_iterations: seed.optimizer_iterations + 2,
+            max_nfev: Some(seed.nfev + 64),
+            ..WhitenedFitConfig::default()
+        };
+        let approximate = solve(
+            &problem,
+            problem.geometry.state,
+            &WhitenedFitConfig {
+                jacobian: JacobianMethod::Analytic,
+                ..config
+            },
+        )
+        .unwrap();
+        assert_eq!(approximate.optimizer_iterations, seed.optimizer_iterations);
+        assert_eq!(approximate.nfev, seed.nfev);
+        let exact_config = WhitenedFitConfig {
+            max_iterations: config.max_iterations - approximate.optimizer_iterations,
+            max_nfev: config.max_nfev.map(|limit| limit - approximate.nfev),
+            ..config
+        };
+        let mut expected_warnings = Vec::new();
+        let (exact, expected_method) = solve_with_nonfinite_fallback(
+            &problem,
+            approximate.state,
+            &exact_config,
+            &mut expected_warnings,
+        )
+        .unwrap();
+        let mut warnings = Vec::new();
+        let (combined, method) =
+            solve_with_fallback(&problem, problem.geometry.state, &config, &mut warnings).unwrap();
+        assert_eq!(method, expected_method);
+        assert_eq!(warnings, expected_warnings);
+        assert_eq!(combined.nfev, approximate.nfev + exact.nfev);
+        assert_eq!(
+            combined.optimizer_iterations,
+            approximate.optimizer_iterations + exact.optimizer_iterations
+        );
+        assert!(combined.nfev <= config.max_nfev.unwrap());
+        assert!(combined.optimizer_iterations <= config.max_iterations);
+    }
+
+    #[test]
+    fn nonfinite_fallback_reports_and_shares_combined_iteration_budget() {
+        let propagator = TwoBodyPropagator::default();
+        let options = ephemeris_options();
+        let predictor = PropagatorPredictor {
+            propagator: &propagator,
+            options: &options,
+            provider: &NoopProvider,
+            translation_provider: &ZeroTranslationProvider,
+        };
+        let observed = synthetic_observations(None);
+        let base = WhitenedFitConfig {
+            jacobian: JacobianMethod::Analytic,
+            ..WhitenedFitConfig::default()
+        };
+        let mut problem = WhitenedProblem::new(
+            &predictor,
+            &perturbed_start(),
+            &observed,
+            &observers(),
+            &base,
+            &NoopProvider,
+            &ZeroTranslationProvider,
+        )
+        .unwrap();
+        problem.analytic_terms.as_mut().unwrap().cos_lats[0] = f64::NAN;
+        let plain = solve(&problem, problem.geometry.state, &base).unwrap();
+        assert_eq!(plain.status, STATUS_NON_FINITE);
+        assert!(plain.optimizer_iterations > 0);
+        let config = WhitenedFitConfig {
+            max_iterations: plain.optimizer_iterations + 1,
+            max_nfev: Some(plain.nfev + 14),
+            ..base
+        };
+        let retry_config = WhitenedFitConfig {
+            jacobian: JacobianMethod::Central,
+            max_iterations: 1,
+            max_nfev: Some(14),
+            ..config
+        };
+        let retry = solve(&problem, plain.state, &retry_config).unwrap();
+        let mut warnings = Vec::new();
+        let (combined, method) =
+            solve_with_nonfinite_fallback(&problem, problem.geometry.state, &config, &mut warnings)
+                .unwrap();
+        assert_eq!(method, JacobianMethod::Central);
+        assert_eq!(warnings.len(), 1);
+        assert_eq!(combined.nfev, plain.nfev + retry.nfev);
+        assert_eq!(
+            combined.optimizer_iterations,
+            plain.optimizer_iterations + retry.optimizer_iterations
+        );
+        assert!(combined.nfev <= config.max_nfev.unwrap());
+        assert!(combined.optimizer_iterations <= config.max_iterations);
+    }
+
+    #[test]
     fn non_finite_analytic_jacobian_continues_with_central_differences() {
         // Analytic terms poisoned (as the two-body STM is on very long arcs):
         // the plain solver stops with status -2, the fit continues from that

@@ -416,3 +416,95 @@ fn review_ranging_planet_exclusion_is_applied_in_supported_observer_context() {
         );
     }
 }
+
+#[test]
+fn review_ranging_call_site_uses_endpoint_half_cells_exactly() {
+    let (observed, observers) = arc([1.0, 0.0, 0.0]);
+    let cfg = RangingConfig {
+        rho_min_au: 0.2,
+        rho_max_au: 3.0,
+        n_rho: 7,
+        n_rho_dot: 9,
+        ..RangingConfig::default()
+    };
+    let result = run(&observed, &observers, &cfg, Box::new(|_, _| 0.0));
+    let log_min = cfg.rho_min_au.ln();
+    let log_max = cfg.rho_max_au.ln();
+    let log_step = (log_max - log_min) / (cfg.n_rho - 1) as f64;
+    let mut log_weights = Vec::with_capacity(result.samples.len());
+    for sample in &result.samples {
+        let endpoint = (sample.rho_au.ln() - log_min).abs() < 1.0e-12
+            || (sample.rho_au.ln() - log_max).abs() < 1.0e-12;
+        let log_cell_width = if endpoint { 0.5 * log_step } else { log_step };
+        let (lo, hi) =
+            admissible_rho_dot_interval(&result.attributable, sample.rho_au, MU_SUN).unwrap();
+        let rate_width = (hi - lo) / (cfg.n_rho_dot - 1) as f64;
+        log_weights.push(
+            -0.5 * sample.chi2
+                + ranging_log_cell_measure(sample.rho_au, log_cell_width, rate_width),
+        );
+    }
+    let max = log_weights
+        .iter()
+        .copied()
+        .fold(f64::NEG_INFINITY, f64::max);
+    let normalization: f64 = log_weights.iter().map(|value| (value - max).exp()).sum();
+    for (sample, expected) in result.samples.iter().zip(log_weights) {
+        let expected = (expected - max).exp() / normalization;
+        assert!((sample.weight - expected).abs() <= 1.0e-14 * expected.max(1.0));
+    }
+}
+
+#[test]
+fn review_systematic_ranging_calls_the_earth_context_guard() {
+    let (observed, observers) = arc([1.52, 0.0, 0.0]);
+    let attributable = attributable(&observed, &observers, &NoopProvider).unwrap();
+    let lonlat = observed
+        .values
+        .raw_values()
+        .iter()
+        .map(|value| [value[1], value[2]])
+        .collect();
+    let predictor = AnalyticPredictor {
+        lonlat,
+        attributable,
+        g: Box::new(|_, _| 0.0),
+    };
+    let error = systematic_ranging_with(
+        &predictor,
+        &observed,
+        &observers,
+        &RangingConfig::default(),
+        MU_SUN,
+        &NoopProvider,
+        &ZeroTranslation,
+    )
+    .unwrap_err();
+    assert!(error.to_string().contains("only geocentric/Earth-near"));
+}
+
+#[test]
+fn attributable_rates_are_invariant_to_equivalent_utc_labels_across_a_leap() {
+    let (mut tdb_observed, mut tdb_observers) = arc([1.0, 0.0, 0.0]);
+    let tdb_times = TimeArray::new(
+        TimeScale::Tdb,
+        [0_i64, 60, 90, 180]
+            .into_iter()
+            .map(|seconds| Epoch::new(57_754, seconds * 1_000_000_000))
+            .collect(),
+    )
+    .unwrap();
+    tdb_observed.times = Some(tdb_times.clone());
+    tdb_observers.coordinates.times = Some(tdb_times.clone());
+    let tdb = attributable(&tdb_observed, &tdb_observers, &NoopProvider).unwrap();
+
+    let utc_times = tdb_times.rescale(TimeScale::Utc).unwrap();
+    let mut utc_observed = tdb_observed;
+    let mut utc_observers = tdb_observers;
+    utc_observed.times = Some(utc_times.clone());
+    utc_observers.coordinates.times = Some(utc_times);
+    let utc = attributable(&utc_observed, &utc_observers, &NoopProvider).unwrap();
+    assert_eq!(utc.reference_row, tdb.reference_row);
+    assert!((utc.ra_rate_deg_per_day - tdb.ra_rate_deg_per_day).abs() < 1.0e-12);
+    assert!((utc.dec_rate_deg_per_day - tdb.dec_rate_deg_per_day).abs() < 1.0e-12);
+}
