@@ -21,6 +21,7 @@ from adam_core.orbit_determination import (
 )
 from adam_core.orbit_determination.observation_uncertainty import (
     EFCC18DebiasModel,
+    ObservationUncertaintyModel,
     PerformanceWeightedModel,
 )
 from adam_core.orbit_determination.od_orchestration import run_od
@@ -168,9 +169,14 @@ def test_fused_equals_composed_every_provenance_field():
         fm, cm = (json.loads(x) for x in diffs.pop("models"))
         for d in (fm, cm):
             for m in d:
-                m.pop("type"), m.pop("descriptor_sha256"), m.pop(
-                    "implementation_version"
-                )
+                for key in (
+                    "type",
+                    "descriptor_sha256",
+                    "implementation_version",
+                    "implementation_entrypoint",
+                    "implementation",
+                ):
+                    m.pop(key)
         assert fm == cm
     assert not diffs, diffs
 
@@ -197,7 +203,11 @@ def test_explicit_stage_composition_route_completes():
 def _two_epoch_arc():
     observations = make_synthetic_observations().take(pa.array([0, 0, 0, 1, 1, 1]))
     return observations.set_column(
-        "id", pa.array([f"two-epoch-{row}" for row in range(len(observations))])
+        "id",
+        pa.array(
+            [f"two-epoch-{row}" for row in range(len(observations))],
+            type=observations.table.schema.field("id").type,
+        ),
     )
 
 
@@ -228,7 +238,7 @@ def test_two_distinct_epoch_arcs_are_refused_on_all_routes():
                 rejection=rejection,
             )
 
-    class PythonIdentity:
+    class PythonIdentity(ObservationUncertaintyModel):
         def apply(self, value):
             return value
 

@@ -696,7 +696,11 @@ def run_iod(
         "speed_of_light": C,
         "max_triplets": (
             (span_settings or {}).get("span_max_triplets")
-            if max_triplets is None and "span_max_triplets" in (span_settings or {})
+            if max_triplets is None
+            and isinstance((span_settings or {}).get("span_max_triplets"), int)
+            and (span_settings or {})["span_max_triplets"] > 0
+            and (span_settings or {})["span_max_triplets"]
+            != IOD_DEFAULTS["span_max_triplets"]
             else max_triplets
         ),
         "velocity_method": velocity_method,
