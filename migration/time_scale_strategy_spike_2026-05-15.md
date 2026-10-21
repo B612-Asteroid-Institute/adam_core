@@ -93,3 +93,10 @@ Implemented Rust behavior:
 - UT1 and GPS rescaling fail loudly until an explicit provider contract exists.
 
 The fixture-backed Rust test asserts exact day/nanosecond parity for all UTC/TAI/TT/TDB cases in `time_scale_rescale_fixture_2026-05-15.json`.
+
+## 2026-10-21 authoritative UTC/TAI correction
+
+Fixture version 2 replaces the former rounded-offset UTC/TAI expectation with
+absolute ERFA ``Utctai``/``Taiutc`` two-part-JD results. This matters on leap
+second days because UTC is a SOFA quasi-JD. All UTC edges now route through the
+shared Rust time service; the project-local TT/TDB policy is unchanged.

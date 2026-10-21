@@ -42,6 +42,7 @@ pub use external::{
     EXTERNAL_PROPAGATOR_KNOWN_CAPABILITIES, EXTERNAL_PROPAGATOR_RESERVED_WORDS,
     EXTERNAL_PROPAGATOR_STATUS_ERROR, EXTERNAL_PROPAGATOR_STATUS_INVALID,
     EXTERNAL_PROPAGATOR_STATUS_OK, EXTERNAL_PROPAGATOR_STATUS_PANIC,
+    EXTERNAL_PROPAGATOR_V2_LEGACY_FULL_SIZE, EXTERNAL_PROPAGATOR_V2_METADATA_SIZE,
     EXTERNAL_PROPAGATOR_V2_MIN_SIZE, EXTERNAL_PROPAGATOR_V2_STM_SIZE,
     PROPAGATE_REQUEST_V2_MIN_SIZE, PROPAGATE_STM_REQUEST_V2_MIN_SIZE,
 };
@@ -104,6 +105,8 @@ pub type PropagationResultValue<T> = std::result::Result<T, PropagationError>;
 pub enum PropagationError {
     Schema(SchemaError),
     InvalidRequest(String),
+    /// CMC2003 cannot calibrate expected residuals without a validated covariance.
+    CmcCovarianceUnavailable(String),
     MissingOrbitTimes,
     UnsupportedCovarianceMode(CovariancePropagation),
     /// Candidate-local numerical failure reported in-band by a successful backend request.
@@ -120,6 +123,9 @@ impl fmt::Display for PropagationError {
         match self {
             Self::Schema(err) => write!(f, "schema error: {err}"),
             Self::InvalidRequest(message) => write!(f, "invalid propagation request: {message}"),
+            Self::CmcCovarianceUnavailable(message) => {
+                write!(f, "CMC2003 expected covariance unavailable: {message}")
+            }
             Self::MissingOrbitTimes => write!(f, "propagation requires per-orbit coordinate times"),
             Self::UnsupportedCovarianceMode(mode) => {
                 write!(f, "unsupported covariance propagation mode: {mode:?}")

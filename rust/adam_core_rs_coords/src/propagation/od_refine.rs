@@ -1201,6 +1201,59 @@ fn weak_direction_delta_cost(
 /// the covariance unvalidated. A backend error (`PropagationError`) raised
 /// while predicting the probe displacement propagates like one raised by
 /// any other prediction. Only an in-band row failure is a rejected trial.
+const COVARIANCE_SYMMETRY_RELATIVE_TOLERANCE: f64 = 1.0e-12;
+const COVARIANCE_MIN_RELATIVE_EIGENVALUE: f64 = 1.0e-12;
+
+/// Structural/rank gate required before a covariance may calibrate CMC2003.
+fn covariance_quality(covariance: &[f64; 36]) -> Result<(), String> {
+    if covariance.iter().any(|value| !value.is_finite()) {
+        return Err("the fitted state covariance is non-finite".to_string());
+    }
+    let scale = covariance
+        .iter()
+        .map(|value| value.abs())
+        .fold(0.0_f64, f64::max);
+    if scale == 0.0 {
+        return Err("the fitted state covariance is singular".to_string());
+    }
+    for row in 0..6 {
+        for col in row + 1..6 {
+            if (covariance[row * 6 + col] - covariance[col * 6 + row]).abs()
+                > COVARIANCE_SYMMETRY_RELATIVE_TOLERANCE * scale
+            {
+                return Err("the fitted state covariance is not symmetric".to_string());
+            }
+        }
+    }
+    let mut symmetric = covariance_matrix(covariance);
+    for row in 0..6 {
+        for col in row + 1..6 {
+            let value = 0.5 * (covariance[row * 6 + col] + covariance[col * 6 + row]);
+            symmetric[row][col] = value;
+            symmetric[col][row] = value;
+        }
+    }
+    let (eigenvalues, _) = symmetric_eigen_6x6(&symmetric);
+    let lambda_max = eigenvalues
+        .iter()
+        .copied()
+        .fold(f64::NEG_INFINITY, f64::max);
+    let lambda_min = eigenvalues.iter().copied().fold(f64::INFINITY, f64::min);
+    if !(lambda_max.is_finite() && lambda_min.is_finite() && lambda_max > 0.0) {
+        return Err("the fitted state covariance has no positive finite eigenvalue".to_string());
+    }
+    if lambda_min <= 0.0 {
+        return Err("the fitted state covariance is not positive-definite".to_string());
+    }
+    if lambda_min <= COVARIANCE_MIN_RELATIVE_EIGENVALUE * lambda_max {
+        return Err(format!(
+            "the fitted state covariance is rank-deficient or ill-conditioned (minimum/maximum eigenvalue ratio = {:.3e})",
+            lambda_min / lambda_max
+        ));
+    }
+    Ok(())
+}
+
 fn validated_covariance(
     problem: &WhitenedProblem<'_>,
     covariance: [f64; 36],
@@ -1738,7 +1791,7 @@ pub fn iterative_fit_with<T: OriginTranslationProvider>(
             "observed and observers must have equal length".to_string(),
         ));
     }
-    let times_mjd = super::od::observed_times_mjd(observed)?;
+    let times_mjd = predictor.dynamical_times_mjd(observed)?;
     let limit = max_outliers(n, config.min_obs, config.contamination_percentage);
     let mut ignore = vec![false; n];
     let mut warnings: Vec<String> = Vec::new();
@@ -1977,6 +2030,13 @@ pub fn cmc2003_fit_with<T: OriginTranslationProvider>(
         .mjd_values();
     let apparitions = cmc2003_apparitions(&mjd_utc, config.apparition_gap_days);
 
+    // CMC validates the selected-fit covariance explicitly below. Keep the
+    // standalone warning/fallback probe off here so one authoritative probe
+    // determines whether rejection statistics are calibrated.
+    let cmc_fit_config = WhitenedFitConfig {
+        validate_covariance: false,
+        ..config.fit
+    };
     let run_fit = |seed: &OrbitBatch, selected: &[bool]| {
         let ignore: Vec<bool> = selected.iter().map(|&keep| !keep).collect();
         fit_orbit_whitened_impl(
@@ -1985,7 +2045,7 @@ pub fn cmc2003_fit_with<T: OriginTranslationProvider>(
             observed,
             observers,
             &ignore,
-            &config.fit,
+            &cmc_fit_config,
             provider,
             translation_provider,
             Some(&full_problem),
@@ -2007,6 +2067,42 @@ pub fn cmc2003_fit_with<T: OriginTranslationProvider>(
         n_iterations = iteration + 1;
         let (mut output, rejection_jacobian) = run_fit(&seed, &selected)?;
         warnings.append(&mut output.warnings);
+
+        covariance_quality(&output.covariance)
+            .map_err(PropagationError::CmcCovarianceUnavailable)?;
+        let observed_selected = filter_coordinate_batch(observed, &selected)?;
+        let observers_selected = filter_observer_batch(observers, &selected)?;
+        let covariance_problem = WhitenedProblem::new(
+            predictor,
+            &seed,
+            &observed_selected,
+            &observers_selected,
+            &cmc_fit_config,
+            provider,
+            translation_provider,
+        )?;
+        let probe = weak_direction_delta_cost(
+            &covariance_problem,
+            &output.state,
+            &output.covariance,
+            output.cost,
+            &cmc_fit_config,
+        )?;
+        let (lower, upper) = DELTA_CHI2_WINDOW;
+        match probe {
+            Ok(delta) if (lower..=upper).contains(&delta) => {}
+            Ok(delta) => {
+                return Err(PropagationError::CmcCovarianceUnavailable(format!(
+                    "weak-direction covariance consistency check failed (delta-chi2 = {delta:.3})"
+                )))
+            }
+            Err(reason) => {
+                return Err(PropagationError::CmcCovarianceUnavailable(format!(
+                    "weak-direction covariance probe failed: {reason}"
+                )))
+            }
+        }
+
         seed = orbit_with_state(orbit, output.state)?;
 
         if n <= CMC2003_MIN_OBS {
@@ -2512,7 +2608,7 @@ fn ranging_fallback<T: OriginTranslationProvider>(
     translation_provider: &T,
     result: &mut super::od::IodResult,
 ) -> PropagationResultValue<()> {
-    let times = super::od::observed_times_mjd(observed)?;
+    let times = iod_predictor.dynamical_times_mjd(observed)?;
     let span = times.iter().copied().fold(f64::NEG_INFINITY, f64::max)
         - times.iter().copied().fold(f64::INFINITY, f64::min);
     if span.is_nan() || span > config.ranging.max_arc_days {
@@ -2618,7 +2714,7 @@ fn correct_candidates<T: OriginTranslationProvider>(
     pool: &[usize],
 ) -> PropagationResultValue<()> {
     let n = observed.len();
-    let times = super::od::observed_times_mjd(observed)?;
+    let times = iod_predictor.civil_times_mjd(observed)?;
     let nights = super::od::observation_nights(&times, Some(&observers.code));
     let stage_config = WhitenedFitConfig {
         loss: LossType::Linear,
@@ -4221,12 +4317,7 @@ mod tests {
                 assert!(max_relative_difference(&output.fit.covariance, &expected) < 2e-6);
                 assert_eq!(output.fit.iterations, 1); // exact solver budget
                 let batches = fixture.predictor.batches.borrow();
-                let expected_batches: &[usize] = if validate_covariance {
-                    &[1, 12, 2, 1]
-                } else {
-                    &[1, 12, 1]
-                };
-                assert_eq!(batches.as_slice(), expected_batches, "{jacobian:?}");
+                assert_eq!(batches.as_slice(), &[1, 12, 1, 2], "{jacobian:?}");
             }
         }
     }
@@ -4320,12 +4411,13 @@ mod tests {
                 let selected: Vec<bool> = expected_mask.iter().map(|flag| !flag).collect();
                 let expected = expected_linear_covariance(&fixture, &selected);
                 assert!(max_relative_difference(&output.fit.covariance, &expected) < 2e-6);
-                // Every pass spends one solver evaluation, one 12-state full
-                // finalization Jacobian, and one final evaluation.
+                // Every decision pass also spends one two-state mandatory
+                // covariance probe; the final selected-mask refit retains
+                // the solver/Jacobian/evaluation three-batch finalization.
                 assert_eq!(output.fit.iterations, 1);
                 assert_eq!(
                     fixture.predictor.batches.borrow().len(),
-                    3 * (max_iterations + 1),
+                    4 * max_iterations + 3,
                     "{jacobian:?} {raw_chi2}"
                 );
             }
@@ -5552,16 +5644,51 @@ mod tests {
                 assert_eq!(output.n_iterations, 1);
                 assert_eq!(output.fit.iterations, 1);
                 assert!(!output.fit.converged);
-                assert_eq!(
-                    *counting.batches.borrow(),
-                    if validate_covariance {
-                        vec![1, 12, 2, 1]
-                    } else {
-                        vec![1, 12, 1]
-                    }
-                );
+                // CMC always performs its fail-closed selected-mask
+                // weak-direction probe, independent of the standalone fit
+                // warning option.
+                assert_eq!(*counting.batches.borrow(), vec![1, 12, 1, 2]);
             }
         }
+    }
+
+    #[test]
+    fn cmc_covariance_quality_fails_closed_on_invalid_rank_and_shape() {
+        let mut identity = [0.0; 36];
+        for axis in 0..6 {
+            identity[axis * 6 + axis] = 1.0;
+        }
+        assert!(covariance_quality(&identity).is_ok());
+
+        let mut invalid = identity;
+        invalid[0] = f64::NAN;
+        assert!(covariance_quality(&invalid)
+            .unwrap_err()
+            .contains("non-finite"));
+
+        invalid = identity;
+        invalid[1] = 1.0e-3;
+        assert!(covariance_quality(&invalid)
+            .unwrap_err()
+            .contains("symmetric"));
+
+        invalid = identity;
+        invalid[0] = -1.0;
+        assert!(covariance_quality(&invalid)
+            .unwrap_err()
+            .contains("positive-definite"));
+
+        invalid = identity;
+        invalid[0] = 0.0;
+        assert!(covariance_quality(&invalid)
+            .unwrap_err()
+            .contains("positive-definite"));
+
+        invalid = identity;
+        invalid[0] = 1.0e-13;
+        assert!(covariance_quality(&invalid)
+            .unwrap_err()
+            .contains("ill-conditioned"));
     }
 
     fn full_od_config(refinement: RefinementConfig) -> FullOdConfig {
@@ -5579,6 +5706,9 @@ mod tests {
                 mu: crate::types::origin_mu_au3_day2(&OriginId::from_code("SUN")).unwrap(),
                 speed_of_light: 173.144_632_674_240_3,
                 max_triplets: None,
+                max_pair_visits: 20_000,
+                max_raw_pair_visits: 200_000,
+                max_middle_visits: 200_000,
                 velocity_method: super::super::od::VelocityMethod::Gibbs,
                 spans: super::super::od::SpanSearchConfig::default(),
                 acceptance: super::super::od::IodAcceptance::Prefit,

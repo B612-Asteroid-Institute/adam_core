@@ -173,8 +173,9 @@ impl std::error::Error for WhiteningError {}
 /// For each observation the 2x2 (lon, lat) block of the `(N, 36)` row-major
 /// coordinate covariance (degrees²) is corrected for cos(latitude) on the
 /// longitude axis (matching `Residuals.calculate`) and factored as
-/// `C = L L^T`; the returned row-major 2x2 whitener is `L^-1`. Missing (NaN)
-/// cross terms are treated as zero, matching `calculate_chi2`.
+/// `C = L L^T`; the returned row-major 2x2 whitener is `L^-1`. Both
+/// explicit cross terms must be finite and symmetric; the public encoding
+/// with both cross terms missing means diagonal covariance (zero cross term).
 pub fn observation_whitening_matrices(
     covariances: &[f64],
     lat_deg: &[f64],
@@ -189,7 +190,22 @@ pub fn observation_whitening_matrices(
     for row in 0..n {
         let block = &covariances[row * 36..(row + 1) * 36];
         let cos_lat = lat_deg[row].to_radians().cos();
-        let cross = if block[8].is_finite() { block[8] } else { 0.0 };
+        let cross_left = block[8];
+        let cross_right = block[13];
+        // A nullable cross term is the public diagonal-covariance encoding;
+        // both missing entries mean exactly zero. A partial/non-finite or
+        // asymmetric explicit covariance fails closed.
+        let cross = if cross_left.is_nan() && cross_right.is_nan() {
+            0.0
+        } else if cross_left.is_finite() && cross_right.is_finite() {
+            let covariance_scale = block[7].abs().max(block[14].abs()).max(1.0);
+            if (cross_left - cross_right).abs() > 1.0e-12 * covariance_scale {
+                return Err(WhiteningError::NonFinite { row });
+            }
+            0.5 * (cross_left + cross_right)
+        } else {
+            return Err(WhiteningError::NonFinite { row });
+        };
         let a = block[7] * (cos_lat * cos_lat);
         let b = cross * cos_lat;
         let d = block[14];
@@ -467,6 +483,8 @@ mod tests {
         let mut covariances = vec![f64::NAN; n * 36];
         for block in covariances.chunks_exact_mut(36) {
             block[7] = sigma * sigma;
+            block[8] = 0.0;
+            block[13] = 0.0;
             block[14] = sigma * sigma;
         }
         let lats = vec![5.0; n];
@@ -527,13 +545,27 @@ mod tests {
         covariances[8] = 5e-9;
         covariances[13] = 5e-9;
         covariances[36 + 7] = 1e-8;
-        covariances[36 + 14] = 1e-8; // NaN cross term -> zero
+        covariances[36 + 8] = 0.0;
+        covariances[36 + 13] = 0.0;
+        covariances[36 + 14] = 1e-8;
         let lats = [60.0, -20.0];
+        let mut invalid = covariances.clone();
+        invalid[8] = f64::NAN;
+        assert!(matches!(
+            observation_whitening_matrices(&invalid, &lats),
+            Err(WhiteningError::NonFinite { row: 0 })
+        ));
+        invalid = covariances.clone();
+        invalid[8] = 6e-9;
+        assert!(matches!(
+            observation_whitening_matrices(&invalid, &lats),
+            Err(WhiteningError::NonFinite { row: 0 })
+        ));
         let whiteners = observation_whitening_matrices(&covariances, &lats).unwrap();
         for (row, w) in whiteners.iter().enumerate() {
             let cos_lat = lats[row].to_radians().cos();
             let block = &covariances[row * 36..(row + 1) * 36];
-            let cross = if block[8].is_finite() { block[8] } else { 0.0 };
+            let cross = block[8];
             let c = [
                 block[7] * cos_lat * cos_lat,
                 cross * cos_lat,
