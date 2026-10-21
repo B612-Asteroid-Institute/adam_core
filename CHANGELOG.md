@@ -16,15 +16,33 @@ This file contains notable changes in adam-core
   integrate the physical ``d rho d rho_dot`` cell measure, bounded triplet
   search reports independent work counters/caps, and CMC2003 fails closed when
   a trustworthy fit covariance is unavailable. Follow-up hardening restores
-  the exact default triplet budget ``3 * (max_outliers + 1)``, prevents dense
-  repeated nights from starving later geometry, requires three distinct
+  the historical method-specific triplet budgets (``3 * (max_outliers + 1)``
+  for combinations and 32 for spans), prevents dense repeated nights from
+  starving later geometry, requires three distinct
   observation epochs, rejects non-finite/domain-invalid inputs before provider
   calls, re-gates selection-changing final CMC refits with retained diagnostics,
-  and canonicalizes Arrow chunk layout in fingerprints. Bounded triplet-search
-  priorities now use millisecond-resolution keys, preventing
+  and canonicalizes Arrow chunk layout in fingerprints. General fits now
+  require a finite symmetric full-rank positive-definite covariance without
+  applying CMC's stricter conditioning threshold; a bad candidate covariance
+  is a local unsuccessful fit while CMC still fails closed after its
+  conditioning and weak-direction checks. Bounded triplet-search priorities
+  now use millisecond-resolution keys, preventing
   external equivalent labels within the documented TT/TDB model difference
   from discontinuously selecting a different spans/prefit branch; dynamical
   epochs remain unrounded and the canonical TT/TDB policy is unchanged.
+
+- ``run_od`` provenance is preflighted before observation models or fitting.
+  Python implementation identities hash stable entrypoint and owning-module
+  source content (including delegated helpers), never CPython bytecode;
+  unordered configuration is canonicalized. Unsupported dynamic objects fail
+  closed with ``TypeError``. ``run_od`` also deliberately refuses native
+  builds whose embedded identity is ``dirty:*`` or ``unknown``: install an
+  official wheel or rebuild from an exact clean checkout. Source builds watch
+  Python/Rust source roots so relevant untracked additions invalidate an
+  incremental identity; generated artifacts such as ``wheelhouse/`` and the
+  independently pinned nested ``adam-assist/`` checkout do not make Core
+  dirty. Release builds without Git must supply the exact 40-hex commit in
+  ``ADAM_CORE_BUILD_COMMIT`` with ``ADAM_CORE_RELEASE_BUILD=1``.
 
 - Orbit determination now owns every IOD, least-squares, rejection, linkage
   and ``run_od`` loop in adam-core. Separately built propagators contribute

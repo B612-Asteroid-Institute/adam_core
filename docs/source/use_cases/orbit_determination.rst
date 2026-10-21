@@ -220,6 +220,23 @@ model list built with your own tables needs no package.
        to half the arc; the fraction shows how much it did).
      - ``run_od``
 
+``run_od`` constructs every provenance identity before applying a model or
+calling the fitter. Python implementations are identified by stable
+entrypoint and owning-module source-content hashes (including delegated
+helpers), explicit configuration, and package version where available;
+CPython bytecode is never hashed. Unsupported dynamic callables and
+undescribable configuration fail closed with ``TypeError``.
+
+The native build identity must be one exact clean 40-hex Core commit.
+``run_od`` refuses ``dirty:<commit>`` and ``unknown`` identities before work;
+this is intentional, because otherwise its run-level provenance would claim a
+source tree it cannot reproduce. Use an official wheel or rebuild from a clean
+checkout. A source/release build without Git must set both
+``ADAM_CORE_RELEASE_BUILD=1`` and ``ADAM_CORE_BUILD_COMMIT=<40-hex-commit>``.
+Relevant untracked files under ``src/adam_core`` or Rust crate source roots
+make source builds dirty; build artifacts (for example ``wheelhouse/``) and the
+separately pinned nested ``adam-assist/`` checkout do not.
+
 Kept as options but not defaults: ``loss="huber"`` (open covariance pathology
 on short arcs), ``VeresFloorModel`` / ``VeresReplaceModel``, ``SigmaFloorModel``
 (no-op on the study), ``PerformanceWeightedModel`` (over-inflates by about
@@ -261,9 +278,10 @@ IOD_DEFAULTS``), so the signature defaults of ``run_iod`` and
   chi2 grows from about 1e4 at a 3-day span to 1e9 at 67 days). The search
   visits the densest 10 days, the densest 30 days, the last and first 30
   days and the whole arc, and in each prefers triplets spanning about 6
-  days, at most one per pair of nights. The default triplet budget is exactly
-  ``3 * (max_outliers + 1)``; an explicit ``max_triplets`` overrides it.
-  (``span_settings``).
+  days, at most one per pair of nights. The default budget is 32 triplets for
+  this spans method (``span_max_triplets``). The combinations method retains
+  its historical ``3 * (max_outliers + 1)`` default; an explicit
+  ``max_triplets`` overrides either method-specific budget (``span_settings``).
 * **Velocity.** ``velocity_method="auto"`` by default, which switches to
   Herrick-Gibbs when consecutive positions are within 5 degrees (Vallado
   2013, sec. 7.5.2).
@@ -434,9 +452,11 @@ Native IOD canonicalizes rows by exact epoch, station code, and complete
 observed/observer physical row content. The caller's row index is used only to
 break ties between physically identical rows; candidate triplet indices and
 all residual/member arrays are mapped back to the caller's order. Triplets are
-generated lazily and stop at ``max_triplets`` (when omitted, exactly
-``3 * (max_outliers + 1)``), rather than materializing or globally sorting
-all :math:`{n \choose 3}` choices. Pair, raw-pair and middle-row visits have
+generated lazily and stop at the method-specific budget: when
+``max_triplets`` is omitted, combinations use exactly ``3 * (max_outliers +
+1)`` and spans use ``span_max_triplets`` (32 by default). An explicit
+``max_triplets`` overrides either. The search never materializes or globally
+sorts all :math:`{n \choose 3}` choices. Pair, raw-pair and middle-row visits have
 independent caps; repeated rows from a dense observing night are collapsed
 before raw-pair work is charged, so they cannot starve later-night geometry.
 Every physical root is retained as a scientifically distinct candidate.
@@ -462,9 +482,13 @@ arc must contain at least three distinct epochs; duplicated rows at only one or
 two epochs are refused as rank deficient.
 
 A converged fit is returned only with a finite, symmetric, positive-definite,
-full-rank covariance. CMC2003 additionally probes the selected-mask covariance
-along its weakest direction after every refit, including a final refit caused
-by a selection change. A refusal raises ``CmcCovarianceUnavailable`` in Rust
+full-rank covariance. General fits intentionally do not apply a universal raw
+condition-number cutoff to mixed position/velocity units; a structurally bad
+candidate covariance marks only that fit unsuccessful and wider root/triplet
+search continues. CMC2003 alone applies the stricter conditioning threshold
+and probes the selected-mask covariance along its weakest direction after
+every refit, including a final refit caused by a selection change. A CMC
+refusal raises ``CmcCovarianceUnavailable`` in Rust
 (``RuntimeError`` at the Python boundary) and includes the retained pass,
 selected count, status, convergence flag, cost, state and covariance so the
 failed fit remains diagnosable without being presented as a scientific
