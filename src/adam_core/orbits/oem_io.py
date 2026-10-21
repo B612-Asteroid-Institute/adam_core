@@ -314,6 +314,7 @@ def orbit_to_oem(
     include_covariance: bool = True,
     covariance_frame: Optional[str] = None,
     table_frames_only: bool = False,
+    covariance_label: Optional[str] = None,
 ) -> str:
     """
     Convert Orbit object to an OEM file.
@@ -337,6 +338,12 @@ def orbit_to_oem(
         Write covariance blocks in REF_FRAME (None) or a local orbital frame:
         RSW, RTN, TNW (the standard's own set, rotated at each epoch), or in
         3.0 any name ``LocalFrameCovariances`` accepts unless table_frames_only.
+    covariance_label : str, optional
+        COV_REF_FRAME text for the blocks when it must differ from the frame's
+        registry name: a table label (RSW, RTN, TNW) of the same family, so
+        ``covariance_frame="TNW_ROTATING", covariance_label="TNW"`` gives a
+        2.0 reader the rotating frame velocity rows under the label it knows.
+        A COMMENT names the content.
 
     Returns
     -------
@@ -370,6 +377,7 @@ def orbit_to_oem(
         include_covariance=include_covariance,
         covariance_frame=covariance_frame,
         table_frames_only=table_frames_only,
+        covariance_label=covariance_label,
     )
 
     return output_file

@@ -98,3 +98,43 @@ def test_version_2_writes_a_validated_file_with_the_table_frame(history, tmp_pat
     # Without a version the legacy product is unchanged.
     orbit_to_oem(history, path, "ME")
     assert "\nREF_FRAME = EME2000\n" in open(path).read()
+
+
+def test_table_label_carries_a_registry_frame_of_its_family(history, tmp_path):
+    path = str(tmp_path / "label.oem")
+    date = dict(creation_date="2026-10-06T00:00:00")
+    orbit_to_oem(
+        history,
+        path,
+        "ME",
+        version="2.0",
+        covariance_frame="TNW_ROTATING",
+        covariance_label="TNW",
+        **date,
+    )
+    text = open(path).read()
+    note = (
+        "COMMENT COV_REF_FRAME TNW carries the SANA TNW_ROTATING covariance: "
+        "velocity rows relative to the rotating frame."
+    )
+    assert f"\nMETA_START\n{note}\nOBJECT_NAME = " in text
+    assert text.count("COV_REF_FRAME = TNW") == 4
+    assert "TNW_ROTATING" not in text.replace(note, "")
+    segment = json.loads(_rust_native.oem_parse_kvn(path))
+    written = [block["matrix"] for block in segment["segments"][0]["covariances"]]
+    rotating = LocalFrameCovariances.from_orbits(history, "TNW_ROTATING")
+    expected = convert_cartesian_covariance_au_to_km(rotating.covariance.to_matrix())
+    sigma = np.sqrt(np.diagonal(expected, axis1=1, axis2=2))
+    bound = 1e-12 * sigma[:, :, None] * sigma[:, None, :]
+    assert np.all(np.abs(np.reshape(written, (4, 6, 6)) - expected) <= bound)
+    with pytest.raises(ValueError, match="VNC frames have none"):
+        orbit_to_oem(
+            history,
+            path,
+            "ME",
+            version="2.0",
+            covariance_frame="VNC_ROTATING",
+            covariance_label="TNW",
+        )
+    with pytest.raises(ValueError, match="covariance_label needs covariance_frame"):
+        orbit_to_oem(history, path, "ME", version="2.0", covariance_label="TNW")
