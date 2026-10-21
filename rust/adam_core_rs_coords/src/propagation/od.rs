@@ -1334,9 +1334,9 @@ pub struct SpanSearchConfig {
     pub dense_window_days: [f64; 2],
     /// Length of the last- and first-window searches.
     pub edge_window_days: f64,
-    /// Legacy span-ladder tuning retained for source compatibility. The
-    /// run-level budget is `IodConfig::max_triplets`; when that is None the
-    /// deterministic default is `3 * (max_outliers + 1)` for every method.
+    /// Historical span-search triplet budget. A run-level
+    /// `IodConfig::max_triplets` overrides it; otherwise span search uses this
+    /// value while combinations uses `3 * (max_outliers + 1)`.
     pub max_triplets: usize,
 }
 
@@ -1548,10 +1548,9 @@ pub struct IodConfig {
     pub mu: f64,
     pub speed_of_light: f64,
     /// Upper bound on the number of candidate triplets searched. `None`
-    /// keeps the legacy budget `3 * (max_outliers + 1)`, which couples the
-    /// search to `contamination_percentage`; `Some(k)` searches at most `k`
-    /// triplets whatever the contamination percentage (which then only
-    /// sets the outlier allowance).
+    /// keeps each method's historical default: `spans.max_triplets` for span
+    /// search and `3 * (max_outliers + 1)` for combinations. `Some(k)`
+    /// overrides either method and searches at most `k` triplets.
     pub max_triplets: Option<usize>,
     /// Hard cap on useful distinct endpoint/night pairs inspected while
     /// selecting triplets. Independent of contamination allowance.
@@ -5396,6 +5395,32 @@ mod tests {
         assert_eq!(retained_arc, 1.0);
         assert!(!prefit_outlier_is_acceptable(0.5, 1.0, retained_arc, 2.0));
         assert!(prefit_outlier_is_acceptable(0.5, 1.0, retained_arc, 1.0));
+    }
+
+    #[test]
+    fn legacy_od_fit_validates_config_before_predictor_work() {
+        let observed = synthetic_observations();
+        let predictor = LegacyLinearPredictor {
+            base: observed.values.spherical().unwrap().to_vec(),
+            truth: TRUTH_STATE,
+        };
+        let error = od_fit_with(
+            &predictor,
+            &perturbed_start(),
+            &observed,
+            &observers(),
+            &OdConfig {
+                rchi2_threshold: 1.0,
+                min_arc_length: 0.0,
+                contamination_percentage: 0.0,
+                method: OdMethod::Central,
+                min_obs: 6,
+                delta: 1.0e-6,
+                max_iter: 0,
+            },
+        )
+        .expect_err("invalid legacy OD config must fail before fitting");
+        assert!(error.to_string().contains("max_iter must be positive"));
     }
 
     #[test]

@@ -5033,6 +5033,29 @@ mod tests {
             approximate.optimizer_iterations + exact.optimizer_iterations
         );
         assert!(combined.optimizer_iterations <= config.max_iterations);
+
+        // If the analytic seed consumes the entire shared iteration budget,
+        // the exact phase must not run at all. This distinguishes the real
+        // phase hand-off from a fresh exact-phase max_iterations allowance.
+        let exhausted = WhitenedFitConfig {
+            max_iterations: approximate.optimizer_iterations,
+            max_nfev: None,
+            ..config
+        };
+        let mut exhausted_warnings = Vec::new();
+        let (exhausted_solution, exhausted_method) = solve_with_fallback(
+            &problem,
+            problem.geometry.state,
+            &exhausted,
+            &mut exhausted_warnings,
+        )
+        .unwrap();
+        assert_eq!(exhausted_method, JacobianMethod::Propagator);
+        assert_eq!(exhausted_solution.status, STATUS_LIMIT);
+        assert_eq!(
+            exhausted_solution.optimizer_iterations,
+            approximate.optimizer_iterations
+        );
     }
 
     #[test]

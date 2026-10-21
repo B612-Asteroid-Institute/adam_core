@@ -736,6 +736,102 @@ fn lazy_sparse_night_pairs_are_not_marked_before_a_valid_middle() {
 }
 
 #[test]
+fn lazy_span_caps_and_midpoint_ties_are_enforced_at_the_real_frontier() {
+    let times: Vec<f64> = (0..70).map(|row| row as f64).collect();
+    let nights: Vec<usize> = (0..70).collect();
+    let config = SpanSearchConfig {
+        target_span_days: 5.0,
+        dense_window_days: [100.0, 100.0],
+        edge_window_days: 100.0,
+        ..SpanSearchConfig::default()
+    };
+
+    let mut pair_stats = TripletSearchStats::default();
+    let pair_limited =
+        span_triplets_with_limits(&times, &nights, &config, 1, 0, 100, 100, &mut pair_stats);
+    assert!(pair_limited.is_empty());
+    assert!(pair_stats.pair_cap_exhausted);
+
+    let mut middle_stats = TripletSearchStats::default();
+    let middle_limited =
+        span_triplets_with_limits(&times, &nights, &config, 1, 100, 100, 0, &mut middle_stats);
+    assert!(middle_limited.is_empty());
+    assert!(middle_stats.middle_cap_exhausted);
+
+    let mut tie_stats = TripletSearchStats::default();
+    let tied =
+        span_triplets_with_limits(&times, &nights, &config, 1, 100, 100, 100, &mut tie_stats);
+    assert_eq!(tied[0].0, [0, 2, 5]);
+}
+
+#[test]
+fn grouped_pairs_filter_a_truncated_duplicate_epoch_pair_before_marking() {
+    // The densest window contains night pair (0, 1) with endpoints 0.10
+    // and 0.11, but its duplicate 0.10 row is not a strictly interior
+    // middle. The grouped-pair constructor filters that pair before its
+    // caller can mark it used. The full window later offers the same night
+    // pair at 0.0 and 0.21 with valid interior rows.
+    let times = [0.0, 0.10, 0.10, 0.11, 0.21];
+    let nights = [0, 0, 0, 1, 1];
+    let mut stats = TripletSearchStats::default();
+    let triplets = span_triplets_with_limits(
+        &times,
+        &nights,
+        &SpanSearchConfig {
+            target_span_days: 0.21,
+            dense_window_days: [0.011, 0.011],
+            edge_window_days: 0.001,
+            ..SpanSearchConfig::default()
+        },
+        1,
+        100,
+        100,
+        100,
+        &mut stats,
+    );
+    assert_eq!(triplets.len(), 1, "{triplets:?}");
+    assert_eq!(triplets[0].0, [0, 1, 4]);
+}
+
+#[test]
+fn observing_night_gap_includes_the_priority_resolution_boundary() {
+    let times = [
+        0.0,
+        OBSERVING_NIGHT_GAP_DAYS + TRIPLET_PRIORITY_RESOLUTION_DAYS / 2.0,
+    ];
+    assert_eq!(observation_nights(&times, None), vec![0, 0]);
+}
+
+#[test]
+fn corrected_candidate_pool_rejects_two_epochs_before_search() {
+    let epochs = [60_002.0, 60_002.0, 60_005.0, 60_005.0, 60_002.0, 60_005.0];
+    let observers = observers_at(&epochs, &["X05"; 6]);
+    let observed = observe(&observers, &[1.0 / 3600.0; 6]);
+    let propagator = TwoBodyPropagator::default();
+    let options = options();
+    let predictor = predictor(&propagator, &options);
+    let result = iod_candidate_pool(
+        &predictor,
+        &observed,
+        &observers,
+        &IodConfig {
+            min_obs: 3,
+            min_arc_length: 0.0,
+            ..IodConfig::default()
+        },
+    )
+    .unwrap();
+    assert!(!result.found());
+    assert_eq!(result.triplets_tried, 0);
+    assert_eq!(result.candidates_evaluated, 0);
+    assert!(result
+        .not_found_reason
+        .as_deref()
+        .unwrap()
+        .contains("2 distinct observation epochs"));
+}
+
+#[test]
 fn default_triplet_budget_is_method_specific_and_explicit_override_wins() {
     let epochs: Vec<f64> = (0..80)
         .map(|row| 60_002.0 + (row / 8) as f64 + 0.2 * (row % 8) as f64 / 8.0)
