@@ -27,11 +27,41 @@ fn git_dirty(repo: &PathBuf) -> Option<bool> {
             "status",
             "--porcelain",
             "--untracked-files=normal",
+            "--",
+            ".",
+            ":(exclude)adam-assist",
         ])
         .current_dir(repo)
         .output()
         .ok()?;
     output.status.success().then_some(!output.stdout.is_empty())
+}
+
+fn emit_git_path_watch(repo: &PathBuf, git_path: &str) {
+    if let Ok(output) = Command::new("git")
+        .args([
+            "-c",
+            &format!("safe.directory={}", repo.display()),
+            "rev-parse",
+            "--git-path",
+            git_path,
+        ])
+        .current_dir(repo)
+        .output()
+    {
+        if output.status.success() {
+            let value = String::from_utf8_lossy(&output.stdout).trim().to_owned();
+            if !value.is_empty() {
+                let path = PathBuf::from(value);
+                let path = if path.is_absolute() {
+                    path
+                } else {
+                    repo.join(path)
+                };
+                println!("cargo:rerun-if-changed={}", path.display());
+            }
+        }
+    }
 }
 
 fn main() {
@@ -79,49 +109,55 @@ fn main() {
     println!("cargo:rustc-env=ADAM_CORE_BUILD_COMMIT={commit}");
     println!("cargo:rerun-if-env-changed=ADAM_CORE_BUILD_COMMIT");
     println!("cargo:rerun-if-env-changed=ADAM_CORE_RELEASE_BUILD");
-    // Re-run the identity check when any source that contributes to the
-    // mixed Python/Rust distribution changes. Cargo otherwise caches build
-    // script output across ordinary working-tree edits.
-    for relative in [
-        "Cargo.toml",
-        "Cargo.lock",
-        "pyproject.toml",
-        "pdm.lock",
-        "CHANGELOG.md",
-        "src",
-        "rust",
-        "migration",
-        "docs",
-    ] {
-        let path = repo.join(relative);
-        if path.exists() {
-            println!("cargo:rerun-if-changed={}", path.display());
-        }
-    }
-    // Worktrees store `.git` as a redirection file, so ask Git for the
-    // actual HEAD path rather than assuming `.git/HEAD` is a directory.
+    // Every tracked distribution input is an explicit dependency. This
+    // avoids stale clean identities after commits or edits outside a short
+    // hand-maintained source list, without recursively watching `target/`.
     if let Ok(output) = Command::new("git")
         .args([
             "-c",
             &format!("safe.directory={}", repo.display()),
-            "rev-parse",
-            "--git-path",
+            "ls-files",
+            "-z",
+        ])
+        .current_dir(&repo)
+        .output()
+    {
+        if output.status.success() {
+            for relative in output
+                .stdout
+                .split(|byte| *byte == 0)
+                .filter(|p| !p.is_empty())
+            {
+                if let Ok(relative) = std::str::from_utf8(relative) {
+                    println!("cargo:rerun-if-changed={}", repo.join(relative).display());
+                }
+            }
+        }
+    }
+    // The index detects staged paths and the current branch ref detects a
+    // commit even though `.git/HEAD` still contains the same symbolic name.
+    for git_path in ["HEAD", "index", "packed-refs"] {
+        emit_git_path_watch(&repo, git_path);
+    }
+    if let Ok(output) = Command::new("git")
+        .args([
+            "-c",
+            &format!("safe.directory={}", repo.display()),
+            "symbolic-ref",
+            "-q",
             "HEAD",
         ])
         .current_dir(&repo)
         .output()
     {
         if output.status.success() {
-            let head = String::from_utf8_lossy(&output.stdout).trim().to_owned();
-            if !head.is_empty() {
-                let path = PathBuf::from(&head);
-                let path = if path.is_absolute() {
-                    path
-                } else {
-                    repo.join(path)
-                };
-                println!("cargo:rerun-if-changed={}", path.display());
+            let reference = String::from_utf8_lossy(&output.stdout).trim().to_owned();
+            if !reference.is_empty() {
+                emit_git_path_watch(&repo, &reference);
             }
         }
     }
+    // The known release-matrix `adam-assist/` checkout is deliberately
+    // excluded from Core dirtiness; its exact SHA is verified independently
+    // by that workflow. No other untracked path is ignored.
 }

@@ -19,6 +19,8 @@ env:
   ADAM_ASSIST_REF: ${{ inputs.adam_assist_ref }}
   PIP_ONLY_BINARY: ":all:"
   PYTHON_PREVIEW_VERSION: "0.7.0"
+  ADAM_CORE_RELEASE_BUILD: "1"
+  ADAM_CORE_BUILD_COMMIT: ${{ github.sha }}
 
 jobs:
   artifact-acceptance:
