@@ -1,0 +1,7 @@
+adam\_core.propagator.utils module
+==================================
+
+.. automodule:: adam_core.propagator.utils
+   :members:
+   :show-inheritance:
+   :undoc-members:
