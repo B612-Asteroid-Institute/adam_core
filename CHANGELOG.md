@@ -17,7 +17,8 @@ This file contains notable changes in adam-core
   search reports independent work counters/caps, and CMC2003 fails closed when
   a trustworthy fit covariance is unavailable. Follow-up hardening restores
   the historical method-specific triplet budgets (``3 * (max_outliers + 1)``
-  for combinations and 32 for spans), prevents dense repeated nights from
+  for combinations and ``SpanSearchConfig.max_triplets`` for spans, 32 by
+  default), prevents dense repeated nights from
   starving later geometry, requires three distinct
   observation epochs, rejects non-finite/domain-invalid inputs before provider
   calls, re-gates selection-changing final CMC refits with retained diagnostics,
@@ -25,7 +26,14 @@ This file contains notable changes in adam-core
   require a finite symmetric full-rank positive-definite covariance without
   applying CMC's stricter conditioning threshold; a bad candidate covariance
   is a local unsuccessful fit while CMC still fails closed after its
-  conditioning and weak-direction checks. Bounded triplet-search priorities
+  conditioning and weak-direction checks. During corrected IOD only, a
+  whole-arc candidate whose CMC fit cannot establish that covariance is
+  recorded as an unsuccessful candidate and the bounded search continues to
+  wider roots/triplets; public/final CMC calls and provider, protocol,
+  configuration, and global failures remain fail-closed. General-fit numerical
+  rank uses a scale-free correlation-spectrum floor of ``6 * epsilon`` times
+  its largest mode, far below CMC's separate ``1e-12`` conditioning gate.
+  Bounded triplet-search priorities
   now use millisecond-resolution keys, preventing
   external equivalent labels within the documented TT/TDB model difference
   from discontinuously selecting a different spans/prefit branch; dynamical
@@ -33,13 +41,21 @@ This file contains notable changes in adam-core
 
 - ``run_od`` provenance is preflighted before observation models or fitting.
   Python implementation identities hash stable entrypoint and owning-module
-  source content (including delegated helpers), never CPython bytecode;
-  unordered configuration is canonicalized. Unsupported dynamic objects fail
-  closed with ``TypeError``. ``run_od`` also deliberately refuses native
+  source content (including sibling/same-package delegated helpers and every
+  non-builtin MRO implementation), never CPython bytecode; callable defaults,
+  keyword defaults, closures, partials, classes, enums, nested object classes,
+  paths, NumPy values, and stable stdlib names are canonicalized. Executing
+  source is snapshotted so an on-disk edit does not relabel already-loaded
+  code; reload/re-execution creates a new identity. Unsupported dynamic,
+  notebook, and sourceless objects fail closed with ``TypeError``. ``run_od``
+  also deliberately refuses native
   builds whose embedded identity is ``dirty:*`` or ``unknown``: install an
   official wheel or rebuild from an exact clean checkout. Source builds watch
-  Python/Rust source roots so relevant untracked additions invalidate an
-  incremental identity; generated artifacts such as ``wheelhouse/`` and the
+  exact tracked paths plus a narrow, content-stable inventory of relevant new
+  untracked Python/Rust runtime source; they do not recursively watch source
+  roots, so repeated version generation, in-tree extension builds, and
+  ``__pycache__`` creation reach Cargo ``Fresh``. Generated artifacts such as
+  ``wheelhouse/`` and the
   independently pinned nested ``adam-assist/`` checkout do not make Core
   dirty. Release builds without Git must supply the exact 40-hex commit in
   ``ADAM_CORE_BUILD_COMMIT`` with ``ADAM_CORE_RELEASE_BUILD=1``.
