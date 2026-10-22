@@ -2441,7 +2441,6 @@ fn stage_fit<T: OriginTranslationProvider>(
     mask: &[bool],
     config: &WhitenedFitConfig,
     rchi2_threshold: f64,
-    require_valid_covariance: bool,
     provider: &dyn TimeScaleProvider,
     translation_provider: &T,
 ) -> PropagationResultValue<Result<WhitenedFitOutput, (String, bool)>> {
@@ -2477,14 +2476,13 @@ fn stage_fit<T: OriginTranslationProvider>(
     // Any finite fit within the threshold is a usable seed for the next
     // stage, converged or not (the walk-forward accepted budget-exhausted
     // fits at a good state); a non-finite derivative (status -2) is not.
-    // Partial-arc differential corrections need only a finite fitted state and
-    // objective to warm-start the next, wider stage. Their geometry can be
-    // numerically rank deficient even when the eventual whole-arc solution is
-    // full rank. `orbit_with_state` deliberately drops covariance, so an
-    // invalid partial covariance is neither reported nor reused. Whole-arc
-    // acceptance still requires a freshly computed valid covariance.
-    let usable = output.status_code != STATUS_NON_FINITE
-        && (!require_valid_covariance || output.status_code != STATUS_INVALID_COVARIANCE);
+    // Corrected IOD is itself an intermediate state-estimation stage. Even its
+    // whole-observation-arc correction hands only a state/objective to the
+    // final refinement. Short-arc geometry can make this stage covariance
+    // numerically rank deficient although final refinement is full rank.
+    // `orbit_with_state` drops covariance before every wider/refinement seed;
+    // reportable covariance is filtered separately below.
+    let usable = output.status_code != STATUS_NON_FINITE;
     if !usable || !rchi2.is_finite() || rchi2 > rchi2_threshold {
         return Ok(Err((
             format!(
@@ -2847,6 +2845,15 @@ fn ranging_fallback<T: OriginTranslationProvider>(
     Ok(())
 }
 
+/// Covariance from an intermediate IOD correction is reportable only when it
+/// passes the same general-fit structural/rank gate as a final fit. The state
+/// may still seed final refinement when this returns `None`.
+fn reportable_iod_covariance(covariance: &[f64; 36]) -> Option<[f64; 36]> {
+    covariance_validity(covariance)
+        .is_ok()
+        .then_some(*covariance)
+}
+
 /// Record the only whole-arc rejection failures that are local to one
 /// corrected-IOD candidate. Provider, protocol, settings, schema, and global
 /// failures remain fatal and are returned unchanged.
@@ -2978,7 +2985,6 @@ fn correct_candidates<T: OriginTranslationProvider>(
                     &partial_config
                 },
                 threshold,
-                whole_arc,
                 provider,
                 translation_provider,
             )? {
@@ -3073,7 +3079,7 @@ fn correct_candidates<T: OriginTranslationProvider>(
                 record.postfit_reduced_chi2 = Some(output.evaluation.reduced_chi2);
                 record.whole_arc_score = Some(whole_arc_score(&output.evaluation));
                 record.corrected_state = Some(output.state);
-                record.corrected_covariance = Some(output.covariance);
+                record.corrected_covariance = reportable_iod_covariance(&output.covariance);
                 record.removed = (0..n)
                     .filter(|&row| output.evaluation.outlier[row])
                     .collect();
@@ -6398,7 +6404,7 @@ mod tests {
     }
 
     #[test]
-    fn whole_arc_stage_never_accepts_an_invalid_covariance() {
+    fn corrected_iod_stage_keeps_only_state_from_rank_deficient_covariance() {
         let mut fixture = linear_fixture(0.0);
         for row in &mut fixture.predictor.design {
             row[5] = 0.0;
@@ -6415,41 +6421,13 @@ mod tests {
                 ..WhitenedFitConfig::default()
             },
             f64::INFINITY,
-            true,
-            &NoopProvider,
-            &ZeroTranslationProvider,
-        )
-        .unwrap()
-        .expect_err("invalid covariance must make a whole-arc stage unusable");
-        assert!(!staged.1);
-        assert!(staged.0.contains("status -3"));
-    }
-
-    #[test]
-    fn partial_stage_uses_only_state_when_covariance_is_rank_deficient() {
-        let mut fixture = linear_fixture(0.0);
-        for row in &mut fixture.predictor.design {
-            row[5] = 0.0;
-        }
-        let staged = stage_fit(
-            &fixture.predictor,
-            &orbit(TRUTH_STATE),
-            &fixture.observed,
-            &observers(),
-            &[true; NUM_OBS],
-            &WhitenedFitConfig {
-                jacobian: JacobianMethod::Central,
-                validate_covariance: false,
-                ..WhitenedFitConfig::default()
-            },
-            f64::INFINITY,
-            false,
             &NoopProvider,
             &ZeroTranslationProvider,
         )
         .unwrap()
         .expect("a finite intermediate state is a valid covariance-free seed");
         assert_eq!(staged.status_code, STATUS_INVALID_COVARIANCE);
+        assert!(reportable_iod_covariance(&staged.covariance).is_none());
         assert!(staged.state.iter().all(|value| value.is_finite()));
         let seed = orbit_with_state(&orbit(TRUTH_STATE), staged.state).unwrap();
         assert!(seed.coordinates.covariance.is_none());

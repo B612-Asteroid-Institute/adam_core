@@ -33,10 +33,10 @@ This file contains notable changes in adam-core
   configuration, and global failures remain fail-closed. General-fit numerical
   rank uses a scale-free correlation-spectrum floor of ``6 * epsilon`` times
   its largest mode, far below CMC's separate ``1e-12`` conditioning gate.
-  Corrected-IOD partial-arc stages may retain only a finite state/objective as
-  the next seed when their intermediate covariance is rank deficient; that
-  covariance is dropped, and whole-arc acceptance recomputes and validates a
-  reportable covariance.
+  Corrected-IOD correction stages, including the whole-observation-arc stage,
+  may retain only a finite state/objective as the next seed when their
+  intermediate covariance is rank deficient; that covariance is dropped, and
+  final ``run_od`` refinement recomputes and validates reportable covariance.
   Bounded triplet-search priorities
   now use millisecond-resolution keys, preventing
   external equivalent labels within the documented TT/TDB model difference

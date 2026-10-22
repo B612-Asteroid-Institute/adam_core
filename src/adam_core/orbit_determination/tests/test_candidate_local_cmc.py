@@ -5,11 +5,12 @@ import pytest
 
 from adam_core.coordinates import CoordinateCovariances, Origin, SphericalCoordinates
 from adam_core.observers import Observers
-from adam_core.orbit_determination import run_iod
+from adam_core.orbit_determination import NativeOrbitFitter, run_iod
 from adam_core.orbit_determination.evaluate import (
     OrbitDeterminationObservations,
     OrbitDeterminationPhotometry,
 )
+from adam_core.orbit_determination.od_orchestration import run_od
 from adam_core.time import Timestamp
 
 from .test_differential_correction import (
@@ -85,3 +86,25 @@ def test_corrected_iod_continues_after_candidate_local_cmc_refusal(seed, case):
         "CMC2003 expected covariance unavailable" in str(failure)
         for failure in report.candidate_failures
     )
+
+
+def test_short_whole_arc_iod_covariance_is_only_a_state_seed():
+    """Frozen 2.04-day arc: IOD may be rank deficient, final OD may not."""
+    t0 = EPOCH_MJD_TDB + 5.0
+    times = [t0 + day + row / 48 for day in range(3) for row in range(3)]
+    observations = _arc(times, seed=7)
+
+    iod, _, report = run_iod(observations, TwoBodyPropagator())
+    assert report.found and len(iod) == 1
+    iod_covariance = iod.coordinates.covariance.to_matrix()[0]
+    assert np.isnan(iod_covariance).all()
+
+    fitted, _ = run_od(
+        observations,
+        NativeOrbitFitter(TwoBodyPropagator(), outlier_rejection="worst_residual"),
+        None,
+        propagator=TwoBodyPropagator(),
+    )
+    assert len(fitted) == 1
+    assert fitted.success.to_pylist() == [True]
+    assert np.isfinite(fitted.coordinates.covariance.to_matrix()).all()

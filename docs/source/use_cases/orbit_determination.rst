@@ -515,10 +515,12 @@ two epochs are refused as rank deficient.
 A reported whole-arc fit is returned only with a finite, symmetric,
 positive-definite, numerically full-rank covariance. General fits intentionally
 do not apply a universal raw condition-number cutoff to mixed
-position/velocity units. An intermediate corrected-IOD partial-arc fit may be
-rank deficient: only its finite state and objective warm-start the next wider
-stage, and its covariance is neither reused nor reported. Whole-arc acceptance
-recomputes and validates covariance.
+position/velocity units. A corrected-IOD correction fit, including its whole-observation-arc
+stage, is still an intermediate seed for final refinement and may be rank
+deficient: only its finite state and objective warm-start the next wider stage
+or final refinement, and its covariance is neither reused nor reported.
+``run_od`` final refinement recomputes and validates the reportable covariance;
+a direct ``run_iod`` seed has no covariance when that intermediate gate fails.
 
 CMC2003 alone applies the stricter conditioning threshold and probes the
 selected-mask covariance along its weakest direction after every refit,
