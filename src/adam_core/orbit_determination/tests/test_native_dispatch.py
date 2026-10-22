@@ -3,7 +3,6 @@
 import numpy.testing as npt
 import pytest
 
-
 import adam_core
 from adam_core import _rust_native
 from adam_core.coordinates import CoordinateCovariances

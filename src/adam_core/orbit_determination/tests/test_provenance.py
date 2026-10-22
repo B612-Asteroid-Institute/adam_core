@@ -9,7 +9,6 @@ import numpy as np
 import pyarrow as pa
 import pytest
 
-
 import adam_core
 from adam_core import _rust_native
 from adam_core.orbit_determination import (

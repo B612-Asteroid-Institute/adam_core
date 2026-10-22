@@ -22,7 +22,6 @@ import numpy as np
 import numpy.testing as npt
 import pyarrow as pa
 import pytest
-
 import quivr as qv
 
 from ...coordinates.covariances import CoordinateCovariances
