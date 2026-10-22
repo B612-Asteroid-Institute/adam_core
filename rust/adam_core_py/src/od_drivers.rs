@@ -41,6 +41,9 @@ use pyo3::types::{PyBytes, PyCapsule, PyDict, PyList, PyTuple};
 use serde::Deserialize;
 use serde_json::json;
 use sha2::{Digest, Sha256};
+use std::hint::black_box;
+use std::sync::Arc;
+use std::time::Instant;
 
 fn value_error(message: impl Into<String>) -> PyErr {
     PyValueError::new_err(message.into())
@@ -3721,6 +3724,264 @@ mod batch_contract_tests {
     }
 }
 
+/// Native OD timing lanes supported by [`benchmark_od_fit_ipc`].
+#[derive(Clone, Copy)]
+enum NativeOdBenchmarkOperation {
+    RefineNone,
+    RunOd,
+}
+
+impl NativeOdBenchmarkOperation {
+    fn parse(value: &str) -> PyResult<Self> {
+        match value {
+            "refine_none" => Ok(Self::RefineNone),
+            "run_od" => Ok(Self::RunOd),
+            _ => Err(value_error(
+                "operation must be exactly 'refine_none' or 'run_od'",
+            )),
+        }
+    }
+
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::RefineNone => "refine_none",
+            Self::RunOd => "run_od",
+        }
+    }
+}
+
+struct NativeOdBenchmarkResult {
+    fit: WhitenedFitOutput,
+    iod_found: Option<bool>,
+    triplets_tried: Option<usize>,
+    candidates_evaluated: Option<usize>,
+    passes: usize,
+    n_rejected: usize,
+    n_recovered: usize,
+}
+
+#[allow(clippy::too_many_arguments)]
+fn run_native_od_benchmark_once(
+    operation: NativeOdBenchmarkOperation,
+    predictor: &dyn SphericalPredictor,
+    orbit: &DataOrbitBatch,
+    problem: &OdObservations,
+    obs_code: &[String],
+    band: &[Option<String>],
+    astcat: &[Option<String>],
+    ignore: &[bool],
+    full_config: &FullOdConfig,
+    fit_config: &WhitenedFitConfig,
+) -> PropagationResultValue<NativeOdBenchmarkResult> {
+    match operation {
+        NativeOdBenchmarkOperation::RefineNone => {
+            let fit = fit_orbit_whitened_with(
+                predictor,
+                orbit,
+                &problem.observed,
+                &problem.observers,
+                ignore,
+                fit_config,
+                &ErfaTimeProvider,
+                &LockingSpiceTranslation,
+            )?;
+            Ok(NativeOdBenchmarkResult {
+                fit,
+                iod_found: None,
+                triplets_tried: None,
+                candidates_evaluated: None,
+                passes: 1,
+                n_rejected: 0,
+                n_recovered: 0,
+            })
+        }
+        NativeOdBenchmarkOperation::RunOd => {
+            let output = run_od_with(
+                predictor,
+                predictor,
+                &problem.observed,
+                &problem.observers,
+                obs_code,
+                band,
+                astcat,
+                Vec::new(),
+                full_config,
+                &ErfaTimeProvider,
+                &LockingSpiceTranslation,
+            )?;
+            let iod_found = output.full_od.iod.found();
+            let triplets_tried = output.full_od.iod.triplets_tried;
+            let candidates_evaluated = output.full_od.iod.candidates_evaluated;
+            let refined = output.full_od.refined.ok_or_else(|| {
+                adam_core_rs_coords::propagation::PropagationError::InvalidRequest(
+                    "benchmark run_od workload did not produce a refined orbit".to_string(),
+                )
+            })?;
+            Ok(NativeOdBenchmarkResult {
+                fit: refined.fit,
+                iod_found: Some(iod_found),
+                triplets_tried: Some(triplets_tried),
+                candidates_evaluated: Some(candidates_evaluated),
+                passes: refined.passes,
+                n_rejected: refined.n_rejected,
+                n_recovered: refined.n_recovered,
+            })
+        }
+    }
+}
+
+/// Rust-owned `Instant` timing for Core OD fit stages.
+///
+/// Arrow decoding, Python extraction and settings parsing happen once before
+/// the correctness run and are excluded from every sample. `refine_none`
+/// times the native whitened fit behind public `refine(..., rejection="none")`;
+/// `run_od` times the complete native model-free IOD + refinement workflow.
+/// The returned state/diagnostics come from an untimed preflight run so the
+/// Python benchmark harness can assert correctness before reporting timings.
+#[pyfunction]
+#[pyo3(signature = (
+    propagator,
+    operation,
+    orbit_ipc,
+    observed_ipc,
+    observers_ipc,
+    obs_code,
+    band,
+    astcat,
+    reps,
+    trials,
+    warmup_reps,
+    iod_settings=None,
+    refinement=None,
+    fit_settings=None
+))]
+#[allow(clippy::too_many_arguments)]
+fn benchmark_od_fit_ipc<'py>(
+    py: Python<'py>,
+    propagator: Option<&Bound<'py, PyAny>>,
+    operation: &str,
+    orbit_ipc: &Bound<'py, PyBytes>,
+    observed_ipc: &Bound<'py, PyBytes>,
+    observers_ipc: &Bound<'py, PyBytes>,
+    obs_code: Vec<String>,
+    band: Vec<Option<String>>,
+    astcat: Vec<Option<String>>,
+    reps: usize,
+    trials: usize,
+    warmup_reps: usize,
+    iod_settings: Option<&Bound<'py, PyDict>>,
+    refinement: Option<&Bound<'py, PyDict>>,
+    fit_settings: Option<&Bound<'py, PyDict>>,
+) -> PyResult<Bound<'py, PyDict>> {
+    if reps == 0 || trials == 0 {
+        return Err(value_error("reps and trials must be >= 1"));
+    }
+    let operation = NativeOdBenchmarkOperation::parse(operation)?;
+    let source = propagator.map(PySource::new).transpose()?;
+    let provider_boundary = if source.is_some() {
+        "external propagation ABI v2"
+    } else {
+        "direct typed TwoBodyPropagator"
+    };
+    let orbit = decode_orbit(orbit_ipc)?;
+    let problem = decode_observations(observed_ipc, observers_ipc)?;
+    let settings = parse_fit_settings(fit_settings)?;
+    let full_config = FullOdConfig {
+        iod: parse_iod_settings(iod_settings)?,
+        refinement: parse_refinement(refinement, settings.config)?,
+    };
+    full_config.validate().map_err(value_error)?;
+    let n = problem.observed.len();
+    let ignore = vec![false; n];
+    if obs_code.len() != n || band.len() != n || astcat.len() != n {
+        return Err(value_error(
+            "observed, obs_code, band and astcat must have equal length",
+        ));
+    }
+
+    let (samples, correctness) = py
+        .allow_threads(|| {
+            let two_body = PropagatorPredictor {
+                propagator: &settings.propagator,
+                options: &settings.options,
+                provider: &ErfaTimeProvider,
+                translation_provider: &LockingSpiceTranslation,
+            };
+            let external = source
+                .as_ref()
+                .map(|source| external_predictor(&source.propagator, &settings));
+            let predictor: &dyn SphericalPredictor = external
+                .as_ref()
+                .map_or(&two_body as &dyn SphericalPredictor, |value| value);
+            let run_once = || {
+                run_native_od_benchmark_once(
+                    operation,
+                    predictor,
+                    &orbit,
+                    &problem,
+                    &obs_code,
+                    &band,
+                    &astcat,
+                    &ignore,
+                    &full_config,
+                    &settings.config,
+                )
+            };
+            let correctness = run_once()?;
+            if !correctness.fit.state.iter().all(|value| value.is_finite())
+                || !correctness
+                    .fit
+                    .covariance
+                    .iter()
+                    .all(|value| value.is_finite())
+                || correctness.fit.evaluation.num_obs != n
+            {
+                return Err(adam_core_rs_coords::propagation::PropagationError::InvalidRequest(
+                    "benchmark correctness run produced a non-finite fit or wrong observation count"
+                        .to_string(),
+                ));
+            }
+            let mut samples = Vec::with_capacity(trials);
+            for _ in 0..trials {
+                for _ in 0..warmup_reps {
+                    black_box(run_once()?);
+                }
+                let mut trial = Vec::with_capacity(reps);
+                for _ in 0..reps {
+                    let started = Instant::now();
+                    let result = run_once()?;
+                    black_box(&result);
+                    trial.push(started.elapsed().as_secs_f64());
+                }
+                samples.push(trial);
+            }
+            Ok((samples, correctness))
+        })
+        .map_err(od_error)?;
+
+    let out = PyDict::new(py);
+    out.set_item("operation", operation.as_str())?;
+    out.set_item("timer", "std::time::Instant")?;
+    out.set_item("provider_boundary", provider_boundary)?;
+    out.set_item("input_decoding_timed", false)?;
+    out.set_item("settings_parsing_timed", false)?;
+    out.set_item("samples_seconds", samples)?;
+    out.set_item("state", correctness.fit.state.to_vec())?;
+    out.set_item("iterations", correctness.fit.iterations)?;
+    out.set_item("optimizer_iterations", correctness.fit.optimizer_iterations)?;
+    out.set_item("converged", correctness.fit.converged)?;
+    out.set_item("status_code", correctness.fit.status_code)?;
+    out.set_item("reduced_chi2", correctness.fit.evaluation.reduced_chi2)?;
+    out.set_item("num_obs", correctness.fit.evaluation.num_obs)?;
+    out.set_item("iod_found", correctness.iod_found)?;
+    out.set_item("triplets_tried", correctness.triplets_tried)?;
+    out.set_item("candidates_evaluated", correctness.candidates_evaluated)?;
+    out.set_item("passes", correctness.passes)?;
+    out.set_item("n_rejected", correctness.n_rejected)?;
+    out.set_item("n_recovered", correctness.n_recovered)?;
+    Ok(out)
+}
+
 /// Canonical Cargo SemVer embedded in adam-core's native two-body provider.
 /// Provider declarations compare this native spelling (including `-rc.N`),
 /// never the Python distribution's independently normalized PEP 440 version.
@@ -3762,6 +4023,7 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(native_provider_metadata, m)?)?;
     m.add_function(wrap_pyfunction!(od_defaults, m)?)?;
     m.add_function(wrap_pyfunction!(apply_observation_pipeline_ipc, m)?)?;
+    m.add_function(wrap_pyfunction!(benchmark_od_fit_ipc, m)?)?;
     Ok(())
 }
 

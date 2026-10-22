@@ -139,3 +139,6 @@ migration/artifacts/assist_parity_cache/
 
 # Per-invocation release attestation packaged by the audited wheel wrapper.
 /src/adam_core/_release_inventory.json
+
+# Machine-specific Core OD latency diagnostic.
+migration/artifacts/od_fitting_benchmark_local.json
