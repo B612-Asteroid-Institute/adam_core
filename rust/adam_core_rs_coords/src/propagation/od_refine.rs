@@ -2441,6 +2441,7 @@ fn stage_fit<T: OriginTranslationProvider>(
     mask: &[bool],
     config: &WhitenedFitConfig,
     rchi2_threshold: f64,
+    require_valid_covariance: bool,
     provider: &dyn TimeScaleProvider,
     translation_provider: &T,
 ) -> PropagationResultValue<Result<WhitenedFitOutput, (String, bool)>> {
@@ -2476,8 +2477,14 @@ fn stage_fit<T: OriginTranslationProvider>(
     // Any finite fit within the threshold is a usable seed for the next
     // stage, converged or not (the walk-forward accepted budget-exhausted
     // fits at a good state); a non-finite derivative (status -2) is not.
-    let usable =
-        output.status_code != STATUS_NON_FINITE && output.status_code != STATUS_INVALID_COVARIANCE;
+    // Partial-arc differential corrections need only a finite fitted state and
+    // objective to warm-start the next, wider stage. Their geometry can be
+    // numerically rank deficient even when the eventual whole-arc solution is
+    // full rank. `orbit_with_state` deliberately drops covariance, so an
+    // invalid partial covariance is neither reported nor reused. Whole-arc
+    // acceptance still requires a freshly computed valid covariance.
+    let usable = output.status_code != STATUS_NON_FINITE
+        && (!require_valid_covariance || output.status_code != STATUS_INVALID_COVARIANCE);
     if !usable || !rchi2.is_finite() || rchi2 > rchi2_threshold {
         return Ok(Err((
             format!(
@@ -2840,6 +2847,34 @@ fn ranging_fallback<T: OriginTranslationProvider>(
     Ok(())
 }
 
+/// Record the only whole-arc rejection failures that are local to one
+/// corrected-IOD candidate. Provider, protocol, settings, schema, and global
+/// failures remain fatal and are returned unchanged.
+fn record_candidate_local_rejection_failure(
+    error: PropagationError,
+    stages: usize,
+    triplet: [usize; 3],
+    root_index: usize,
+    result: &mut super::od::IodResult,
+) -> PropagationResultValue<String> {
+    match error {
+        err @ (PropagationError::RowFailure(_)
+        | PropagationError::CmcCovarianceUnavailable(_)) => {
+            let message = format!("whole-arc rejection failed at stage {stages}: {err}");
+            result.candidates_failed += 1;
+            result
+                .candidate_failures
+                .push(super::od::IodCandidateFailure {
+                    triplet,
+                    root_index,
+                    message: message.clone(),
+                });
+            Ok(message)
+        }
+        error => Err(error),
+    }
+}
+
 /// Correct the candidates in `pool` (see [`run_iod_corrected`]) and select
 /// the accepted one among every converged candidate of `result`.
 #[allow(clippy::too_many_arguments)]
@@ -2944,6 +2979,7 @@ fn correct_candidates<T: OriginTranslationProvider>(
                     &partial_config
                 },
                 threshold,
+                whole_arc,
                 provider,
                 translation_provider,
             )? {
@@ -2993,24 +3029,17 @@ fn correct_candidates<T: OriginTranslationProvider>(
                     translation_provider,
                 ) {
                     Ok(rejected) => rejected.fit,
-                    Err(
-                        err @ (PropagationError::RowFailure(_)
-                        | PropagationError::CmcCovarianceUnavailable(_)),
-                    ) => {
-                        let message =
-                            format!("whole-arc rejection failed at stage {stages}: {err}");
-                        result.candidates_failed += 1;
-                        result
-                            .candidate_failures
-                            .push(super::od::IodCandidateFailure {
-                                triplet: candidate.triplet,
-                                root_index: candidate.root_index,
-                                message: message.clone(),
-                            });
+                    Err(error) => {
+                        let message = record_candidate_local_rejection_failure(
+                            error,
+                            stages,
+                            candidate.triplet,
+                            candidate.root_index,
+                            result,
+                        )?;
                         note = Some(message);
                         break;
                     }
-                    Err(err) => return Err(err),
                 }
             };
             let rchi2 = output.evaluation.reduced_chi2;
@@ -6310,7 +6339,68 @@ mod tests {
     }
 
     #[test]
-    fn stage_fit_never_uses_an_invalid_covariance_as_a_seed() {
+    fn corrected_iod_rejection_locality_records_only_candidate_failures() {
+        let triplet = [2, 5, 9];
+        let root_index = 3;
+        for error in [
+            PropagationError::CmcCovarianceUnavailable("weak direction".to_string()),
+            PropagationError::RowFailure("one row".to_string()),
+        ] {
+            let mut result = super::super::od::IodResult::not_found(
+                crate::TimeScale::Tdb,
+                "test".to_string(),
+            );
+            let message = record_candidate_local_rejection_failure(
+                error.clone(),
+                4,
+                triplet,
+                root_index,
+                &mut result,
+            )
+            .expect("the candidate-local refusal must continue the wider search");
+            assert!(message.contains(&error.to_string()));
+            assert_eq!(result.candidates_failed, 1);
+            assert_eq!(result.candidate_failures.len(), 1);
+            let diagnostic = &result.candidate_failures[0];
+            assert_eq!(diagnostic.triplet, triplet);
+            assert_eq!(diagnostic.root_index, root_index);
+            assert_eq!(diagnostic.message, message);
+        }
+    }
+
+    #[test]
+    fn corrected_iod_rejection_propagates_provider_protocol_settings_and_other_errors() {
+        let fatal = [
+            PropagationError::Backend("provider".to_string()),
+            PropagationError::BackendProtocol("protocol".to_string()),
+            PropagationError::InvalidRequest("settings".to_string()),
+            PropagationError::ThreadPool("global".to_string()),
+            PropagationError::MissingOrbitTimes,
+            PropagationError::UnsupportedCovarianceMode(
+                super::super::CovariancePropagation::Monte { samples: 4, seed: 1 },
+            ),
+        ];
+        for error in fatal {
+            let mut result = super::super::od::IodResult::not_found(
+                crate::TimeScale::Tdb,
+                "test".to_string(),
+            );
+            let propagated = record_candidate_local_rejection_failure(
+                error.clone(),
+                4,
+                [2, 5, 9],
+                3,
+                &mut result,
+            )
+            .expect_err("fatal errors must cross the corrected-IOD call site");
+            assert_eq!(propagated, error);
+            assert_eq!(result.candidates_failed, 0);
+            assert!(result.candidate_failures.is_empty());
+        }
+    }
+
+    #[test]
+    fn whole_arc_stage_never_accepts_an_invalid_covariance() {
         let mut fixture = linear_fixture(0.0);
         for row in &mut fixture.predictor.design {
             row[5] = 0.0;
@@ -6327,13 +6417,44 @@ mod tests {
                 ..WhitenedFitConfig::default()
             },
             f64::INFINITY,
+            true,
             &NoopProvider,
             &ZeroTranslationProvider,
         )
         .unwrap()
-        .expect_err("invalid covariance must make the correction stage unusable");
+        .expect_err("invalid covariance must make a whole-arc stage unusable");
         assert!(!staged.1);
         assert!(staged.0.contains("status -3"));
+    }
+
+    #[test]
+    fn partial_stage_uses_only_state_when_covariance_is_rank_deficient() {
+        let mut fixture = linear_fixture(0.0);
+        for row in &mut fixture.predictor.design {
+            row[5] = 0.0;
+        }
+        let staged = stage_fit(
+            &fixture.predictor,
+            &orbit(TRUTH_STATE),
+            &fixture.observed,
+            &observers(),
+            &[true; NUM_OBS],
+            &WhitenedFitConfig {
+                jacobian: JacobianMethod::Central,
+                validate_covariance: false,
+                ..WhitenedFitConfig::default()
+            },
+            f64::INFINITY,
+            false,
+            &NoopProvider,
+            &ZeroTranslationProvider,
+        )
+        .unwrap()
+        .expect("a finite intermediate state is a valid covariance-free seed");
+        assert_eq!(staged.status_code, STATUS_INVALID_COVARIANCE);
+        assert!(staged.state.iter().all(|value| value.is_finite()));
+        let seed = orbit_with_state(&orbit(TRUTH_STATE), staged.state).unwrap();
+        assert!(seed.coordinates.covariance.is_none());
     }
 
     #[test]
