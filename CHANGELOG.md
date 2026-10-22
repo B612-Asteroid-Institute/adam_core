@@ -33,6 +33,10 @@ This file contains notable changes in adam-core
   configuration, and global failures remain fail-closed. General-fit numerical
   rank uses a scale-free correlation-spectrum floor of ``6 * epsilon`` times
   its largest mode, far below CMC's separate ``1e-12`` conditioning gate.
+  Corrected-IOD partial-arc stages may retain only a finite state/objective as
+  the next seed when their intermediate covariance is rank deficient; that
+  covariance is dropped, and whole-arc acceptance recomputes and validates a
+  reportable covariance.
   Bounded triplet-search priorities
   now use millisecond-resolution keys, preventing
   external equivalent labels within the documented TT/TDB model difference
@@ -40,25 +44,32 @@ This file contains notable changes in adam-core
   epochs remain unrounded and the canonical TT/TDB policy is unchanged.
 
 - ``run_od`` provenance is preflighted before observation models or fitting.
-  Python implementation identities hash stable entrypoint and owning-module
-  source content (including sibling/same-package delegated helpers and every
-  non-builtin MRO implementation), never CPython bytecode; callable defaults,
-  keyword defaults, closures, partials, classes, enums, nested object classes,
-  paths, NumPy values, and stable stdlib names are canonicalized. Executing
-  source is snapshotted so an on-disk edit does not relabel already-loaded
-  code; reload/re-execution creates a new identity. Unsupported dynamic,
-  notebook, and sourceless objects fail closed with ``TypeError``. ``run_od``
-  also deliberately refuses native
-  builds whose embedded identity is ``dirty:*`` or ``unknown``: install an
-  official wheel or rebuild from an exact clean checkout. Source builds watch
-  exact tracked paths plus a narrow, content-stable inventory of relevant new
-  untracked Python/Rust runtime source; they do not recursively watch source
-  roots, so repeated version generation, in-tree extension builds, and
-  ``__pycache__`` creation reach Cargo ``Fresh``. Generated artifacts such as
-  ``wheelhouse/`` and the
-  independently pinned nested ``adam-assist/`` checkout do not make Core
-  dirty. Release builds without Git must supply the exact 40-hex commit in
-  ``ADAM_CORE_BUILD_COMMIT`` with ``ADAM_CORE_RELEASE_BUILD=1``.
+  Shipped adam-core observation models use the exact clean native build commit
+  plus stable class/entrypoint names and canonical configuration/data hashes;
+  they do not inspect source closures, bytecode, interpreter versions, loaded
+  modules, or import history. **Breaking custom-model migration:** external and
+  user-defined models (including subclasses and instance-overridden ``apply``)
+  must return the frozen public ``ModelProvenance`` contract from
+  ``model_provenance()``: package, version, a lowercase 64-hex
+  implementation/content fingerprint, and complete configuration. Providers
+  must change the fingerprint for science changes; there is no fabricated
+  fallback. Common NumPy, Arrow, datetime, namedtuple, enum, partial, nested
+  object/class and file-content values are canonical across Python 3.11–3.13
+  without absolute paths or arbitrary module imports. Unsupported, malformed,
+  uncontracted ``__main__``/dynamic/sourceless models fail with ``TypeError``
+  before work.
+
+  ``run_od`` refuses native builds whose identity is ``dirty:*`` or
+  ``unknown``. Bare Cargo builds watch Git refs and exact tracked inputs but do
+  not watch a missing source-inventory file, so repeated fresh-checkout
+  cargo/test/Clippy no-ops reach ``Fresh``. The release/wheel version pre-step
+  creates the narrow content-stable relevant-untracked-source inventory and
+  release builds validate it; source-overlay runtime preflight independently
+  refuses relevant untracked Python/Rust source. Generated extensions, caches,
+  tests, ``target``, ``wheelhouse/`` and nested ``adam-assist/`` remain outside
+  the inventory. Release builds without Git must supply the exact 40-hex commit
+  in ``ADAM_CORE_BUILD_COMMIT`` with ``ADAM_CORE_RELEASE_BUILD=1``.
+
 
 - Orbit determination now owns every IOD, least-squares, rejection, linkage
   and ``run_od`` loop in adam-core. Separately built propagators contribute

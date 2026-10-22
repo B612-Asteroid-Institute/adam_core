@@ -35,3 +35,20 @@ Last updated: 2026-10-21.
 - Dedicated benchmark jobs execute every benchmark row. The release-candidate workflow runs all six profile-marked scientific fixtures, both live Rust kernel-data integrations, and the three live Horizons/NEOCC/Scout/SBDB integration tests after wheel acceptance.
 - No expected xfail remains in the rotation-period confidence suite: every committed standard-candle fixture enforces the strict confidence contract.
 - To inspect skip reasons, run `pdm run test-rust-full -- -rs`.
+
+
+## Source inventory and native identity
+
+Bare `cargo`, Clippy, and Rust test builds identify the current commit and watch
+Git refs plus exact tracked distribution inputs. They do **not** watch a
+nonexistent `.git/adam-core-source-inventory` (Cargo would rerun the build
+script forever), and they cannot discover arbitrary new files without broad
+source-directory watches that include generated extensions and caches.
+
+`pdm run wheel-version` / `migration/scripts/write_maturin_version.py` creates
+the narrow inventory without rewriting unchanged content. Every release/wheel
+build must run that step first; `ADAM_CORE_RELEASE_BUILD=1` validates that the
+inventory exists and exactly matches relevant untracked Python/Rust runtime
+source before compiling. Source-overlay `run_od` separately performs the same
+Git untracked-source check at runtime. Tests, generated extensions, caches,
+`target`, wheelhouse, and nested Assist are intentionally excluded.

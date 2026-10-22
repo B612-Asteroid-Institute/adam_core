@@ -221,21 +221,52 @@ model list built with your own tables needs no package.
      - ``run_od``
 
 ``run_od`` constructs every provenance identity before applying a model or
-calling the fitter. Python implementations are identified by stable
-entrypoint and owning-module source-content hashes (including delegated
-helpers), explicit configuration, and package version where available;
-CPython bytecode is never hashed. Unsupported dynamic callables and
-undescribable configuration fail closed with ``TypeError``.
+calling the fitter. Shipped adam-core observation models use the exact clean
+native build commit plus their stable class and ``apply`` entrypoint names.
+They do not hash Python source trees, bytecode, interpreter versions, loaded
+modules, or import history.
+
+A custom model (including a subclass of a shipped model or a shipped instance
+with ``apply`` replaced) must implement the typed ``ProvenancedModel`` hook and
+return an immutable ``ModelProvenance``::
+
+   from adam_core.orbit_determination import ModelProvenance
+
+   class MyModel:
+       def apply(self, observations):
+           return observations
+
+       def model_provenance(self):
+           return ModelProvenance(
+               package="my-od-models",
+               version="2.4.1",
+               implementation_fingerprint="0123456789abcdef" * 4,
+               configuration={"mode": "calibrated", "scale": 1.5},
+           )
+
+The provider owns the lowercase 64-hex implementation/content fingerprint and
+must change it whenever science-affecting code changes. The configuration must
+be complete; adam-core canonicalizes mappings, sets, NumPy arrays/scalars/types
+and ufuncs, Arrow tables, dates/times, named tuples, enum classes/members,
+partials (including keywords), nested classes/objects and file content.
+Absolute paths are not recorded. There is no inferred or fabricated fallback:
+missing/malformed contracts, unsupported fields, and uncontracted
+``__main__``/dynamic/sourceless models raise ``TypeError`` before ``apply`` or
+fitting. See ``migration/custom_model_provenance.md``.
 
 The native build identity must be one exact clean 40-hex Core commit.
 ``run_od`` refuses ``dirty:<commit>`` and ``unknown`` identities before work;
 this is intentional, because otherwise its run-level provenance would claim a
 source tree it cannot reproduce. Use an official wheel or rebuild from a clean
-checkout. A source/release build without Git must set both
-``ADAM_CORE_RELEASE_BUILD=1`` and ``ADAM_CORE_BUILD_COMMIT=<40-hex-commit>``.
-Relevant untracked files under ``src/adam_core`` or Rust crate source roots
-make source builds dirty; build artifacts (for example ``wheelhouse/``) and the
-separately pinned nested ``adam-assist/`` checkout do not.
+checkout. Bare Cargo builds track Git refs and exact tracked inputs; Cargo
+cannot watch a nonexistent-file inventory or arbitrary new files without a
+rebuild loop, so source-overlay ``run_od`` independently refuses relevant
+untracked Python/Rust runtime source. The release/wheel workflow first runs
+``wheel-version``, which creates and validates the narrow source inventory. A
+release build without Git must set both ``ADAM_CORE_RELEASE_BUILD=1`` and
+``ADAM_CORE_BUILD_COMMIT=<40-hex-commit>``. Build artifacts (for example
+``wheelhouse/``), tests, caches, and the separately pinned nested
+``adam-assist/`` checkout are outside that inventory.
 
 Kept as options but not defaults: ``loss="huber"`` (open covariance pathology
 on short arcs), ``VeresFloorModel`` / ``VeresReplaceModel``, ``SigmaFloorModel``
@@ -481,18 +512,24 @@ range, and thresholds/tolerances must be finite with the required sign. An OD
 arc must contain at least three distinct epochs; duplicated rows at only one or
 two epochs are refused as rank deficient.
 
-A converged fit is returned only with a finite, symmetric, positive-definite,
-full-rank covariance. General fits intentionally do not apply a universal raw
-condition-number cutoff to mixed position/velocity units; a structurally bad
-candidate covariance marks only that fit unsuccessful and wider root/triplet
-search continues. CMC2003 alone applies the stricter conditioning threshold
-and probes the selected-mask covariance along its weakest direction after
-every refit, including a final refit caused by a selection change. A CMC
-refusal raises ``CmcCovarianceUnavailable`` in Rust
-(``RuntimeError`` at the Python boundary) and includes the retained pass,
-selected count, status, convergence flag, cost, state and covariance so the
-failed fit remains diagnosable without being presented as a scientific
-solution.
+A reported whole-arc fit is returned only with a finite, symmetric,
+positive-definite, numerically full-rank covariance. General fits intentionally
+do not apply a universal raw condition-number cutoff to mixed
+position/velocity units. An intermediate corrected-IOD partial-arc fit may be
+rank deficient: only its finite state and objective warm-start the next wider
+stage, and its covariance is neither reused nor reported. Whole-arc acceptance
+recomputes and validates covariance.
+
+CMC2003 alone applies the stricter conditioning threshold and probes the
+selected-mask covariance along its weakest direction after every refit,
+including a final refit caused by a selection change. During corrected IOD
+only, ``CmcCovarianceUnavailable`` from one whole-arc candidate is recorded in
+``candidate_failures`` and the bounded root/triplet search continues. Native
+row failure is candidate-local too; provider, protocol, settings and other
+errors propagate. Public/final CMC remains fail-closed with ``RuntimeError`` at
+the Python boundary. Its message includes retained pass, selected count,
+status, convergence flag, cost, state and covariance so the refusal remains
+diagnosable without being presented as a scientific solution.
 
 Solver budgets
 ~~~~~~~~~~~~~~
