@@ -101,3 +101,41 @@ def test_wheel_checker_rejects_python_set_or_hash_outside_attestation(tmp_path):
     with ZipFile(wheel) as archive:
         with pytest.raises(SystemExit, match="unexpected=.*untracked.py"):
             _verify_release_inventory(archive, wheel)
+
+
+def test_wheel_checker_requires_inventory_and_exact_attested_contents(tmp_path):
+    missing_inventory = tmp_path / "missing-inventory.whl"
+    with ZipFile(missing_inventory, "w") as archive:
+        archive.writestr("adam_core/__init__.py", b"VALUE = 1\n")
+    with ZipFile(missing_inventory) as archive:
+        with pytest.raises(
+            SystemExit, match="missing adam_core/_release_inventory.json"
+        ):
+            _verify_release_inventory(archive, missing_inventory)
+
+    bad_hash = tmp_path / "bad-hash.whl"
+    inventory = {
+        "format": release_inventory.FORMAT,
+        "commit": "1" * 40,
+        "digest": "2" * 64,
+        "python_files": {"adam_core/__init__.py": "0" * 64},
+    }
+    with ZipFile(bad_hash, "w") as archive:
+        archive.writestr("adam_core/__init__.py", b"VALUE = 1\n")
+        archive.writestr(
+            "adam_core/_release_inventory.json", json.dumps(inventory, sort_keys=True)
+        )
+    with ZipFile(bad_hash) as archive:
+        with pytest.raises(SystemExit, match="does not match its attested digest"):
+            _verify_release_inventory(archive, bad_hash)
+
+    missing_python = tmp_path / "missing-python.whl"
+    inventory["python_files"]["adam_core/missing.py"] = "3" * 64
+    with ZipFile(missing_python, "w") as archive:
+        archive.writestr("adam_core/__init__.py", b"VALUE = 1\n")
+        archive.writestr(
+            "adam_core/_release_inventory.json", json.dumps(inventory, sort_keys=True)
+        )
+    with ZipFile(missing_python) as archive:
+        with pytest.raises(SystemExit, match="missing=.*missing.py"):
+            _verify_release_inventory(archive, missing_python)

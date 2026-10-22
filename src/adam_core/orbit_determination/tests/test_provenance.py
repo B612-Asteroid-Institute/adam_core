@@ -982,3 +982,32 @@ def test_documented_custom_model_examples_are_executable_verbatim():
     migration_model = migration_namespace["CalibratedModel"](1.5)
     assert migration_model.apply(marker) is marker
     assert migration_model.model_provenance().configuration == {"scale": 1.5}
+
+
+def test_public_run_od_recursively_preflights_nested_custom_models():
+    from adam_core.orbit_determination.observation_uncertainty import CompositeModel
+
+    apply_calls = 0
+    fit_calls = 0
+
+    class Uncontracted(ObservationUncertaintyModel):
+        def apply(self, observations):
+            nonlocal apply_calls
+            apply_calls += 1
+            return observations
+
+    class Fitter:
+        def full_od(self, *args, **kwargs):
+            nonlocal fit_calls
+            fit_calls += 1
+            raise AssertionError("fit must not run before recursive model preflight")
+
+    with pytest.raises(TypeError, match="model_provenance"):
+        run_od(
+            make_synthetic_observations(),
+            Fitter(),
+            [CompositeModel(Uncontracted())],
+            propagator=TwoBodyPropagator(),
+        )
+    assert apply_calls == 0
+    assert fit_calls == 0
