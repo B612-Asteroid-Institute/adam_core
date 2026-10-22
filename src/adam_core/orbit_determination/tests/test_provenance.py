@@ -736,6 +736,53 @@ def test_enum_class_type_and_nested_object_classes_are_distinct():
         )
 
 
+def test_class_parameter_identity_covers_same_named_implementation_changes(
+    tmp_path, monkeypatch
+):
+    import importlib
+    import linecache
+    import sys
+
+    module_name = "_adam_core_provenance_class_parameter_fixture"
+    module_path = tmp_path / f"{module_name}.py"
+
+    def write(marker: int) -> None:
+        module_path.write_text(
+            "class Parameter:\n" f"    marker = {marker}\n", encoding="utf-8"
+        )
+        importlib.invalidate_caches()
+        linecache.clearcache()
+
+    class Model:
+        def __init__(self, parameter):
+            self.parameter = parameter
+
+        def apply(self, observations):
+            return observations
+
+    monkeypatch.syspath_prepend(str(tmp_path))
+    write(1)
+    module = importlib.import_module(module_name)
+    first = model_descriptor(Model(module.Parameter))
+
+    write(2)
+    source = compile(module_path.read_text(encoding="utf-8"), str(module_path), "exec")
+    spec = module.__spec__
+    module.__dict__.clear()
+    module.__dict__.update(
+        {
+            "__name__": module_name,
+            "__file__": str(module_path),
+            "__package__": "",
+            "__spec__": spec,
+        }
+    )
+    exec(source, module.__dict__)
+    second = model_descriptor(Model(module.Parameter))
+    assert first["descriptor_sha256"] != second["descriptor_sha256"]
+    sys.modules.pop(module_name, None)
+
+
 def test_partial_and_stdlib_object_parameters_are_portable_and_distinct():
     import argparse
     import functools
