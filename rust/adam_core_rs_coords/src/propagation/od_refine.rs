@@ -2858,8 +2858,7 @@ fn record_candidate_local_rejection_failure(
     result: &mut super::od::IodResult,
 ) -> PropagationResultValue<String> {
     match error {
-        err @ (PropagationError::RowFailure(_)
-        | PropagationError::CmcCovarianceUnavailable(_)) => {
+        err @ (PropagationError::RowFailure(_) | PropagationError::CmcCovarianceUnavailable(_)) => {
             let message = format!("whole-arc rejection failed at stage {stages}: {err}");
             result.candidates_failed += 1;
             result
@@ -6346,10 +6345,8 @@ mod tests {
             PropagationError::CmcCovarianceUnavailable("weak direction".to_string()),
             PropagationError::RowFailure("one row".to_string()),
         ] {
-            let mut result = super::super::od::IodResult::not_found(
-                crate::TimeScale::Tdb,
-                "test".to_string(),
-            );
+            let mut result =
+                super::super::od::IodResult::not_found(crate::TimeScale::Tdb, "test".to_string());
             let message = record_candidate_local_rejection_failure(
                 error.clone(),
                 4,
@@ -6377,14 +6374,15 @@ mod tests {
             PropagationError::ThreadPool("global".to_string()),
             PropagationError::MissingOrbitTimes,
             PropagationError::UnsupportedCovarianceMode(
-                super::super::CovariancePropagation::Monte { samples: 4, seed: 1 },
+                super::super::CovariancePropagation::Monte {
+                    samples: 4,
+                    seed: 1,
+                },
             ),
         ];
         for error in fatal {
-            let mut result = super::super::od::IodResult::not_found(
-                crate::TimeScale::Tdb,
-                "test".to_string(),
-            );
+            let mut result =
+                super::super::od::IodResult::not_found(crate::TimeScale::Tdb, "test".to_string());
             let propagated = record_candidate_local_rejection_failure(
                 error.clone(),
                 4,
