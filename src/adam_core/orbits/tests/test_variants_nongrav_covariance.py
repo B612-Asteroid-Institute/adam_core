@@ -1,4 +1,5 @@
 import numpy as np
+import pyarrow as pa
 import pytest
 import quivr as qv
 
@@ -9,6 +10,43 @@ from adam_core.orbits.non_gravitational_parameters import NonGravitationalParame
 from adam_core.orbits.orbits import Orbits
 from adam_core.orbits.variants import VariantOrbits
 from adam_core.time import Timestamp
+
+
+def _replace_nested_arrow_field(
+    values: pa.StructArray,
+    path: tuple[str, ...],
+    replacement: pa.Array,
+) -> pa.StructArray:
+    """Replace one nested Arrow child without quivr's non-nullable cast."""
+    children: list[pa.Array] = []
+    for index, field in enumerate(values.type):
+        child = values.field(index)
+        if field.name == path[0]:
+            if len(path) == 1:
+                child = replacement
+            else:
+                assert isinstance(child, pa.StructArray)
+                child = _replace_nested_arrow_field(child, path[1:], replacement)
+        children.append(child)
+    mask = values.is_null() if values.null_count else None
+    return pa.StructArray.from_arrays(children, fields=list(values.type), mask=mask)
+
+
+def _with_raw_nested_arrow_field(
+    orbit: Orbits,
+    column: str,
+    replacement: pa.Array,
+) -> Orbits:
+    """Build malformed-but-representable input for unrelated-payload probes."""
+    path = tuple(column.split("."))
+    table = orbit.table.combine_chunks()
+    root_index = table.schema.get_field_index(path[0])
+    assert root_index >= 0
+    root = table.column(root_index).chunk(0)
+    assert isinstance(root, pa.StructArray)
+    replaced = _replace_nested_arrow_field(root, path[1:], replacement)
+    table = table.set_column(root_index, table.schema.field(root_index), replaced)
+    return Orbits.from_pyarrow(table, validate=False, permit_nulls=True)
 
 
 def _extended_orbit() -> tuple[Orbits, np.ndarray, np.ndarray]:
@@ -123,34 +161,155 @@ def test_strip_nongrav_covariance_is_rust_owned(
     )
 
 
-def test_strip_nongrav_covariance_preserves_mixed_and_null_rows() -> None:
+def test_strip_nongrav_covariance_preserves_noop_storage_exactly() -> None:
     extended, _, covariance = _extended_orbit()
     coordinate_only = extended.set_column(
         "coordinates.covariance",
         CoordinateCovariances.from_matrix(covariance[None, :6, :6]),
     )
-    null_covariance = extended.set_column(
-        "coordinates.covariance",
-        CoordinateCovariances.from_kwargs(values=[None]),
+    null_elements = extended.set_column(
+        "coordinates.covariance", CoordinateCovariances.nulls(1)
     )
-    coordinate_only_stripped = coordinate_only.without_non_gravitational_parameters()
-    np.testing.assert_array_equal(
-        coordinate_only_stripped.coordinates.covariance.to_matrix()[0],
-        covariance[:6, :6],
+    list_null = extended.set_column(
+        "coordinates.covariance", CoordinateCovariances.from_kwargs(values=[None])
     )
-    null_stripped = null_covariance.without_non_gravitational_parameters()
-    assert null_stripped.coordinates.covariance.values.to_pylist() == [None]
 
-    mixed = qv.concatenate([coordinate_only, extended, null_covariance])
+    for original in (coordinate_only, null_elements, list_null, extended[:0]):
+        stripped = original.without_non_gravitational_parameters()
+        assert stripped.coordinates.table.equals(original.coordinates.table)
+        assert (
+            stripped.coordinates.table.schema.metadata
+            == original.coordinates.table.schema.metadata
+        )
+
+
+def test_strip_nongrav_covariance_matches_legacy_mixed_null_policy() -> None:
+    extended, _, covariance = _extended_orbit()
+    sources = qv.concatenate([extended] * 5)
+    partial = list(covariance[:6, :6].reshape(-1))
+    partial[7] = None
+    mixed_covariance = qv.concatenate(
+        [
+            CoordinateCovariances.from_matrix(covariance[None, :6, :6]),
+            extended.coordinates.covariance,
+            CoordinateCovariances.from_kwargs(values=[None]),
+            CoordinateCovariances.from_kwargs(values=[partial]),
+            CoordinateCovariances.nulls(1),
+        ]
+    )
+    mixed = sources.set_column("coordinates.covariance", mixed_covariance)
+    expected = mixed.coordinates.covariance.to_matrix()
+
     stripped = mixed.without_non_gravitational_parameters()
 
-    assert len(stripped) == 3
+    assert len(stripped) == 5
     assert not stripped.has_non_gravitational_solution()
-    assert stripped.coordinates.covariance.values.to_pylist()[2] is None
-    np.testing.assert_array_equal(
-        stripped.coordinates.covariance.to_matrix()[:2],
-        np.repeat(covariance[None, :6, :6], 2, axis=0),
+    assert all(
+        row is not None for row in stripped.coordinates.covariance.values.to_pylist()
     )
+    np.testing.assert_array_equal(stripped.coordinates.covariance.to_matrix(), expected)
+    assert np.isnan(stripped.coordinates.covariance.to_matrix()[2]).all()
+    assert np.isnan(stripped.coordinates.covariance.to_matrix()[3, 1, 1])
+    assert np.isnan(stripped.coordinates.covariance.to_matrix()[4]).all()
+
+    variants = VariantOrbits.create(extended, method="sigma-point")[:5].set_column(
+        "coordinates.covariance", mixed_covariance
+    )
+    expected_variants = variants.coordinates.covariance.to_matrix()
+    stripped_variants = variants.without_non_gravitational_parameters()
+    np.testing.assert_array_equal(
+        stripped_variants.coordinates.covariance.to_matrix(), expected_variants
+    )
+    assert all(
+        row is not None
+        for row in stripped_variants.coordinates.covariance.values.to_pylist()
+    )
+
+
+def test_strip_nongrav_covariance_preserves_malformed_error_string() -> None:
+    extended, _, _ = _extended_orbit()
+    malformed = qv.concatenate(
+        [
+            extended.coordinates.covariance,
+            CoordinateCovariances.from_kwargs(values=[[0.0] * 4]),
+        ]
+    )
+    orbits = qv.concatenate([extended, extended]).set_column(
+        "coordinates.covariance", malformed
+    )
+
+    with pytest.raises(ValueError) as error:
+        orbits.without_non_gravitational_parameters()
+    assert str(error.value) == "Covariance row 1 has 4 values; expected 36 or 81."
+
+
+def test_strip_nongrav_covariance_preserves_all_null_time_and_scale() -> None:
+    orbit, _, _ = _extended_orbit()
+    null_time = _with_raw_nested_arrow_field(
+        orbit, "coordinates.time.days", pa.array([None], type=pa.int64())
+    )
+    null_time = _with_raw_nested_arrow_field(
+        null_time, "coordinates.time.nanos", pa.array([None], type=pa.int64())
+    )
+
+    stripped = null_time.without_non_gravitational_parameters()
+
+    assert stripped.coordinates.time.days.to_pylist() == [None]
+    assert stripped.coordinates.time.nanos.to_pylist() == [None]
+    assert stripped.coordinates.time.scale == "tdb"
+    assert stripped.coordinates.table.schema.metadata == (
+        null_time.coordinates.table.schema.metadata
+    )
+
+
+def test_strip_nongrav_covariance_preserves_custom_coordinate_metadata() -> None:
+    orbit, _, _ = _extended_orbit()
+    metadata = dict(orbit.coordinates.table.schema.metadata or {})
+    metadata[b"adam-review-sentinel"] = b"exact-bytes"
+    coordinates = CartesianCoordinates.from_pyarrow(
+        orbit.coordinates.table.replace_schema_metadata(metadata)
+    )
+    modified = orbit.set_column("coordinates", coordinates)
+
+    stripped = modified.without_non_gravitational_parameters()
+
+    assert (
+        modified.coordinates.table.schema.metadata[b"adam-review-sentinel"]
+        == b"exact-bytes"
+    )
+    assert stripped.coordinates.table.schema.metadata == (
+        modified.coordinates.table.schema.metadata
+    )
+
+
+@pytest.mark.parametrize(
+    ("column", "values"),
+    [
+        ("coordinates.x", pa.array([None], type=pa.float64())),
+        ("coordinates.time.days", pa.array([None], type=pa.int64())),
+        ("coordinates.time.nanos", pa.array([None], type=pa.int64())),
+        ("coordinates.origin.code", pa.array([None], type=pa.large_string())),
+        (
+            "coordinates.origin.code",
+            pa.array(["NAIF:0010"], type=pa.large_string()),
+        ),
+    ],
+)
+def test_strip_nongrav_covariance_preserves_unrelated_arrow_payload(
+    column: str,
+    values: pa.Array,
+) -> None:
+    orbit, _, _ = _extended_orbit()
+    modified = _with_raw_nested_arrow_field(orbit, column, values)
+    before = modified.coordinates.table.drop(["covariance"])
+
+    stripped = modified.without_non_gravitational_parameters()
+    after = stripped.coordinates.table.drop(["covariance"])
+
+    assert after.equals(before)
+    assert after.schema.metadata == before.schema.metadata
+    assert stripped.coordinates.frame == modified.coordinates.frame
+    assert stripped.coordinates.time.scale == modified.coordinates.time.scale
 
 
 def test_variant_nongrav_helpers_and_include_nongrav_false() -> None:

@@ -1,7 +1,11 @@
 import numpy as np
 import pytest
 
+from adam_core.coordinates.cartesian import CartesianCoordinates
 from adam_core.coordinates.covariances import _upper_triangular_to_full
+from adam_core.coordinates.origin import Origin
+from adam_core.coordinates.variants import create_coordinate_variants
+from adam_core.time import Timestamp
 
 from ...utils.helpers.orbits import make_real_orbits
 from ..covariances import (
@@ -12,6 +16,38 @@ from ..covariances import (
     weighted_covariance,
     weighted_mean,
 )
+
+
+def test_coordinate_variants_all_undefined_error_precedes_other_validation():
+    coordinates = CartesianCoordinates.from_kwargs(
+        x=[1.0],
+        y=[0.0],
+        z=[0.0],
+        vx=[0.0],
+        vy=[0.01],
+        vz=[0.0],
+        time=Timestamp.from_mjd([60000.0], scale="tdb"),
+        covariance=CoordinateCovariances.nulls(1),
+        origin=Origin.from_kwargs(code=["SUN"]),
+        frame="ecliptic",
+    )
+    expected = (
+        "Cannot sample coordinate covariances when covariances are all undefined."
+    )
+    for kwargs in (
+        {"method": "bogus"},
+        {"method": "monte-carlo", "num_samples": 0},
+        {"method": "sigma-point", "alpha": 0.0},
+    ):
+        with pytest.raises(ValueError) as error:
+            create_coordinate_variants(coordinates, **kwargs)
+        assert str(error.value) == expected
+
+
+def test_is_all_nan_checks_extended_nongrav_block():
+    covariance = np.full((1, 9, 9), np.nan)
+    covariance[0, 6, 6] = 1.0
+    assert not CoordinateCovariances.from_matrix(covariance).is_all_nan()
 
 
 def test_sample_covariance_sigma_points():

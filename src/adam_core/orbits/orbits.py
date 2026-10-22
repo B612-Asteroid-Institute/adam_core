@@ -8,6 +8,7 @@ import quivr as qv
 
 from ..coordinates.cartesian import CartesianCoordinates
 from ..coordinates.cometary import CometaryCoordinates
+from ..coordinates.covariances import CoordinateCovariances  # noqa: F401
 from ..coordinates.keplerian import KeplerianCoordinates
 from ..coordinates.origin import OriginCodes
 from ..coordinates.spherical import SphericalCoordinates
@@ -88,11 +89,16 @@ class Orbits(qv.Table):
         """Strip non-grav values and reduce extended covariance to its 6D block."""
         from .arrow_bridge import _without_nongrav_covariance
 
-        coordinates = _without_nongrav_covariance(self.coordinates)
-        return self.set_column(
+        orbits = self.set_column(
             "non_gravitational_parameters",
             NonGravitationalParameters.nulls(len(self)),
-        ).set_column("coordinates", coordinates)
+        )
+        if self.coordinates.covariance.has_nongrav_block():
+            orbits = orbits.set_column(
+                "coordinates.covariance",
+                _without_nongrav_covariance(self.coordinates.covariance),
+            )
+        return orbits
 
     def coordinates_to(
         self,

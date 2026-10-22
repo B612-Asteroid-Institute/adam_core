@@ -292,7 +292,7 @@ class CoordinateCovariances(qv.Table):
         """
         from adam_core import _rust_native
 
-        return _rust_native.covariance_is_all_nan_numpy(self.to_matrix())
+        return _rust_native.covariance_is_all_nan_numpy(self.to_transform_matrix())
 
 
 def make_positive_semidefinite(

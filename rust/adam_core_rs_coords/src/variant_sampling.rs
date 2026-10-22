@@ -562,8 +562,7 @@ fn sample_coordinate_covariances_dimension<const N: usize>(
     }
     if covariances_flat.iter().all(|value| value.is_nan()) {
         return Err(SchemaError::InvalidRecordBatch(
-            "Cannot sample coordinate covariances when covariances are all undefined."
-                .to_string(),
+            "Cannot sample coordinate covariances when covariances are all undefined.".to_string(),
         ));
     }
     let mut samples_out = Vec::new();

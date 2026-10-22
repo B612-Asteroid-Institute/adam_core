@@ -304,54 +304,34 @@ class CartesianCoordinates(qv.Table):
         -------
             Rotated Cartesian coordinates and their covariances.
         """
+        from adam_core import _rust_native
+
         from .._rust.api import rotate_cartesian_time_varying_numpy
-        from .covariances import apply_linear_covariance_transform
 
         n = len(self)
-        cov_matrix = self.covariance.to_transform_matrix()
-        coordinate_covariance = cov_matrix[:, :6, :6]
-        cov_flat = np.ascontiguousarray(coordinate_covariance.reshape(n, 36))
-        # Single shared rotation matrix applied to all rows; time_index
-        # is a zero-vector pointing into a length-1 matrix table. The Rust
-        # kernel handles the NaN policy for covariance (fill NaN with 0,
-        # rotate, restore NaN) and propagates coord NaN via IEEE.
-        rust_result = rotate_cartesian_time_varying_numpy(
+        cov_matrix = np.ascontiguousarray(
+            self.covariance.to_transform_matrix(), dtype=np.float64
+        )
+        # Coordinate and covariance rotation are separate native kernels. The
+        # covariance kernel owns 6D/9D selection, NaN masking/restoration, and
+        # near-zero thresholding; Python only marshals the stored matrix.
+        coords_rotated, _ = rotate_cartesian_time_varying_numpy(
             self.values,
             np.zeros(n, dtype=np.int64),
             rotation_matrix.reshape(1, 6, 6),
-            cov_flat,
+            None,
         )
-
-        coords_rotated, cov_flat_rotated = rust_result
-        if cov_flat_rotated is None:
-            raise RuntimeError(
-                "rotate_cartesian_time_varying_numpy returned no covariance output "
-                "despite covariance input"
+        covariances_rotated, near_zero = (
+            _rust_native._rotate_cartesian_covariance_numpy(
+                np.ascontiguousarray(rotation_matrix, dtype=np.float64),
+                cov_matrix,
+                COVARIANCE_ROTATION_TOLERANCE,
             )
-        covariances_rotated = np.asarray(cov_flat_rotated, dtype=np.float64).reshape(
-            n, 6, 6
-        )
-        if cov_matrix.shape[1] == 9:
-            covariance_mask = np.isnan(cov_matrix)
-            covariances_rotated = apply_linear_covariance_transform(
-                rotation_matrix, np.nan_to_num(cov_matrix, nan=0.0)
-            )
-            covariances_rotated[covariance_mask] = np.nan
-
-        # Check if any coordinate-block elements are near zero, if so set them to zero
-        coordinate_block = covariances_rotated[:, :6, :6]
-        near_zero = len(
-            coordinate_block[np.abs(coordinate_block) < COVARIANCE_ROTATION_TOLERANCE]
         )
         if near_zero > 0:
             logger.debug(
                 f"{near_zero} covariance elements are within {COVARIANCE_ROTATION_TOLERANCE:.0e}"
                 " of zero after rotation, setting these elements to 0."
-            )
-            covariances_rotated[:, :6, :6] = np.where(
-                np.abs(coordinate_block) < COVARIANCE_ROTATION_TOLERANCE,
-                0,
-                coordinate_block,
             )
 
         coords = self.from_kwargs(

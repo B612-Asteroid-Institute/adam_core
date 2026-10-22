@@ -1264,6 +1264,47 @@ pub fn apply_linear_covariance_transform_flat(
     Ok(output)
 }
 
+/// Rotate 6D or extended 9D Cartesian covariance rows with one 6x6 matrix,
+/// restoring the input NaN mask and zeroing near-zero coordinate-block values.
+/// Returns the transformed rows and the number of values zeroed.
+pub fn rotate_cartesian_covariance_flat(
+    flat_cov: &[f64],
+    dimension: usize,
+    matrix_flat: &[f64],
+    coordinate_zero_tolerance: f64,
+) -> Result<(Vec<f64>, usize), &'static str> {
+    if !coordinate_zero_tolerance.is_finite() || coordinate_zero_tolerance < 0.0 {
+        return Err("coordinate_zero_tolerance must be finite and non-negative");
+    }
+    if matrix_flat.len() != 36 {
+        return Err("matrix_flat length must be 36");
+    }
+    if !matches!(dimension, 6 | 9) {
+        return Err("covariance dimension must be 6 or 9");
+    }
+    if !flat_cov.len().is_multiple_of(dimension * dimension) {
+        return Err("flat_cov length must be N * dimension * dimension");
+    }
+    let rows = flat_cov.len() / (dimension * dimension);
+    let indices = vec![0; rows];
+    let mut output =
+        apply_linear_covariance_transform_flat(flat_cov, dimension, &indices, matrix_flat)?;
+    let mut near_zero = 0;
+    for row in 0..rows {
+        let row_start = row * dimension * dimension;
+        for coordinate_row in 0..6 {
+            for coordinate_column in 0..6 {
+                let index = row_start + coordinate_row * dimension + coordinate_column;
+                if output[index].abs() < coordinate_zero_tolerance {
+                    output[index] = 0.0;
+                    near_zero += 1;
+                }
+            }
+        }
+    }
+    Ok((output, near_zero))
+}
+
 pub fn rotate_cartesian_time_varying_flat6(
     flat_coords: &[f64],
     flat_cov: &[f64],
@@ -1947,5 +1988,53 @@ mod orbital_public_tests {
 
         let hyperbolic_nu = solve_kepler_true_anomaly(1.2, 0.1, 100, 1e-15);
         assert!(hyperbolic_nu.is_finite());
+    }
+}
+
+#[cfg(test)]
+mod cartesian_covariance_rotation_tests {
+    use super::rotate_cartesian_covariance_flat;
+
+    #[test]
+    fn extended_rotation_preserves_nan_mask_and_nongrav_block() {
+        let mut covariance = vec![0.0_f64; 81];
+        for index in 0..9 {
+            covariance[index * 9 + index] = (index + 1) as f64;
+        }
+        covariance[1] = f64::NAN;
+        covariance[9] = f64::NAN;
+        covariance[2 * 9 + 6] = 0.25;
+        covariance[6 * 9 + 2] = 0.25;
+        let matrix = [
+            0.0, -1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0,
+            0.0, 0.0, 0.0, 0.0, 0.0, -1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+            0.0, 1.0,
+        ];
+        let (rotated, near_zero) =
+            rotate_cartesian_covariance_flat(&covariance, 9, &matrix, 1.0e-25).unwrap();
+
+        assert!(rotated[1].is_nan());
+        assert!(rotated[9].is_nan());
+        assert_eq!(rotated[6 * 9 + 6], covariance[6 * 9 + 6]);
+        assert_eq!(rotated[7 * 9 + 7], covariance[7 * 9 + 7]);
+        assert_eq!(rotated[8 * 9 + 8], covariance[8 * 9 + 8]);
+        assert_eq!(rotated[0], 2.0);
+        assert_eq!(rotated[10], 1.0);
+        assert!(near_zero > 0);
+    }
+
+    #[test]
+    fn rotation_zeros_only_coordinate_block_near_zero_values() {
+        let mut covariance = vec![0.0_f64; 81];
+        covariance[0] = 1.0e-30;
+        covariance[6 * 9 + 6] = 1.0e-30;
+        let mut identity = [0.0_f64; 36];
+        for index in 0..6 {
+            identity[index * 6 + index] = 1.0;
+        }
+        let (rotated, _) =
+            rotate_cartesian_covariance_flat(&covariance, 9, &identity, 1.0e-25).unwrap();
+        assert_eq!(rotated[0], 0.0);
+        assert_eq!(rotated[6 * 9 + 6], 1.0e-30);
     }
 }

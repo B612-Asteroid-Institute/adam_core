@@ -383,6 +383,23 @@ pub struct CovarianceBatch {
     pub units: CovarianceUnits,
 }
 
+fn coordinate_covariance_block_values(source: &[f64], dimension: usize) -> SchemaResult<[f64; 36]> {
+    if !matches!(dimension, 6 | 9) || source.len() != dimension * dimension {
+        return Err(SchemaError::InvalidCovarianceShape {
+            rows: 1,
+            dimension,
+            values: source.len(),
+        });
+    }
+    let mut coordinate_block = [0.0_f64; 36];
+    for row in 0..6 {
+        for column in 0..6 {
+            coordinate_block[row * 6 + column] = source[row * dimension + column];
+        }
+    }
+    Ok(coordinate_block)
+}
+
 impl CovarianceBatch {
     pub fn new(
         rows: usize,
@@ -507,14 +524,12 @@ impl CovarianceBatch {
 
         let mut values = Vec::with_capacity(self.rows * 6 * 6);
         for row in 0..self.rows {
-            let source = self.row_values(row);
-            for coordinate_row in 0..6 {
-                let start = coordinate_row * self.dimension;
-                values.extend_from_slice(&source[start..start + 6]);
-            }
+            values.extend_from_slice(&coordinate_covariance_block_values(
+                self.row_values(row),
+                self.dimension,
+            )?);
         }
-        let coordinate_covariance =
-            Self::new(self.rows, 6, values, self.units.clone())?;
+        let coordinate_covariance = Self::new(self.rows, 6, values, self.units.clone())?;
         match self.row_validity.clone() {
             Some(validity) => coordinate_covariance.with_row_validity(validity),
             None => Ok(coordinate_covariance),

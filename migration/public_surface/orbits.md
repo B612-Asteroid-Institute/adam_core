@@ -9,7 +9,7 @@ symbol-level inventory; this is its grouped implementation disposition.
 | Surface group | Disposition | Evidence |
 |---|---|---|
 | Orbits/Ephemeris/Variant tables, columns, constructors, projection, linkage objects | generic quivr/PyArrow data veneer; UUIDs remain Python inputs where nondeterministic identity is required | schema/linkage/round-trip tests |
-| `NonGravitationalParameters`, Marsden constants, array projections, null construction, and orbit presence/strip helpers | typed quivr/static-data compatibility veneer; force-domain validation belongs to propagators | nested Arrow, mixed/null, validation, and opt-out tests |
+| `NonGravitationalParameters`, Marsden constants, array projections, null construction, and orbit presence/strip helpers | typed quivr/static-data compatibility veneer; when stripping a solved A1/A2/A3 covariance, Python performs only the structural 81-value guard and Rust projects the covariance payload to its 6D coordinate block without decoding unrelated coordinates; force-domain validation belongs to propagators | nested Arrow, mixed/null/partial-null payload parity, validation, and opt-out tests |
 | `Orbits.coordinates_to` and representation aliases | thin veneer over the one-crossing Rust coordinate/covariance transform, preserving the complete 6D/9D covariance | mixed representation and 9D transform tests |
 | `Orbits.group_by_orbit_id` | one Arrow crossing; Rust owns stable grouping and output batches | grouping parity and benchmark coverage |
 | `Orbits.dynamical_class` / `calc_orbit_class` | one Arrow/numeric crossing; Rust owns conversion inputs, classification, and stable labels | random parity, method tests, native timing |
