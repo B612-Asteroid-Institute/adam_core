@@ -2,11 +2,13 @@
 
 import json
 import subprocess
+import sys
 from pathlib import Path
 
 import numpy as np
 import pyarrow as pa
 import pytest
+
 
 import adam_core
 from adam_core import _rust_native
@@ -380,22 +382,26 @@ def test_custom_descriptor_is_stable_across_hash_seed_and_import_order(tmp_path)
     import os
     import sys
 
-    module_path = tmp_path / "seed_model.py"
-    module_path.write_text(
-        "from adam_core.orbit_determination import ModelProvenance\n"
-        "from adam_core.orbit_determination.observation_uncertainty import ObservationUncertaintyModel\n"
-        "class Model(ObservationUncertaintyModel):\n"
-        "    def __init__(self):\n"
-        "        self.excluded = {'V', 'a', 'b', 'c'}\n"
-        "    def apply(self, observations):\n"
-        "        return observations\n"
-        "    def model_provenance(self):\n"
-        "        return ModelProvenance('example-model', '2.1', 'a' * 64, "
-        "{'excluded': self.excluded})\n",
-        encoding="utf-8",
+    repository = Path(__file__).resolve().parents[4]
+    example = repository / "migration/examples/acme_orbit_models"
+    installed = tmp_path / "installed-example"
+    subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "pip",
+            "install",
+            "--quiet",
+            "--no-deps",
+            "--no-build-isolation",
+            "--target",
+            str(installed),
+            str(example),
+        ],
+        check=True,
     )
     script = (
-        "{imports}; from seed_model import Model; "
+        "{imports}; from acme_orbit_models import CalibratedModel as Model; "
         "from adam_core.orbit_determination import IdentityModel; "
         "from adam_core.orbit_determination.provenance import model_descriptor; "
         "print(model_descriptor(Model())['descriptor_sha256']); "
@@ -412,7 +418,7 @@ def test_custom_descriptor_is_stable_across_hash_seed_and_import_order(tmp_path)
             environment["PYTHONPATH"] = os.pathsep.join(
                 part
                 for part in (
-                    str(tmp_path),
+                    str(installed),
                     source_root,
                     environment.get("PYTHONPATH"),
                 )
@@ -812,6 +818,168 @@ def test_builtin_behavior_overrides_and_nested_overrides_require_contract(monkey
         model_descriptor(NightBatchDeweightingModel(cap=2))
 
 
+def _assert_run_od_preflight_refuses_model(
+    model, monkeypatch, match="model_provenance"
+):
+    from adam_core import _rust_native
+
+    apply_calls = 0
+    fit_calls = 0
+
+    def model_work(*args, **kwargs):
+        nonlocal apply_calls
+        apply_calls += 1
+        raise AssertionError("model must not run before provenance refusal")
+
+    class Fitter:
+        def full_od(self, *args, **kwargs):
+            nonlocal fit_calls
+            fit_calls += 1
+            raise AssertionError("fitter must not run before provenance refusal")
+
+    monkeypatch.setattr(_rust_native, "veres_model_apply_numpy", model_work)
+    monkeypatch.setattr(_rust_native, "bias_table_model_apply_numpy", model_work)
+    with pytest.raises(TypeError, match=match):
+        run_od(
+            make_synthetic_observations(),
+            Fitter(),
+            [model],
+            propagator=TwoBodyPropagator(),
+        )
+    assert apply_calls == 0
+    assert fit_calls == 0
+
+
+def test_sigma_fill_model_constant_monkeypatch_is_custom_on_real_route(monkeypatch):
+    """Exact fallback-audit reproducer: fill must not retain built-in identity."""
+    from adam_core.orbit_determination.tests.test_veres2017 import SMALL_TABLE
+    from adam_core.orbit_determination.veres2017 import SigmaFillModel
+
+    model = SigmaFillModel(SMALL_TABLE)
+    original = model_descriptor(model)
+    monkeypatch.setattr(SigmaFillModel, "_MODEL", "replace")
+    assert model._native_specs()[0]["kind"] == "replace"
+    with pytest.raises(TypeError, match="model_provenance"):
+        model_descriptor(model)
+    assert original["implementation"]["kind"] == "adam-core-built-in-v1"
+    _assert_run_od_preflight_refuses_model(model, monkeypatch)
+
+
+def test_veres_lookup_payload_monkeypatch_is_custom_on_real_route(monkeypatch):
+    """Exact fallback-audit reproducer: nested payload routing is attested."""
+    from adam_core.orbit_determination.tests.test_veres2017 import SMALL_TABLE
+    from adam_core.orbit_determination.veres2017 import (
+        SigmaFillModel,
+        VeresSigmaLookup,
+    )
+
+    model = SigmaFillModel(SMALL_TABLE)
+    original = VeresSigmaLookup._table_arguments
+
+    def replaced_arguments(self):
+        arguments = original(self)
+        return (*arguments[:-1], 19.0)
+
+    monkeypatch.setattr(VeresSigmaLookup, "_table_arguments", replaced_arguments)
+    assert model._native_specs()[0]["fallback_sigma_arcsec"] == 19.0
+    with pytest.raises(TypeError, match="model_provenance"):
+        model_descriptor(model)
+    _assert_run_od_preflight_refuses_model(model, monkeypatch)
+
+
+@pytest.mark.parametrize(
+    ("owner_name", "member", "replacement"),
+    [
+        ("SigmaFillModel", "_DEFAULT_TABLE", "veres2017_working"),
+        ("VeresSigmaLookup", "sigmas_for", lambda self, codes, catalogs: None),
+        ("VeresSigmaLookup", "sigmas", lambda self, code, catalog: (9.0, 9.0)),
+    ],
+)
+def test_veres_registered_class_mutations_are_custom(
+    monkeypatch, owner_name, member, replacement
+):
+    from adam_core.orbit_determination.tests.test_veres2017 import SMALL_TABLE
+    from adam_core.orbit_determination.veres2017 import (
+        SigmaFillModel,
+        VeresSigmaLookup,
+    )
+
+    model = SigmaFillModel(SMALL_TABLE)
+    owner = {"SigmaFillModel": SigmaFillModel, "VeresSigmaLookup": VeresSigmaLookup}[
+        owner_name
+    ]
+    monkeypatch.setattr(owner, member, replacement)
+    _assert_run_od_preflight_refuses_model(model, monkeypatch)
+
+
+@pytest.mark.parametrize(
+    ("owner_name", "member"),
+    [
+        ("SigmaFillModel", "lookup"),
+        ("SigmaFillModel", "fill_missing"),
+        ("VeresSigmaLookup", "fallback_sigma_arcsec"),
+    ],
+)
+def test_registered_instance_data_cannot_be_shadowed_on_the_class(
+    monkeypatch, owner_name, member
+):
+    from adam_core.orbit_determination.tests.test_veres2017 import SMALL_TABLE
+    from adam_core.orbit_determination.veres2017 import (
+        SigmaFillModel,
+        VeresSigmaLookup,
+    )
+
+    model = SigmaFillModel(SMALL_TABLE)
+    owner = {"SigmaFillModel": SigmaFillModel, "VeresSigmaLookup": VeresSigmaLookup}[
+        owner_name
+    ]
+    monkeypatch.setattr(owner, member, property(lambda self: None), raising=False)
+    _assert_run_od_preflight_refuses_model(model, monkeypatch)
+
+
+def test_bias_row_columns_monkeypatch_is_custom_on_real_route(monkeypatch):
+    from adam_core.orbit_determination.observation_uncertainty import (
+        PerformanceWeightedModel,
+    )
+
+    model = PerformanceWeightedModel(
+        make_bias_table([{"obs_code": "500", "chi2_per_obs": 2.0}])
+    )
+    monkeypatch.setattr(
+        PerformanceWeightedModel,
+        "_ROW_COLUMNS",
+        tuple(reversed(PerformanceWeightedModel._ROW_COLUMNS)),
+    )
+    _assert_run_od_preflight_refuses_model(model, monkeypatch)
+
+
+def test_registered_instance_shadows_and_nested_subclass_are_custom(monkeypatch):
+    from adam_core.orbit_determination.tests.test_veres2017 import SMALL_TABLE
+    from adam_core.orbit_determination.veres2017 import (
+        SigmaFillModel,
+        VeresSigmaLookup,
+    )
+
+    for mutate in (
+        lambda model: setattr(model, "_MODEL", "replace"),
+        lambda model: setattr(model, "_DEFAULT_TABLE", "veres2017_working"),
+        lambda model: setattr(
+            model.lookup, "_table_arguments", lambda: ([], [], [], [], 3.0)
+        ),
+    ):
+        model = SigmaFillModel(SMALL_TABLE)
+        mutate(model)
+        with pytest.raises(TypeError, match="model_provenance"):
+            model_descriptor(model)
+
+    class LookupSubclass(VeresSigmaLookup):
+        pass
+
+    model = SigmaFillModel(SMALL_TABLE)
+    model.lookup = LookupSubclass(SMALL_TABLE)
+    _assert_run_od_preflight_refuses_model(model, monkeypatch)
+
+
 def test_nested_custom_model_contract_is_recursive_and_sensitive():
     from adam_core.orbit_determination.observation_uncertainty import CompositeModel
 
@@ -881,6 +1049,189 @@ def test_contracted_moduleless_model_is_rejected():
     Model.__module__ = None
     with pytest.raises(TypeError, match="module identity"):
         model_descriptor(Model())
+
+
+def _write_installed_distribution(root, name, version, files):
+    normalized = name.replace("-", "_")
+    dist_info = root / f"{normalized}-{version}.dist-info"
+    dist_info.mkdir(parents=True)
+    (dist_info / "METADATA").write_text(
+        f"Metadata-Version: 2.1\nName: {name}\nVersion: {version}\n",
+        encoding="utf-8",
+    )
+    records = []
+    for relative, content in files.items():
+        path = root / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
+        records.append(f"{relative},,")
+    records.extend(
+        [
+            f"{dist_info.name}/METADATA,,",
+            f"{dist_info.name}/RECORD,,",
+        ]
+    )
+    (dist_info / "RECORD").write_text("\n".join(records) + "\n", encoding="utf-8")
+
+
+def _dynamic_contracted_model(module, package, version, counters):
+    def apply(self, observations):
+        counters["apply"] += 1
+        return observations
+
+    def model_provenance(self):
+        counters["contract"] += 1
+        return ModelProvenance(package, version, "d" * 64, {"mode": "audit"})
+
+    return type(
+        "DynamicModel",
+        (ObservationUncertaintyModel,),
+        {
+            "__module__": module,
+            "__qualname__": "DynamicModel",
+            "apply": apply,
+            "model_provenance": model_provenance,
+        },
+    )
+
+
+def _assert_distribution_refusal_precedes_work(model, match):
+    counters = model._audit_counters
+
+    class Fitter:
+        def full_od(self, *args, **kwargs):
+            counters["fit"] += 1
+            raise AssertionError("fitter ran before custom-model refusal")
+
+    class Provider:
+        def __getattribute__(self, name):
+            if name.startswith("__"):
+                return object.__getattribute__(self, name)
+            counters["provider"] += 1
+            raise AssertionError("provider ran before custom-model refusal")
+
+    with pytest.raises(TypeError, match=match):
+        run_od(
+            make_synthetic_observations(),
+            Fitter(),
+            [model],
+            propagator=Provider(),
+        )
+    assert counters == {"contract": 1, "apply": 0, "fit": 0, "provider": 0}
+
+
+def test_main_dynamic_nonexistent_contract_is_rejected_before_all_work(
+    monkeypatch, allow_synthetic_model_distribution
+):
+    """Exact fallback-audit reproducer must fail before model/fitter/provider."""
+    import adam_core.orbit_determination.provenance as provenance
+
+    monkeypatch.setattr(
+        provenance,
+        "_validate_custom_model_distribution",
+        allow_synthetic_model_distribution,
+    )
+    counters = {"contract": 0, "apply": 0, "fit": 0, "provider": 0}
+    cls = _dynamic_contracted_model(
+        "__main__", "nonexistent-audit-distribution", "999", counters
+    )
+    model = cls()
+    model._audit_counters = counters
+    _assert_distribution_refusal_precedes_work(model, "__main__")
+
+
+def test_local_contracted_class_is_rejected_before_all_work(
+    monkeypatch, allow_synthetic_model_distribution
+):
+    import adam_core.orbit_determination.provenance as provenance
+
+    monkeypatch.setattr(
+        provenance,
+        "_validate_custom_model_distribution",
+        allow_synthetic_model_distribution,
+    )
+    counters = {"contract": 0, "apply": 0, "fit": 0, "provider": 0}
+
+    class LocalModel(ObservationUncertaintyModel):
+        def apply(self, observations):
+            counters["apply"] += 1
+            return observations
+
+        def model_provenance(self):
+            counters["contract"] += 1
+            return ModelProvenance("nonexistent-local-model", "1", "e" * 64, {})
+
+    model = LocalModel()
+    model._audit_counters = counters
+    _assert_distribution_refusal_precedes_work(model, "non-local class")
+
+
+@pytest.mark.parametrize(
+    ("case", "module", "claimed_version", "files", "match"),
+    [
+        (
+            "missing distribution",
+            "missing_provider.models",
+            "1.0",
+            None,
+            "is not installed",
+        ),
+        (
+            "wrong version",
+            "audit_models.models",
+            "2.0",
+            {"audit_models/models.py": "class DynamicModel: pass\n"},
+            "does not match installed",
+        ),
+        (
+            "foreign module",
+            "foreign_models.models",
+            "1.0",
+            {"audit_models/models.py": "class DynamicModel: pass\n"},
+            "not Python source owned",
+        ),
+        (
+            "sourceless module",
+            "audit_models.models",
+            "1.0",
+            {"audit_models/models.so": "not a Python source module\n"},
+            "not Python source owned",
+        ),
+        (
+            "dynamic class",
+            "audit_models.models",
+            "1.0",
+            {"audit_models/models.py": "VALUE = 1\n"},
+            "is dynamic or not declared",
+        ),
+    ],
+)
+def test_custom_distribution_refusals_use_real_run_od_preflight(
+    tmp_path,
+    monkeypatch,
+    allow_synthetic_model_distribution,
+    case,
+    module,
+    claimed_version,
+    files,
+    match,
+):
+    import adam_core.orbit_determination.provenance as provenance
+
+    monkeypatch.setattr(
+        provenance,
+        "_validate_custom_model_distribution",
+        allow_synthetic_model_distribution,
+    )
+    if files is not None:
+        _write_installed_distribution(tmp_path, "audit-models", "1.0", files)
+        monkeypatch.syspath_prepend(str(tmp_path))
+    counters = {"contract": 0, "apply": 0, "fit": 0, "provider": 0}
+    package = "missing-audit-models" if files is None else "audit-models"
+    cls = _dynamic_contracted_model(module, package, claimed_version, counters)
+    model = cls()
+    model._audit_counters = counters
+    _assert_distribution_refusal_precedes_work(model, match)
 
 
 def test_real_git_source_checkout_detector_is_fail_closed(tmp_path):
@@ -974,12 +1325,38 @@ def test_real_git_source_checkout_detector_is_fail_closed(tmp_path):
     assert _source_checkout_problems(head, repo=installed) == ()
 
 
-def test_documented_custom_model_examples_are_executable_verbatim():
+def test_documented_custom_model_examples_are_executable_verbatim(
+    tmp_path, monkeypatch, allow_synthetic_model_distribution
+):
+    import adam_core.orbit_determination.provenance as provenance
+
+    monkeypatch.setattr(
+        provenance,
+        "_validate_custom_model_distribution",
+        allow_synthetic_model_distribution,
+    )
     repository = Path(__file__).resolve().parents[4]
+    installed = tmp_path / "installed-example"
+    subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "pip",
+            "install",
+            "--quiet",
+            "--no-deps",
+            "--no-build-isolation",
+            "--target",
+            str(installed),
+            str(repository / "migration/examples/acme_orbit_models"),
+        ],
+        check=True,
+    )
+    monkeypatch.syspath_prepend(str(installed))
 
     guide = (repository / "docs/source/use_cases/orbit_determination.rst").read_text()
     guide_start = guide.index(
-        "   from adam_core.orbit_determination import ModelProvenance"
+        "   # Install migration/examples/acme_orbit_models first."
     )
     guide_end = guide.index("\n\nThe provider owns", guide_start)
     guide_code = "\n".join(
@@ -991,7 +1368,8 @@ def test_documented_custom_model_examples_are_executable_verbatim():
     guide_model = guide_namespace["MyModel"]()
     marker = object()
     assert guide_model.apply(marker) is marker
-    assert guide_model.model_provenance().package == "my-od-models"
+    assert guide_model.model_provenance().package == "acme-orbit-models"
+    assert model_descriptor(guide_model)["implementation"]["version"] == "3.2.0"
 
     migration = (repository / "migration/custom_model_provenance.md").read_text()
     migration_code = migration.split("```python\n", 1)[1].split("\n```", 1)[0]
@@ -999,7 +1377,11 @@ def test_documented_custom_model_examples_are_executable_verbatim():
     exec(migration_code, migration_namespace)
     migration_model = migration_namespace["CalibratedModel"](1.5)
     assert migration_model.apply(marker) is marker
-    assert migration_model.model_provenance().configuration == {"scale": 1.5}
+    assert migration_model.model_provenance().configuration == {
+        "mode": "calibrated",
+        "scale": 1.5,
+    }
+    assert model_descriptor(migration_model)["type"].endswith(".CalibratedModel")
 
 
 def test_public_run_od_recursively_preflights_nested_custom_models():
@@ -1029,3 +1411,6 @@ def test_public_run_od_recursively_preflights_nested_custom_models():
         )
     assert apply_calls == 0
     assert fit_calls == 0
+
+
+pytestmark = pytest.mark.usefixtures("allow_synthetic_model_distribution")

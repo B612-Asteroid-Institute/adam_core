@@ -51,6 +51,7 @@ import pyarrow as pa
 
 from ..coordinates.covariances import CoordinateCovariances
 from .evaluate import OrbitDeterminationObservations
+from .model_provenance import _BehaviorSpec, _capture_behavior_spec
 from .observation_uncertainty import ObservationUncertaintyModel
 
 __all__ = [
@@ -439,18 +440,39 @@ class SigmaFillModel(_VeresSigmaModel):
     _DEFAULT_TABLE = V2_SIGMA_FILL_TABLE
 
 
-def _capture_provenance_behavior(cls: type) -> dict[str, object]:
-    """Capture shipped routing functions before callers can monkeypatch them."""
-    captured: dict[str, object] = {}
-    for name in ("apply", "_native_specs"):
-        for owner in cls.__mro__:
-            if name in vars(owner):
-                captured[name] = vars(owner)[name]
-                break
-    return captured
+# The lookup is a recursively used behavior collaborator: its exact type,
+# routing methods, and any instance shadows are part of the built-in identity.
+
+_VERES_LOOKUP_BEHAVIOR = _capture_behavior_spec(
+    VeresSigmaLookup,
+    ("__init__", "_table_arguments", "sigmas_for", "sigmas"),
+    instance_fields=(
+        "sigma_table",
+        "fallback_sigma_arcsec",
+        "_obs_codes",
+        "_astcats",
+        "_sigma_ra",
+        "_sigma_dec",
+    ),
+)
 
 
-_PROVENANCE_BEHAVIOR_METHODS = {
-    cls: _capture_provenance_behavior(cls)
+def _veres_model_behavior(cls: type) -> _BehaviorSpec:
+    return _capture_behavior_spec(
+        cls,
+        (
+            "__init__",
+            "apply",
+            "_native_specs",
+            "_MODEL",
+            "_DEFAULT_TABLE",
+        ),
+        instance_fields=("lookup", "fill_missing"),
+        collaborators=(("lookup", _VERES_LOOKUP_BEHAVIOR),),
+    )
+
+
+_PROVENANCE_BEHAVIOR_REGISTRY = {
+    cls: _veres_model_behavior(cls)
     for cls in (VeresFloorModel, VeresReplaceModel, SigmaFillModel)
 }

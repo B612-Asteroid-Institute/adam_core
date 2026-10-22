@@ -480,15 +480,15 @@ def run_od(
         )
     from .native_orbit_fitter import NativeOrbitFitter
 
+    if isinstance(models, str):
+        models = _default_models()
+    model_list = _model_list(models)
+    provenance = _preflight_provenance(fitter, model_list)
     if isinstance(fitter, NativeOrbitFitter):
         from adam_core import _rust_native
 
         iod_settings, refinement, fit_settings = fitter.native_settings()
         _rust_native.validate_full_od_settings(iod_settings, refinement, fit_settings)
-    if isinstance(models, str):
-        models = _default_models()
-    model_list = _model_list(models)
-    provenance = _preflight_provenance(fitter, model_list)
     if len(observations) == 0:
         return FittedOrbits.empty(), FittedOrbitMembers.empty()
 

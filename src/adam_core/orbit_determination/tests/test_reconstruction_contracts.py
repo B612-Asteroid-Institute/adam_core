@@ -11,6 +11,7 @@ import numpy as np
 import pyarrow as pa
 import pytest
 
+
 import adam_core
 from adam_core import _rust_native
 from adam_core.orbit_determination import (
@@ -352,3 +353,6 @@ def test_provider_metadata_comes_from_capsule_not_python_declaration():
             return
     rec = _record(orbits)
     assert "declared-name" not in rec["refinement_provider"]
+
+
+pytestmark = pytest.mark.usefixtures("allow_synthetic_model_distribution")

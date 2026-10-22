@@ -14,6 +14,7 @@ import numpy as np
 import pyarrow as pa
 import pytest
 
+
 from ...coordinates.covariances import CoordinateCovariances
 from ..evaluate import OrbitDeterminationObservations
 from ..model_provenance import ModelProvenance
@@ -158,3 +159,6 @@ def test_native_and_python_applied_model_routes_agree_with_filled_sigmas(
             ),
             rtol=1e-12,
         )
+
+
+pytestmark = pytest.mark.usefixtures("allow_synthetic_model_distribution")

@@ -3,6 +3,7 @@
 import numpy.testing as npt
 import pytest
 
+
 import adam_core
 from adam_core import _rust_native
 from adam_core.coordinates import CoordinateCovariances
@@ -557,3 +558,6 @@ def test_python_propagators_are_refused():
 
     with pytest.raises(TypeError, match="not covered"):
         run_iod(observations, ChangedCapsule())
+
+
+pytestmark = pytest.mark.usefixtures("allow_synthetic_model_distribution")

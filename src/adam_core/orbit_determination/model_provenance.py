@@ -19,9 +19,9 @@ class ModelProvenance:
     Parameters
     ----------
     package
-        Stable distribution or project name that owns the implementation.
+        Installed distribution name that owns the implementation class.
     version
-        Exact package/project version for this implementation.
+        Exact immutable installed distribution version for this implementation.
     implementation_fingerprint
         Lowercase 64-hex SHA-256 (or equivalent content fingerprint) chosen by
         the provider. A science-affecting implementation change must use a new
@@ -37,12 +37,44 @@ class ModelProvenance:
     configuration: Mapping[str, Any]
 
 
+@dataclass(frozen=True, slots=True)
+class _BehaviorSpec:
+    """Exact shipped class behavior used by built-in provenance checks."""
+
+    model_type: type[Any]
+    class_members: tuple[tuple[str, object], ...]
+    instance_fields: tuple[str, ...] = ()
+    collaborators: tuple[tuple[str, "_BehaviorSpec"], ...] = ()
+
+
+def _capture_behavior_spec(
+    model_type: type[Any],
+    member_names: tuple[str, ...],
+    *,
+    instance_fields: tuple[str, ...] = (),
+    collaborators: tuple[tuple[str, _BehaviorSpec], ...] = (),
+) -> _BehaviorSpec:
+    """Capture explicitly named shipped members before callers can patch them."""
+    members: list[tuple[str, object]] = []
+    for name in member_names:
+        for owner in model_type.__mro__:
+            if name in vars(owner):
+                members.append((name, vars(owner)[name]))
+                break
+        else:  # pragma: no cover - import-time registry programming error
+            raise RuntimeError(
+                f"registered behavior member {model_type.__qualname__}.{name} is missing"
+            )
+    return _BehaviorSpec(model_type, tuple(members), instance_fields, collaborators)
+
+
 @runtime_checkable
 class ProvenancedModel(Protocol):
     """Structural provenance hook implemented by custom observation models.
 
     This protocol describes only the provenance facet. A model accepted by
-    ``run_od`` must also subclass ``ObservationUncertaintyModel``.
+    ``run_od`` must also subclass ``ObservationUncertaintyModel`` and be a
+    source-declared class owned by the claimed installed distribution.
     """
 
     def model_provenance(self) -> ModelProvenance:

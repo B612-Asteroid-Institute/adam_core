@@ -60,9 +60,14 @@ This file contains notable changes in adam-core
   must change the fingerprint for science changes; there is no fabricated
   fallback. Common NumPy, Arrow, datetime, namedtuple, enum, partial, nested
   object/class and file-content values are canonical across Python 3.11–3.13
-  without absolute paths or arbitrary module imports. Unsupported, malformed,
-  uncontracted ``__main__``/dynamic/sourceless models fail with ``TypeError``
-  before work.
+  without absolute paths or arbitrary module imports. Built-in identity now
+  verifies an explicit exact registry of constructors, routing methods, class
+  constants, instance-data shadows, and recursive collaborators. Custom model
+  claims require an installed distribution at the exact claimed version whose
+  metadata owns readable Python source declaring the class. Unsupported,
+  malformed, nonexistent/mismatched-package, local, ``__main__``, dynamic, and
+  sourceless models fail with ``TypeError`` before model, fitter, or provider
+  work.
 
   ``run_od`` refuses native builds whose identity is ``dirty:*`` or
   ``unknown``. In Git source overlays it also requires checkout ``HEAD`` to

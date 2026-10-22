@@ -231,22 +231,10 @@ with any behavior/routing hook replaced) must subclass
 ``ObservationUncertaintyModel``, implement the typed ``ProvenancedModel``
 provenance hook, and return an immutable ``ModelProvenance``::
 
-   from adam_core.orbit_determination import ModelProvenance
-   from adam_core.orbit_determination.observation_uncertainty import (
-       ObservationUncertaintyModel,
-   )
+   # Install migration/examples/acme_orbit_models first.
+   from acme_orbit_models import CalibratedModel as MyModel
 
-   class MyModel(ObservationUncertaintyModel):
-       def apply(self, observations):
-           return observations
-
-       def model_provenance(self):
-           return ModelProvenance(
-               package="my-od-models",
-               version="2.4.1",
-               implementation_fingerprint="0123456789abcdef" * 4,
-               configuration={"mode": "calibrated", "scale": 1.5},
-           )
+   model = MyModel(scale=1.5, mode="calibrated")
 
 The provider owns the lowercase 64-hex implementation/content fingerprint and
 must change it whenever science-affecting code changes. The configuration must
@@ -256,10 +244,12 @@ tables, dates/times, named tuples, enum classes/members, supported public
 built-in callables/partials, nested classes/objects and file content. Python
 functions/methods in configuration are rejected: encode their public choice as
 data and cover implementation science in ``implementation_fingerprint``.
-Absolute paths are not recorded. There is no inferred or fabricated fallback:
-missing/malformed contracts, unsupported fields, and uncontracted
-``__main__``/dynamic/sourceless models raise ``TypeError`` before ``apply`` or
-fitting. See ``migration/custom_model_provenance.md``.
+Absolute paths are not recorded. There is no inferred or fabricated fallback. The claimed distribution must be
+installed at the exact claimed version, and its package metadata must own
+readable Python source that declares the model class. Missing/malformed
+contracts, unsupported fields, nonexistent or mismatched distributions, and
+``__main__``/local/dynamic/sourceless models raise ``TypeError`` before model,
+fitter, or provider work. See ``migration/custom_model_provenance.md``.
 
 The native build identity must be one exact clean 40-hex Core commit.
 ``run_od`` refuses ``dirty:<commit>`` and ``unknown`` identities before work;

@@ -24,3 +24,20 @@ def pure_iod_orbit():
         )
     )
     return orbit, orbit_members, observations
+
+
+@pytest.fixture
+def allow_synthetic_model_distribution(monkeypatch):
+    """Bypass installed-distribution checks for narrow synthetic model tests.
+
+    Production-route attestation tests restore and exercise the returned real
+    validator explicitly. Other tests use local classes only to isolate
+    canonical configuration or routing behavior.
+    """
+    from .. import provenance
+
+    validator = provenance._validate_custom_model_distribution
+    monkeypatch.setattr(
+        provenance, "_validate_custom_model_distribution", lambda cls, contract: None
+    )
+    return validator

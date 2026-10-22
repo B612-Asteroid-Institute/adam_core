@@ -10,34 +10,24 @@ Every model not shipped as an exact adam-core built-in must subclass
 frozen public `ModelProvenance` value:
 
 ```python
-from adam_core.orbit_determination import ModelProvenance
-from adam_core.orbit_determination.observation_uncertainty import (
-    ObservationUncertaintyModel,
-)
+# Install migration/examples/acme_orbit_models first, then import its class.
+from acme_orbit_models import CalibratedModel
 
-class CalibratedModel(ObservationUncertaintyModel):
-    def __init__(self, scale):
-        self.scale = scale
-
-    def apply(self, observations):
-        return observations
-
-    def model_provenance(self):
-        return ModelProvenance(
-            package="acme-orbit-models",
-            version="3.2.0",
-            implementation_fingerprint=(
-                "ed8ab4b58f6c4b2bbf6c4c4d736942aa"
-                "dddc774f5ac86b7b53c50a1072f900a1"
-            ),
-            configuration={"scale": self.scale},
-        )
+model = CalibratedModel(scale=1.5)
 ```
+
+The complete example is an installable distribution at
+`migration/examples/acme_orbit_models`; install it with
+`python -m pip install migration/examples/acme_orbit_models`. Defining the class
+in a script, notebook, `__main__`, or an `exec` namespace is intentionally not a
+reproducible replacement for installing it.
 
 The package/provider chooses the lowercase 64-hex fingerprint. It should be a
 release-manifest or content hash covering all science-affecting implementation
 and data dependencies, and **must change when that science changes**. adam-core
-does not fabricate a weaker fallback. `version` and `package` are mandatory;
+does not fabricate a weaker fallback. `version` and `package` are mandatory. The named distribution must be
+installed, its immutable installed version must match exactly, and package
+metadata must list readable Python source that declares the model class.
 `configuration` must include every instance choice and data table/file.
 
 adam-core canonicalizes supported configuration with injective explicit tags,

@@ -22,6 +22,7 @@ import numpy as np
 import numpy.testing as npt
 import pyarrow as pa
 import pytest
+
 import quivr as qv
 
 from ...coordinates.covariances import CoordinateCovariances
@@ -1022,3 +1023,6 @@ def test_native_run_od_validates_full_settings_before_empty_exit() -> None:
             None,
             propagator=NativeTwoBodyPropagator(),
         )
+
+
+pytestmark = pytest.mark.usefixtures("allow_synthetic_model_distribution")

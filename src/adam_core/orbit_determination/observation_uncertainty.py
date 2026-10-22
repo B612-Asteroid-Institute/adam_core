@@ -61,6 +61,7 @@ from ..observations.efcc18 import (
     load_efcc18_biases,
 )
 from .evaluate import OrbitDeterminationObservations
+from .model_provenance import _capture_behavior_spec
 
 __all__ = [
     "BIAS_TABLE_PACKAGE",
@@ -723,29 +724,63 @@ class CompositeModel(ObservationUncertaintyModel):
         return native_model_specs(self.models)
 
 
-def _capture_provenance_behavior(cls: type) -> dict[str, object]:
-    """Capture shipped routing functions before callers can monkeypatch them."""
-    captured: dict[str, object] = {}
-    for name in ("apply", "_native_specs"):
-        for owner in cls.__mro__:
-            if name in vars(owner):
-                captured[name] = vars(owner)[name]
-                break
-    return captured
+# Explicit, minimal built-in behavior registry. Capturing only ``apply`` and
+# ``_native_specs`` is insufficient: inherited constructors and routing class
+# data such as ``_MODEL``/``_ROW_COLUMNS`` also select native science.
 
-
-# Private immutable-at-import registry consumed by provenance preflight. Values
-# are function objects, not names, so class-level monkeypatching cannot retain a
-# shipped built-in identity.
-_PROVENANCE_BEHAVIOR_METHODS = {
-    cls: _capture_provenance_behavior(cls)
-    for cls in (
-        IdentityModel,
+_PROVENANCE_BEHAVIOR_REGISTRY = {
+    IdentityModel: _capture_behavior_spec(
+        IdentityModel, ("__init__", "apply", "_native_specs")
+    ),
+    EmpiricalCovarianceModel: _capture_behavior_spec(
         EmpiricalCovarianceModel,
+        ("__init__", "apply", "_native_specs", "_MODEL", "_ROW_COLUMNS"),
+        instance_fields=(
+            "bias_table",
+            "min_resid_cov_n",
+            "mode",
+            "_codes",
+            "_bands",
+            "_columns",
+        ),
+    ),
+    PerformanceWeightedModel: _capture_behavior_spec(
         PerformanceWeightedModel,
+        ("__init__", "apply", "_native_specs", "_MODEL", "_ROW_COLUMNS"),
+        instance_fields=(
+            "bias_table",
+            "min_resid_cov_n",
+            "mode",
+            "_codes",
+            "_bands",
+            "_columns",
+        ),
+    ),
+    SigmaFloorModel: _capture_behavior_spec(
         SigmaFloorModel,
+        ("__init__", "apply", "_native_specs", "_MODEL", "_ROW_COLUMNS"),
+        instance_fields=(
+            "bias_table",
+            "min_resid_cov_n",
+            "mode",
+            "_codes",
+            "_bands",
+            "_columns",
+        ),
+    ),
+    NightBatchDeweightingModel: _capture_behavior_spec(
         NightBatchDeweightingModel,
+        ("__init__", "apply", "_native_specs"),
+        instance_fields=("cap",),
+    ),
+    EFCC18DebiasModel: _capture_behavior_spec(
         EFCC18DebiasModel,
+        ("__init__", "apply", "_native_specs"),
+        instance_fields=("bias_table", "exclude_astcats", "_bias_table_f32"),
+    ),
+    CompositeModel: _capture_behavior_spec(
         CompositeModel,
-    )
+        ("__init__", "apply", "_native_specs"),
+        instance_fields=("models",),
+    ),
 }

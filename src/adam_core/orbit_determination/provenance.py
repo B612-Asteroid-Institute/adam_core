@@ -8,6 +8,7 @@ are deliberately outside the identity contract.
 
 from __future__ import annotations
 
+import ast
 import datetime as dt
 import functools
 import hashlib
@@ -20,7 +21,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from enum import Enum
 from importlib import metadata
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, Any, Optional, cast
 
 import numpy as np
@@ -29,7 +30,7 @@ import quivr as qv
 
 from ._native_dispatch import native_backend
 from .fitted_orbits import FittedOrbitMembers, FittedOrbits, OdProvenance
-from .model_provenance import ModelProvenance
+from .model_provenance import ModelProvenance, _BehaviorSpec
 
 if TYPE_CHECKING:
     from ..propagator import Propagator
@@ -355,9 +356,9 @@ def _canonical_parameter(value: Any, seen: set[int]) -> Any:
     )
 
 
-def _builtin_behavior_registry() -> dict[type[Any], dict[str, object]]:
-    from .observation_uncertainty import _PROVENANCE_BEHAVIOR_METHODS as core
-    from .veres2017 import _PROVENANCE_BEHAVIOR_METHODS as veres
+def _builtin_behavior_registry() -> dict[type[Any], _BehaviorSpec]:
+    from .observation_uncertainty import _PROVENANCE_BEHAVIOR_REGISTRY as core
+    from .veres2017 import _PROVENANCE_BEHAVIOR_REGISTRY as veres
 
     return {**core, **veres}
 
@@ -369,26 +370,42 @@ def _static_class_member(cls: type[Any], name: str) -> object | None:
     return None
 
 
-def _is_builtin_model(model: object) -> bool:
-    """Whether all behavior-affecting hooks are the shipped function objects."""
-    cls = type(model)
-    expected = _builtin_behavior_registry().get(cls)
-    if expected is None:
+def _class_defines_member(cls: type[Any], name: str) -> bool:
+    return any(name in vars(owner) for owner in cls.__mro__)
+
+
+def _matches_behavior_spec(value: object, spec: _BehaviorSpec) -> bool:
+    """Match an exact shipped type, its named members, and collaborators."""
+    if type(value) is not spec.model_type:
         return False
-    for name, function in expected.items():
-        if _static_class_member(cls, name) is not function:
+    member_names = {name for name, _ in spec.class_members}
+    for name, expected in spec.class_members:
+        if _static_class_member(spec.model_type, name) is not expected:
             return False
     try:
-        fields = vars(model)
+        fields = vars(value)
     except TypeError:
         fields = {}
-    # A per-instance behavior/routing hook is custom even when it is not
-    # callable (for example, replacing _native_specs with None). More broadly,
-    # no instance callable may shadow a class member under a built-in identity.
-    for name, value in fields.items():
-        if name in expected or callable(value):
+    # Registered methods and class data may not be shadowed per instance. Any
+    # other callable shadow is also custom rather than silently acquiring the
+    # shipped identity.
+    if any(name in member_names or callable(item) for name, item in fields.items()):
+        return False
+    for name in spec.instance_fields:
+        if name not in fields or _class_defines_member(spec.model_type, name):
+            return False
+    for attribute, collaborator in spec.collaborators:
+        if attribute not in fields or not _matches_behavior_spec(
+            fields[attribute], collaborator
+        ):
             return False
     return True
+
+
+def _is_builtin_model(model: object) -> bool:
+    """Whether the complete registered behavior is exactly the shipped graph."""
+    expected = _builtin_behavior_registry().get(type(model))
+    return expected is not None and _matches_behavior_spec(model, expected)
 
 
 def _validated_build_identity() -> tuple[str, str]:
@@ -437,6 +454,119 @@ def _model_fields(model: object, build_identity: tuple[str, str]) -> dict[str, A
     return fields
 
 
+def _canonical_distribution_name(name: str) -> str:
+    return re.sub(r"[-_.]+", "-", name).lower()
+
+
+def _declares_class(source: str, filename: str, qualname: str) -> bool:
+    """Whether a module source file declares this non-local class path."""
+    try:
+        body = ast.parse(source, filename=filename).body
+    except (SyntaxError, ValueError):
+        return False
+    for part in qualname.split("."):
+        declaration = next(
+            (
+                node
+                for node in body
+                if isinstance(node, ast.ClassDef) and node.name == part
+            ),
+            None,
+        )
+        if declaration is None:
+            return False
+        body = declaration.body
+    return True
+
+
+def _validate_custom_model_distribution(
+    cls: type[Any], contract: ModelProvenance
+) -> None:
+    """Validate a custom class against immutable installed metadata.
+
+    This reads only the claimed distribution's metadata and its directly
+    listed module source. It imports no provider module and does not consult
+    ``sys.modules``, import history, bytecode, or source closure.
+    """
+    module = _module_name(cls, kind="model class")
+    qualname = getattr(cls, "__qualname__", None)
+    if module == "__main__" or module.startswith("__main__."):
+        raise TypeError(
+            "custom observation models from __main__ are not reproducible; "
+            "use a class from an installed distribution"
+        )
+    if (
+        not isinstance(qualname, str)
+        or not qualname
+        or "<locals>" in qualname
+        or any(not part.isidentifier() for part in qualname.split("."))
+    ):
+        raise TypeError(
+            "custom observation model must be a non-local class declared by an "
+            "installed distribution"
+        )
+    module_parts = module.split(".")
+    if any(not part.isidentifier() for part in module_parts):
+        raise TypeError(
+            "custom observation model module must be an installed Python module"
+        )
+
+    try:
+        distribution = metadata.distribution(contract.package)
+        installed_name = distribution.metadata.get("Name")
+        installed_version = distribution.version
+    except Exception as error:
+        raise TypeError(
+            f"model provenance distribution {contract.package!r} is not installed"
+        ) from error
+    if not isinstance(installed_name, str) or _canonical_distribution_name(
+        installed_name
+    ) != _canonical_distribution_name(contract.package):
+        raise TypeError(
+            f"model provenance package {contract.package!r} does not match the "
+            "installed distribution identity"
+        )
+    if installed_version != contract.version:
+        raise TypeError(
+            f"model provenance version {contract.version!r} does not match "
+            f"installed {contract.package!r} version {installed_version!r}"
+        )
+
+    module_path = PurePosixPath(*module_parts)
+    candidates = {
+        module_path.with_suffix(".py").as_posix(),
+        (module_path / "__init__.py").as_posix(),
+    }
+    files = distribution.files
+    if files is None:
+        files = []
+    matching = []
+    for file in files:
+        relative = PurePosixPath(str(file).replace("\\", "/"))
+        if relative.is_absolute() or ".." in relative.parts:
+            continue
+        if relative.as_posix() in candidates:
+            matching.append(file)
+    if len(matching) != 1:
+        raise TypeError(
+            f"custom observation model module {module!r} is not Python source "
+            f"owned by installed distribution {contract.package!r}"
+        )
+    source_file = matching[0]
+    try:
+        source = Path(distribution.locate_file(source_file)).read_text(encoding="utf-8")
+    except (OSError, UnicodeError) as error:
+        raise TypeError(
+            f"custom observation model module {module!r} has no readable installed "
+            "Python source"
+        ) from error
+    if not _declares_class(source, str(source_file), qualname):
+        raise TypeError(
+            f"custom observation model {module}.{qualname} is dynamic or not "
+            f"declared by installed distribution {contract.package!r}"
+        )
+
+
 def _custom_contract(model: object) -> ModelProvenance:
     from .observation_uncertainty import ObservationUncertaintyModel
 
@@ -471,6 +601,7 @@ def _custom_contract(model: object) -> ModelProvenance:
         )
     if not isinstance(contract.configuration, Mapping):
         raise TypeError("model provenance configuration must be a mapping")
+    _validate_custom_model_distribution(cls, contract)
     return contract
 
 
@@ -708,16 +839,19 @@ def _preflight_provenance(
             + "; ".join(source_problems)
         )
 
+    # Model identity is validated before asking even a built-in fitter or any
+    # downstream provider for settings. Invalid custom provenance therefore
+    # cannot trigger model, fitter, or provider work.
+    build_identity = (build_version, build_commit)
+    descriptors = _json(
+        [model_descriptor(model, _build_identity=build_identity) for model in models]
+    )
     settings: Optional[str] = None
     if isinstance(fitter, NativeOrbitFitter):
         iod_settings, refinement, fit_settings = fitter.native_settings()
         settings = _json(
             {"iod": iod_settings, "refinement": refinement, "fit": fit_settings}
         )
-    build_identity = (build_version, build_commit)
-    descriptors = _json(
-        [model_descriptor(model, _build_identity=build_identity) for model in models]
-    )
     return _ProvenancePreflight(build_version, build_commit, settings, descriptors)
 
 
