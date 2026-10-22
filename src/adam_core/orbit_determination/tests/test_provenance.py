@@ -463,13 +463,14 @@ def test_custom_fingerprint_is_the_implementation_identity():
     changed_science = model_descriptor(Model("2" * 64))
     changed_config = model_descriptor(Model("1" * 64, scale=2))
     assert first == same
-    assert set(first["implementation"]) == {
-        "kind",
-        "package",
-        "version",
-        "implementation_fingerprint",
-        "entrypoint",
+    assert first["implementation"] == {
+        "kind": "explicit-model-provenance-v1",
+        "package": "adam-core-tests",
+        "version": "1.0",
+        "implementation_fingerprint": "1" * 64,
+        "entrypoint": "apply",
     }
+    assert changed_science["implementation"]["implementation_fingerprint"] == "2" * 64
     assert first["descriptor_sha256"] != changed_science["descriptor_sha256"]
     assert first["descriptor_sha256"] != changed_config["descriptor_sha256"]
 
