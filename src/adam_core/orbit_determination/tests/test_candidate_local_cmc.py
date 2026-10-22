@@ -72,8 +72,6 @@ def _random_case(seed: int, case: int) -> OrbitDeterminationObservations:
     raise AssertionError("unreachable")
 
 
-
-
 def _frozen_seed11_case(case: int) -> OrbitDeterminationObservations:
     """One layout from the frozen seed-11 120-case review matrix."""
     rng = np.random.default_rng(11)
@@ -114,9 +112,7 @@ def test_corrected_iod_continues_after_candidate_local_cmc_refusal(seed, case):
 def test_frozen_2_04_day_arc_accepts_rank_deficient_whole_arc_seed():
     t0 = EPOCH_MJD_TDB + 5.0
     times = [t0 + day + row / 48 for day in range(3) for row in range(3)]
-    iod, _, report = run_iod(
-        _arc(times, seed=7, sigma_arcsec=0.5), TwoBodyPropagator()
-    )
+    iod, _, report = run_iod(_arc(times, seed=7, sigma_arcsec=0.5), TwoBodyPropagator())
     assert report.found and len(iod) == 1
     assert np.isfinite(np.asarray(iod.coordinates.values)).all()
 
