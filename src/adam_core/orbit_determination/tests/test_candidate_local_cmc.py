@@ -78,7 +78,7 @@ def test_corrected_iod_continues_after_candidate_local_cmc_refusal(seed, case):
     assert report.found
     assert len(fitted) == 1
     assert len(members) > 0
-    state = fitted.coordinates.values.to_numpy(zero_copy_only=False)
+    state = np.asarray(fitted.coordinates.values)
     assert np.isfinite(state).all()
     assert report.candidates_evaluated > 1
     assert any(

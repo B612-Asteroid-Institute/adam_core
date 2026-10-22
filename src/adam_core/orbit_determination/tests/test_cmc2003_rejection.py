@@ -16,6 +16,7 @@ import numpy as np
 import numpy.testing as npt
 import pyarrow as pa
 import pytest
+
 from .. import native_orbit_fitter as native_module
 from ..differential_correction import fit_least_squares
 from ..fitted_orbits import FittedOrbitMembers, FittedOrbits
