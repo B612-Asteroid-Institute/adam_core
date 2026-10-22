@@ -6362,14 +6362,14 @@ mod tests {
         assert!(fixture.predictor.batches.borrow().is_empty());
     }
 
-    struct FailAfterPredictor<'a> {
+    struct FailAtPredictor<'a> {
         inner: &'a dyn SphericalPredictor,
         calls: std::cell::Cell<usize>,
-        fail_after: usize,
+        fail_at: Vec<usize>,
         error: PropagationError,
     }
 
-    impl SphericalPredictor for FailAfterPredictor<'_> {
+    impl SphericalPredictor for FailAtPredictor<'_> {
         fn predict_spherical(
             &self,
             states: &[[f64; 6]],
@@ -6378,7 +6378,7 @@ mod tests {
         ) -> PropagationResultValue<Result<Vec<f64>, String>> {
             let call = self.calls.get();
             self.calls.set(call + 1);
-            if call >= self.fail_after {
+            if self.fail_at.contains(&call) {
                 return Err(self.error.clone());
             }
             self.inner.predict_spherical(states, geometry, observers)
@@ -6403,7 +6403,7 @@ mod tests {
         };
         let mut config = corrected_iod_config(1.0e-12);
         config.correction.min_stage_obs = observed.len();
-        config.correction.max_corrections = 1;
+        config.correction.max_corrections = 2;
         config.correction.max_converged = 1;
         config.correction.max_stages = 1;
         let mut result =
@@ -6424,10 +6424,10 @@ mod tests {
             vec![None],
             seed_coordinates,
         )?;
-        let counter = FailAfterPredictor {
+        let counter = FailAtPredictor {
             inner: &predictor,
             calls: std::cell::Cell::new(0),
-            fail_after: usize::MAX,
+            fail_at: Vec::new(),
             error: error.clone(),
         };
         let stage_config = WhitenedFitConfig {
@@ -6451,12 +6451,16 @@ mod tests {
             output.evaluation.reduced_chi2 > config.rchi2_threshold,
             "fixture must enter the CMC call site"
         );
-        let failing = FailAfterPredictor {
+        let calls_per_stage = counter.calls.get();
+        let failing = FailAtPredictor {
             inner: &predictor,
             calls: std::cell::Cell::new(0),
-            fail_after: counter.calls.get(),
+            fail_at: vec![calls_per_stage, 2 * calls_per_stage + 1],
             error,
         };
+        // Two distinct records make continuation after the first local CMC
+        // refusal observable at this exact call site.
+        result.candidates.push(result.candidates[0].clone());
         correct_candidates(
             &failing,
             &observed,
@@ -6466,9 +6470,9 @@ mod tests {
             &NoopProvider,
             &ZeroTranslationProvider,
             &mut result,
-            &[0],
+            &[0, 1],
         )?;
-        assert!(failing.calls.get() > failing.fail_after);
+        assert!(failing.calls.get() > 2 * calls_per_stage + 1);
         Ok(result)
     }
 
@@ -6488,10 +6492,11 @@ mod tests {
             "rank".to_string(),
         ))
         .expect("CMC covariance refusal must remain candidate-local");
-        assert_eq!(local.candidates_failed, 1);
-        assert!(local.candidate_failures[0]
+        assert_eq!(local.candidates_failed, 2);
+        assert_eq!(local.candidate_failures.len(), 2);
+        assert!(local.candidate_failures.iter().all(|failure| failure
             .message
-            .contains("CMC2003 expected covariance unavailable"));
+            .contains("CMC2003 expected covariance unavailable")));
     }
 
     #[test]
@@ -6571,12 +6576,13 @@ mod tests {
                 validate_covariance: false,
                 ..WhitenedFitConfig::default()
             },
-            f64::INFINITY,
+            1.0e30,
             &NoopProvider,
             &ZeroTranslationProvider,
         )
         .unwrap()
         .expect("a finite intermediate state is a valid covariance-free seed");
+        assert!(staged.evaluation.reduced_chi2 < 1.0e30);
         assert_eq!(staged.status_code, STATUS_INVALID_COVARIANCE);
         assert!(reportable_iod_covariance(&staged.covariance).is_none());
         assert!(staged.state.iter().all(|value| value.is_finite()));
