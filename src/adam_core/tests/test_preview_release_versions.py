@@ -73,11 +73,12 @@ def test_release_matrix_generates_and_inspects_runtime_version() -> None:
     workflow = (
         ROOT / ".github/workflows/release-candidate-wheel-matrix.yml"
     ).read_text()
-    writer = "python migration/scripts/write_maturin_version.py"
-    builder = "uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b"
+    builder = "python migration/scripts/build_release_wheel.py"
     inspector = "python migration/scripts/check_wheel_artifacts.py"
 
-    assert workflow.index(writer) < workflow.index(builder) < workflow.index(inspector)
+    assert workflow.count(builder) == 2
+    assert workflow.index(builder) < workflow.index(inspector)
+    assert "python migration/scripts/write_maturin_version.py" not in workflow
     assert "adam_assist_ref:" in workflow
     assert "ADAM_ASSIST_REF: ${{ inputs.adam_assist_ref }}" in workflow
     assert 'PYTHON_PREVIEW_VERSION: "0.7.0"' in workflow
