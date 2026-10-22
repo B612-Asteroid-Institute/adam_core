@@ -20,7 +20,10 @@ work. ``run_od`` accepts only an exact built-in ``list`` or ``tuple`` as a model
 container, so structural sequence iteration cannot precede this refusal.
 
 For shipped models, inherited class/metaclass behavior and construction/loader
-selectors are identity-bearing. After resolving fitter/provider hooks,
+selectors are identity-bearing. Every instance value must match its registered
+closed schema before conversion, model methods, or canonicalization, and the
+native-spec builder/routing plus concrete NumPy/PyArrow application delegates
+are part of every shipped graph. After resolving fitter/provider hooks,
 ``run_od`` deep-copies a single final declarative model-spec and fitter-settings
 snapshot; that same snapshot is recorded and passed to Core Rust. Composed
 execution revalidates the descriptor immediately before application. Replaced

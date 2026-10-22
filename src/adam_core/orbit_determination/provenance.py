@@ -30,7 +30,7 @@ import quivr as qv
 from ._native_dispatch import native_backend
 from ._native_trust import validate_native_trust
 from .fitted_orbits import FittedOrbitMembers, FittedOrbits, OdProvenance
-from .model_provenance import ModelProvenance, _BehaviorSpec
+from .model_provenance import ModelProvenance, _BehaviorSpec, _FieldSchema
 
 _CONTRACT_NAME = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9_.-]*[A-Za-z0-9])?$")
 _HEX64 = re.compile(r"^[0-9a-f]{64}$")
@@ -393,6 +393,41 @@ def _matches_behavior_type(spec: _BehaviorSpec) -> bool:
     )
 
 
+def _matches_field_schema(value: object, schema: _FieldSchema) -> bool:
+    """Validate a closed data value without provider conversion or lookup."""
+    value_type = type(value)
+    if not any(value_type is expected for expected in schema.exact_types):
+        return False
+    if schema.allowed_values and value not in schema.allowed_values:
+        return False
+    if schema.item_schema is not None:
+        # Only exact built-in containers can reach iteration.
+        if value_type not in (list, tuple):
+            return False
+        if any(not _matches_field_schema(item, schema.item_schema) for item in value):
+            return False
+    if schema.mapping_keys or schema.mapping_value_schema is not None:
+        if value_type is not dict:
+            return False
+        if any(type(key) is not str for key in value):
+            return False
+        if set(value) != set(schema.mapping_keys):
+            return False
+        if schema.mapping_value_schema is not None and any(
+            not _matches_field_schema(value[key], schema.mapping_value_schema)
+            for key in schema.mapping_keys
+        ):
+            return False
+    if value_type is np.ndarray:
+        if schema.ndarray_dtypes and value.dtype.name not in schema.ndarray_dtypes:
+            return False
+        if schema.ndim is not None and value.ndim != schema.ndim:
+            return False
+        if schema.shape and value.shape != schema.shape:
+            return False
+    return True
+
+
 def _instance_dict(value: object) -> dict[str, object] | None:
     """Read instance state without running an inherited lookup hook."""
     try:
@@ -407,7 +442,13 @@ def _matches_behavior_spec(value: object, spec: _BehaviorSpec) -> bool:
     if type(value) is not spec.model_type or not _matches_behavior_type(spec):
         return False
     fields = _instance_dict(value)
-    if fields is None or set(fields) != set(spec.instance_fields):
+    field_schemas = dict(spec.instance_fields)
+    if fields is None or set(fields) != set(field_schemas):
+        return False
+    if any(
+        not _matches_field_schema(fields[name], schema)
+        for name, schema in spec.instance_fields
+    ):
         return False
     for attribute, collaborator in spec.collaborators:
         if not _matches_behavior_spec(fields[attribute], collaborator):

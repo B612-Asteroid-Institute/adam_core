@@ -1969,3 +1969,128 @@ def test_provider_cannot_replace_a_separate_orchestration_native_alias(monkeypat
     )
     assert fitted.success.to_pylist() == [True]
     assert fake_calls == 0
+
+
+@pytest.mark.parametrize(
+    "field",
+    ["night-cap", "bias-minimum", "veres-fill", "veres-lookup", "lookup-array"],
+)
+def test_hostile_registered_field_values_are_refused_without_hooks(monkeypatch, field):
+    from adam_core.orbit_determination.observation_uncertainty import (
+        NightBatchDeweightingModel,
+        PerformanceWeightedModel,
+    )
+    from adam_core.orbit_determination.tests.test_veres2017 import SMALL_TABLE
+    from adam_core.orbit_determination.veres2017 import SigmaFillModel
+
+    calls = 0
+
+    class Hostile:
+        def __getattribute__(self, name):
+            nonlocal calls
+            calls += 1
+            raise AssertionError("hostile field lookup executed")
+
+        def __int__(self):
+            nonlocal calls
+            calls += 1
+            raise AssertionError("hostile int conversion executed")
+
+        def __float__(self):
+            nonlocal calls
+            calls += 1
+            raise AssertionError("hostile float conversion executed")
+
+        def __bool__(self):
+            nonlocal calls
+            calls += 1
+            raise AssertionError("hostile bool conversion executed")
+
+    hostile = Hostile()
+    if field == "night-cap":
+        model = NightBatchDeweightingModel(cap=4)
+        model.cap = hostile
+    elif field == "bias-minimum":
+        model = PerformanceWeightedModel(
+            make_bias_table([{"obs_code": "500", "chi2_per_obs": 1.0}])
+        )
+        model.min_resid_cov_n = hostile
+    else:
+        model = SigmaFillModel(SMALL_TABLE)
+        if field == "veres-fill":
+            model.fill_missing = hostile
+        elif field == "veres-lookup":
+            model.lookup = hostile
+        else:
+            model.lookup._sigma_ra = hostile
+
+    _assert_run_od_preflight_refuses_model(model, monkeypatch)
+    assert calls == 0
+
+
+def test_provider_native_spec_builder_replacement_is_refused_without_call(
+    monkeypatch,
+):
+    import adam_core.orbit_determination.observation_uncertainty as uncertainty
+    from adam_core.orbit_determination.observation_uncertainty import IdentityModel
+
+    replacement_calls = 0
+
+    def replacement(models):
+        nonlocal replacement_calls
+        replacement_calls += 1
+        return [{"model": "night_batch", "cap": 999}]
+
+    class MutatingProvider(NativeTwoBodyPropagator):
+        native_backend = NativeTwoBodyPropagator.native_backend
+
+        def propagator_capsule(self):
+            monkeypatch.setattr(uncertainty, "native_model_specs", replacement)
+            return super().propagator_capsule()
+
+    provider = MutatingProvider()
+    with pytest.raises(TypeError, match="model_provenance"):
+        run_od(
+            make_synthetic_observations(),
+            NativeOrbitFitter(provider),
+            [IdentityModel()],
+            propagator=provider,
+        )
+    assert replacement_calls == 0
+
+
+def test_composed_numpy_delegate_replacement_is_refused_without_call(monkeypatch):
+    import adam_core.orbit_determination.observation_uncertainty as uncertainty
+    from adam_core.orbit_determination.observation_uncertainty import (
+        NightBatchDeweightingModel,
+    )
+
+    observations = make_synthetic_observations()
+    model = NightBatchDeweightingModel(cap=4)
+    replacement_calls = 0
+    fit_calls = 0
+    provider_calls = 0
+
+    def replacement(*args, **kwargs):
+        nonlocal replacement_calls
+        replacement_calls += 1
+        raise AssertionError("replacement NumPy delegate executed")
+
+    class Fitter:
+        def full_od(self, *args, **kwargs):
+            nonlocal fit_calls
+            fit_calls += 1
+            raise AssertionError("composed fitter executed")
+
+    class Provider:
+        def __getattribute__(self, name):
+            if name.startswith("__"):
+                return object.__getattribute__(self, name)
+            nonlocal provider_calls
+            provider_calls += 1
+            raise AssertionError("provider executed")
+
+    monkeypatch.setattr(uncertainty.np, "asarray", replacement)
+    with pytest.raises(TypeError, match="model_provenance"):
+        run_od(observations, Fitter(), [model], propagator=Provider())
+    assert replacement_calls == fit_calls == provider_calls == 0

@@ -57,6 +57,7 @@ import pyarrow as pa
 
 from adam_core import _rust_native as _provenance_native
 
+from ..coordinates import covariances as _provenance_covariances
 from ..coordinates.covariances import CoordinateCovariances
 from ..observations import efcc18 as _provenance_efcc18
 from ..observations.efcc18 import (
@@ -66,7 +67,7 @@ from ..observations.efcc18 import (
 )
 from . import _native_dispatch as _provenance_native_dispatch
 from .evaluate import OrbitDeterminationObservations
-from .model_provenance import _capture_behavior_spec
+from .model_provenance import _capture_behavior_spec, _field_schema
 
 __all__ = [
     "BIAS_TABLE_PACKAGE",
@@ -729,6 +730,29 @@ class CompositeModel(ObservationUncertaintyModel):
         return native_model_specs(self.models)
 
 
+_STR_FIELD = _field_schema(str)
+_OPTIONAL_STR_FIELD = _field_schema(str, type(None))
+_FLOAT64_VECTOR_FIELD = _field_schema(np.ndarray, ndarray_dtypes=("float64",), ndim=1)
+_TABLE_FIELD = _field_schema(pa.Table)
+_BIAS_COLUMNS_FIELD = _field_schema(
+    dict,
+    mapping_keys=_BiasTableModel._ROW_COLUMNS,
+    mapping_value_schema=_FLOAT64_VECTOR_FIELD,
+)
+_EFCC_ARRAY_FIELD = _field_schema(
+    np.ndarray,
+    ndarray_dtypes=("float32", "float64"),
+    ndim=3,
+    shape=(EFCC18_N_TILES, EFCC18_N_CATALOGS, 4),
+)
+_EFCC_F32_FIELD = _field_schema(
+    np.ndarray,
+    ndarray_dtypes=("float32",),
+    ndim=3,
+    shape=(EFCC18_N_TILES, EFCC18_N_CATALOGS, 4),
+)
+
+
 def _behavior_delegate(namespace: Mapping[str, object], name: str):
     return (namespace, name, namespace[name])
 
@@ -737,27 +761,84 @@ _MODULE = globals()
 _NATIVE = vars(_provenance_native)
 _NATIVE_DISPATCH = vars(_provenance_native_dispatch)
 _COORDINATE_COVARIANCES = vars(CoordinateCovariances)
+_COVARIANCE_MODULE = vars(_provenance_covariances)
 _IMPORTLIB = vars(importlib)
 _EFCC18 = vars(_provenance_efcc18)
-_BIAS_DELEGATES = tuple(
-    _behavior_delegate(_MODULE, name)
+_NUMPY = vars(np)
+_PYARROW = vars(pa)
+_MODEL_RUNTIME_DELEGATES = tuple(
+    _behavior_delegate(_NUMPY, name)
     for name in (
-        "BIAS_TABLE_PACKAGE",
-        "V2_FULL_BIAS_TABLE",
-        "BIAS_TABLE_SCHEMA",
-        "_NON_NEGATIVE_COLUMNS",
-        "_PACKAGE_INSTALL_HINT",
-        "load_bias_table",
-        "validate_bias_table",
-        "_float_column",
-        "_latitudes",
-        "_covariances",
-        "_with_covariances",
+        "any",
+        "arange",
+        "array_equal",
+        "asarray",
+        "ascontiguousarray",
+        "float32",
+        "cumsum",
+        "empty",
+        "float64",
+        "int64",
+        "isfinite",
+        "isnan",
+        "where",
+        "zeros",
     )
-) + (
-    _behavior_delegate(_IMPORTLIB, "import_module"),
-    _behavior_delegate(_NATIVE, "bias_table_model_apply_numpy"),
-    _behavior_delegate(_COORDINATE_COVARIANCES, "from_matrix"),
+) + tuple(
+    _behavior_delegate(_PYARROW, name)
+    for name in (
+        "ArrowInvalid",
+        "ArrowNotImplementedError",
+        "ArrowTypeError",
+        "LargeListArray",
+        "Table",
+        "array",
+        "bool_",
+        "field",
+        "float64",
+        "int64",
+        "large_string",
+        "schema",
+    )
+)
+_COVARIANCE_HELPER_DELEGATES = (
+    _behavior_delegate(_COVARIANCE_MODULE, "np"),
+    _behavior_delegate(_COVARIANCE_MODULE, "pa"),
+    _behavior_delegate(_COVARIANCE_MODULE, "COORD_DIM"),
+    _behavior_delegate(_COVARIANCE_MODULE, "FULL_DIM"),
+)
+_NATIVE_SPEC_DELEGATES = (
+    _behavior_delegate(_MODULE, "np"),
+    _behavior_delegate(_MODULE, "pa"),
+    _behavior_delegate(_MODULE, "native_model_specs"),
+    _behavior_delegate(_NATIVE_DISPATCH, "_has_compatible_native_spec"),
+)
+_COMMON_MODEL_DELEGATES = (
+    _MODEL_RUNTIME_DELEGATES + _COVARIANCE_HELPER_DELEGATES + _NATIVE_SPEC_DELEGATES
+)
+_BIAS_DELEGATES = (
+    tuple(
+        _behavior_delegate(_MODULE, name)
+        for name in (
+            "BIAS_TABLE_PACKAGE",
+            "V2_FULL_BIAS_TABLE",
+            "BIAS_TABLE_SCHEMA",
+            "_NON_NEGATIVE_COLUMNS",
+            "_PACKAGE_INSTALL_HINT",
+            "load_bias_table",
+            "validate_bias_table",
+            "_float_column",
+            "_latitudes",
+            "_covariances",
+            "_with_covariances",
+        )
+    )
+    + (
+        _behavior_delegate(_IMPORTLIB, "import_module"),
+        _behavior_delegate(_NATIVE, "bias_table_model_apply_numpy"),
+        _behavior_delegate(_COORDINATE_COVARIANCES, "from_matrix"),
+    )
+    + _COMMON_MODEL_DELEGATES
 )
 
 
@@ -790,18 +871,19 @@ _PROVENANCE_BEHAVIOR_REGISTRY = {
     IdentityModel: _capture_behavior_spec(
         IdentityModel,
         ("__init__", "apply", "_native_specs"),
-        module_delegates=(_behavior_delegate(_MODULE, "validate_bias_table"),),
+        module_delegates=(_behavior_delegate(_MODULE, "validate_bias_table"),)
+        + _COMMON_MODEL_DELEGATES,
     ),
     EmpiricalCovarianceModel: _capture_behavior_spec(
         EmpiricalCovarianceModel,
         ("__init__", "apply", "_native_specs", "_MODEL", "_ROW_COLUMNS"),
         instance_fields=(
-            "bias_table",
-            "min_resid_cov_n",
-            "mode",
-            "_codes",
-            "_bands",
-            "_columns",
+            ("bias_table", _TABLE_FIELD),
+            ("min_resid_cov_n", _field_schema(int)),
+            ("mode", _field_schema(str, allowed_values=("add", "replace"))),
+            ("_codes", _field_schema(list, item_schema=_STR_FIELD)),
+            ("_bands", _field_schema(list, item_schema=_OPTIONAL_STR_FIELD)),
+            ("_columns", _BIAS_COLUMNS_FIELD),
         ),
         module_delegates=_BIAS_DELEGATES,
     ),
@@ -809,12 +891,12 @@ _PROVENANCE_BEHAVIOR_REGISTRY = {
         PerformanceWeightedModel,
         ("__init__", "apply", "_native_specs", "_MODEL", "_ROW_COLUMNS"),
         instance_fields=(
-            "bias_table",
-            "min_resid_cov_n",
-            "mode",
-            "_codes",
-            "_bands",
-            "_columns",
+            ("bias_table", _TABLE_FIELD),
+            ("min_resid_cov_n", _field_schema(int)),
+            ("mode", _field_schema(str, allowed_values=("add", "replace"))),
+            ("_codes", _field_schema(list, item_schema=_STR_FIELD)),
+            ("_bands", _field_schema(list, item_schema=_OPTIONAL_STR_FIELD)),
+            ("_columns", _BIAS_COLUMNS_FIELD),
         ),
         module_delegates=_BIAS_DELEGATES,
     ),
@@ -822,44 +904,47 @@ _PROVENANCE_BEHAVIOR_REGISTRY = {
         SigmaFloorModel,
         ("__init__", "apply", "_native_specs", "_MODEL", "_ROW_COLUMNS"),
         instance_fields=(
-            "bias_table",
-            "min_resid_cov_n",
-            "mode",
-            "_codes",
-            "_bands",
-            "_columns",
+            ("bias_table", _TABLE_FIELD),
+            ("min_resid_cov_n", _field_schema(int)),
+            ("mode", _field_schema(str, allowed_values=("add", "replace"))),
+            ("_codes", _field_schema(list, item_schema=_STR_FIELD)),
+            ("_bands", _field_schema(list, item_schema=_OPTIONAL_STR_FIELD)),
+            ("_columns", _BIAS_COLUMNS_FIELD),
         ),
         module_delegates=_BIAS_DELEGATES,
     ),
     NightBatchDeweightingModel: _capture_behavior_spec(
         NightBatchDeweightingModel,
         ("__init__", "apply", "_native_specs"),
-        instance_fields=("cap",),
+        instance_fields=(("cap", _field_schema(int)),),
         module_delegates=(
             _behavior_delegate(_MODULE, "_covariances"),
             _behavior_delegate(_MODULE, "_with_covariances"),
             _behavior_delegate(_NATIVE, "night_batch_deweighting_model_apply_numpy"),
             _behavior_delegate(_COORDINATE_COVARIANCES, "from_matrix"),
-        ),
+        )
+        + _COMMON_MODEL_DELEGATES,
     ),
     EFCC18DebiasModel: _capture_behavior_spec(
         EFCC18DebiasModel,
         ("__init__", "apply", "_native_specs"),
-        instance_fields=("bias_table", "exclude_astcats", "_bias_table_f32"),
+        instance_fields=(
+            ("bias_table", _EFCC_ARRAY_FIELD),
+            ("exclude_astcats", _field_schema(tuple, item_schema=_STR_FIELD)),
+            ("_bias_table_f32", _EFCC_F32_FIELD),
+        ),
         module_delegates=_EFCC_DELEGATES
         + (
             _behavior_delegate(_MODULE, "_latitudes"),
             _behavior_delegate(_NATIVE, "efcc18_debias_model_apply_numpy"),
-        ),
+        )
+        + _COMMON_MODEL_DELEGATES,
     ),
     CompositeModel: _capture_behavior_spec(
         CompositeModel,
         ("__init__", "apply", "_native_specs"),
-        instance_fields=("models",),
+        instance_fields=(("models", _field_schema(tuple)),),
         nested_model_fields=(("models", tuple),),
-        module_delegates=(
-            _behavior_delegate(_MODULE, "native_model_specs"),
-            _behavior_delegate(_NATIVE_DISPATCH, "_has_compatible_native_spec"),
-        ),
+        module_delegates=_COMMON_MODEL_DELEGATES,
     ),
 }

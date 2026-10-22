@@ -64,8 +64,9 @@ This file contains notable changes in adam-core
   authentication. Only exact shipped models with declarative configuration
   executed by Core Rust retain reproducible built-in identity. Follow-up
   fail-closed checks cover inherited ABC/metaclass dispatch, exact instance key
-  sets and nested fields, construction/loader/schema selectors, and exact
-  built-in list/tuple model containers. Native fitter settings and model specs
+  sets and closed recursive value schemas, construction/loader/schema selectors,
+  final native-spec routing, concrete NumPy/PyArrow application delegates, and
+  exact built-in list/tuple model containers. Native fitter settings and model specs
   are deep-copied once after provider-hook resolution and reused for provenance
   and Core execution; composed application is immediately revalidated. Replaced
   native modules/build/settings/run entry points are rejected by import-time

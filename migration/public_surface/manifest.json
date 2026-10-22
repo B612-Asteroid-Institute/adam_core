@@ -10873,7 +10873,7 @@
       "kind": "class",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/model_provenance.py",
-      "line": 97,
+      "line": 148,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -10901,7 +10901,7 @@
       "kind": "method",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/model_provenance.py",
-      "line": 105,
+      "line": 156,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -11237,7 +11237,7 @@
       "kind": "constant",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/observation_uncertainty.py",
-      "line": 88,
+      "line": 89,
       "explicit_export": false,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -11265,7 +11265,7 @@
       "kind": "constant",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/observation_uncertainty.py",
-      "line": 93,
+      "line": 94,
       "explicit_export": true,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -11293,7 +11293,7 @@
       "kind": "constant",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/observation_uncertainty.py",
-      "line": 109,
+      "line": 110,
       "explicit_export": true,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -11321,7 +11321,7 @@
       "kind": "class",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/observation_uncertainty.py",
-      "line": 700,
+      "line": 701,
       "explicit_export": true,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -11349,7 +11349,7 @@
       "kind": "constructor",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/observation_uncertainty.py",
-      "line": 710,
+      "line": 711,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -11377,7 +11377,7 @@
       "kind": "method",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/observation_uncertainty.py",
-      "line": 721,
+      "line": 722,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -11405,7 +11405,7 @@
       "kind": "class",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/observation_uncertainty.py",
-      "line": 597,
+      "line": 598,
       "explicit_export": true,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -11433,7 +11433,7 @@
       "kind": "constructor",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/observation_uncertainty.py",
-      "line": 638,
+      "line": 639,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -11461,7 +11461,7 @@
       "kind": "method",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/observation_uncertainty.py",
-      "line": 657,
+      "line": 658,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -11489,7 +11489,7 @@
       "kind": "class",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/observation_uncertainty.py",
-      "line": 480,
+      "line": 481,
       "explicit_export": true,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -11517,7 +11517,7 @@
       "kind": "constructor",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/observation_uncertainty.py",
-      "line": 505,
+      "line": 506,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -11545,7 +11545,7 @@
       "kind": "class",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/observation_uncertainty.py",
-      "line": 369,
+      "line": 370,
       "explicit_export": true,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -11573,7 +11573,7 @@
       "kind": "constructor",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/observation_uncertainty.py",
-      "line": 379,
+      "line": 380,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -11601,7 +11601,7 @@
       "kind": "method",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/observation_uncertainty.py",
-      "line": 383,
+      "line": 384,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -11629,7 +11629,7 @@
       "kind": "class",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/observation_uncertainty.py",
-      "line": 546,
+      "line": 547,
       "explicit_export": true,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -11657,7 +11657,7 @@
       "kind": "constructor",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/observation_uncertainty.py",
-      "line": 567,
+      "line": 568,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -11685,7 +11685,7 @@
       "kind": "method",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/observation_uncertainty.py",
-      "line": 572,
+      "line": 573,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -11713,7 +11713,7 @@
       "kind": "class",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/observation_uncertainty.py",
-      "line": 339,
+      "line": 340,
       "explicit_export": true,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -11741,7 +11741,7 @@
       "kind": "method",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/observation_uncertainty.py",
-      "line": 350,
+      "line": 351,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -11769,7 +11769,7 @@
       "kind": "class",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/observation_uncertainty.py",
-      "line": 517,
+      "line": 518,
       "explicit_export": true,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -11797,7 +11797,7 @@
       "kind": "class",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/observation_uncertainty.py",
-      "line": 531,
+      "line": 532,
       "explicit_export": true,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -11825,7 +11825,7 @@
       "kind": "constant",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/observation_uncertainty.py",
-      "line": 96,
+      "line": 97,
       "explicit_export": true,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -11853,7 +11853,7 @@
       "kind": "function",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/observation_uncertainty.py",
-      "line": 238,
+      "line": 239,
       "explicit_export": true,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -11881,7 +11881,7 @@
       "kind": "function",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/observation_uncertainty.py",
-      "line": 203,
+      "line": 204,
       "explicit_export": true,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -11909,7 +11909,7 @@
       "kind": "function",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/observation_uncertainty.py",
-      "line": 312,
+      "line": 313,
       "explicit_export": false,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -11937,7 +11937,7 @@
       "kind": "function",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/observation_uncertainty.py",
-      "line": 147,
+      "line": 148,
       "explicit_export": true,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -12357,7 +12357,7 @@
       "kind": "function",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/provenance.py",
-      "line": 618,
+      "line": 659,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -12385,7 +12385,7 @@
       "kind": "function",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/provenance.py",
-      "line": 916,
+      "line": 957,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -12413,7 +12413,7 @@
       "kind": "function",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/provenance.py",
-      "line": 533,
+      "line": 574,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -12441,7 +12441,7 @@
       "kind": "function",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/provenance.py",
-      "line": 600,
+      "line": 641,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -12749,7 +12749,7 @@
       "kind": "constant",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/veres2017.py",
-      "line": 94,
+      "line": 101,
       "explicit_export": true,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -12777,7 +12777,7 @@
       "kind": "class",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/veres2017.py",
-      "line": 408,
+      "line": 415,
       "explicit_export": true,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -12805,7 +12805,7 @@
       "kind": "constant",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/veres2017.py",
-      "line": 96,
+      "line": 103,
       "explicit_export": true,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -12833,7 +12833,7 @@
       "kind": "constant",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/veres2017.py",
-      "line": 88,
+      "line": 95,
       "explicit_export": true,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -12861,7 +12861,7 @@
       "kind": "constant",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/veres2017.py",
-      "line": 78,
+      "line": 85,
       "explicit_export": true,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -12889,7 +12889,7 @@
       "kind": "constant",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/veres2017.py",
-      "line": 98,
+      "line": 105,
       "explicit_export": true,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -12917,7 +12917,7 @@
       "kind": "class",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/veres2017.py",
-      "line": 350,
+      "line": 357,
       "explicit_export": true,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -12945,7 +12945,7 @@
       "kind": "constructor",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/veres2017.py",
-      "line": 377,
+      "line": 384,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -12973,7 +12973,7 @@
       "kind": "class",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/veres2017.py",
-      "line": 387,
+      "line": 394,
       "explicit_export": true,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -13001,7 +13001,7 @@
       "kind": "class",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/veres2017.py",
-      "line": 192,
+      "line": 199,
       "explicit_export": true,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -13029,7 +13029,7 @@
       "kind": "constructor",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/veres2017.py",
-      "line": 217,
+      "line": 224,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -13057,7 +13057,7 @@
       "kind": "method",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/veres2017.py",
-      "line": 266,
+      "line": 273,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -13085,7 +13085,7 @@
       "kind": "method",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/veres2017.py",
-      "line": 250,
+      "line": 257,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -13113,7 +13113,7 @@
       "kind": "function",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/veres2017.py",
-      "line": 106,
+      "line": 113,
       "explicit_export": true,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -13141,7 +13141,7 @@
       "kind": "function",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/veres2017.py",
-      "line": 143,
+      "line": 150,
       "explicit_export": true,
       "plotting_exemption_candidate": false,
       "signals": {

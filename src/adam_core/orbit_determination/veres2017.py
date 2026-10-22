@@ -52,9 +52,16 @@ import pyarrow as pa
 
 from adam_core import _rust_native as _provenance_native
 
+from ..coordinates import covariances as _provenance_covariances
 from ..coordinates.covariances import CoordinateCovariances
+from . import _native_dispatch as _provenance_native_dispatch
+from . import observation_uncertainty as _provenance_observation_uncertainty
 from .evaluate import OrbitDeterminationObservations
-from .model_provenance import _BehaviorSpec, _capture_behavior_spec
+from .model_provenance import (
+    _BehaviorSpec,
+    _capture_behavior_spec,
+    _field_schema,
+)
 from .observation_uncertainty import ObservationUncertaintyModel
 
 __all__ = [
@@ -443,6 +450,12 @@ class SigmaFillModel(_VeresSigmaModel):
     _DEFAULT_TABLE = V2_SIGMA_FILL_TABLE
 
 
+_STR_FIELD = _field_schema(str)
+_OPTIONAL_STR_FIELD = _field_schema(str, type(None))
+_FLOAT64_VECTOR_FIELD = _field_schema(np.ndarray, ndarray_dtypes=("float64",), ndim=1)
+_TABLE_FIELD = _field_schema(pa.Table)
+
+
 def _behavior_delegate(namespace: Mapping[str, object], name: str):
     return (namespace, name, namespace[name])
 
@@ -450,22 +463,74 @@ def _behavior_delegate(namespace: Mapping[str, object], name: str):
 _MODULE = globals()
 _NATIVE = vars(_provenance_native)
 _COORDINATE_COVARIANCES = vars(CoordinateCovariances)
+_COVARIANCE_MODULE = vars(_provenance_covariances)
 _IMPORTLIB = vars(importlib)
-_LOOKUP_DELEGATES = tuple(
-    _behavior_delegate(_MODULE, name)
+_OBSERVATION_UNCERTAINTY = vars(_provenance_observation_uncertainty)
+_NATIVE_DISPATCH = vars(_provenance_native_dispatch)
+_NUMPY = vars(np)
+_PYARROW = vars(pa)
+_MODEL_RUNTIME_DELEGATES = tuple(
+    _behavior_delegate(_NUMPY, name)
     for name in (
-        "SIGMA_TABLE_PACKAGE",
-        "V2_SIGMA_FILL_TABLE",
-        "VERES2017_WORKING_TABLE",
-        "VERES2017_FALLBACK_SIGMA_ARCSEC",
-        "VERES2017_SIGMA_TABLE_SCHEMA",
-        "_PACKAGE_INSTALL_HINT",
-        "validate_veres_sigma_table",
-        "load_sigma_table",
+        "arange",
+        "asarray",
+        "ascontiguousarray",
+        "cumsum",
+        "empty",
+        "float64",
+        "int64",
+        "isnan",
+        "where",
+        "zeros",
     )
-) + (
-    _behavior_delegate(_IMPORTLIB, "import_module"),
-    _behavior_delegate(_NATIVE, "veres_sigma_lookup_numpy"),
+) + tuple(
+    _behavior_delegate(_PYARROW, name)
+    for name in (
+        "ArrowInvalid",
+        "ArrowNotImplementedError",
+        "ArrowTypeError",
+        "LargeListArray",
+        "Table",
+        "field",
+        "float64",
+        "large_string",
+        "schema",
+    )
+)
+_COVARIANCE_HELPER_DELEGATES = (
+    _behavior_delegate(_COVARIANCE_MODULE, "np"),
+    _behavior_delegate(_COVARIANCE_MODULE, "pa"),
+    _behavior_delegate(_COVARIANCE_MODULE, "COORD_DIM"),
+    _behavior_delegate(_COVARIANCE_MODULE, "FULL_DIM"),
+)
+_NATIVE_SPEC_DELEGATES = (
+    _behavior_delegate(_MODULE, "np"),
+    _behavior_delegate(_MODULE, "pa"),
+    _behavior_delegate(_OBSERVATION_UNCERTAINTY, "native_model_specs"),
+    _behavior_delegate(_NATIVE_DISPATCH, "_has_compatible_native_spec"),
+)
+_COMMON_MODEL_DELEGATES = (
+    _MODEL_RUNTIME_DELEGATES + _COVARIANCE_HELPER_DELEGATES + _NATIVE_SPEC_DELEGATES
+)
+_LOOKUP_DELEGATES = (
+    tuple(
+        _behavior_delegate(_MODULE, name)
+        for name in (
+            "SIGMA_TABLE_PACKAGE",
+            "V2_SIGMA_FILL_TABLE",
+            "VERES2017_WORKING_TABLE",
+            "VERES2017_FALLBACK_SIGMA_ARCSEC",
+            "VERES2017_SIGMA_TABLE_SCHEMA",
+            "_PACKAGE_INSTALL_HINT",
+            "validate_veres_sigma_table",
+            "load_sigma_table",
+        )
+    )
+    + (
+        _behavior_delegate(_IMPORTLIB, "import_module"),
+        _behavior_delegate(_NATIVE, "veres_sigma_lookup_numpy"),
+    )
+    + _COMMON_MODEL_DELEGATES
 )
 _MODEL_DELEGATES = _LOOKUP_DELEGATES + (
     _behavior_delegate(_NATIVE, "veres_model_apply_numpy"),
@@ -480,12 +545,12 @@ _VERES_LOOKUP_BEHAVIOR = _capture_behavior_spec(
     VeresSigmaLookup,
     ("__init__", "_table_arguments", "sigmas_for", "sigmas"),
     instance_fields=(
-        "sigma_table",
-        "fallback_sigma_arcsec",
-        "_obs_codes",
-        "_astcats",
-        "_sigma_ra",
-        "_sigma_dec",
+        ("sigma_table", _TABLE_FIELD),
+        ("fallback_sigma_arcsec", _field_schema(float, type(None))),
+        ("_obs_codes", _field_schema(list, item_schema=_OPTIONAL_STR_FIELD)),
+        ("_astcats", _field_schema(list, item_schema=_OPTIONAL_STR_FIELD)),
+        ("_sigma_ra", _FLOAT64_VECTOR_FIELD),
+        ("_sigma_dec", _FLOAT64_VECTOR_FIELD),
     ),
     module_delegates=_LOOKUP_DELEGATES,
 )
@@ -501,7 +566,10 @@ def _veres_model_behavior(cls: type) -> _BehaviorSpec:
             "_MODEL",
             "_DEFAULT_TABLE",
         ),
-        instance_fields=("lookup", "fill_missing"),
+        instance_fields=(
+            ("lookup", _field_schema(VeresSigmaLookup)),
+            ("fill_missing", _field_schema(bool)),
+        ),
         collaborators=(("lookup", _VERES_LOOKUP_BEHAVIOR),),
         module_delegates=_MODEL_DELEGATES,
     )

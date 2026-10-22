@@ -239,7 +239,12 @@ objects are refused without iteration.
 
 The preflight attests inherited class/metaclass behavior and construction,
 loader, schema, and native-routing selectors before default model construction.
-It resolves fitter/provider hooks first, then deep-copies one final model/native
+Every registered instance field is checked against a closed declarative schema
+(exact scalar/table/array/container types, recursive item/key/value schemas,
+and array dtype/dimensions) before model methods or canonicalization. The graph
+also attests the final native-spec builder/routing and concrete NumPy/PyArrow
+functions and types used by shipped constructors and application. It resolves
+fitter/provider hooks first, then deep-copies one final model/native
 specification and fitter-settings snapshot. Fused Core execution consumes those
 copies, while composed execution rechecks the exact descriptor immediately
 before model application. The import-time native extension and OD entry-point
