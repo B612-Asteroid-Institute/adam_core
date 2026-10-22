@@ -10,6 +10,7 @@ import pyarrow as pa
 import pytest
 
 import adam_core
+import adam_core.orbit_determination.provenance as provenance_module
 from adam_core import _rust_native
 from adam_core.orbit_determination import (
     ModelProvenance,
@@ -37,6 +38,7 @@ from adam_core.orbit_determination.tests.test_observation_uncertainty import (
 )
 
 _TEST_IMPLEMENTATION = "1" * 64
+_REAL_CUSTOM_CONTRACT = provenance_module._custom_contract
 
 
 class _ExplicitModel(ObservationUncertaintyModel):
@@ -820,6 +822,7 @@ def test_builtin_behavior_overrides_and_nested_overrides_require_contract(monkey
 def _assert_run_od_preflight_refuses_model(
     model, monkeypatch, match="model_provenance"
 ):
+    monkeypatch.setattr(provenance_module, "_custom_contract", _REAL_CUSTOM_CONTRACT)
     fit_calls = 0
     provider_calls = 0
 
@@ -851,6 +854,7 @@ def _assert_run_od_preflight_refuses_model(
 def test_exact_class_special_lookup_hooks_are_refused_before_execution(monkeypatch):
     from adam_core.orbit_determination.observation_uncertainty import IdentityModel
 
+    monkeypatch.setattr(provenance_module, "_custom_contract", _REAL_CUSTOM_CONTRACT)
     for special in ("__getattribute__", "__getattr__"):
         calls = 0
         model = IdentityModel()
