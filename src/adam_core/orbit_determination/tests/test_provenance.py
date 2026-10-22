@@ -1,6 +1,5 @@
 """Run-level OD provenance (`OdProvenance`) on both run_od routes."""
 
-import hashlib
 import json
 import subprocess
 from pathlib import Path
@@ -384,8 +383,10 @@ def test_custom_descriptor_is_stable_across_hash_seed_and_import_order(tmp_path)
     )
     script = (
         "{imports}; from seed_model import Model; "
+        "from adam_core.orbit_determination import IdentityModel; "
         "from adam_core.orbit_determination.provenance import model_descriptor; "
-        "print(model_descriptor(Model())['descriptor_sha256'])"
+        "print(model_descriptor(Model())['descriptor_sha256']); "
+        "print(model_descriptor(IdentityModel())['descriptor_sha256'])"
     )
     hashes = set()
     for seed in ("0", "1", "12345", "random"):
@@ -405,11 +406,15 @@ def test_custom_descriptor_is_stable_across_hash_seed_and_import_order(tmp_path)
                 if part
             )
             hashes.add(
-                subprocess.check_output(
-                    [sys.executable, "-c", script.format(imports=imports)],
-                    env=environment,
-                    text=True,
-                ).strip()
+                tuple(
+                    subprocess.check_output(
+                        [sys.executable, "-c", script.format(imports=imports)],
+                        env=environment,
+                        text=True,
+                    )
+                    .strip()
+                    .splitlines()
+                )
             )
     assert len(hashes) == 1
 
@@ -427,6 +432,12 @@ def test_builtin_descriptor_uses_exact_build_and_not_import_history():
     assert implementation["kind"] == "adam-core-built-in-v1"
     assert implementation["entrypoint"] == "apply"
     assert implementation["build_commit"] == _rust_native.build_identity()[1]
+    assert set(implementation) == {
+        "kind",
+        "build_commit",
+        "class",
+        "entrypoint",
+    }
     encoded = json.dumps(before, sort_keys=True)
     for forbidden in (
         "bytecode",
@@ -452,6 +463,13 @@ def test_custom_fingerprint_is_the_implementation_identity():
     changed_science = model_descriptor(Model("2" * 64))
     changed_config = model_descriptor(Model("1" * 64, scale=2))
     assert first == same
+    assert set(first["implementation"]) == {
+        "kind",
+        "package",
+        "version",
+        "implementation_fingerprint",
+        "entrypoint",
+    }
     assert first["descriptor_sha256"] != changed_science["descriptor_sha256"]
     assert first["descriptor_sha256"] != changed_config["descriptor_sha256"]
 
@@ -491,11 +509,19 @@ def test_common_configuration_values_are_portable_and_distinct(tmp_path):
         FIRST = "same"
         SECOND = "other"
 
+    class OtherMode(Enum):
+        FIRST = "same"
+
     class Nested:
         def __init__(self, value):
             self.value = value
 
+    class OtherNested:
+        def __init__(self, value):
+            self.value = value
+
     Pair = namedtuple("Pair", "left right")
+    OtherPair = namedtuple("OtherPair", "left right")
 
     def helper(value, *, scale=1):
         return value * scale
@@ -539,17 +565,33 @@ def test_common_configuration_values_are_portable_and_distinct(tmp_path):
     assert first == reordered
     assert str(tmp_path) not in json.dumps(first, sort_keys=True)
 
-    second = dict(configuration)
-    second["partial"] = functools.partial(helper, 3, scale=5)
+    variants = [
+        {**configuration, "int": np.int32(5)},
+        {**configuration, "float": np.float64(1.5)},
+        {**configuration, "type": np.float32},
+        {**configuration, "ufunc": np.square},
+        {**configuration, "date": datetime.date(2024, 3, 1)},
+        {**configuration, "datetime": datetime.datetime(2024, 2, 29, 12, 1, 2, 4)},
+        {**configuration, "namedtuple_class": OtherPair},
+        {**configuration, "namedtuple": OtherPair(1, 2)},
+        {**configuration, "namedtuple": (1, 2)},
+        {**configuration, "enum_class": OtherMode},
+        {**configuration, "enum": Mode.SECOND},
+        {**configuration, "partial": functools.partial(helper, 4, scale=4)},
+        {**configuration, "partial": functools.partial(helper, 3, scale=5)},
+        {**configuration, "nested_class": OtherNested},
+        {**configuration, "nested": OtherNested(7)},
+    ]
+    for changed in variants:
+        assert (
+            first["descriptor_sha256"]
+            != model_descriptor(Model(changed))["descriptor_sha256"]
+        )
+
+    path.write_text("changed content", encoding="utf-8")
     assert (
         first["descriptor_sha256"]
-        != model_descriptor(Model(second))["descriptor_sha256"]
-    )
-    plain_tuple = dict(configuration)
-    plain_tuple["namedtuple"] = (1, 2)
-    assert (
-        first["descriptor_sha256"]
-        != model_descriptor(Model(plain_tuple))["descriptor_sha256"]
+        != model_descriptor(Model(configuration))["descriptor_sha256"]
     )
 
 
