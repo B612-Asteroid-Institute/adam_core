@@ -111,6 +111,11 @@ def observers_from_ipc(raw: bytes) -> Observers:
     return Observers.from_pyarrow(_to_quivr_metadata(_read_ipc(raw)))
 
 
+def coordinates_from_ipc(raw: bytes, coordinate_type):
+    """Reconstruct a coordinate table from Rust-produced nested IPC bytes."""
+    return coordinate_type.from_pyarrow(_to_quivr_metadata(_read_ipc(raw)))
+
+
 def coordinates_to_ipc(coordinates, representation: str) -> bytes:
     """Serialize a coordinate table (``cartesian`` or ``spherical``) to Arrow IPC."""
     table = _stamp_adam_core_metadata(

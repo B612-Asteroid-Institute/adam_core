@@ -2114,6 +2114,31 @@ pub fn cmc2003_fit_with<T: OriginTranslationProvider>(
     provider: &dyn TimeScaleProvider,
     translation_provider: &T,
 ) -> PropagationResultValue<Cmc2003FitOutput> {
+    cmc2003_fit_with_covariance_failure(
+        predictor,
+        orbit,
+        observed,
+        observers,
+        config,
+        provider,
+        translation_provider,
+        &mut || None,
+    )
+}
+
+/// Semantic test seam immediately before CMC validates the expected-residual
+/// covariance. Production always supplies the no-failure closure above.
+#[allow(clippy::too_many_arguments)]
+fn cmc2003_fit_with_covariance_failure<T: OriginTranslationProvider>(
+    predictor: &dyn SphericalPredictor,
+    orbit: &OrbitBatch,
+    observed: &CoordinateBatch,
+    observers: &ObserverBatch,
+    config: &Cmc2003FitConfig,
+    provider: &dyn TimeScaleProvider,
+    translation_provider: &T,
+    covariance_failure: &mut dyn FnMut() -> Option<PropagationError>,
+) -> PropagationResultValue<Cmc2003FitOutput> {
     use crate::cmc2003::{
         cmc2003_apparitions, cmc2003_expected_residual_chi2, cmc2003_select, Cmc2003Flag,
         Cmc2003SelectionOptions, CMC2003_MIN_OBS,
@@ -2242,6 +2267,9 @@ pub fn cmc2003_fit_with<T: OriginTranslationProvider>(
         let (mut output, rejection_jacobian) = run_fit(&seed, &selected)?;
         warnings.append(&mut output.warnings);
 
+        if let Some(error) = covariance_failure() {
+            return Err(error);
+        }
         validate_cmc_fit(&seed, &selected, &output, n_iterations)?;
 
         seed = orbit_with_state(orbit, output.state)?;
@@ -2913,6 +2941,35 @@ fn correct_candidates<T: OriginTranslationProvider>(
     result: &mut super::od::IodResult,
     pool: &[usize],
 ) -> PropagationResultValue<()> {
+    correct_candidates_with_cmc_failure(
+        iod_predictor,
+        observed,
+        observers,
+        config,
+        fit,
+        provider,
+        translation_provider,
+        result,
+        pool,
+        &mut || None,
+    )
+}
+
+/// Thread the corrected-IOD test injection to the exact CMC expected-
+/// covariance operation, without coupling the test to propagation-call counts.
+#[allow(clippy::too_many_arguments)]
+fn correct_candidates_with_cmc_failure<T: OriginTranslationProvider>(
+    iod_predictor: &dyn SphericalPredictor,
+    observed: &CoordinateBatch,
+    observers: &ObserverBatch,
+    config: &super::od::IodConfig,
+    fit: &WhitenedFitConfig,
+    provider: &dyn TimeScaleProvider,
+    translation_provider: &T,
+    result: &mut super::od::IodResult,
+    pool: &[usize],
+    cmc_failure: &mut dyn FnMut() -> Option<PropagationError>,
+) -> PropagationResultValue<()> {
     let n = observed.len();
     let times = iod_predictor.civil_times_mjd(observed)?;
     let nights = super::od::observation_nights(&times, Some(&observers.code));
@@ -3031,7 +3088,7 @@ fn correct_candidates<T: OriginTranslationProvider>(
             let output = if output.evaluation.reduced_chi2 <= config.rchi2_threshold {
                 output
             } else {
-                match cmc2003_fit_with(
+                let rejection = cmc2003_fit_with_covariance_failure(
                     iod_predictor,
                     &seed,
                     observed,
@@ -3050,7 +3107,9 @@ fn correct_candidates<T: OriginTranslationProvider>(
                     },
                     provider,
                     translation_provider,
-                ) {
+                    cmc_failure,
+                );
+                match rejection {
                     Ok(rejected) => rejected.fit,
                     Err(error) => {
                         let message = record_candidate_local_rejection_failure(
@@ -3505,89 +3564,29 @@ pub struct RunOdOutput {
     pub full_od: FullOdOutput,
 }
 
-/// One-crossing `run_od` for the native fitter: apply the observation models
-/// to the ORIGINAL observations in order, run the full orbit determination
-/// on the transformed ("used") observations, and return both astrometry
-/// snapshots for the members' provenance columns. `obs_code`, `band` and
-/// `astcat` are the per-observation station, photometric band and star
-/// catalog the models consult.
-///
-/// The models run before a covariance is required: observations without
-/// one (`None`) start as NaN-filled covariance rows, so that a
-/// `SigmaFillModel` among `models` can supply the missing sigmas exactly as
-/// it does on the composed Python route. After the models every observation
-/// must have finite, positive lon/lat variances, else `InvalidRequest`
-/// names that model as the remedy.
-#[allow(clippy::too_many_arguments)]
-pub fn run_od_barycentric<I, R, T>(
-    iod_propagator: &I,
-    propagator: &R,
-    observed: &CoordinateBatch,
-    observers: &ObserverBatch,
-    obs_code: &[String],
-    band: &[Option<String>],
-    astcat: &[Option<String>],
-    models: Vec<Box<dyn ObservationUncertaintyModel>>,
-    config: &FullOdConfig,
-    options: &EphemerisOptions,
-    provider: &dyn TimeScaleProvider,
-    translation_provider: &T,
-) -> PropagationResultValue<RunOdOutput>
-where
-    I: Propagator,
-    R: Propagator,
-    T: OriginTranslationProvider,
-{
-    let iod_predictor = PropagatorPredictor {
-        propagator: iod_propagator,
-        options,
-        provider,
-        translation_provider,
-    };
-    let predictor = PropagatorPredictor {
-        propagator,
-        options,
-        provider,
-        translation_provider,
-    };
-    run_od_with(
-        &iod_predictor,
-        &predictor,
-        observed,
-        observers,
-        obs_code,
-        band,
-        astcat,
-        models,
-        config,
-        provider,
-        translation_provider,
-    )
+/// Rust-owned result of applying ordered observation models to original data.
+#[derive(Debug, Clone)]
+pub struct AppliedObservationModels {
+    pub original: AstrometrySnapshot,
+    pub used: AstrometrySnapshot,
+    pub models_changed: bool,
+    pub observations: CoordinateBatch,
 }
 
-/// [`run_od_barycentric`] over any pair of [`SphericalPredictor`]s (IOD,
-/// refinement).
-#[allow(clippy::too_many_arguments)]
-pub fn run_od_with<T: OriginTranslationProvider>(
-    iod_predictor: &dyn SphericalPredictor,
-    predictor: &dyn SphericalPredictor,
+/// Apply ordered observation models and materialize the complete coordinates
+/// consumed by OD. Both fused and composed routes call this implementation.
+pub fn apply_observation_models(
     observed: &CoordinateBatch,
-    observers: &ObserverBatch,
     obs_code: &[String],
     band: &[Option<String>],
     astcat: &[Option<String>],
     models: Vec<Box<dyn ObservationUncertaintyModel>>,
-    config: &FullOdConfig,
     provider: &dyn TimeScaleProvider,
-    translation_provider: &T,
-) -> PropagationResultValue<RunOdOutput> {
-    config
-        .validate()
-        .map_err(PropagationError::InvalidRequest)?;
+) -> PropagationResultValue<AppliedObservationModels> {
     let n = observed.len();
-    if observers.len() != n || obs_code.len() != n || band.len() != n || astcat.len() != n {
+    if obs_code.len() != n || band.len() != n || astcat.len() != n {
         return Err(PropagationError::InvalidRequest(
-            "observed, observers, obs_code, band and astcat must have equal length".to_string(),
+            "observed, obs_code, band and astcat must have equal length".to_string(),
         ));
     }
     let observed_flat = spherical_flat(observed, "observed")?;
@@ -3681,19 +3680,114 @@ pub fn run_od_with<T: OriginTranslationProvider>(
         observed.clone()
     };
 
+    Ok(AppliedObservationModels {
+        original,
+        used: used_snapshot,
+        models_changed,
+        observations: used,
+    })
+}
+
+/// One-crossing `run_od` for the native fitter: apply the observation models
+/// to the ORIGINAL observations in order, run the full orbit determination
+/// on the transformed ("used") observations, and return both astrometry
+/// snapshots for the members' provenance columns. `obs_code`, `band` and
+/// `astcat` are the per-observation station, photometric band and star
+/// catalog the models consult.
+///
+/// The models run before a covariance is required: observations without
+/// one (`None`) start as NaN-filled covariance rows, so that a
+/// `SigmaFillModel` among `models` can supply the missing sigmas exactly as
+/// it does on the composed Python route. After the models every observation
+/// must have finite, positive lon/lat variances, else `InvalidRequest`
+/// names that model as the remedy.
+#[allow(clippy::too_many_arguments)]
+pub fn run_od_barycentric<I, R, T>(
+    iod_propagator: &I,
+    propagator: &R,
+    observed: &CoordinateBatch,
+    observers: &ObserverBatch,
+    obs_code: &[String],
+    band: &[Option<String>],
+    astcat: &[Option<String>],
+    models: Vec<Box<dyn ObservationUncertaintyModel>>,
+    config: &FullOdConfig,
+    options: &EphemerisOptions,
+    provider: &dyn TimeScaleProvider,
+    translation_provider: &T,
+) -> PropagationResultValue<RunOdOutput>
+where
+    I: Propagator,
+    R: Propagator,
+    T: OriginTranslationProvider,
+{
+    let iod_predictor = PropagatorPredictor {
+        propagator: iod_propagator,
+        options,
+        provider,
+        translation_provider,
+    };
+    let predictor = PropagatorPredictor {
+        propagator,
+        options,
+        provider,
+        translation_provider,
+    };
+    run_od_with(
+        &iod_predictor,
+        &predictor,
+        observed,
+        observers,
+        obs_code,
+        band,
+        astcat,
+        models,
+        config,
+        provider,
+        translation_provider,
+    )
+}
+
+/// [`run_od_barycentric`] over any pair of [`SphericalPredictor`]s (IOD,
+/// refinement).
+#[allow(clippy::too_many_arguments)]
+pub fn run_od_with<T: OriginTranslationProvider>(
+    iod_predictor: &dyn SphericalPredictor,
+    predictor: &dyn SphericalPredictor,
+    observed: &CoordinateBatch,
+    observers: &ObserverBatch,
+    obs_code: &[String],
+    band: &[Option<String>],
+    astcat: &[Option<String>],
+    models: Vec<Box<dyn ObservationUncertaintyModel>>,
+    config: &FullOdConfig,
+    provider: &dyn TimeScaleProvider,
+    translation_provider: &T,
+) -> PropagationResultValue<RunOdOutput> {
+    config
+        .validate()
+        .map_err(PropagationError::InvalidRequest)?;
+    let n = observed.len();
+    if observers.len() != n || obs_code.len() != n || band.len() != n || astcat.len() != n {
+        return Err(PropagationError::InvalidRequest(
+            "observed, observers, obs_code, band and astcat must have equal length".to_string(),
+        ));
+    }
+    let applied = apply_observation_models(observed, obs_code, band, astcat, models, provider)?;
+
     let full_od = full_od_with(
         iod_predictor,
         predictor,
-        &used,
+        &applied.observations,
         observers,
         config,
         provider,
         translation_provider,
     )?;
     Ok(RunOdOutput {
-        original,
-        used: used_snapshot,
-        models_changed,
+        original: applied.original,
+        used: applied.used,
+        models_changed: applied.models_changed,
         full_od,
     })
 }
@@ -6362,33 +6456,6 @@ mod tests {
         assert!(fixture.predictor.batches.borrow().is_empty());
     }
 
-    struct FailAtPredictor<'a> {
-        inner: &'a dyn SphericalPredictor,
-        calls: std::cell::Cell<usize>,
-        fail_at: Vec<usize>,
-        error: PropagationError,
-    }
-
-    impl SphericalPredictor for FailAtPredictor<'_> {
-        fn predict_spherical(
-            &self,
-            states: &[[f64; 6]],
-            geometry: &OrbitGeometry,
-            observers: &ObserverBatch,
-        ) -> PropagationResultValue<Result<Vec<f64>, String>> {
-            let call = self.calls.get();
-            self.calls.set(call + 1);
-            if self.fail_at.contains(&call) {
-                return Err(self.error.clone());
-            }
-            self.inner.predict_spherical(states, geometry, observers)
-        }
-
-        fn backend(&self) -> super::super::BackendIdentity {
-            self.inner.backend()
-        }
-    }
-
     fn corrected_iod_cmc_call_fixture(
         error: PropagationError,
     ) -> PropagationResultValue<super::super::od::IodResult> {
@@ -6408,61 +6475,17 @@ mod tests {
         config.correction.max_stages = 1;
         let mut result =
             super::super::od::iod_candidate_pool(&predictor, &observed, &observers, &config)?;
-        let candidate = result.candidates.first().expect("fixture candidate");
-        let seed_coordinates = CoordinateBatch::cartesian(
-            vec![candidate.state],
-            Frame::Ecliptic,
-            OriginArray::repeat(OriginId::from_code("SUN"), 1),
-            Some(crate::TimeArray::new(
-                candidate.epoch_scale,
-                vec![candidate.epoch],
-            )?),
-            None,
-        )?;
-        let seed = OrbitBatch::new(
-            vec![crate::OrbitId("iod-candidate".to_string())],
-            vec![None],
-            seed_coordinates,
-        )?;
-        let counter = FailAtPredictor {
-            inner: &predictor,
-            calls: std::cell::Cell::new(0),
-            fail_at: Vec::new(),
-            error: error.clone(),
-        };
-        let stage_config = WhitenedFitConfig {
-            loss: LossType::Linear,
-            validate_covariance: false,
-            ..WhitenedFitConfig::default()
-        };
-        let output = stage_fit(
-            &counter,
-            &seed,
-            &observed,
-            &observers,
-            &vec![true; observed.len()],
-            &stage_config,
-            f64::INFINITY,
-            &NoopProvider,
-            &ZeroTranslationProvider,
-        )?
-        .expect("fixture whole-arc stage");
-        assert!(
-            output.evaluation.reduced_chi2 > config.rchi2_threshold,
-            "fixture must enter the CMC call site"
-        );
-        let calls_per_stage = counter.calls.get();
-        let failing = FailAtPredictor {
-            inner: &predictor,
-            calls: std::cell::Cell::new(0),
-            fail_at: vec![calls_per_stage, 2 * calls_per_stage + 1],
-            error,
-        };
         // Two distinct records make continuation after the first local CMC
-        // refusal observable at this exact call site.
+        // refusal observable at this exact semantic call site.
+        let duplicate_index = result.candidates.len();
         result.candidates.push(result.candidates[0].clone());
-        correct_candidates(
-            &failing,
+        let cmc_calls = std::cell::Cell::new(0_usize);
+        let mut fail_expected_covariance = || {
+            cmc_calls.set(cmc_calls.get() + 1);
+            Some(error.clone())
+        };
+        correct_candidates_with_cmc_failure(
+            &predictor,
             &observed,
             &observers,
             &config,
@@ -6470,9 +6493,14 @@ mod tests {
             &NoopProvider,
             &ZeroTranslationProvider,
             &mut result,
-            &[0, 1],
+            &[0, duplicate_index],
+            &mut fail_expected_covariance,
         )?;
-        assert!(failing.calls.get() > 2 * calls_per_stage + 1);
+        assert_eq!(
+            cmc_calls.get(),
+            2,
+            "candidate-local refusal must continue to the second candidate"
+        );
         Ok(result)
     }
 
@@ -6492,11 +6520,18 @@ mod tests {
             "rank".to_string(),
         ))
         .expect("CMC covariance refusal must remain candidate-local");
+        assert_eq!(local.corrections_run, 2);
+        assert_eq!(local.candidates[0].stages, 1);
         assert_eq!(local.candidates_failed, 2);
         assert_eq!(local.candidate_failures.len(), 2);
-        assert!(local.candidate_failures.iter().all(|failure| failure
-            .message
-            .contains("CMC2003 expected covariance unavailable")));
+        for failure in &local.candidate_failures {
+            assert_eq!(failure.triplet, local.candidates[0].triplet);
+            assert_eq!(failure.root_index, local.candidates[0].root_index);
+            assert_eq!(
+                failure.message,
+                "whole-arc rejection failed at stage 1: CMC2003 expected covariance unavailable: rank"
+            );
+        }
     }
 
     #[test]

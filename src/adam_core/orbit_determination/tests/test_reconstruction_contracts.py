@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import subprocess
 import warnings
 from pathlib import Path
@@ -22,6 +21,7 @@ from adam_core.orbit_determination import (
 )
 from adam_core.orbit_determination.observation_uncertainty import (
     EFCC18DebiasModel,
+    IdentityModel,
     ObservationUncertaintyModel,
     PerformanceWeightedModel,
 )
@@ -52,6 +52,11 @@ class PythonAppliedModel(PerformanceWeightedModel):
 
     def model_provenance(self):
         return ModelProvenance("adam-core-tests", "1", "2" * 64, dict(vars(self)))
+
+
+class ExplicitStageComposition(NativeOrbitFitter):
+    def full_od(self, object_id, observations, propagator):
+        return super().full_od(object_id, observations, propagator)
 
 
 def _fitter(**kw):
@@ -161,41 +166,46 @@ def test_input_fingerprint_is_layout_canonical():
 # ------------------------------------------------------------------ fused == composed
 
 
-def test_fused_equals_composed_every_provenance_field():
+def test_fused_and_composed_share_native_model_science_and_provenance():
     obs = make_synthetic_observations()
     table = make_bias_table([{"obs_code": "500", "chi2_per_obs": 1.0}])
-    f = _record(_run(obs, [PerformanceWeightedModel(table)])[0])
-    c = _record(_run(obs, [PythonAppliedModel(table)])[0])
-    assert f["route"] == "fused" and c["route"] == "composed"
-    diffs = {k: (f[k], c[k]) for k in f if f[k] != c[k] and k not in ("route",)}
-    # The composed route genuinely executes a different Python entrypoint;
-    # implementation identity must therefore differ while model configuration
-    # and table content remain identical.
-    if "models" in diffs:
-        fm, cm = (json.loads(x) for x in diffs.pop("models"))
-        assert isinstance(fm[0]["implementation"], dict)
-        assert isinstance(cm[0]["implementation"], dict)
-        assert fm[0]["implementation"] != cm[0]["implementation"]
-        # The explicit custom contract owns its complete configuration rather
-        # than relying on Core's built-in field inventory. Both nevertheless
-        # identify the exact same input bias table content.
-        configuration = cm[0]["parameters"]
-        assert configuration["tag"] == "mapping"
-        custom_bias_table = next(
-            value
-            for key, value in configuration["entries"]
-            if key == {"tag": "str", "value": "bias_table"}
+    fused, fused_members = _run(obs, [PerformanceWeightedModel(table)])
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        composed, composed_members = run_od(
+            obs,
+            ExplicitStageComposition(TwoBodyPropagator(), iod_rchi2_threshold=1e6),
+            [PerformanceWeightedModel(table)],
+            propagator=TwoBodyPropagator(),
+            object_id="x",
         )
-        assert custom_bias_table["tag"] == "arrow-table"
-        assert fm[0]["tables_sha256"]["bias_table"] == custom_bias_table["sha256"]
-    assert not diffs, diffs
+    f = _record(fused)
+    c = _record(composed)
+    assert f["route"] == "fused" and c["route"] == "composed"
+    for field in (
+        "adam_core_version",
+        "adam_core_build",
+        "input_fingerprint",
+        "iod_backend",
+        "refinement_backend",
+        "settings",
+        "models",
+        "iod_ambiguous",
+        "iod_alternatives",
+        "num_rejected",
+        "rejected_fraction",
+    ):
+        assert f[field] == c[field], field
+    np.testing.assert_allclose(
+        fused.coordinates.values,
+        composed.coordinates.values,
+        rtol=1e-12,
+        atol=1e-12,
+    )
+    assert fused_members.outlier.to_pylist() == composed_members.outlier.to_pylist()
 
 
 def test_explicit_stage_composition_route_completes():
-    class ExplicitStageComposition(NativeOrbitFitter):
-        def full_od(self, object_id, observations, propagator):
-            return super().full_od(object_id, observations, propagator)
-
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         orbits, _ = run_od(
@@ -248,19 +258,23 @@ def test_two_distinct_epoch_arcs_are_refused_on_all_routes():
                 rejection=rejection,
             )
 
-    class PythonIdentity(ObservationUncertaintyModel):
-        def apply(self, value):
-            return value
-
-        def model_provenance(self):
-            return ModelProvenance("adam-core-tests", "1", "3" * 64, {})
-
-    for models in (None, [PythonIdentity()]):
+    routes = (
+        (_fitter(min_arc_length=0.0), None),
+        (
+            ExplicitStageComposition(
+                TwoBodyPropagator(),
+                iod_rchi2_threshold=1e6,
+                min_arc_length=0.0,
+            ),
+            [IdentityModel()],
+        ),
+    )
+    for route_fitter, models in routes:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             fitted, members = run_od(
                 observations,
-                _fitter(min_arc_length=0.0),
+                route_fitter,
                 models,
                 propagator=TwoBodyPropagator(),
             )

@@ -1,4 +1,4 @@
-"""Core-owned OD dispatch must preserve custom model and fitter behavior."""
+"""Core-owned OD dispatch and refusal of live custom model behavior."""
 
 import numpy.testing as npt
 import pytest
@@ -114,7 +114,7 @@ def make_fitter(cls=NativeOrbitFitter, **kwargs):
 
 @pytest.mark.parametrize("backend", [TwoBodyPropagator, RecordingNativePropagator])
 @pytest.mark.parametrize("form", ["direct", "sequence", "nested", "composite"])
-def test_overridden_model_changes_used_uncertainties(observations, backend, form):
+def test_live_custom_model_behavior_is_refused(observations, backend, form):
     model = ScaleSigmas()
     models = {
         "direct": model,
@@ -122,49 +122,39 @@ def test_overridden_model_changes_used_uncertainties(observations, backend, form
         "nested": CompositeModel(IdentityModel(), CompositeModel(model)),
         "composite": ScalingComposite(IdentityModel()),
     }[form]
-    propagator = backend()
-    if form == "nested":
-        # A shipped CompositeModel containing live Python behavior is refused;
-        # the test-only declaration bypass does not make that graph native.
-        with pytest.raises(TypeError, match="model_provenance"):
-            run_od(observations, make_fitter(), models, propagator=propagator)
-        return
-    fitted, members = run_od(observations, make_fitter(), models, propagator=propagator)
-    assert fitted.success.to_pylist() == [True]
-    for axis in ("lon", "lat"):
-        npt.assert_allclose(
-            getattr(members.used_astrometry, f"sigma_{axis}").to_numpy(),
-            2.0 * getattr(members.original_astrometry, f"sigma_{axis}").to_numpy(),
-        )
-    if form != "composite":
-        assert model.calls == 1
+    with pytest.raises(TypeError, match="exact shipped|model_provenance"):
+        run_od(observations, make_fitter(), models, propagator=backend())
+    assert getattr(model, "calls", 0) == 0
 
 
 @pytest.mark.parametrize(
     "model_class", [IdentityModel, UnchangedIdentity, NativeScaleSigmas]
 )
-def test_compatible_models_keep_fused_run_od(observations, model_class):
+def test_only_exact_shipped_models_keep_fused_run_od(observations, model_class):
     model = model_class()
     propagator = RecordingNativePropagator()
+    if model_class is not IdentityModel:
+        with pytest.raises(TypeError, match="exact shipped"):
+            run_od(observations, make_fitter(), model, propagator=propagator)
+        assert getattr(model, "calls", 0) == 0
+        return
     fitted, members = run_od(observations, make_fitter(), model, propagator=propagator)
     assert fitted.success.to_pylist() == [True]
     npt.assert_allclose(
         members.used_astrometry.sigma_lon.to_numpy(),
-        getattr(model, "factor", 1.0)
-        * members.original_astrometry.sigma_lon.to_numpy(),
+        members.original_astrometry.sigma_lon.to_numpy(),
     )
-    assert getattr(model, "calls", 0) == 0
 
 
-def test_further_model_override_needs_new_spec(observations):
+def test_further_custom_model_override_is_refused(observations):
     propagator = RecordingNativePropagator()
-    _, members = run_od(
-        observations, make_fitter(), ChangedNativeScaleSigmas(), propagator=propagator
-    )
-    npt.assert_allclose(
-        members.used_astrometry.sigma_lon.to_numpy(),
-        4.0 * members.original_astrometry.sigma_lon.to_numpy(),
-    )
+    with pytest.raises(TypeError, match="exact shipped"):
+        run_od(
+            observations,
+            make_fitter(),
+            ChangedNativeScaleSigmas(),
+            propagator=propagator,
+        )
 
 
 class CustomHookReached(Exception):
@@ -283,7 +273,7 @@ def test_custom_fitter_runs_before_native_settings_validation(observations):
         run_od(observations, fitter, None, propagator=RecordingNativePropagator())
 
 
-def test_instance_model_override_is_honored(observations, monkeypatch):
+def test_instance_model_override_is_refused(observations, monkeypatch):
     model = IdentityModel()
     monkeypatch.setattr(model, "apply", ScaleSigmas().apply)
     monkeypatch.setattr(
@@ -293,11 +283,8 @@ def test_instance_model_override_is_honored(observations, monkeypatch):
         raising=False,
     )
     propagator = RecordingNativePropagator()
-    _, members = run_od(observations, make_fitter(), model, propagator=propagator)
-    npt.assert_allclose(
-        members.used_astrometry.sigma_lon.to_numpy(),
-        2.0 * members.original_astrometry.sigma_lon.to_numpy(),
-    )
+    with pytest.raises(TypeError, match="exact shipped"):
+        run_od(observations, make_fitter(), model, propagator=propagator)
 
 
 class ChangedDynamics(NativeTwoBodyPropagator):
@@ -570,3 +557,44 @@ def test_python_propagators_are_refused():
 
 
 pytestmark = pytest.mark.usefixtures("allow_synthetic_model_distribution")
+
+
+@pytest.mark.parametrize("fitter_class", [NativeOrbitFitter, CompatibleFitter])
+def test_run_od_model_science_ignores_all_python_model_execution_surfaces(
+    observations, fitter_class, monkeypatch
+):
+    """Fused and composed routes consume only declarative state in Core Rust."""
+    import adam_core.orbit_determination.observation_uncertainty as uncertainty
+    from adam_core.orbit_determination.observation_uncertainty import (
+        NightBatchDeweightingModel,
+    )
+
+    model = NightBatchDeweightingModel(cap=1)
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError("Python observation-model behavior executed")
+
+    functions = (
+        NightBatchDeweightingModel.apply,
+        NightBatchDeweightingModel._native_specs,
+        CoordinateCovariances.to_matrix,
+    )
+    original_codes = [function.__code__ for function in functions]
+    for function in functions:
+        function.__code__ = forbidden.__code__
+    monkeypatch.setattr(uncertainty, "_covariances", forbidden)
+    monkeypatch.setattr(uncertainty, "_with_covariances", forbidden)
+    monkeypatch.setattr(uncertainty, "np", object())
+    try:
+        fitted, members = run_od(
+            observations,
+            make_fitter(fitter_class),
+            model,
+            propagator=RecordingNativePropagator(),
+        )
+    finally:
+        for function, code in zip(functions, original_codes):
+            function.__code__ = code
+
+    assert fitted.success.to_pylist() == [True]
+    assert len(members) == len(observations)

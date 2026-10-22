@@ -43,6 +43,7 @@ _REQUIRED_NATIVE_SYMBOLS = (
     "run_iod_2body_ipc",
     "full_od_ipc",
     "full_od_2body_ipc",
+    "apply_observation_models_ipc",
     "run_od_ipc",
     "run_od_2body_ipc",
     "benchmark_transform_coordinates_arrow",

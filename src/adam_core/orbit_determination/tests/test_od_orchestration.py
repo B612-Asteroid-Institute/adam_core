@@ -345,8 +345,14 @@ class TestRunOdProvenance:
             ObservationAstrometry.from_spherical(observations.coordinates),
         )
         assert members.astcat.to_pylist() == ["Gaia2", "UCAC4", None]
-        # A true no-op: the fitter saw the very observations that were passed in.
-        assert all(received is observations for received in fitter.received)
+        # Even identity crosses the shared Core-Rust application boundary.
+        assert all(received is not observations for received in fitter.received)
+        expected = ObservationAstrometry.from_spherical(observations.coordinates)
+        for received in fitter.received:
+            assert received.id.to_pylist() == observations.id.to_pylist()
+            assert_astrometry_equal(
+                ObservationAstrometry.from_spherical(received.coordinates), expected
+            )
 
     def test_empirical_covariance_inflates_used_sigma_and_keeps_positions(
         self,
@@ -978,7 +984,7 @@ class TestCoreRunOdRoutes:
             members.original_astrometry.lon.to_pylist()
         )
 
-    def test_python_model_keeps_the_core_stage_composition(
+    def test_live_python_model_is_refused_before_core_stage_composition(
         self, two_body_observations
     ) -> None:
         class ScaleSigmas(ObservationUncertaintyModel):
@@ -988,27 +994,16 @@ class TestCoreRunOdRoutes:
                 )
 
             def apply(self, observations):
-                covariances = observations.coordinates.covariance.to_matrix() * 4.0
-                return observations.set_column(
-                    "coordinates.covariance",
-                    CoordinateCovariances.from_matrix(covariances),
-                )
+                raise AssertionError("live Python model must not execute")
 
-        propagator = TwoBodyPropagator()
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", RuntimeWarning)
-            fitted, members = run_od(
+        with pytest.raises(TypeError, match="exact shipped"):
+            run_od(
                 two_body_observations,
                 self._fitter(),
                 [ScaleSigmas()],
-                propagator=propagator,
+                propagator=TwoBodyPropagator(),
                 object_id="python-model",
             )
-        assert len(fitted) == 1
-        npt.assert_allclose(
-            members.used_astrometry.sigma_lon.to_numpy(zero_copy_only=False),
-            2.0 * members.original_astrometry.sigma_lon.to_numpy(zero_copy_only=False),
-        )
 
 
 def test_native_run_od_validates_full_settings_before_empty_exit() -> None:

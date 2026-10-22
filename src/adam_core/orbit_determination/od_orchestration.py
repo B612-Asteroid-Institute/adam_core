@@ -23,9 +23,10 @@ Design
   differential correction) and which external plugins such as adam_fo
   (FindOrb) override. Fitters never see the models: they receive
   pre-transformed observations, keeping the `OrbitFitter` interface flag-free.
-* ``model.apply(observations) -> observations`` stays the internal primitive,
-  shared with the ``observatory_bias_model`` parameter of the lower-level OD
-  functions. Prefer `run_od` when the provenance of the fit matters.
+* ``run_od`` never executes a model's Python ``apply`` or ``_native_specs``
+  method. It schema-validates exact shipped instances, builds declarative specs,
+  and applies them in Core Rust. The public `apply_observation_models` helper is
+  a legacy/custom-model utility and is not part of blessed reproducible OD.
 * Called without ``models``, `run_od` uses observations exactly as supplied.
   Explicit ``models="default"`` selects the Institute reference stack described
   in its Notes; some models in that stack import data packages for their tables.
@@ -37,7 +38,6 @@ import uuid
 from dataclasses import dataclass
 from typing import Literal, Optional, TypeAlias, cast
 
-import numpy as np
 import pyarrow as pa
 import pyarrow.compute as pc
 
@@ -109,6 +109,10 @@ def apply_observation_models(
     """
     Apply observation models to the original observations, producing the
     observations a fitter will use.
+
+    This legacy utility executes each live Python ``model.apply`` method. The
+    reproducible `run_od` entry point does not call it; `run_od` accepts exact
+    shipped declarative state and applies that state in Core Rust.
 
     Parameters
     ----------
@@ -300,6 +304,74 @@ def _prepare_native_inputs(fitter, propagator, frozen):
     )
 
 
+def _native_snapshots(output) -> dict[str, ObservationAstrometry]:
+    snapshots = {}
+    for name in ("original_astrometry", "used_astrometry"):
+        columns = output[name]
+        snapshots[name] = ObservationAstrometry.from_kwargs(
+            **{
+                column: pa.array(columns[column], type=pa.float64())
+                for column in (
+                    "lon",
+                    "lat",
+                    "sigma_lon",
+                    "sigma_lat",
+                    "cov_lonlat",
+                )
+            }
+        )
+    return snapshots
+
+
+def _attach_native_observation_provenance(
+    members: FittedOrbitMembers,
+    observations: OrbitDeterminationObservations,
+    output,
+) -> FittedOrbitMembers:
+    if len(members) == 0:
+        return members
+    indices = pc.index_in(
+        _as_array(members.obs_id), value_set=_as_array(observations.id)
+    )
+    if indices.null_count > 0:
+        unknown = pc.unique(
+            pc.filter(_as_array(members.obs_id), pc.is_null(indices))
+        ).to_pylist()
+        raise ValueError(
+            "Fitted orbit members reference observation ids absent from the "
+            f"original observations: {unknown}"
+        )
+    snapshots = _native_snapshots(output)
+    return (
+        members.set_column(
+            "original_astrometry", snapshots["original_astrometry"].take(indices)
+        )
+        .set_column("used_astrometry", snapshots["used_astrometry"].take(indices))
+        .set_column("astcat", observations.take(indices).astcat)
+    )
+
+
+def _apply_frozen_models_native(observations: OrbitDeterminationObservations, frozen):
+    """Apply the final declarative snapshot in Core Rust, without model code."""
+    from ..coordinates import SphericalCoordinates
+    from ..orbits.arrow_bridge import coordinates_from_ipc, coordinates_to_ipc
+
+    assert frozen.native_model_specs is not None
+    observed_ipc = coordinates_to_ipc(observations.coordinates, "spherical")
+    _, _, _, apply_models = validate_native_trust()
+    output = apply_models(
+        observed_ipc,
+        observations.observers.code.to_pylist(),
+        observations.photometry.band.to_pylist(),
+        observations.astcat.to_pylist(),
+        models=frozen.native_model_specs,
+    )
+    coordinates = coordinates_from_ipc(
+        output["used_coordinates_ipc"], SphericalCoordinates
+    )
+    return observations.set_column("coordinates", coordinates), output
+
+
 def _fused_run_od(
     observations: OrbitDeterminationObservations,
     fitter: OrbitFitter,
@@ -322,9 +394,9 @@ def _fused_run_od(
 
     # Module/function identity is checked without calling a replacement, both
     # before settings validation and immediately before native science.
-    _, validate_settings, _ = validate_native_trust()
+    _, validate_settings, _, _ = validate_native_trust()
     validate_settings(iod_settings, refinement, fit_settings)
-    _, _, run_od_ipc = validate_native_trust()
+    _, _, run_od_ipc, _ = validate_native_trust()
     output = run_od_ipc(
         inputs.propagator,
         observed_ipc,
@@ -342,23 +414,7 @@ def _fused_run_od(
         backend_object_id, observations, output
     )
     fitted_orbits = _stamp_object_id(fitted_orbits, object_id)
-    if len(members) == 0:
-        return fitted_orbits, members
-    snapshots = {}
-    for name in ("original_astrometry", "used_astrometry"):
-        columns = output[name]
-        snapshots[name] = ObservationAstrometry.from_kwargs(
-            lon=np.asarray(columns["lon"], dtype=np.float64),
-            lat=np.asarray(columns["lat"], dtype=np.float64),
-            sigma_lon=np.asarray(columns["sigma_lon"], dtype=np.float64),
-            sigma_lat=np.asarray(columns["sigma_lat"], dtype=np.float64),
-            cov_lonlat=np.asarray(columns["cov_lonlat"], dtype=np.float64),
-        )
-    members = (
-        members.set_column("original_astrometry", snapshots["original_astrometry"])
-        .set_column("used_astrometry", snapshots["used_astrometry"])
-        .set_column("astcat", observations.astcat)
-    )
+    members = _attach_native_observation_provenance(members, observations, output)
     return fitted_orbits, members
 
 
@@ -406,9 +462,9 @@ def run_od(
         Notes), whose tables come from data packages. Pass None (or an empty
         sequence) to fit the observations exactly as supplied (members then
         record ``used_astrometry`` equal to ``original_astrometry``). Only exact
-        shipped model classes are accepted. Live Python subclasses, custom
-        classes, and class/instance behavior overrides fail provenance
-        preflight before their hooks, model, fitter, or provider work.
+        shipped model classes with schema-valid declarative state are accepted.
+        Live Python subclasses and custom classes fail provenance preflight;
+        shipped Python model methods are never executed by this entry point.
     propagator : `~adam_core.propagator.Propagator`
         Propagator used by the backend during refinement.
     object_id : str, optional
@@ -445,10 +501,10 @@ def run_od(
         wheel or an exact clean-checkout build so its provenance is
         reproducible; this check runs before models or fitting.
     TypeError
-        If a model is not an exact shipped Core model with its complete
-        behavior graph intact. A `ModelProvenance` declaration cannot
-        authenticate live executable Python. This preflight runs before model,
-        fitter, or provider work.
+        If a model is not an exact shipped Core model with schema-valid
+        declarative state. A `ModelProvenance` declaration cannot authenticate
+        live executable Python. This preflight runs before model, fitter, or
+        provider work.
     ImportError, FileNotFoundError
         If ``models="default"`` and the ``adam-observatory-uncertainties``
         data package or JPL's EFCC18 ``bias.dat`` is not installed: one
@@ -526,7 +582,7 @@ def run_od(
     provenance = _preflight_provenance(fitter, model_list)
     if len(observations) == 0:
         if provenance.native_settings is not None:
-            _, validate_settings, _ = validate_native_trust()
+            _, validate_settings, _, _ = validate_native_trust()
             validate_settings(*provenance.native_settings)
         return FittedOrbits.empty(), FittedOrbitMembers.empty()
 
@@ -562,10 +618,10 @@ def run_od(
     # Composed execution consumes the same state only after an immediate exact
     # descriptor recheck. Native fitter settings are the single frozen copy.
     if provenance.native_settings is not None:
-        _, validate_settings, _ = validate_native_trust()
+        _, validate_settings, _, _ = validate_native_trust()
         validate_settings(*provenance.native_settings)
     _assert_preflight_models(provenance, model_list)
-    used = apply_observation_models(observations, model_list)
+    used, model_output = _apply_frozen_models_native(observations, provenance)
 
     backend_object_id = object_id if object_id is not None else uuid.uuid4().hex
     fitted_orbits, fitted_orbit_members = fitter.full_od(
@@ -574,8 +630,8 @@ def run_od(
 
     fitted_orbits = _stamp_object_id(fitted_orbits, object_id)
 
-    fitted_orbit_members = attach_observation_provenance(
-        fitted_orbit_members, observations, used
+    fitted_orbit_members = _attach_native_observation_provenance(
+        fitted_orbit_members, observations, model_output
     )
     fitted_orbits = complete_provenance(
         fitted_orbits,

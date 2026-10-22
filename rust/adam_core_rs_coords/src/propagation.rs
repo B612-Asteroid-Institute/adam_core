@@ -84,9 +84,9 @@ pub mod adapter {
     pub use super::od::{run_iod, PropagatorPredictor, SphericalPredictor};
     pub use super::od_ranging::systematic_ranging_with;
     pub use super::od_refine::{
-        cmc2003_fit_with, fit_orbit_whitened_with, full_od_with, iterative_fit_with, refine_with,
-        run_iod_corrected, run_iod_linkages_with, run_iod_with, run_od_with,
-        validate_fit_covariance_with,
+        apply_observation_models, cmc2003_fit_with, fit_orbit_whitened_with, full_od_with,
+        iterative_fit_with, refine_with, run_iod_corrected, run_iod_linkages_with, run_iod_with,
+        run_od_with, validate_fit_covariance_with,
     };
 }
 pub use request::{

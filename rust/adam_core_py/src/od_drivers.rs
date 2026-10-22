@@ -7,13 +7,12 @@
 //! loop and public operation.
 //!
 //! Inputs cross as nested Arrow IPC (the `arrow_bridge` helpers) plus dicts of
-//! settings (`fit_settings`, `iod_settings`, `refinement`) and the models'
-//! `_native_specs()` dicts; outputs are plain dicts of scalars, lists and
+//! settings (`fit_settings`, `iod_settings`, `refinement`) and the models' declarative native-spec dictionaries; outputs are plain dicts of scalars, lists and
 //! NumPy arrays that the facade wraps into `FittedOrbits` /
 //! `FittedOrbitMembers` without further computation. Driver errors map to
 //! `ValueError` (invalid input) or `RuntimeError` (backend failure).
 
-use crate::coordinates::{read_orbit_ipc, ErfaTimeProvider};
+use crate::coordinates::{read_orbit_ipc, write_orbit_ipc, ErfaTimeProvider};
 use crate::observation_uncertainty::{bias_table, efcc18_table, veres_lookup};
 use crate::od_support::{od_error, LockingSpiceTranslation};
 use adam_core_rs_coords::observation_uncertainty::{
@@ -22,9 +21,9 @@ use adam_core_rs_coords::observation_uncertainty::{
     SigmaFloorModel,
 };
 use adam_core_rs_coords::propagation::adapter::{
-    cmc2003_fit_with, fit_orbit_whitened_with, full_od_with, iterative_fit_with,
-    run_iod_linkages_with, run_iod_with, run_od_with, validate_fit_covariance_with,
-    PropagatorPredictor, SphericalPredictor,
+    apply_observation_models, cmc2003_fit_with, fit_orbit_whitened_with, full_od_with,
+    iterative_fit_with, run_iod_linkages_with, run_iod_with, run_od_with,
+    validate_fit_covariance_with, PropagatorPredictor, SphericalPredictor,
 };
 use adam_core_rs_coords::propagation::{
     AstrometrySnapshot, BackendIdentity, Cmc2003FitConfig, CorrectionConfig, CovariancePropagation,
@@ -37,7 +36,7 @@ use adam_core_rs_coords::propagation::{
 };
 use adam_core_rs_coords::veres2017::{SigmaFillModel, VeresFloorModel, VeresReplaceModel};
 use adam_core_rs_coords::{
-    validate_loss, CoordinateBatch as DataCoordinateBatch, LossType,
+    validate_loss, CoordinateBatch as DataCoordinateBatch, IntoNestedRecordBatch, LossType,
     ObserverBatch as DataObserverBatch, OrbitBatch as DataOrbitBatch, TimeScale,
     TryFromNestedRecordBatch, TwoBodyModelConfig, CMC2003_APPARITION_GAP_DAYS, CMC2003_CHI2_FRAC,
     CMC2003_CHI2_RECOVER, CMC2003_CHI2_REJECT, CMC2003_MAX_ITERATIONS,
@@ -1692,8 +1691,48 @@ fn full_od_2body_ipc<'py>(
     )
 }
 
+/// Apply schema-validated observation-model specs in Core Rust and return
+/// the complete transformed coordinate batch for a composed fitter route.
+#[pyfunction]
+#[pyo3(signature = (observed_ipc, obs_code, band, astcat, models=None))]
+fn apply_observation_models_ipc<'py>(
+    py: Python<'py>,
+    observed_ipc: &Bound<'py, PyBytes>,
+    obs_code: Vec<String>,
+    band: Vec<Option<String>>,
+    astcat: Vec<Option<String>>,
+    models: Option<&Bound<'py, PyList>>,
+) -> PyResult<Bound<'py, PyDict>> {
+    let observed = DataCoordinateBatch::try_from_nested_record_batch(&read_orbit_ipc(
+        observed_ipc.as_bytes(),
+    )?)
+    .map_err(|err| value_error(format!("failed to decode observed coordinates: {err}")))?;
+    let output = apply_observation_models(
+        &observed,
+        &obs_code,
+        &band,
+        &astcat,
+        models_from_specs(models)?,
+        &ErfaTimeProvider,
+    )
+    .map_err(od_error)?;
+    let batch = output
+        .observations
+        .into_nested_record_batch()
+        .map_err(|err| value_error(format!("failed to encode used coordinates: {err}")))?;
+    let out = PyDict::new(py);
+    out.set_item(
+        "used_coordinates_ipc",
+        PyBytes::new(py, &write_orbit_ipc(&batch)?),
+    )?;
+    out.set_item("original_astrometry", snapshot_dict(py, output.original)?)?;
+    out.set_item("used_astrometry", snapshot_dict(py, output.used)?)?;
+    out.set_item("models_changed", output.models_changed)?;
+    Ok(out)
+}
+
 /// One-crossing `run_od`: the observation models (``models`` = list of
-/// ``_native_spec()`` dicts, applied in order) on the original observations,
+/// declarative native-spec dicts, applied in order) on the original observations,
 /// the full OD on the used observations, and the original / used astrometry
 /// snapshots for the members' provenance.
 #[pyfunction]
@@ -1853,6 +1892,7 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(run_iod_2body_ipc, m)?)?;
     m.add_function(wrap_pyfunction!(full_od_ipc, m)?)?;
     m.add_function(wrap_pyfunction!(full_od_2body_ipc, m)?)?;
+    m.add_function(wrap_pyfunction!(apply_observation_models_ipc, m)?)?;
     m.add_function(wrap_pyfunction!(run_od_ipc, m)?)?;
     m.add_function(wrap_pyfunction!(run_od_2body_ipc, m)?)?;
     Ok(())

@@ -1,9 +1,10 @@
 """Compact, reproducible orbit-determination provenance.
 
 Built-in adam-core observation models are identified by the exact clean native
-build commit and a stable entrypoint name. Live custom Python models are refused: declarations and package metadata cannot
-authenticate mutable executable behavior. Only exact shipped model graphs with
-declarative configuration executed by Core Rust are accepted.
+build commit, exact registered type, and schema-validated declarative state.
+Live custom Python models are refused: declarations and package metadata cannot
+authenticate mutable executable behavior. Blessed OD never executes shipped
+Python model methods; Core Rust interprets and applies the frozen state.
 """
 
 from __future__ import annotations
@@ -34,6 +35,8 @@ from .model_provenance import ModelProvenance, _BehaviorSpec, _FieldSchema
 
 _CONTRACT_NAME = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9_.-]*[A-Za-z0-9])?$")
 _HEX64 = re.compile(r"^[0-9a-f]{64}$")
+_NDARRAY_TYPE = np.ndarray
+_NUMPY_SCALAR_TYPE = np.generic
 
 
 def _module_name(value: object, *, kind: str) -> str:
@@ -106,12 +109,17 @@ def _fit_input_sha256(observations: qv.Table, members: FittedOrbitMembers) -> st
 
 
 def _numpy_sha256(value: np.ndarray[Any, Any]) -> dict[str, Any]:
-    """Canonical NumPy identity independent of byte order and view layout."""
-    array = np.asarray(value)
+    """Canonical NumPy identity without consulting mutable module helpers."""
+    if type(value) is _NDARRAY_TYPE:
+        array = value
+    elif isinstance(value, _NUMPY_SCALAR_TYPE):
+        array = value.reshape(())
+    else:
+        raise TypeError("NumPy provenance requires an exact array or scalar")
     if array.dtype.hasobject:
         raise TypeError("object-dtype NumPy provenance is not supported")
     dtype = array.dtype.newbyteorder("<")
-    canonical = np.ascontiguousarray(array.astype(dtype, copy=False))
+    canonical = array.astype(dtype, copy=False)
     dtype_identity: Any = dtype.descr if dtype.names is not None else dtype.str
     return {
         "dtype": dtype_identity,
@@ -418,7 +426,7 @@ def _matches_field_schema(value: object, schema: _FieldSchema) -> bool:
             for key in schema.mapping_keys
         ):
             return False
-    if value_type is np.ndarray:
+    if value_type is _NDARRAY_TYPE:
         if schema.ndarray_dtypes and value.dtype.name not in schema.ndarray_dtypes:
             return False
         if schema.ndim is not None and value.ndim != schema.ndim:
@@ -438,7 +446,7 @@ def _instance_dict(value: object) -> dict[str, object] | None:
 
 
 def _matches_behavior_spec(value: object, spec: _BehaviorSpec) -> bool:
-    """Match an exact shipped type, exact state keys, and collaborators."""
+    """Match the legacy full Python behavior graph for descriptor callers."""
     if type(value) is not spec.model_type or not _matches_behavior_type(spec):
         return False
     fields = _instance_dict(value)
@@ -464,6 +472,40 @@ def _matches_behavior_spec(value: object, spec: _BehaviorSpec) -> bool:
     return True
 
 
+def _matches_declarative_spec(value: object, spec: _BehaviorSpec) -> bool:
+    """Match only exact registered types and schema-validated instance state."""
+    if type(value) is not spec.model_type:
+        return False
+    fields = _instance_dict(value)
+    field_schemas = dict(spec.instance_fields)
+    if fields is None or set(fields) != set(field_schemas):
+        return False
+    if any(
+        not _matches_field_schema(fields[name], schema)
+        for name, schema in spec.instance_fields
+    ):
+        return False
+    for attribute, collaborator in spec.collaborators:
+        if not _matches_declarative_spec(fields[attribute], collaborator):
+            return False
+    for name, container_type in spec.nested_model_fields:
+        nested = fields[name]
+        if type(nested) is not container_type or not nested:
+            return False
+        for item in nested:
+            child = _builtin_behavior_registry().get(type(item))
+            if child is None or not _matches_declarative_spec(item, child):
+                return False
+    return True
+
+
+def _declarative_behavior_spec(model: object) -> _BehaviorSpec | None:
+    expected = _builtin_behavior_registry().get(type(model))
+    if expected is None or not _matches_declarative_spec(model, expected):
+        return None
+    return expected
+
+
 def _behavior_spec(model: object) -> _BehaviorSpec | None:
     expected = _builtin_behavior_registry().get(type(model))
     if expected is None or not _matches_behavior_spec(model, expected):
@@ -479,7 +521,7 @@ def _is_builtin_model(model: object) -> bool:
 def _validated_build_identity() -> tuple[str, str]:
     from .. import __version__
 
-    build_identity, _, _ = validate_native_trust()
+    build_identity, _, _, _ = validate_native_trust()
     build_version, build_commit = build_identity()
     if build_version != __version__:
         raise RuntimeError(
@@ -495,7 +537,11 @@ def _validated_build_identity() -> tuple[str, str]:
 
 
 def _model_fields(
-    model: object, build_identity: tuple[str, str], spec: _BehaviorSpec
+    model: object,
+    build_identity: tuple[str, str],
+    spec: _BehaviorSpec,
+    *,
+    declarative: bool = False,
 ) -> dict[str, Any]:
     parameters: dict[str, Any] = {}
     tables: dict[str, str] = {}
@@ -503,12 +549,22 @@ def _model_fields(
     fields = _instance_dict(model)
     assert fields is not None  # established by the exact behavior match
     nested_names = {name for name, _ in spec.nested_model_fields}
+    collaborator_names = {name for name, _ in spec.collaborators}
     for name, value in sorted(fields.items()):
         if name in nested_names:
             # Nested model fields are explicit registry data. Never probe an
             # arbitrary item for method presence while deciding what it is.
+            descriptor = (
+                _declarative_model_descriptor if declarative else model_descriptor
+            )
             nested.extend(
-                model_descriptor(item, _build_identity=build_identity) for item in value
+                descriptor(item, _build_identity=build_identity) for item in value
+            )
+        elif name in collaborator_names:
+            collaborator_fields = _instance_dict(value)
+            assert collaborator_fields is not None
+            parameters[name] = _canonical_parameter(
+                collaborator_fields, {id(model), id(value)}
             )
         elif isinstance(value, (pa.Table, qv.Table)):
             tables[name] = _table_sha256(value)
@@ -569,6 +625,48 @@ def _custom_contract(model: object) -> ModelProvenance:
         "(including live custom Python models) cannot be authenticated by "
         "model_provenance or ModelProvenance"
     )
+
+
+def _declarative_model_descriptor(
+    model: object, *, _build_identity: tuple[str, str]
+) -> dict[str, Any]:
+    spec = _declarative_behavior_spec(model)
+    if spec is None:
+        _custom_contract(model)
+        raise TypeError(
+            "run_od requires an exact shipped model with schema-validated "
+            "declarative state"
+        )
+    cls = type(model)
+    cls_module = type.__getattribute__(cls, "__module__")
+    qualname = type.__getattribute__(cls, "__qualname__")
+    if type(cls_module) is not str or not cls_module:
+        raise TypeError("shipped model class has no reproducible module identity")
+    type_name = f"{cls_module}.{qualname}"
+    build_version, build_commit = _build_identity
+    implementation = {
+        "kind": "adam-core-built-in-v1",
+        "build_commit": build_commit,
+        "class": type_name,
+        "entrypoint": "apply",
+    }
+    descriptor: dict[str, Any] = {
+        "type": type_name,
+        "implementation_version": build_version,
+        "implementation_entrypoint": "apply",
+        "implementation_class": implementation,
+        "implementation": implementation,
+        **_model_fields(
+            model,
+            (build_version, build_commit),
+            spec,
+            declarative=True,
+        ),
+    }
+    descriptor["descriptor_sha256"] = hashlib.sha256(
+        _json(descriptor).encode("utf-8")
+    ).hexdigest()
+    return descriptor
 
 
 def model_descriptor(
@@ -700,11 +798,11 @@ def _copy_native_payload(value: Any) -> Any:
     """Deep-copy the closed data vocabulary accepted by Core Rust."""
     if value is None or type(value) in (str, bool, int, float):
         return value
-    if isinstance(value, np.generic):
+    if isinstance(value, _NUMPY_SCALAR_TYPE):
         return value.item()
-    if type(value) is np.ndarray:
-        result = np.array(value, copy=True, order="C")
-        result.setflags(write=False)
+    if type(value) is _NDARRAY_TYPE:
+        result = value.copy(order="C")
+        result.flags.writeable = False
         return result
     if type(value) is list:
         return [_copy_native_payload(item) for item in value]
@@ -719,20 +817,116 @@ def _copy_native_payload(value: Any) -> Any:
 
 def _require_builtin_models(models: Sequence[object]) -> None:
     for model in models:
-        if _behavior_spec(model) is None:
+        if _declarative_behavior_spec(model) is None:
             _custom_contract(model)
+            raise TypeError(
+                "run_od requires an exact shipped model with schema-validated "
+                "declarative state"
+            )
+
+
+def _declarative_model_specs(model: object) -> list[dict[str, Any]]:
+    """Build Core-Rust specs from validated state, never Python model methods."""
+    spec = _declarative_behavior_spec(model)
+    if spec is None:
+        _custom_contract(model)
+        raise TypeError(
+            "run_od requires an exact shipped model with schema-validated "
+            "declarative state"
+        )
+    fields = _instance_dict(model)
+    assert fields is not None
+    cls = spec.model_type
+    module = type.__getattribute__(cls, "__module__")
+    name = type.__getattribute__(cls, "__name__")
+    identity = (module, name)
+
+    if identity == (
+        "adam_core.orbit_determination.observation_uncertainty",
+        "CompositeModel",
+    ):
+        flattened: list[dict[str, Any]] = []
+        for child in fields["models"]:
+            flattened.extend(_declarative_model_specs(child))
+        return flattened
+    if identity == (
+        "adam_core.orbit_determination.observation_uncertainty",
+        "IdentityModel",
+    ):
+        return [{"model": "identity"}]
+    if identity == (
+        "adam_core.orbit_determination.observation_uncertainty",
+        "NightBatchDeweightingModel",
+    ):
+        return [{"model": "night_batch", "cap": fields["cap"]}]
+    if identity == (
+        "adam_core.orbit_determination.observation_uncertainty",
+        "EFCC18DebiasModel",
+    ):
+        return [
+            {
+                "model": "efcc18",
+                "bias_table": fields["_bias_table_f32"],
+                "exclude_astcats": list(fields["exclude_astcats"]),
+            }
+        ]
+    bias_models = {
+        "EmpiricalCovarianceModel": "empirical_covariance",
+        "PerformanceWeightedModel": "performance_weighted",
+        "SigmaFloorModel": "sigma_floor",
+    }
+    if (
+        module == "adam_core.orbit_determination.observation_uncertainty"
+        and (native_name := bias_models.get(name)) is not None
+    ):
+        return [
+            {
+                "model": native_name,
+                "mode": fields["mode"],
+                "min_resid_cov_n": fields["min_resid_cov_n"],
+                "table_obs_code": fields["_codes"],
+                "table_band": fields["_bands"],
+                **fields["_columns"],
+            }
+        ]
+    veres_kinds = {
+        "VeresFloorModel": "floor",
+        "VeresReplaceModel": "replace",
+        "SigmaFillModel": "fill",
+    }
+    if (
+        module == "adam_core.orbit_determination.veres2017"
+        and (kind := veres_kinds.get(name)) is not None
+    ):
+        lookup_fields = _instance_dict(fields["lookup"])
+        assert lookup_fields is not None
+        return [
+            {
+                "model": "veres",
+                "kind": kind,
+                "fill_missing": fields["fill_missing"],
+                "table_obs_code": lookup_fields["_obs_codes"],
+                "table_astcat": lookup_fields["_astcats"],
+                "sigma_ra_arcsec": lookup_fields["_sigma_ra"],
+                "sigma_dec_arcsec": lookup_fields["_sigma_dec"],
+                "fallback_sigma_arcsec": lookup_fields["fallback_sigma_arcsec"],
+            }
+        ]
+    raise TypeError("shipped observation model has no declarative Core-Rust schema")
 
 
 def _snapshot_models(
     models: Sequence[object], build_identity: tuple[str, str]
 ) -> tuple[str, Optional[list[dict[str, Any]]]]:
-    from .observation_uncertainty import native_model_specs
-
     _require_builtin_models(models)
-    specs = native_model_specs(models)
-    frozen_specs = None if specs is None else _copy_native_payload(specs)
+    frozen_specs = _copy_native_payload(
+        [spec for model in models for spec in _declarative_model_specs(model)]
+    )
     descriptors = _json(
-        [model_descriptor(model, _build_identity=build_identity) for model in models]
+        [
+            _declarative_model_descriptor(model, _build_identity=build_identity)
+            for model in models
+        ]
     )
     return descriptors, frozen_specs
 
@@ -753,7 +947,7 @@ def _assert_preflight_models(
     """Immediately revalidate the composed inputs against their descriptor."""
     descriptors = _json(
         [
-            model_descriptor(
+            _declarative_model_descriptor(
                 model,
                 _build_identity=(frozen.adam_core_version, frozen.adam_core_build),
             )

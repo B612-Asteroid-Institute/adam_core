@@ -17,10 +17,14 @@ _TRUSTED_ENTRYPOINTS = (
     ("build_identity", _TRUSTED_NATIVE_MODULE.build_identity),
     ("validate_full_od_settings", _TRUSTED_NATIVE_MODULE.validate_full_od_settings),
     ("run_od_ipc", _TRUSTED_NATIVE_MODULE.run_od_ipc),
+    (
+        "apply_observation_models_ipc",
+        _TRUSTED_NATIVE_MODULE.apply_observation_models_ipc,
+    ),
 )
 
 
-def validate_native_trust() -> tuple[Any, Any, Any]:
+def validate_native_trust() -> tuple[Any, Any, Any, Any]:
     """Return only the import-time entry points after validating their owners.
 
     Callers retain only this validator. They do not expose separate mutable

@@ -16,7 +16,6 @@ import pytest
 
 from ...coordinates.covariances import CoordinateCovariances
 from ..evaluate import OrbitDeterminationObservations
-from ..model_provenance import ModelProvenance
 from ..native_orbit_fitter import NativeOrbitFitter
 from ..od_orchestration import run_od
 from ..veres2017 import VERES2017_SIGMA_TABLE_SCHEMA, SigmaFillModel
@@ -116,22 +115,20 @@ def test_without_a_filling_model_the_fit_is_refused(null_covariance_arc) -> None
         run_od(null_covariance_arc, fitter(), None, propagator=TwoBodyPropagator())
 
 
-def test_native_and_python_applied_model_routes_agree_with_filled_sigmas(
+def test_fused_and_composed_native_model_routes_agree_with_filled_sigmas(
     null_covariance_arc,
 ) -> None:
     model = SigmaFillModel(global_fill_table(), fallback_sigma_arcsec=None)
 
-    class PythonAppliedSigmaFillModel(SigmaFillModel):
-        """Same operation, with an override that disables model fusion."""
+    class ComposedFitter(NativeOrbitFitter):
+        def full_od(self, object_id, observations, propagator):
+            return super().full_od(object_id, observations, propagator)
 
-        def apply(self, observations):
-            return super().apply(observations)
-
-        def model_provenance(self):
-            return ModelProvenance("adam-core-tests", "1", "5" * 64, dict(vars(self)))
-
-    python_model = PythonAppliedSigmaFillModel(
-        global_fill_table(), fallback_sigma_arcsec=None
+    composed_fitter = ComposedFitter(
+        TwoBodyPropagator(),
+        min_obs=6,
+        rchi2_threshold=10.0,
+        iod_rchi2_threshold=1e4,
     )
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", RuntimeWarning)
@@ -140,8 +137,8 @@ def test_native_and_python_applied_model_routes_agree_with_filled_sigmas(
         )
         composed, composed_members = run_od(
             null_covariance_arc,
-            fitter(),
-            [python_model],
+            composed_fitter,
+            [model],
             propagator=TwoBodyPropagator(),
         )
     np.testing.assert_allclose(

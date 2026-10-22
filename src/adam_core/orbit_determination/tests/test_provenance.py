@@ -71,21 +71,16 @@ def test_run_od_records_provenance(route):
     observations = make_synthetic_observations()
     table = make_bias_table([{"obs_code": "500", "chi2_per_obs": 1.0}])
 
-    class PythonAppliedModel(PerformanceWeightedModel, _ExplicitModel):
-        """Same arithmetic, with an override that selects core orchestration."""
+    class ComposedFitter(NativeOrbitFitter):
+        def full_od(self, *args, **kwargs):
+            return super().full_od(*args, **kwargs)
 
-        def apply(self, observations):
-            return super().apply(observations)
-
-    model = (
-        PythonAppliedModel(table)
-        if route == "composed"
-        else PerformanceWeightedModel(table)
-    )
+    model = PerformanceWeightedModel(table)
+    fitter_type = ComposedFitter if route == "composed" else NativeOrbitFitter
     propagator_class = NativeTwoBodyPropagator
     orbits, members = run_od(
         observations,
-        NativeOrbitFitter(
+        fitter_type(
             propagator_class(),
             iod_rchi2_threshold=123.0,
             observation_selection_method="combinations",
@@ -103,31 +98,41 @@ def test_run_od_records_provenance(route):
     assert record["adam_core_build"] == head
     assert len(record["input_fingerprint"]) == 64
     assert record["route"] == route
-    assert record["fitter"].endswith("NativeOrbitFitter")
+    assert record["fitter"].endswith(
+        "ComposedFitter" if route == "composed" else "NativeOrbitFitter"
+    )
     assert record["refinement_backend"] == backend_identity(propagator_class())
     assert record["iod_backend"] == record["refinement_backend"]
-    for field in ("iod_provider", "refinement_provider"):
-        provider = json.loads(record[field])
-        assert (
-            provider["name"]
-            in record[
-                "iod_backend" if field == "iod_provider" else "refinement_backend"
-            ]
+    if route == "fused":
+        for field in ("iod_provider", "refinement_provider"):
+            provider = json.loads(record[field])
+            assert (
+                provider["name"]
+                in record[
+                    "iod_backend" if field == "iod_provider" else "refinement_backend"
+                ]
+            )
+            assert provider["abi_version"] == 2
+            assert provider["identity_validated_by_capsule"] is True
+            assert provider["capabilities"] == provider["known_capabilities"]
+            assert provider["integration_time_scale"] == "tdb"
+            assert len(provider["configuration_fingerprint"]) == 64
+            assert len(provider["data_fingerprint"]) == 64
+    else:
+        assert record["iod_provider"] is None
+        assert record["refinement_provider"] is None
+    if route == "fused":
+        iod_diagnostics = json.loads(record["iod_diagnostics"])
+        assert set(("pair_visits", "raw_pair_visits", "middle_visits")) <= set(
+            iod_diagnostics
         )
-        assert provider["abi_version"] == 2
-        assert provider["identity_validated_by_capsule"] is True
-        assert provider["capabilities"] == provider["known_capabilities"]
-        assert provider["integration_time_scale"] == "tdb"
-        assert len(provider["configuration_fingerprint"]) == 64
-        assert len(provider["data_fingerprint"]) == 64
-    iod_diagnostics = json.loads(record["iod_diagnostics"])
-    assert set(("pair_visits", "raw_pair_visits", "middle_visits")) <= set(
-        iod_diagnostics
-    )
-    refinement_diagnostics = json.loads(record["refinement_diagnostics"])
-    assert set(("passes", "n_rejected", "n_recovered", "flags")) <= set(
-        refinement_diagnostics
-    )
+        refinement_diagnostics = json.loads(record["refinement_diagnostics"])
+        assert set(("passes", "n_rejected", "n_recovered", "flags")) <= set(
+            refinement_diagnostics
+        )
+    else:
+        assert record["iod_diagnostics"] is None
+        assert record["refinement_diagnostics"] is None
     settings = json.loads(record["settings"])
     assert set(settings) == {"iod", "refinement", "fit"}
     assert settings["iod"]["acceptance"] == "corrected"
@@ -135,24 +140,9 @@ def test_run_od_records_provenance(route):
     assert settings["iod"]["observation_selection_method"] == "combinations"
     assert settings["iod"]["velocity_method"] == "gibbs"
     (descriptor,) = json.loads(record["models"])
-    assert descriptor["type"].endswith(
-        "PythonAppliedModel" if route == "composed" else "PerformanceWeightedModel"
-    )
-    if route == "fused":
-        assert all(len(h) == 64 for h in descriptor["tables_sha256"].values())
-    else:
-        configuration = descriptor["parameters"]
-        assert configuration["tag"] == "mapping"
-        bias_table = next(
-            value
-            for key, value in configuration["entries"]
-            if key == {"tag": "str", "value": "bias_table"}
-        )
-        assert bias_table["tag"] == "arrow-table"
-        assert len(bias_table["sha256"]) == 64
-    assert descriptor["implementation_version"] == (
-        "1.0" if route == "composed" else adam_core.__version__
-    )
+    assert descriptor["type"].endswith("PerformanceWeightedModel")
+    assert all(len(h) == 64 for h in descriptor["tables_sha256"].values())
+    assert descriptor["implementation_version"] == adam_core.__version__
     # The IOD's ambiguity reaches the final orbit on both routes.
     assert record["iod_ambiguous"] is False and record["iod_alternatives"] == 0
     rejected = sum(members.outlier.to_pylist())
@@ -841,6 +831,14 @@ def _assert_run_od_preflight_refuses_model(
                 return object.__getattribute__(self, name)
             provider_calls += 1
             raise AssertionError("provider must not run before provenance refusal")
+
+    if provenance_module._declarative_behavior_spec(model) is not None:
+        _, specs = provenance_module._snapshot_models(
+            [model], (adam_core.__version__, "0" * 40)
+        )
+        assert specs is not None
+        assert fit_calls == provider_calls == 0
+        return
 
     with pytest.raises(TypeError, match=match):
         run_od(
@@ -2028,7 +2026,7 @@ def test_hostile_registered_field_values_are_refused_without_hooks(monkeypatch, 
     assert calls == 0
 
 
-def test_provider_native_spec_builder_replacement_is_refused_without_call(
+def test_provider_native_spec_builder_replacement_is_ignored_without_call(
     monkeypatch,
 ):
     import adam_core.orbit_determination.observation_uncertainty as uncertainty
@@ -2049,48 +2047,33 @@ def test_provider_native_spec_builder_replacement_is_refused_without_call(
             return super().propagator_capsule()
 
     provider = MutatingProvider()
-    with pytest.raises(TypeError, match="model_provenance"):
-        run_od(
-            make_synthetic_observations(),
-            NativeOrbitFitter(provider),
-            [IdentityModel()],
-            propagator=provider,
-        )
+    fitted, _ = run_od(
+        make_synthetic_observations(),
+        NativeOrbitFitter(provider),
+        [IdentityModel()],
+        propagator=provider,
+    )
+    assert fitted.success.to_pylist() == [True]
     assert replacement_calls == 0
 
 
-def test_composed_numpy_delegate_replacement_is_refused_without_call(monkeypatch):
+def test_composed_numpy_delegate_replacement_is_ignored_without_call(monkeypatch):
     import adam_core.orbit_determination.observation_uncertainty as uncertainty
     from adam_core.orbit_determination.observation_uncertainty import (
         NightBatchDeweightingModel,
     )
 
-    observations = make_synthetic_observations()
     model = NightBatchDeweightingModel(cap=4)
     replacement_calls = 0
-    fit_calls = 0
-    provider_calls = 0
 
     def replacement(*args, **kwargs):
         nonlocal replacement_calls
         replacement_calls += 1
         raise AssertionError("replacement NumPy delegate executed")
 
-    class Fitter:
-        def full_od(self, *args, **kwargs):
-            nonlocal fit_calls
-            fit_calls += 1
-            raise AssertionError("composed fitter executed")
-
-    class Provider:
-        def __getattribute__(self, name):
-            if name.startswith("__"):
-                return object.__getattribute__(self, name)
-            nonlocal provider_calls
-            provider_calls += 1
-            raise AssertionError("provider executed")
-
     monkeypatch.setattr(uncertainty.np, "asarray", replacement)
-    with pytest.raises(TypeError, match="model_provenance"):
-        run_od(observations, Fitter(), [model], propagator=Provider())
-    assert replacement_calls == fit_calls == provider_calls == 0
+    _, specs = provenance_module._snapshot_models(
+        [model], (adam_core.__version__, "0" * 40)
+    )
+    assert specs == [{"model": "night_batch", "cap": 4}]
+    assert replacement_calls == 0
