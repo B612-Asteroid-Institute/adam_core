@@ -89,9 +89,9 @@ def test_corrected_iod_continues_after_candidate_local_cmc_refusal(seed, case):
 
 
 def test_short_whole_arc_iod_covariance_is_only_a_state_seed():
-    """Frozen 2.04-day arc: IOD may be rank deficient, final OD may not."""
+    """Frozen 2.08-day arc: IOD may be rank deficient, final OD may not."""
     t0 = EPOCH_MJD_TDB + 5.0
-    times = [t0 + day + row / 48 for day in range(3) for row in range(3)]
+    times = [t0 + day + row / 48 for day in range(3) for row in range(5)]
     observations = _arc(times, seed=7)
 
     iod, _, report = run_iod(observations, TwoBodyPropagator())
