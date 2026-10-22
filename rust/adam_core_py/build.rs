@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::process::Command;
 
 fn git_commit(repo: &PathBuf) -> Option<String> {
@@ -17,6 +17,48 @@ fn git_commit(repo: &PathBuf) -> Option<String> {
     }
     let value = String::from_utf8(output.stdout).ok()?.trim().to_owned();
     (value.len() == 40 && value.bytes().all(|byte| byte.is_ascii_hexdigit())).then_some(value)
+}
+
+fn relevant_untracked_path(path: &str) -> bool {
+    (path.starts_with("src/adam_core/") && !path.contains("/tests/") && path.ends_with(".py"))
+        || (path.starts_with("rust/")
+            && (path.contains("/src/")
+                || path.ends_with("/Cargo.toml")
+                || path.ends_with("/build.rs")))
+}
+
+fn relevant_untracked_files(repo: &PathBuf) -> Option<Vec<String>> {
+    let output = Command::new("git")
+        .args([
+            "-c",
+            &format!("safe.directory={}", repo.display()),
+            "ls-files",
+            "--others",
+            "--exclude-standard",
+            "-z",
+            "--",
+            "src/adam_core",
+            "rust",
+        ])
+        .current_dir(repo)
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let mut relevant = Vec::new();
+    for raw in output
+        .stdout
+        .split(|byte| *byte == 0)
+        .filter(|raw| !raw.is_empty())
+    {
+        let path = std::str::from_utf8(raw).ok()?;
+        if relevant_untracked_path(path) {
+            relevant.push(path.to_owned());
+        }
+    }
+    relevant.sort_unstable();
+    Some(relevant)
 }
 
 fn git_dirty(repo: &PathBuf) -> Option<bool> {
@@ -45,51 +87,40 @@ fn git_dirty(repo: &PathBuf) -> Option<bool> {
     }
 
     // Only untracked files that can enter the Python package or a Rust crate
-    // make the build dirty. Caches, wheelhouse/, docs output and the nested
-    // Assist checkout cannot affect the compiled/native package.
-    let untracked = Command::new("git")
+    // make the build dirty. Tests, caches, wheelhouse/, documentation output,
+    // generated extensions, and the nested Assist checkout do not.
+    relevant_untracked_files(repo).map(|paths| !paths.is_empty())
+}
+
+fn source_inventory_path(repo: &PathBuf) -> Option<PathBuf> {
+    let output = Command::new("git")
         .args([
             "-c",
             &format!("safe.directory={}", repo.display()),
-            "ls-files",
-            "--others",
-            "--exclude-standard",
-            "-z",
-            "--",
-            "src/adam_core",
-            "rust",
+            "rev-parse",
+            "--git-path",
+            "adam-core-source-inventory",
         ])
         .current_dir(repo)
         .output()
         .ok()?;
-    if !untracked.status.success() {
+    if !output.status.success() {
         return None;
     }
-    let relevant = untracked.stdout.split(|byte| *byte == 0).any(|raw| {
-        let Ok(path) = std::str::from_utf8(raw) else {
-            return true;
-        };
-        path.starts_with("src/adam_core/")
-            || (path.starts_with("rust/")
-                && (path.contains("/src/")
-                    || path.ends_with("/Cargo.toml")
-                    || path.ends_with("/build.rs")))
-    });
-    Some(relevant)
+    let raw = String::from_utf8(output.stdout).ok()?;
+    let path = PathBuf::from(raw.trim());
+    if path.as_os_str().is_empty() {
+        None
+    } else if path.is_absolute() {
+        Some(path)
+    } else {
+        Some(repo.join(path))
+    }
 }
 
-fn emit_source_directory_watches(repo: &Path) {
-    // Directory watches are needed for additions/removals: a newly-created
-    // untracked source file cannot be listed by an earlier build-script run.
-    // Restrict them to source roots so target/, wheelhouse/ and the nested
-    // adam-assist checkout never cause rebuild loops.
-    let python = repo.join("src/adam_core");
-    if python.is_dir() {
-        println!("cargo:rerun-if-changed={}", python.display());
-    }
-    let rust = repo.join("rust");
-    if rust.is_dir() {
-        println!("cargo:rerun-if-changed={}", rust.display());
+fn emit_source_inventory_watch(repo: &PathBuf) {
+    if let Some(path) = source_inventory_path(repo) {
+        println!("cargo:rerun-if-changed={}", path.display());
     }
 }
 
@@ -190,7 +221,10 @@ fn main() {
             }
         }
     }
-    emit_source_directory_watches(&repo);
+    // The wheel-version pre-step refreshes this narrow inventory only when
+    // relevant new runtime source changes. This avoids recursive source-root
+    // watches and their generated-extension/__pycache__ rebuild loop.
+    emit_source_inventory_watch(&repo);
 
     // The index detects staged paths and the current branch ref detects a
     // commit even though `.git/HEAD` still contains the same symbolic name.

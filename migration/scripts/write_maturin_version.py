@@ -116,10 +116,73 @@ def _validate_exact_tag(python_version: str) -> None:
         )
 
 
+def _relevant_untracked_path(path: str) -> bool:
+    return (
+        path.startswith("src/adam_core/")
+        and "/tests/" not in path
+        and path.endswith(".py")
+    ) or (
+        path.startswith("rust/")
+        and (
+            "/src/" in path
+            or path.endswith("/Cargo.toml")
+            or path.endswith("/build.rs")
+        )
+    )
+
+
+def _refresh_source_inventory() -> None:
+    """Refresh Cargo's narrow new-source sentinel without no-op writes."""
+    try:
+        raw_path = subprocess.run(
+            ["git", "rev-parse", "--git-path", "adam-core-source-inventory"],
+            cwd=REPO_ROOT,
+            check=True,
+            text=True,
+            capture_output=True,
+        ).stdout.strip()
+        raw_files = subprocess.run(
+            [
+                "git",
+                "ls-files",
+                "--others",
+                "--exclude-standard",
+                "-z",
+                "--",
+                "src/adam_core",
+                "rust",
+            ],
+            cwd=REPO_ROOT,
+            check=True,
+            capture_output=True,
+        ).stdout
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        return
+    path = Path(raw_path)
+    if not path.is_absolute():
+        path = REPO_ROOT / path
+    relevant = sorted(
+        item.decode("utf-8")
+        for item in raw_files.split(b"\0")
+        if item and _relevant_untracked_path(item.decode("utf-8"))
+    )
+    content = "source-inventory-v1\n" + "\n".join(relevant) + "\n"
+    if path.exists() and path.read_text(encoding="utf-8") == content:
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content, encoding="utf-8")
+
+
 def main() -> None:
+    _refresh_source_inventory()
     cargo_version, python_version = _cargo_versions()
     _validate_exact_tag(python_version)
-    VERSION_FILE.write_text(f"__version__ = {python_version!r}\n", encoding="utf-8")
+    version_content = f"__version__ = {python_version!r}\n"
+    if (
+        not VERSION_FILE.exists()
+        or VERSION_FILE.read_text(encoding="utf-8") != version_content
+    ):
+        VERSION_FILE.write_text(version_content, encoding="utf-8")
     print(
         f"Wrote {VERSION_FILE.relative_to(REPO_ROOT)} = {python_version} "
         f"from Cargo {cargo_version}"
