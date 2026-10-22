@@ -119,7 +119,7 @@ fn source_inventory_path(repo: &PathBuf) -> Option<PathBuf> {
 }
 
 fn emit_source_inventory_watch(repo: &PathBuf) {
-    if let Some(path) = source_inventory_path(repo) {
+    if let Some(path) = source_inventory_path(repo).filter(|path| path.is_file()) {
         println!("cargo:rerun-if-changed={}", path.display());
     }
 }
@@ -222,8 +222,35 @@ fn main() {
         }
     }
     // The wheel-version pre-step refreshes this narrow inventory only when
-    // relevant new runtime source changes. This avoids recursive source-root
-    // watches and their generated-extension/__pycache__ rebuild loop.
+    // relevant new runtime source changes. Watch it only when it exists:
+    // Cargo treats a missing watched file as perpetually changed. Bare native
+    // builds intentionally rely on tracked inputs plus runtime source-checkout
+    // preflight; release builds require the generated inventory below.
+    let source_inventory = source_inventory_path(&repo);
+    if std::env::var_os("ADAM_CORE_RELEASE_BUILD").is_some() {
+        // A Git checkout has an inventory path and must have run the release
+        // pre-step. A source archive without Git has no untracked-file concept
+        // and is instead authenticated by ADAM_CORE_BUILD_COMMIT above.
+        if let Some(path) = source_inventory.as_ref() {
+            assert!(
+                path.is_file(),
+                "release artifacts require the generated adam-core source inventory"
+            );
+            let expected = format!(
+                "source-inventory-v1\n{}{}",
+                relevant_untracked_files(&repo)
+                    .expect("release artifacts require a verifiable source inventory")
+                    .join("\n"),
+                "\n"
+            );
+            let actual = std::fs::read_to_string(path)
+                .expect("release artifacts require a readable adam-core source inventory");
+            assert_eq!(
+                actual, expected,
+                "release adam-core source inventory is stale; run wheel-version before building"
+            );
+        }
+    }
     emit_source_inventory_watch(&repo);
 
     // The index detects staged paths and the current branch ref detects a
