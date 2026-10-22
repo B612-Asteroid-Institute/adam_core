@@ -45,7 +45,7 @@ def _is_test_path(path: str) -> bool:
 def _allowed_generated_package_file(path: Path) -> bool:
     relative = path.relative_to(PACKAGE_ROOT).as_posix()
     return (
-        relative == "_release_inventory.json"
+        relative in {"_release_inventory.json", "_version.py"}
         or "__pycache__" in path.parts
         or path.suffix in {".pyc", ".pyo"}
         or (
@@ -147,6 +147,10 @@ def create_release_inventory(*, nonce: str | None = None) -> ReleaseInventory:
     ]
     tracked = set(tracked_files)
     _assert_clean_source(tracked)
+    generated_version = "src/adam_core/_version.py"
+    if (REPO_ROOT / generated_version).is_file() and generated_version not in tracked:
+        tracked_files.append(generated_version)
+        tracked_files.sort()
     digest = _inventory_digest(tracked_files)
     nonce = nonce or secrets.token_hex(32)
     if len(nonce) != 64 or any(char not in "0123456789abcdef" for char in nonce):

@@ -31,7 +31,7 @@ def _inventory_repo(tmp_path: Path, monkeypatch) -> Path:
     )
     (repo / "rust/example/src/lib.rs").write_text("pub fn value() -> u8 { 1 }\n")
     (repo / ".gitignore").write_text(
-        "lib/\n*_ignored.py\n/src/adam_core/_release_inventory.json\n"
+        "lib/\n*_ignored.py\n_version.py\n" "/src/adam_core/_release_inventory.json\n"
     )
     _git(repo, "init", "-q")
     _git(repo, "config", "user.email", "test@example.invalid")
@@ -54,6 +54,8 @@ def test_release_inventory_refuses_visible_and_ignored_package_python(
     assert first.commit == _git(repo, "rev-parse", "HEAD")
     assert first.environment()["ADAM_CORE_RELEASE_INVENTORY_NONCE"] == "1" * 64
     assert "adam_core/__init__.py" in first.python_files
+    assert "adam_core/_version.py" in first.python_files
+    assert "src/adam_core/_version.py" in first.tracked_files
 
     visible = repo / "src/adam_core/new.py"
     visible.write_text("VALUE = 2\n")
