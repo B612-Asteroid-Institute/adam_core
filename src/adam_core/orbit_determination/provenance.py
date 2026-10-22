@@ -590,6 +590,8 @@ class _ProvenancePreflight:
 
 
 def _runtime_source_path(path: str) -> bool:
+    if "target" in path.split("/"):
+        return False
     if path.startswith("src/adam_core/"):
         relative = path.removeprefix("src/adam_core/")
         parts = relative.split("/")

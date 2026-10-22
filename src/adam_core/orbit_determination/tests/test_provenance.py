@@ -906,6 +906,9 @@ def test_real_git_source_checkout_detector_is_fail_closed(tmp_path):
         text=True,
         capture_output=True,
     ).stdout.strip()
+    generated_target = repo / "rust/example/target/generated/src/lib.rs"
+    generated_target.parent.mkdir(parents=True)
+    generated_target.write_text("pub fn generated() {}\n")
     assert _source_checkout_problems(head, repo=repo) == ()
 
     runtime = repo / "src/adam_core/runtime.py"

@@ -56,7 +56,10 @@ def _allowed_generated_package_file(path: Path) -> bool:
 
 
 def _source_affecting_rust_file(path: Path) -> bool:
-    relative = path.relative_to(REPO_ROOT).as_posix()
+    relative_path = path.relative_to(REPO_ROOT)
+    if "target" in relative_path.parts:
+        return False
+    relative = relative_path.as_posix()
     return relative.endswith(("/Cargo.toml", "/build.rs")) or "/src/" in relative
 
 

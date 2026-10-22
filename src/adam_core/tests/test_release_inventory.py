@@ -50,6 +50,9 @@ def test_release_inventory_refuses_visible_and_ignored_package_python(
     tmp_path, monkeypatch
 ):
     repo = _inventory_repo(tmp_path, monkeypatch)
+    generated_target = repo / "rust/example/target/generated/src/lib.rs"
+    generated_target.parent.mkdir(parents=True)
+    generated_target.write_text("pub fn generated() {}\n")
     first = release_inventory.create_release_inventory(nonce="1" * 64)
     assert first.commit == _git(repo, "rev-parse", "HEAD")
     assert first.environment()["ADAM_CORE_RELEASE_INVENTORY_NONCE"] == "1" * 64
