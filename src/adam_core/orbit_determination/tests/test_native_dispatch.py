@@ -123,6 +123,12 @@ def test_overridden_model_changes_used_uncertainties(observations, backend, form
         "composite": ScalingComposite(IdentityModel()),
     }[form]
     propagator = backend()
+    if form == "nested":
+        # A shipped CompositeModel containing live Python behavior is refused;
+        # the test-only declaration bypass does not make that graph native.
+        with pytest.raises(TypeError, match="model_provenance"):
+            run_od(observations, make_fitter(), models, propagator=propagator)
+        return
     fitted, members = run_od(observations, make_fitter(), models, propagator=propagator)
     assert fitted.success.to_pylist() == [True]
     for axis in ("lon", "lat"):
@@ -214,12 +220,16 @@ def test_distinct_iod_and_refinement_capsules_are_obtained_and_forwarded(
     )
     fitter = NativeOrbitFitter(IodProvider(), iod_rchi2_threshold=1e6)
     refinement = RefinementProvider()
-    with pytest.raises(CapsuleWiringReached):
-        if entrypoint == "full_od":
+    if entrypoint == "full_od":
+        with pytest.raises(CapsuleWiringReached):
             fitter.full_od("capsule-spy", observations, refinement)
-        else:
+        assert requested == ["refinement", "iod"]
+    else:
+        # run_od owns exact native execution identity and rejects the patched
+        # function before obtaining capsules or calling the replacement.
+        with pytest.raises(RuntimeError, match="entry point changed"):
             run_od(observations, fitter, None, propagator=refinement)
-    assert requested == ["refinement", "iod"]
+        assert requested == []
 
 
 @pytest.mark.parametrize("hook", ["full_od", "initial_fit", "refine_fit"])

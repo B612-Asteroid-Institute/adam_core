@@ -1,9 +1,9 @@
 """Compact, reproducible orbit-determination provenance.
 
 Built-in adam-core observation models are identified by the exact clean native
-build commit and a stable entrypoint name. Custom models must declare an
-explicit :class:`ModelProvenance`; runtime source inspection and import history
-are deliberately outside the identity contract.
+build commit and a stable entrypoint name. Live custom Python models are refused: declarations and package metadata cannot
+authenticate mutable executable behavior. Only exact shipped model graphs with
+declarative configuration executed by Core Rust are accepted.
 """
 
 from __future__ import annotations
@@ -17,22 +17,20 @@ import re
 import subprocess
 import types
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import Enum
 from importlib import metadata
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Optional, cast
+from typing import Any, Optional
 
 import numpy as np
 import pyarrow as pa
 import quivr as qv
 
 from ._native_dispatch import native_backend
+from ._native_trust import validate_native_trust
 from .fitted_orbits import FittedOrbitMembers, FittedOrbits, OdProvenance
 from .model_provenance import ModelProvenance, _BehaviorSpec
-
-if TYPE_CHECKING:
-    from ..propagator import Propagator
 
 _CONTRACT_NAME = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9_.-]*[A-Za-z0-9])?$")
 _HEX64 = re.compile(r"^[0-9a-f]{64}$")
@@ -362,66 +360,86 @@ def _builtin_behavior_registry() -> dict[type[Any], _BehaviorSpec]:
     return {**core, **veres}
 
 
+def _type_dict(cls: type[Any]) -> Mapping[str, object]:
+    """A class dictionary without invoking mutable metaclass dispatch."""
+    return type.__getattribute__(cls, "__dict__")
+
+
+def _type_mro(cls: type[Any]) -> tuple[type[Any], ...]:
+    return type.__getattribute__(cls, "__mro__")
+
+
 def _static_class_member(cls: type[Any], name: str) -> object | None:
-    for owner in cls.__mro__:
-        if name in vars(owner):
-            return vars(owner)[name]
+    for owner in _type_mro(cls):
+        namespace = _type_dict(owner)
+        if name in namespace:
+            return namespace[name]
     return None
 
 
-def _class_defines_member(cls: type[Any], name: str) -> bool:
-    return any(name in vars(owner) for owner in cls.__mro__)
-
-
-def _matches_behavior_spec(value: object, spec: _BehaviorSpec) -> bool:
-    """Match an exact shipped type, its named members, and collaborators."""
-    if type(value) is not spec.model_type or spec.model_type.__mro__ != spec.exact_mro:
+def _matches_behavior_type(spec: _BehaviorSpec) -> bool:
+    """Validate every mutable class, ancestor, metaclass, and delegate."""
+    if _type_mro(spec.model_type) != spec.exact_mro:
         return False
     for owner, expected_items in spec.class_surfaces:
-        current = vars(owner)
+        current = _type_dict(owner)
         if set(current) != {name for name, _ in expected_items}:
             return False
         if any(current[name] is not expected for name, expected in expected_items):
             return False
-    for namespace, name, expected in spec.module_delegates:
-        if namespace.get(name) is not expected:
-            return False
-    member_names = {name for name, _ in spec.class_members}
-    for name, expected in spec.class_members:
-        if _static_class_member(spec.model_type, name) is not expected:
-            return False
+    return all(
+        namespace.get(name) is expected
+        for namespace, name, expected in spec.module_delegates
+    )
+
+
+def _instance_dict(value: object) -> dict[str, object] | None:
+    """Read instance state without running an inherited lookup hook."""
     try:
-        fields = vars(value)
-    except TypeError:
-        fields = {}
-    # Registered methods and class data may not be shadowed per instance. Any
-    # other callable shadow is also custom rather than silently acquiring the
-    # shipped identity.
-    if any(name in member_names or callable(item) for name, item in fields.items()):
+        fields = object.__getattribute__(value, "__dict__")
+    except AttributeError:
+        return None
+    return fields if type(fields) is dict else None
+
+
+def _matches_behavior_spec(value: object, spec: _BehaviorSpec) -> bool:
+    """Match an exact shipped type, exact state keys, and collaborators."""
+    if type(value) is not spec.model_type or not _matches_behavior_type(spec):
         return False
-    for name in spec.instance_fields:
-        if name not in fields or _class_defines_member(spec.model_type, name):
-            return False
+    fields = _instance_dict(value)
+    if fields is None or set(fields) != set(spec.instance_fields):
+        return False
     for attribute, collaborator in spec.collaborators:
-        if attribute not in fields or not _matches_behavior_spec(
-            fields[attribute], collaborator
-        ):
+        if not _matches_behavior_spec(fields[attribute], collaborator):
             return False
+    for name, container_type in spec.nested_model_fields:
+        nested = fields[name]
+        if type(nested) is not container_type or not nested:
+            return False
+        for item in nested:
+            child = _builtin_behavior_registry().get(type(item))
+            if child is None or not _matches_behavior_spec(item, child):
+                return False
     return True
+
+
+def _behavior_spec(model: object) -> _BehaviorSpec | None:
+    expected = _builtin_behavior_registry().get(type(model))
+    if expected is None or not _matches_behavior_spec(model, expected):
+        return None
+    return expected
 
 
 def _is_builtin_model(model: object) -> bool:
     """Whether the complete registered behavior is exactly the shipped graph."""
-    expected = _builtin_behavior_registry().get(type(model))
-    return expected is not None and _matches_behavior_spec(model, expected)
+    return _behavior_spec(model) is not None
 
 
 def _validated_build_identity() -> tuple[str, str]:
-    from adam_core import _rust_native
-
     from .. import __version__
 
-    build_version, build_commit = _rust_native.build_identity()
+    build_identity, _, _ = validate_native_trust()
+    build_version, build_commit = build_identity()
     if build_version != __version__:
         raise RuntimeError(
             f"native adam-core version {build_version!r} does not match Python {__version__!r}"
@@ -435,31 +453,34 @@ def _validated_build_identity() -> tuple[str, str]:
     return str(build_version), build_commit
 
 
-def _model_fields(model: object, build_identity: tuple[str, str]) -> dict[str, Any]:
+def _model_fields(
+    model: object, build_identity: tuple[str, str], spec: _BehaviorSpec
+) -> dict[str, Any]:
     parameters: dict[str, Any] = {}
     tables: dict[str, str] = {}
     nested: list[dict[str, Any]] = []
-    for name, value in sorted(vars(model).items()):
-        if isinstance(value, (pa.Table, qv.Table)):
-            tables[name] = _table_sha256(value)
-        elif (
-            isinstance(value, (list, tuple))
-            and value
-            and all(hasattr(item, "apply") for item in value)
-        ):
+    fields = _instance_dict(model)
+    assert fields is not None  # established by the exact behavior match
+    nested_names = {name for name, _ in spec.nested_model_fields}
+    for name, value in sorted(fields.items()):
+        if name in nested_names:
+            # Nested model fields are explicit registry data. Never probe an
+            # arbitrary item for method presence while deciding what it is.
             nested.extend(
                 model_descriptor(item, _build_identity=build_identity) for item in value
             )
+        elif isinstance(value, (pa.Table, qv.Table)):
+            tables[name] = _table_sha256(value)
         else:
             parameters[name] = _canonical_parameter(value, {id(model)})
-    fields: dict[str, Any] = {}
+    result: dict[str, Any] = {}
     if parameters:
-        fields["parameters"] = parameters
+        result["parameters"] = parameters
     if tables:
-        fields["tables_sha256"] = tables
+        result["tables_sha256"] = tables
     if nested:
-        fields["models"] = nested
-    return fields
+        result["models"] = nested
+    return result
 
 
 def _declared_custom_contract(model: object) -> ModelProvenance:
@@ -500,28 +521,12 @@ def _declared_custom_contract(model: object) -> ModelProvenance:
 
 
 def _custom_contract(model: object) -> ModelProvenance:
-    """Fail closed for live third-party Python behavior.
-
-    A package/version/fingerprint assertion cannot bind the executing class or
-    instance without relying on forbidden mutable runtime state or bytecode.
-    Only exact shipped classes whose behavior graph is attested above can run.
-    """
-    from .observation_uncertainty import ObservationUncertaintyModel
-
-    cls = type(model)
-    module = type.__getattribute__(cls, "__module__")
-    qualname = type.__getattribute__(cls, "__qualname__")
-    name = f"{module}.{qualname}"
-    if ObservationUncertaintyModel not in type.__getattribute__(cls, "__mro__"):
-        raise TypeError(
-            f"custom observation model {name} must subclass "
-            "ObservationUncertaintyModel"
-        )
+    """Refuse live third-party behavior without consulting provider metadata."""
     raise TypeError(
-        f"custom observation model {name} is live Python behavior; "
-        "model_provenance cannot authenticate it for reproducible run_od. "
-        "Use an exact shipped Core model whose declarative configuration "
-        "executes in Core Rust"
+        "run_od accepts only exact shipped Core observation models whose "
+        "declarative configuration executes in Core Rust; live Python behavior "
+        "(including live custom Python models) cannot be authenticated by "
+        "model_provenance or ModelProvenance"
     )
 
 
@@ -534,9 +539,13 @@ def model_descriptor(
     absolute paths contribute to the descriptor.
     """
     cls = type(model)
-    if _is_builtin_model(model):
-        cls_module = _module_name(cls, kind="model class")
-        type_name = f"{cls_module}.{cls.__qualname__}"
+    spec = _behavior_spec(model)
+    if spec is not None:
+        cls_module = type.__getattribute__(cls, "__module__")
+        qualname = type.__getattribute__(cls, "__qualname__")
+        if type(cls_module) is not str or not cls_module:
+            raise TypeError("shipped model class has no reproducible module identity")
+        type_name = f"{cls_module}.{qualname}"
         build_version, build_commit = _build_identity or _validated_build_identity()
         implementation = {
             "kind": "adam-core-built-in-v1",
@@ -550,7 +559,7 @@ def model_descriptor(
             "implementation_entrypoint": "apply",
             "implementation_class": implementation,
             "implementation": implementation,
-            **_model_fields(model, (build_version, build_commit)),
+            **_model_fields(model, (build_version, build_commit), spec),
         }
     else:
         contract = _custom_contract(model)
@@ -640,6 +649,89 @@ class _ProvenancePreflight:
     adam_core_build: str
     settings: Optional[str]
     models: str
+    native_settings: Optional[tuple[dict[str, Any], dict[str, Any], dict[str, Any]]]
+    native_model_specs: Optional[list[dict[str, Any]]]
+    iod_backend: Optional[str] = None
+    refinement_backend: Optional[str] = None
+
+
+def _copy_native_payload(value: Any) -> Any:
+    """Deep-copy the closed data vocabulary accepted by Core Rust."""
+    if value is None or type(value) in (str, bool, int, float):
+        return value
+    if isinstance(value, np.generic):
+        return value.item()
+    if type(value) is np.ndarray:
+        result = np.array(value, copy=True, order="C")
+        result.setflags(write=False)
+        return result
+    if type(value) is list:
+        return [_copy_native_payload(item) for item in value]
+    if type(value) is tuple:
+        return tuple(_copy_native_payload(item) for item in value)
+    if type(value) is dict:
+        if any(type(key) is not str for key in value):
+            raise TypeError("native OD snapshot keys must be strings")
+        return {key: _copy_native_payload(item) for key, item in value.items()}
+    raise TypeError("native OD inputs contain unsupported mutable Python data")
+
+
+def _require_builtin_models(models: Sequence[object]) -> None:
+    for model in models:
+        if _behavior_spec(model) is None:
+            _custom_contract(model)
+
+
+def _snapshot_models(
+    models: Sequence[object], build_identity: tuple[str, str]
+) -> tuple[str, Optional[list[dict[str, Any]]]]:
+    from .observation_uncertainty import native_model_specs
+
+    _require_builtin_models(models)
+    specs = native_model_specs(models)
+    frozen_specs = None if specs is None else _copy_native_payload(specs)
+    descriptors = _json(
+        [model_descriptor(model, _build_identity=build_identity) for model in models]
+    )
+    return descriptors, frozen_specs
+
+
+def _freeze_preflight_models(
+    frozen: _ProvenancePreflight, models: Sequence[object]
+) -> _ProvenancePreflight:
+    """Take the final descriptor/spec snapshot after every provider hook."""
+    descriptors, specs = _snapshot_models(
+        models, (frozen.adam_core_version, frozen.adam_core_build)
+    )
+    return replace(frozen, models=descriptors, native_model_specs=specs)
+
+
+def _assert_preflight_models(
+    frozen: _ProvenancePreflight, models: Sequence[object]
+) -> None:
+    """Immediately revalidate the composed inputs against their descriptor."""
+    descriptors = _json(
+        [
+            model_descriptor(
+                model,
+                _build_identity=(frozen.adam_core_version, frozen.adam_core_build),
+            )
+            for model in models
+        ]
+    )
+    if descriptors != frozen.models:
+        raise RuntimeError("observation model state changed after provenance snapshot")
+
+
+def _with_preflight_backends(
+    frozen: _ProvenancePreflight,
+    *,
+    iod_backend: Optional[str],
+    refinement_backend: Optional[str],
+) -> _ProvenancePreflight:
+    return replace(
+        frozen, iod_backend=iod_backend, refinement_backend=refinement_backend
+    )
 
 
 def _runtime_source_path(path: str) -> bool:
@@ -745,14 +837,7 @@ def _relevant_untracked_source() -> tuple[str, ...]:
     )
 
 
-def _preflight_provenance(
-    fitter: object, models: Sequence[object]
-) -> _ProvenancePreflight:
-    """Validate and freeze every Python-owned provenance field before fitting."""
-    from .native_orbit_fitter import NativeOrbitFitter
-
-    # Build/source validation comes first and performs no user-model work. The
-    # validated identity is then reused for every shipped model descriptor.
+def _clean_build_identity() -> tuple[str, str]:
     build_version, build_commit = _validated_build_identity()
     source_problems = _source_checkout_problems(build_commit)
     if source_problems:
@@ -760,21 +845,61 @@ def _preflight_provenance(
             "native adam-core build identity cannot cover executing source checkout: "
             + "; ".join(source_problems)
         )
+    return build_version, build_commit
 
-    # Model identity is validated before asking even a built-in fitter or any
-    # downstream provider for settings. Invalid custom provenance therefore
-    # cannot trigger model, fitter, or provider work.
-    build_identity = (build_version, build_commit)
-    descriptors = _json(
-        [model_descriptor(model, _build_identity=build_identity) for model in models]
-    )
+
+def _precheck_default_model_types(model_types: Sequence[type[Any]]) -> None:
+    """Validate constructor graphs/selectors before ``models='default'``."""
+    _clean_build_identity()
+    registry = _builtin_behavior_registry()
+    for model_type in model_types:
+        spec = registry.get(model_type)
+        if spec is None or not _matches_behavior_type(spec):
+            raise TypeError(
+                "default observation model behavior changed before construction"
+            )
+
+
+def _preflight_provenance(
+    fitter: object, models: Sequence[object]
+) -> _ProvenancePreflight:
+    """Validate identity and call a native fitter's settings hook exactly once."""
+    from .native_orbit_fitter import NativeOrbitFitter
+
+    build_version, build_commit = _clean_build_identity()
+
+    # Reject custom/altered model graphs before any fitter/provider hook. A
+    # second, final data/spec snapshot follows those hooks in run_od.
+    _require_builtin_models(models)
+
+    native_settings = None
     settings: Optional[str] = None
-    if isinstance(fitter, NativeOrbitFitter):
-        iod_settings, refinement, fit_settings = fitter.native_settings()
+    if NativeOrbitFitter in _type_mro(type(fitter)):
+        raw = fitter.native_settings()
+        if type(raw) is not tuple or len(raw) != 3:
+            raise TypeError(
+                "NativeOrbitFitter.native_settings() must return three dicts"
+            )
+        copied = _copy_native_payload(raw)
+        if not all(type(item) is dict for item in copied):
+            raise TypeError(
+                "NativeOrbitFitter.native_settings() must return three dicts"
+            )
+        native_settings = copied
+        iod_settings, refinement, fit_settings = native_settings
         settings = _json(
             {"iod": iod_settings, "refinement": refinement, "fit": fit_settings}
         )
-    return _ProvenancePreflight(build_version, build_commit, settings, descriptors)
+
+    descriptors, specs = _snapshot_models(models, (build_version, build_commit))
+    return _ProvenancePreflight(
+        build_version,
+        build_commit,
+        settings,
+        descriptors,
+        native_settings,
+        specs,
+    )
 
 
 def _uniform_provider(values: list[Optional[str]], stage: str) -> Optional[str]:
@@ -804,15 +929,13 @@ def complete_provenance(
     n = len(fitted_orbits)
     if n == 0:
         return fitted_orbits
-    from .native_orbit_fitter import NativeOrbitFitter
-
     frozen = preflight or _preflight_provenance(fitter, models)
     fitter_cls = type(fitter)
-    iod_backend: Optional[str] = None
-    refinement_backend: Optional[str] = backend_identity(propagator)
+    iod_backend = frozen.iod_backend
+    refinement_backend = frozen.refinement_backend
     iod_provider: Optional[str] = None
     refinement_provider: Optional[str] = None
-    if isinstance(fitter, NativeOrbitFitter):
+    if frozen.native_settings is not None:
         native_record = fitted_orbits.provenance
         iod_provider = _uniform_provider(native_record.iod_provider.to_pylist(), "IOD")
         refinement_provider = _uniform_provider(
@@ -821,10 +944,6 @@ def complete_provenance(
         if iod_provider is not None:
             iod_metadata = json.loads(iod_provider)
             iod_backend = f"{iod_metadata['name']} {iod_metadata['version']}"
-        else:
-            iod_backend = backend_identity(
-                fitter.iod_propagator_for(cast("Propagator", propagator))
-            )
         if refinement_provider is not None:
             refinement_metadata = json.loads(refinement_provider)
             refinement_backend = (
@@ -860,7 +979,11 @@ def complete_provenance(
         adam_core_build=[frozen.adam_core_build] * n,
         input_fingerprint=[input_fingerprint] * n,
         route=[route] * n,
-        fitter=[f"{fitter_cls.__module__}.{fitter_cls.__qualname__}"] * n,
+        fitter=[
+            f"{type.__getattribute__(fitter_cls, '__module__')}."
+            f"{type.__getattribute__(fitter_cls, '__qualname__')}"
+        ]
+        * n,
         iod_backend=[iod_backend] * n,
         refinement_backend=[refinement_backend] * n,
         iod_provider=[iod_provider] * n,

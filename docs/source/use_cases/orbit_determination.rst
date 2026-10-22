@@ -233,7 +233,18 @@ the class and instance Python is actually executing without forbidden mutable
 runtime state or bytecode. This includes installed classes, subclasses of a
 shipped model, dynamic/notebook/``__main__`` classes, and class or instance
 monkeypatches. They fail provenance preflight before the provenance hook, model
-application, fitter, or provider work.
+application, fitter, or provider work. Model collections at this boundary must
+be an exact built-in ``list`` or ``tuple``; arbitrary ``Sequence``/iterable
+objects are refused without iteration.
+
+The preflight attests inherited class/metaclass behavior and construction,
+loader, schema, and native-routing selectors before default model construction.
+It resolves fitter/provider hooks first, then deep-copies one final model/native
+specification and fitter-settings snapshot. Fused Core execution consumes those
+copies, while composed execution rechecks the exact descriptor immediately
+before model application. The import-time native extension and OD entry-point
+identities are rechecked without calling replacements immediately before native
+validation and execution.
 
 Use an exact shipped adam-core model whose choices are declarative constructor
 configuration or immutable input tables and whose native specification is

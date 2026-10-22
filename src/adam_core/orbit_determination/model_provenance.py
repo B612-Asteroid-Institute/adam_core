@@ -47,6 +47,7 @@ class _BehaviorSpec:
     exact_mro: tuple[type[Any], ...]
     class_surfaces: tuple[tuple[type[Any], tuple[tuple[str, object], ...]], ...]
     instance_fields: tuple[str, ...] = ()
+    nested_model_fields: tuple[tuple[str, type[Any]], ...] = ()
     collaborators: tuple[tuple[str, "_BehaviorSpec"], ...] = ()
     module_delegates: tuple[tuple[Mapping[str, object], str, object], ...] = ()
 
@@ -56,6 +57,7 @@ def _capture_behavior_spec(
     member_names: tuple[str, ...],
     *,
     instance_fields: tuple[str, ...] = (),
+    nested_model_fields: tuple[tuple[str, type[Any]], ...] = (),
     collaborators: tuple[tuple[str, _BehaviorSpec], ...] = (),
     module_delegates: tuple[tuple[Mapping[str, object], str, object], ...] = (),
 ) -> _BehaviorSpec:
@@ -70,18 +72,22 @@ def _capture_behavior_spec(
             raise RuntimeError(
                 f"registered behavior member {model_type.__qualname__}.{name} is missing"
             )
-    surface_owners = tuple(
-        owner
-        for owner in model_type.__mro__
-        if owner.__module__.startswith("adam_core.orbit_determination")
+    exact_mro = type.__getattribute__(model_type, "__mro__")
+    metaclass_mro = type.__getattribute__(type(model_type), "__mro__")
+    # Inherited ABC behavior and metaclass dispatch are mutable Python state too.
+    # Capture every owner, rather than assuming non-adam-core ancestors are inert.
+    surface_owners = tuple(dict.fromkeys((*exact_mro, *metaclass_mro)))
+    surfaces = tuple(
+        (owner, tuple(type.__getattribute__(owner, "__dict__").items()))
+        for owner in surface_owners
     )
-    surfaces = tuple((owner, tuple(vars(owner).items())) for owner in surface_owners)
     return _BehaviorSpec(
         model_type,
         tuple(members),
-        model_type.__mro__,
+        exact_mro,
         surfaces,
         instance_fields,
+        nested_model_fields,
         collaborators,
         module_delegates,
     )

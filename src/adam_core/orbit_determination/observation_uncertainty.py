@@ -58,6 +58,7 @@ import pyarrow as pa
 from adam_core import _rust_native as _provenance_native
 
 from ..coordinates.covariances import CoordinateCovariances
+from ..observations import efcc18 as _provenance_efcc18
 from ..observations.efcc18 import (
     EFCC18_N_CATALOGS,
     EFCC18_N_TILES,
@@ -736,9 +737,16 @@ _MODULE = globals()
 _NATIVE = vars(_provenance_native)
 _NATIVE_DISPATCH = vars(_provenance_native_dispatch)
 _COORDINATE_COVARIANCES = vars(CoordinateCovariances)
+_IMPORTLIB = vars(importlib)
+_EFCC18 = vars(_provenance_efcc18)
 _BIAS_DELEGATES = tuple(
     _behavior_delegate(_MODULE, name)
     for name in (
+        "BIAS_TABLE_PACKAGE",
+        "V2_FULL_BIAS_TABLE",
+        "BIAS_TABLE_SCHEMA",
+        "_NON_NEGATIVE_COLUMNS",
+        "_PACKAGE_INSTALL_HINT",
         "load_bias_table",
         "validate_bias_table",
         "_float_column",
@@ -747,8 +755,30 @@ _BIAS_DELEGATES = tuple(
         "_with_covariances",
     )
 ) + (
+    _behavior_delegate(_IMPORTLIB, "import_module"),
     _behavior_delegate(_NATIVE, "bias_table_model_apply_numpy"),
     _behavior_delegate(_COORDINATE_COVARIANCES, "from_matrix"),
+)
+
+
+_EFCC_DELEGATES = tuple(
+    _behavior_delegate(_MODULE, name)
+    for name in ("EFCC18_N_CATALOGS", "EFCC18_N_TILES", "load_efcc18_biases")
+) + tuple(
+    _behavior_delegate(_EFCC18, name)
+    for name in (
+        "EFCC18_N_CATALOGS",
+        "EFCC18_N_TILES",
+        "EFCC18_BIAS_DAT_SHA256",
+        "EFCC18_BIAS_VERSION",
+        "EFCC18_CACHE_DIR_ENV",
+        "EFCC18_BIAS_DAT_ENV",
+        "_EXPECTED_SHAPE",
+        "resolve_bias_dat",
+        "_default_cache_path",
+        "read_efcc18_bias_version",
+        "load_efcc18_biases",
+    )
 )
 
 
@@ -816,8 +846,8 @@ _PROVENANCE_BEHAVIOR_REGISTRY = {
         EFCC18DebiasModel,
         ("__init__", "apply", "_native_specs"),
         instance_fields=("bias_table", "exclude_astcats", "_bias_table_f32"),
-        module_delegates=(
-            _behavior_delegate(_MODULE, "load_efcc18_biases"),
+        module_delegates=_EFCC_DELEGATES
+        + (
             _behavior_delegate(_MODULE, "_latitudes"),
             _behavior_delegate(_NATIVE, "efcc18_debias_model_apply_numpy"),
         ),
@@ -826,6 +856,7 @@ _PROVENANCE_BEHAVIOR_REGISTRY = {
         CompositeModel,
         ("__init__", "apply", "_native_specs"),
         instance_fields=("models",),
+        nested_model_fields=(("models", tuple),),
         module_delegates=(
             _behavior_delegate(_MODULE, "native_model_specs"),
             _behavior_delegate(_NATIVE_DISPATCH, "_has_compatible_native_spec"),

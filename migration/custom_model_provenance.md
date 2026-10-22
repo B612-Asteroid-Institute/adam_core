@@ -16,7 +16,16 @@ make an executable Python `ObservationUncertaintyModel` acceptable to
 `run_od`. Subclasses of shipped models, dynamic/notebook/`__main__` classes,
 installed classes, and class or instance monkeypatches all fail provenance
 preflight before the provenance hook, model application, fitter, or provider
-work.
+work. ``run_od`` accepts only an exact built-in ``list`` or ``tuple`` as a model
+container, so structural sequence iteration cannot precede this refusal.
+
+For shipped models, inherited class/metaclass behavior and construction/loader
+selectors are identity-bearing. After resolving fitter/provider hooks,
+``run_od`` deep-copies a single final declarative model-spec and fitter-settings
+snapshot; that same snapshot is recorded and passed to Core Rust. Composed
+execution revalidates the descriptor immediately before application. Replaced
+native extension modules or OD entry points are refused by identity without
+calling the replacement.
 
 Use an exact shipped adam-core model and express every supported choice through
 its constructor configuration or immutable input table. Those classes are

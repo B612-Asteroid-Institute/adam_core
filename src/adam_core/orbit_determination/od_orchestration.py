@@ -34,7 +34,7 @@ Design
 from __future__ import annotations
 
 import uuid
-from collections.abc import Sequence
+from dataclasses import dataclass
 from typing import Literal, Optional, TypeAlias, cast
 
 import numpy as np
@@ -47,19 +47,26 @@ from ._native_dispatch import (
     _warn_if_analytic_jacobian_mismatches,
     native_propagator,
 )
+from ._native_trust import validate_native_trust
 from .differential_correction import OD_DEFAULTS
 from .evaluate import OrbitDeterminationObservations
 from .fitted_orbits import FittedOrbitMembers, FittedOrbits, ObservationAstrometry
 from .observation_uncertainty import (
-    CompositeModel,
     EFCC18DebiasModel,
     EmpiricalCovarianceModel,
     NightBatchDeweightingModel,
     ObservationUncertaintyModel,
-    native_model_specs,
 )
 from .orbit_fitter import OrbitFitter
-from .provenance import _preflight_provenance, complete_provenance
+from .provenance import (
+    _assert_preflight_models,
+    _freeze_preflight_models,
+    _precheck_default_model_types,
+    _preflight_provenance,
+    _with_preflight_backends,
+    backend_identity,
+    complete_provenance,
+)
 from .veres2017 import SigmaFillModel
 
 __all__ = [
@@ -70,10 +77,23 @@ __all__ = [
 ]
 
 # Models accepted by run_od: a single model, an ordered sequence of models
-# (applied left to right, equivalent to a CompositeModel), or None.
+# (applied left to right), or None.
 ObservationModels: TypeAlias = (
-    ObservationUncertaintyModel | Sequence[ObservationUncertaintyModel] | None
+    ObservationUncertaintyModel
+    | list[ObservationUncertaintyModel]
+    | tuple[ObservationUncertaintyModel, ...]
+    | None
 )
+
+_DEFAULT_MODEL_CONSTRUCTORS: tuple[
+    tuple[str, type[ObservationUncertaintyModel]], ...
+] = (
+    ("SigmaFillModel", SigmaFillModel),
+    ("EFCC18DebiasModel", EFCC18DebiasModel),
+    ("EmpiricalCovarianceModel", EmpiricalCovarianceModel),
+    ("NightBatchDeweightingModel", NightBatchDeweightingModel),
+)
+_TRUSTED_DEFAULT_MODEL_CONSTRUCTORS = _DEFAULT_MODEL_CONSTRUCTORS
 
 
 def _as_array(column: pa.Array | pa.ChunkedArray) -> pa.Array:
@@ -94,10 +114,10 @@ def apply_observation_models(
     ----------
     observations : `OrbitDeterminationObservations` (N)
         Original observations.
-    models : `ObservationUncertaintyModel`, sequence of them, or None
-        Model(s) to apply. A sequence is applied in order, left to right
-        (equivalent to ``CompositeModel(*models)``). None or an empty
-        sequence returns the observations unchanged.
+    models : `ObservationUncertaintyModel`, exact list/tuple of them, or None
+        Model(s) to apply. An exact built-in list or tuple is applied in order,
+        left to right. None or an empty container returns the observations
+        unchanged; arbitrary iterable/sequence containers are refused.
 
     Returns
     -------
@@ -113,25 +133,17 @@ def apply_observation_models(
         not add, drop or reorder observations, since fit provenance is keyed
         by observation id.
     """
-    if models is None:
-        return observations
-    if isinstance(models, ObservationUncertaintyModel):
-        model: ObservationUncertaintyModel | None = models
-    elif len(models) == 0:
-        model = None
-    else:
-        model = CompositeModel(*models)
-    if model is None:
-        return observations
-
-    used = model.apply(observations)
-    if len(used) != len(observations) or not _as_array(used.id).equals(
-        _as_array(observations.id)
-    ):
-        raise ValueError(
-            "Observation models must preserve the observations' ids and order: "
-            f"got {len(used)} observations from {len(observations)}"
-        )
+    model_list = _model_list(models)
+    used = observations
+    for model in model_list:
+        used = model.apply(used)
+        if len(used) != len(observations) or not _as_array(used.id).equals(
+            _as_array(observations.id)
+        ):
+            raise ValueError(
+                "Observation models must preserve the observations' ids and order: "
+                f"got {len(used)} observations from {len(observations)}"
+            )
     return used
 
 
@@ -220,12 +232,7 @@ def _default_models() -> list[ObservationUncertaintyModel]:
     data is missing is reported in one error, before any fit runs, so the
     caller learns all of what to install at once.
     """
-    constructors: list[tuple[str, type[ObservationUncertaintyModel]]] = [
-        ("SigmaFillModel", SigmaFillModel),
-        ("EFCC18DebiasModel", EFCC18DebiasModel),
-        ("EmpiricalCovarianceModel", EmpiricalCovarianceModel),
-        ("NightBatchDeweightingModel", NightBatchDeweightingModel),
-    ]
+    constructors = _DEFAULT_MODEL_CONSTRUCTORS
     models: list[ObservationUncertaintyModel] = []
     missing: dict[str, list[str]] = {}
     package_missing = False
@@ -248,60 +255,88 @@ def _default_models() -> list[ObservationUncertaintyModel]:
 
 
 def _model_list(models: ObservationModels) -> list[ObservationUncertaintyModel]:
+    """Normalize without invoking structural containers or mutable ABC hooks."""
     if models is None:
         return []
-    if isinstance(models, ObservationUncertaintyModel):
+    model_mro = type.__getattribute__(type(models), "__mro__")
+    if ObservationUncertaintyModel in model_mro:
         return [models]
-    return list(models)
+    if type(models) is list:
+        return models.copy()
+    if type(models) is tuple:
+        return list(models)
+    raise TypeError("models must be one model, an exact list/tuple, None, or 'default'")
+
+
+@dataclass(frozen=True)
+class _FusedInputs:
+    propagator: object
+    iod_propagator: object
+
+
+def _prepare_native_inputs(fitter, propagator, frozen):
+    """Resolve every fitter/provider hook before the final model snapshot."""
+    from .native_orbit_fitter import NativeOrbitFitter
+
+    refinement_backend = backend_identity(propagator)
+    iod_backend = None
+    fused = None
+    if frozen.native_settings is not None:
+        iod_provider = fitter.iod_propagator_for(propagator)
+        iod_backend = backend_identity(iod_provider)
+        if NativeOrbitFitter._supports_native_full_od_snapshot(fitter):
+            _, _, fit_settings = frozen.native_settings
+            _warn_if_analytic_jacobian_mismatches(propagator, fit_settings["jacobian"])
+            fused = _FusedInputs(
+                native_propagator(propagator), native_propagator(iod_provider)
+            )
+    return (
+        _with_preflight_backends(
+            frozen,
+            iod_backend=iod_backend,
+            refinement_backend=refinement_backend,
+        ),
+        fused,
+    )
 
 
 def _fused_run_od(
     observations: OrbitDeterminationObservations,
     fitter: OrbitFitter,
-    models: ObservationModels,
-    propagator: Propagator,
+    frozen,
+    inputs: _FusedInputs,
     object_id: str | None,
-) -> tuple[FittedOrbits, FittedOrbitMembers] | None:
-    """
-    Core-owned `run_od` as one native crossing for a `NativeOrbitFitter`
-    whose hooks retain the canonical behavior and observation models that
-    provide native specs. The propagators contribute capsules only. Returns
-    None otherwise, so Python overrides run through the composition.
-    """
-    from .native_orbit_fitter import NativeOrbitFitter, tables_from_native_full_od
-
-    if not isinstance(fitter, NativeOrbitFitter):
-        return None
-    if not fitter.supports_native_full_od():
-        return None
-    model_list = _model_list(models)
-    specs = native_model_specs(model_list)
-    if specs is None:
-        return None
-
-    iod_settings, refinement, fit_settings = fitter.native_settings()
-    _warn_if_analytic_jacobian_mismatches(propagator, fit_settings["jacobian"])
-    backend_object_id = object_id if object_id is not None else uuid.uuid4().hex
-    from adam_core import _rust_native
-
+) -> tuple[FittedOrbits, FittedOrbitMembers]:
+    """Execute only the already-resolved, provenance-bound native snapshot."""
     from .differential_correction import _native_problem
     from .iod import _placeholder_orbit
+    from .native_orbit_fitter import tables_from_native_full_od
 
+    assert frozen.native_settings is not None
+    assert frozen.native_model_specs is not None
+    iod_settings, refinement, fit_settings = frozen.native_settings
+    backend_object_id = object_id if object_id is not None else uuid.uuid4().hex
     _, observed_ipc, observers_ipc = _native_problem(
         _placeholder_orbit(observations), observations
     )
-    output = _rust_native.run_od_ipc(
-        native_propagator(propagator),
+
+    # Module/function identity is checked without calling a replacement, both
+    # before settings validation and immediately before native science.
+    _, validate_settings, _ = validate_native_trust()
+    validate_settings(iod_settings, refinement, fit_settings)
+    _, _, run_od_ipc = validate_native_trust()
+    output = run_od_ipc(
+        inputs.propagator,
         observed_ipc,
         observers_ipc,
         observations.observers.code.to_pylist(),
         observations.photometry.band.to_pylist(),
         observations.astcat.to_pylist(),
-        models=specs,
+        models=frozen.native_model_specs,
         iod_settings=iod_settings,
         refinement=refinement,
         fit_settings=fit_settings,
-        iod_propagator=native_propagator(fitter.iod_propagator_for(propagator)),
+        iod_propagator=inputs.iod_propagator,
     )
     fitted_orbits, members = tables_from_native_full_od(
         backend_object_id, observations, output
@@ -364,7 +399,7 @@ def run_od(
         plugin. The fitter receives the transformed observations and never
         the models.
     models : `ObservationUncertaintyModel`, sequence of them, None, or "default"
-        Observation model(s) to apply before fitting, in order. The default
+        Observation model(s) to apply before fitting, in an exact list/tuple. The default
         ``None`` uses observations exactly as supplied and requires no private data.
         Explicit ``"default"`` applies the Institute stack (sigma fill, EFCC18
         debiasing, empirical station covariance, nightly deweighting; see
@@ -475,35 +510,41 @@ def run_od(
     here; disabling such internal handling when models are supplied is the
     responsibility of the backend plugin.
     """
-    if isinstance(models, str) and models != "default":
-        raise ValueError(
-            "models must be observation models, None or 'default'; " f"got {models!r}"
+    if type(models) is str:
+        if models != "default":
+            raise ValueError(
+                "models must be observation models, None or the exact string 'default'"
+            )
+        if _DEFAULT_MODEL_CONSTRUCTORS is not _TRUSTED_DEFAULT_MODEL_CONSTRUCTORS:
+            raise TypeError("default observation model constructor registry changed")
+        _precheck_default_model_types(
+            tuple(constructor for _, constructor in _TRUSTED_DEFAULT_MODEL_CONSTRUCTORS)
         )
-    from .native_orbit_fitter import NativeOrbitFitter
-
-    if isinstance(models, str):
         models = _default_models()
+
     model_list = _model_list(models)
     provenance = _preflight_provenance(fitter, model_list)
-    if isinstance(fitter, NativeOrbitFitter):
-        from adam_core import _rust_native
-
-        iod_settings, refinement, fit_settings = fitter.native_settings()
-        _rust_native.validate_full_od_settings(iod_settings, refinement, fit_settings)
     if len(observations) == 0:
+        if provenance.native_settings is not None:
+            _, validate_settings, _ = validate_native_trust()
+            validate_settings(*provenance.native_settings)
         return FittedOrbits.empty(), FittedOrbitMembers.empty()
 
     ids = _as_array(observations.id)
     if ids.null_count > 0 or pc.count_distinct(ids).as_py() != len(ids):
         raise ValueError("Observation ids must be unique and non-null")
 
-    # adam-core runs the whole step in one native crossing: models, IOD,
-    # refinement and the provenance snapshots. The propagator supplies only
-    # its capsule; the
-    # veneer keeps id validation, object ids and table assembly.
-    fused = _fused_run_od(observations, fitter, model_list, propagator, object_id)
-    if fused is not None:
-        fitted_orbits, fitted_orbit_members = fused
+    # Every fitter/provider hook is resolved before this final model data/spec
+    # snapshot. No Python hook runs between it and the trusted fused call.
+    provenance, fused_inputs = _prepare_native_inputs(fitter, propagator, provenance)
+    provenance = _freeze_preflight_models(provenance, model_list)
+    if provenance.native_model_specs is None:
+        fused_inputs = None
+
+    if fused_inputs is not None:
+        fitted_orbits, fitted_orbit_members = _fused_run_od(
+            observations, fitter, provenance, fused_inputs, object_id
+        )
         return (
             complete_provenance(
                 fitted_orbits,
@@ -518,6 +559,12 @@ def run_od(
             fitted_orbit_members,
         )
 
+    # Composed execution consumes the same state only after an immediate exact
+    # descriptor recheck. Native fitter settings are the single frozen copy.
+    if provenance.native_settings is not None:
+        _, validate_settings, _ = validate_native_trust()
+        validate_settings(*provenance.native_settings)
+    _assert_preflight_models(provenance, model_list)
     used = apply_observation_models(observations, model_list)
 
     backend_object_id = object_id if object_id is not None else uuid.uuid4().hex

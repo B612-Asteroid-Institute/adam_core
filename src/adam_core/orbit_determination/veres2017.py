@@ -450,9 +450,21 @@ def _behavior_delegate(namespace: Mapping[str, object], name: str):
 _MODULE = globals()
 _NATIVE = vars(_provenance_native)
 _COORDINATE_COVARIANCES = vars(CoordinateCovariances)
-_LOOKUP_DELEGATES = (
-    _behavior_delegate(_MODULE, "validate_veres_sigma_table"),
-    _behavior_delegate(_MODULE, "load_sigma_table"),
+_IMPORTLIB = vars(importlib)
+_LOOKUP_DELEGATES = tuple(
+    _behavior_delegate(_MODULE, name)
+    for name in (
+        "SIGMA_TABLE_PACKAGE",
+        "V2_SIGMA_FILL_TABLE",
+        "VERES2017_WORKING_TABLE",
+        "VERES2017_FALLBACK_SIGMA_ARCSEC",
+        "VERES2017_SIGMA_TABLE_SCHEMA",
+        "_PACKAGE_INSTALL_HINT",
+        "validate_veres_sigma_table",
+        "load_sigma_table",
+    )
+) + (
+    _behavior_delegate(_IMPORTLIB, "import_module"),
     _behavior_delegate(_NATIVE, "veres_sigma_lookup_numpy"),
 )
 _MODEL_DELEGATES = _LOOKUP_DELEGATES + (

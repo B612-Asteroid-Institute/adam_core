@@ -349,17 +349,12 @@ class NativeOrbitFitter(OrbitFitter):
         )
         return iod_settings, refinement, fit_settings
 
-    def supports_native_full_od(self) -> bool:
-        """Whether the fitting hooks fit adam-core's one-crossing driver.
-
-        Inherited settings cannot represent overridden fitting hooks. Check
-        that compatibility before parsing settings for the built-in drivers.
-        """
+    def _supports_native_full_od_snapshot(self) -> bool:
+        """Whether hooks can use one already-frozen settings snapshot."""
         if not _has_compatible_native_spec(
             self, "native_settings", ("full_od", "initial_fit", "refine_fit")
         ):
             return False
-        _, _, _ = self.native_settings()
         loop_keys = {
             "chi2_reject",
             "chi2_recover",
@@ -370,6 +365,17 @@ class NativeOrbitFitter(OrbitFitter):
             "psd_floor_frac",
         }
         return set(self.rejection_kwargs) <= loop_keys | _FUSED_LOOP_KWARGS
+
+    def supports_native_full_od(self) -> bool:
+        """Whether the fitting hooks fit adam-core's one-crossing driver.
+
+        Inherited settings cannot represent overridden fitting hooks. Check
+        that compatibility before parsing settings for the built-in drivers.
+        """
+        if not self._supports_native_full_od_snapshot():
+            return False
+        _, _, _ = self.native_settings()
+        return True
 
     @property
     def iod_propagator(self) -> Propagator:

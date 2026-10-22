@@ -206,7 +206,7 @@ def test_provenance_preflight_refuses_non_reproducible_builds(monkeypatch):
             "build_identity",
             lambda identity=identity: (adam_core.__version__, identity),
         )
-        with pytest.raises(RuntimeError, match="exact clean source commit"):
+        with pytest.raises(RuntimeError, match="entry point changed"):
             _preflight_provenance(object(), [])
 
 
@@ -765,7 +765,7 @@ def test_preflight_rejects_native_python_version_mismatch_before_model_work(
             return observations
 
     monkeypatch.setattr(_rust_native, "build_identity", lambda: ("999.0.0", "0" * 40))
-    with pytest.raises(RuntimeError, match="does not match Python"):
+    with pytest.raises(RuntimeError, match="entry point changed"):
         run_od(
             make_synthetic_observations(),
             object(),
@@ -1097,19 +1097,16 @@ def test_registered_instance_shadows_and_nested_subclass_are_custom(monkeypatch)
     _assert_run_od_preflight_refuses_model(model, monkeypatch)
 
 
-def test_nested_custom_model_contract_is_recursive_and_sensitive():
-    from adam_core.orbit_determination.observation_uncertainty import CompositeModel
-
+def test_custom_declaration_canonicalization_is_sensitive():
     class Custom(_ExplicitModel):
         def __init__(self, fingerprint, scale):
             self.implementation_fingerprint = fingerprint
             self.scale = scale
 
-    first = model_descriptor(CompositeModel(Custom("1" * 64, 2)))
-    science = model_descriptor(CompositeModel(Custom("2" * 64, 2)))
-    config = model_descriptor(CompositeModel(Custom("1" * 64, 3)))
-    nested = first["models"][0]
-    assert nested["implementation"]["implementation_fingerprint"] == "1" * 64
+    first = model_descriptor(Custom("1" * 64, 2))
+    science = model_descriptor(Custom("2" * 64, 2))
+    config = model_descriptor(Custom("1" * 64, 3))
+    assert first["implementation"]["implementation_fingerprint"] == "1" * 64
     assert first["descriptor_sha256"] != science["descriptor_sha256"]
     assert first["descriptor_sha256"] != config["descriptor_sha256"]
 
@@ -1551,3 +1548,424 @@ def test_public_run_od_recursively_preflights_nested_custom_models():
 
 
 pytestmark = pytest.mark.usefixtures("allow_synthetic_model_distribution")
+
+
+def test_nested_custom_lookup_is_refused_without_any_hook(monkeypatch):
+    from adam_core.orbit_determination.observation_uncertainty import CompositeModel
+
+    monkeypatch.setattr(provenance_module, "_custom_contract", _REAL_CUSTOM_CONTRACT)
+    calls = {name: 0 for name in ("lookup", "provenance", "apply", "fit", "provider")}
+
+    class Evil(ObservationUncertaintyModel):
+        def __getattribute__(self, name):
+            calls["lookup"] += 1
+            return object.__getattribute__(self, name)
+
+        def model_provenance(self):
+            calls["provenance"] += 1
+            raise AssertionError("provenance hook executed")
+
+        def apply(self, observations):
+            calls["apply"] += 1
+            raise AssertionError("model executed")
+
+    class Fitter:
+        def full_od(self, *args, **kwargs):
+            calls["fit"] += 1
+            raise AssertionError("fitter executed")
+
+    class Provider:
+        def __getattribute__(self, name):
+            if name.startswith("__"):
+                return object.__getattribute__(self, name)
+            calls["provider"] += 1
+            raise AssertionError("provider executed")
+
+    model = CompositeModel(Evil())
+    calls.update({name: 0 for name in calls})
+    with pytest.raises(TypeError, match="live custom Python"):
+        run_od(make_synthetic_observations(), Fitter(), [model], propagator=Provider())
+    assert calls == {name: 0 for name in calls}
+
+
+def test_custom_non_string_module_metadata_is_never_formatted(monkeypatch):
+    monkeypatch.setattr(provenance_module, "_custom_contract", _REAL_CUSTOM_CONTRACT)
+    metadata_calls = 0
+
+    class HostileModule:
+        def __format__(self, spec):
+            nonlocal metadata_calls
+            metadata_calls += 1
+            raise AssertionError("provider metadata formatted")
+
+        def __getattribute__(self, name):
+            if name == "__class__":
+                return object.__getattribute__(self, name)
+            nonlocal metadata_calls
+            metadata_calls += 1
+            raise AssertionError("provider metadata inspected")
+
+    class Evil(ObservationUncertaintyModel):
+        def apply(self, observations):
+            raise AssertionError("model executed")
+
+    Evil.__module__ = HostileModule()
+    _assert_run_od_preflight_refuses_model(Evil(), monkeypatch)
+    assert metadata_calls == 0
+
+
+def test_extra_hostile_instance_field_is_refused_before_value_lookup(monkeypatch):
+    from adam_core.orbit_determination.observation_uncertainty import IdentityModel
+
+    calls = 0
+
+    class Hostile:
+        def __getattribute__(self, name):
+            nonlocal calls
+            calls += 1
+            raise AssertionError("extra value inspected")
+
+        def __call__(self):
+            nonlocal calls
+            calls += 1
+            raise AssertionError("extra value called")
+
+    model = IdentityModel()
+    model.extra = Hostile()
+    _assert_run_od_preflight_refuses_model(model, monkeypatch)
+    assert calls == 0
+
+
+@pytest.mark.parametrize("special", ["__getattribute__", "__getattr__"])
+def test_inherited_abc_lookup_mutation_is_refused_without_execution(
+    monkeypatch, special
+):
+    from abc import ABC
+
+    from adam_core.orbit_determination.observation_uncertainty import IdentityModel
+
+    calls = 0
+
+    def changed(self, name):
+        if type(self) is IdentityModel:
+            nonlocal calls
+            calls += 1
+            raise AssertionError("inherited model lookup hook executed")
+        if special == "__getattribute__":
+            return object.__getattribute__(self, name)
+        raise AttributeError(name)
+
+    monkeypatch.setattr(ABC, special, changed, raising=False)
+    _assert_run_od_preflight_refuses_model(IdentityModel(), monkeypatch)
+    assert calls == 0
+
+
+def test_hostile_model_sequence_is_rejected_without_iteration(monkeypatch):
+    from collections.abc import Sequence
+
+    monkeypatch.setattr(provenance_module, "_custom_contract", _REAL_CUSTOM_CONTRACT)
+    calls = 0
+
+    class HostileSequence(Sequence):
+        def __len__(self):
+            nonlocal calls
+            calls += 1
+            raise AssertionError("container length executed")
+
+        def __getitem__(self, item):
+            nonlocal calls
+            calls += 1
+            raise AssertionError("container lookup executed")
+
+        def __iter__(self):
+            nonlocal calls
+            calls += 1
+            raise AssertionError("container iteration executed")
+
+    with pytest.raises(TypeError, match="exact list/tuple"):
+        run_od(
+            make_synthetic_observations(),
+            object(),
+            HostileSequence(),
+            propagator=object(),
+        )
+    assert calls == 0
+
+
+def test_default_constructor_mutation_is_refused_before_constructor(monkeypatch):
+    from adam_core.orbit_determination.veres2017 import SigmaFillModel
+
+    calls = 0
+
+    def changed(self, *args, **kwargs):
+        nonlocal calls
+        calls += 1
+        raise AssertionError("changed default constructor executed")
+
+    monkeypatch.setattr(SigmaFillModel, "__init__", changed)
+    with pytest.raises(TypeError, match="behavior changed before construction"):
+        run_od(make_synthetic_observations(), object(), "default", propagator=object())
+    assert calls == 0
+
+
+@pytest.mark.parametrize(
+    ("module_name", "constant", "replacement"),
+    [
+        ("veres2017", "SIGMA_TABLE_PACKAGE", "hostile_sigma_provider"),
+        ("veres2017", "VERES2017_SIGMA_TABLE_SCHEMA", object()),
+        ("observation_uncertainty", "BIAS_TABLE_PACKAGE", "hostile_bias_provider"),
+        ("observation_uncertainty", "_NON_NEGATIVE_COLUMNS", ()),
+        ("efcc18", "_EXPECTED_SHAPE", (1, 1, 1)),
+    ],
+)
+def test_default_loader_selector_mutation_is_refused_before_loading(
+    monkeypatch, module_name, constant, replacement
+):
+    import adam_core.observations.efcc18 as efcc18
+    import adam_core.orbit_determination.observation_uncertainty as uncertainty
+    import adam_core.orbit_determination.veres2017 as veres2017
+
+    module = {
+        "efcc18": efcc18,
+        "observation_uncertainty": uncertainty,
+        "veres2017": veres2017,
+    }[module_name]
+    monkeypatch.setattr(module, constant, replacement)
+    with pytest.raises(TypeError, match="behavior changed before construction"):
+        run_od(make_synthetic_observations(), object(), "default", propagator=object())
+
+
+def test_replaced_native_package_module_is_refused_without_call(monkeypatch):
+    from adam_core.orbit_determination.observation_uncertainty import IdentityModel
+
+    calls = 0
+
+    class FakeNative:
+        def build_identity(self):
+            nonlocal calls
+            calls += 1
+            raise AssertionError("replacement build identity executed")
+
+    observations = make_synthetic_observations()
+    monkeypatch.setattr(adam_core, "_rust_native", FakeNative())
+    with pytest.raises(RuntimeError, match="extension identity changed"):
+        run_od(
+            observations,
+            object(),
+            [IdentityModel()],
+            propagator=object(),
+        )
+    assert calls == 0
+
+
+def test_replaced_native_build_function_is_refused_without_call(monkeypatch):
+    from adam_core.orbit_determination.observation_uncertainty import IdentityModel
+
+    calls = 0
+
+    def fake_build_identity():
+        nonlocal calls
+        calls += 1
+        raise AssertionError("replacement build identity executed")
+
+    monkeypatch.setattr(_rust_native, "build_identity", fake_build_identity)
+    with pytest.raises(RuntimeError, match="entry point changed"):
+        run_od(
+            make_synthetic_observations(),
+            object(),
+            [IdentityModel()],
+            propagator=object(),
+        )
+    assert calls == 0
+
+
+@pytest.mark.parametrize("replacement", ["module", "run-function"])
+def test_provider_time_native_replacement_is_refused_before_fake_native_work(
+    monkeypatch, replacement
+):
+    from adam_core.orbit_determination.observation_uncertainty import IdentityModel
+
+    fake_calls = 0
+
+    def fake_run(*args, **kwargs):
+        nonlocal fake_calls
+        fake_calls += 1
+        raise AssertionError("fake native work executed")
+
+    class ReplacingProvider(NativeTwoBodyPropagator):
+        native_backend = NativeTwoBodyPropagator.native_backend
+
+        def propagator_capsule(self):
+            capsule = _rust_native.two_body_propagator_capsule()
+            if replacement == "module":
+                monkeypatch.setattr(adam_core, "_rust_native", object())
+            else:
+                monkeypatch.setattr(_rust_native, "run_od_ipc", fake_run)
+            return capsule
+
+    provider = ReplacingProvider()
+    with pytest.raises(
+        RuntimeError, match="native (extension identity|OD entry point)"
+    ):
+        run_od(
+            make_synthetic_observations(),
+            NativeOrbitFitter(provider),
+            [IdentityModel()],
+            propagator=provider,
+        )
+    assert fake_calls == 0
+
+
+def test_provider_mutation_is_bound_by_final_model_and_native_spec_snapshot():
+    model = PerformanceWeightedModel(
+        make_bias_table([{"obs_code": "500", "chi2_per_obs": 1.0}])
+    )
+    provider_calls = 0
+
+    class MutatingProvider(NativeTwoBodyPropagator):
+        native_backend = NativeTwoBodyPropagator.native_backend
+
+        def propagator_capsule(self):
+            nonlocal provider_calls
+            provider_calls += 1
+            values = model._columns["chi2_per_obs"].copy()
+            values[0] = 4.0
+            model._columns["chi2_per_obs"] = values
+            return super().propagator_capsule()
+
+    provider = MutatingProvider()
+    fitted, members = run_od(
+        make_synthetic_observations(),
+        NativeOrbitFitter(provider),
+        [model],
+        propagator=provider,
+    )
+    assert provider_calls == 1
+    (recorded,) = json.loads(fitted.provenance.models[0].as_py())
+    assert recorded == model_descriptor(model)
+    assert members.used_astrometry.sigma_lon.to_numpy()[0] == pytest.approx(
+        2 * members.original_astrometry.sigma_lon.to_numpy()[0]
+    )
+    values = model._columns["chi2_per_obs"].copy()
+    values[0] = 9.0
+    model._columns["chi2_per_obs"] = values
+    assert json.loads(fitted.provenance.models[0].as_py())[0] == recorded
+
+
+def test_native_settings_are_called_once_and_same_snapshot_is_recorded_and_used():
+    calls = 0
+    fitter = None
+
+    class StatefulFitter(NativeOrbitFitter):
+        def native_settings(self):
+            nonlocal calls
+            calls += 1
+            if calls > 1:
+                raise AssertionError("native_settings called more than once")
+            iod, refinement, fit = super().native_settings()
+            iod["rchi2_threshold"] = 177.0
+            self.returned_settings = (iod, refinement, fit)
+            return self.returned_settings
+
+    class MutatingProvider(NativeTwoBodyPropagator):
+        native_backend = NativeTwoBodyPropagator.native_backend
+
+        def propagator_capsule(self):
+            assert fitter is not None
+            # A retained hook result must not be the dict later sent to Rust.
+            fitter.returned_settings[2]["jacobian"] = "hostile-after-preflight"
+            return super().propagator_capsule()
+
+    provider = MutatingProvider()
+    fitter = StatefulFitter(provider)
+    fitted, _ = run_od(make_synthetic_observations(), fitter, [], propagator=provider)
+    assert calls == 1
+    settings = json.loads(fitted.provenance.settings[0].as_py())
+    assert settings["iod"]["rchi2_threshold"] == 177.0
+    assert settings["fit"]["jacobian"] == "auto"
+
+
+def test_native_model_spec_snapshot_has_no_mutable_model_references(monkeypatch):
+    model = PerformanceWeightedModel(
+        make_bias_table([{"obs_code": "500", "chi2_per_obs": 1.0}])
+    )
+    owned_values = model._columns["chi2_per_obs"].copy()
+    model._columns["chi2_per_obs"] = owned_values
+    monkeypatch.setattr(provenance_module, "_source_checkout_problems", lambda _: ())
+    frozen = provenance_module._preflight_provenance(object(), [model])
+    assert frozen.native_model_specs is not None
+    frozen_values = frozen.native_model_specs[0]["chi2_per_obs"]
+    assert not np.shares_memory(owned_values, frozen_values)
+    assert not frozen_values.flags.writeable
+    owned_values[0] = 9.0
+    model._codes.append("hostile-after-preflight")
+    assert frozen_values[0] == 1.0
+    assert frozen.native_model_specs[0]["table_obs_code"] == ["500"]
+
+
+def test_composed_guard_rejects_model_state_changed_after_snapshot(monkeypatch):
+    from adam_core.orbit_determination.observation_uncertainty import (
+        NightBatchDeweightingModel,
+    )
+
+    monkeypatch.setattr(provenance_module, "_source_checkout_problems", lambda _: ())
+    model = NightBatchDeweightingModel(cap=4)
+    frozen = provenance_module._preflight_provenance(object(), [model])
+    model.cap = 1
+    with pytest.raises(RuntimeError, match="state changed"):
+        provenance_module._assert_preflight_models(frozen, [model])
+
+
+@pytest.mark.parametrize("special", ["__getattribute__", "__getattr__"])
+def test_mutable_abc_metaclass_dispatch_is_attested_without_execution(
+    monkeypatch, special
+):
+    from abc import ABCMeta
+
+    from adam_core.orbit_determination.observation_uncertainty import IdentityModel
+
+    calls = 0
+
+    def changed(self, name):
+        if self is IdentityModel:
+            nonlocal calls
+            calls += 1
+            raise AssertionError("model metaclass lookup hook executed")
+        if special == "__getattribute__":
+            return type.__getattribute__(self, name)
+        raise AttributeError(name)
+
+    monkeypatch.setattr(ABCMeta, special, changed, raising=False)
+    _assert_run_od_preflight_refuses_model(IdentityModel(), monkeypatch)
+    assert calls == 0
+
+
+def test_provider_cannot_replace_a_separate_orchestration_native_alias(monkeypatch):
+    import adam_core.orbit_determination.od_orchestration as orchestration
+    from adam_core.orbit_determination.observation_uncertainty import IdentityModel
+
+    fake_calls = 0
+
+    def fake_run(*args, **kwargs):
+        nonlocal fake_calls
+        fake_calls += 1
+        raise AssertionError("mutable orchestration alias executed")
+
+    class AliasReplacingProvider(NativeTwoBodyPropagator):
+        native_backend = NativeTwoBodyPropagator.native_backend
+
+        def propagator_capsule(self):
+            monkeypatch.setattr(
+                orchestration, "TRUSTED_RUN_OD_IPC", fake_run, raising=False
+            )
+            return super().propagator_capsule()
+
+    provider = AliasReplacingProvider()
+    fitted, _ = run_od(
+        make_synthetic_observations(),
+        NativeOrbitFitter(provider),
+        [IdentityModel()],
+        propagator=provider,
+    )
+    assert fitted.success.to_pylist() == [True]
+    assert fake_calls == 0
