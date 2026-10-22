@@ -765,6 +765,44 @@ fn lazy_span_caps_and_midpoint_ties_are_enforced_at_the_real_frontier() {
 }
 
 #[test]
+fn grouped_pairs_skip_duplicate_first_and_last_epochs_for_the_middle() {
+    let config = SpanSearchConfig {
+        target_span_days: 1.0,
+        dense_window_days: [10.0, 10.0],
+        edge_window_days: 10.0,
+        ..SpanSearchConfig::default()
+    };
+
+    let first_duplicates = [0.0, 0.0, 1.0, 2.0];
+    let mut first_stats = TripletSearchStats::default();
+    let first = span_triplets_with_limits(
+        &first_duplicates,
+        &[0, 0, 1, 1],
+        &config,
+        1,
+        100,
+        100,
+        100,
+        &mut first_stats,
+    );
+    assert_eq!(first[0].0, [0, 2, 3]);
+
+    let last_duplicates = [0.0, 1.0, 1.0, 2.0];
+    let mut last_stats = TripletSearchStats::default();
+    let last = span_triplets_with_limits(
+        &last_duplicates,
+        &[0, 1, 1, 1],
+        &config,
+        1,
+        100,
+        100,
+        100,
+        &mut last_stats,
+    );
+    assert_eq!(last[0].0, [0, 1, 3]);
+}
+
+#[test]
 fn grouped_pairs_filter_a_truncated_duplicate_epoch_pair_before_marking() {
     // The densest window contains night pair (0, 1) with endpoints 0.10
     // and 0.11, but its duplicate 0.10 row is not a strictly interior
@@ -862,6 +900,23 @@ fn default_triplet_budget_is_method_specific_and_explicit_override_wins() {
         spans.triplets_tried,
         SpanSearchConfig::default().max_triplets
     );
+    let configured_spans = run_iod(
+        &predictor,
+        &observed,
+        &observers,
+        &IodConfig {
+            observation_selection_method: ObservationSelectionMethod::Spans,
+            contamination_percentage: 20.0,
+            rchi2_threshold: 1.0e-30,
+            spans: SpanSearchConfig {
+                max_triplets: 5,
+                ..SpanSearchConfig::default()
+            },
+            ..IodConfig::default()
+        },
+    )
+    .unwrap();
+    assert_eq!(configured_spans.triplets_tried, 5);
     let combinations = run(ObservationSelectionMethod::Combinations, None);
     let max_outliers = ((epochs.len() as f64 * 0.2) as usize).min(epochs.len() - 6);
     assert_eq!(combinations.triplets_tried, 3 * (max_outliers + 1));

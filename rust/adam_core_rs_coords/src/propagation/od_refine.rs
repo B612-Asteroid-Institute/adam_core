@@ -1286,9 +1286,25 @@ fn covariance_validity(covariance: &[f64; 36]) -> Result<(), String> {
         std::array::from_fn(|col| symmetric[row][col] / (scales[row] * scales[col]))
     });
     let (eigenvalues, _) = symmetric_eigen_6x6(&scaled);
+    let lambda_max = eigenvalues
+        .iter()
+        .copied()
+        .fold(f64::NEG_INFINITY, f64::max);
     let lambda_min = eigenvalues.iter().copied().fold(f64::INFINITY, f64::min);
     if !lambda_min.is_finite() || lambda_min <= 0.0 {
         return Err("the fitted state covariance is not positive-definite".to_string());
+    }
+    // A six-dimensional correlation matrix has O(1) spectrum. Eigenvalues
+    // below n*epsilon relative to its largest mode are numerical null
+    // directions, not evidence of a resolved full-rank covariance. This is a
+    // scale-free rank test, deliberately far below CMC2003's 1e-12 quality
+    // threshold.
+    let rank_tolerance = 6.0 * f64::EPSILON * lambda_max;
+    if !lambda_max.is_finite() || lambda_min <= rank_tolerance {
+        return Err(format!(
+            "the fitted state covariance is numerically rank-deficient (correlation minimum/maximum eigenvalue ratio = {:.3e})",
+            lambda_min / lambda_max
+        ));
     }
     Ok(())
 }
@@ -2977,7 +2993,10 @@ fn correct_candidates<T: OriginTranslationProvider>(
                     translation_provider,
                 ) {
                     Ok(rejected) => rejected.fit,
-                    Err(err @ PropagationError::RowFailure(_)) => {
+                    Err(
+                        err @ (PropagationError::RowFailure(_)
+                        | PropagationError::CmcCovarianceUnavailable(_)),
+                    ) => {
                         let message =
                             format!("whole-arc rejection failed at stage {stages}: {err}");
                         result.candidates_failed += 1;
@@ -5113,6 +5132,27 @@ mod tests {
             plain.optimizer_iterations + retry.optimizer_iterations
         );
         assert!(combined.optimizer_iterations <= config.max_iterations);
+
+        let nfev_exhausted = WhitenedFitConfig {
+            max_iterations: base.max_iterations,
+            // Central differences need twelve perturbations plus their
+            // initial residual. Leave exactly twelve evaluations after the
+            // analytic failure: the retry can be entered, but cannot spend a
+            // fresh max_nfev allowance on a Jacobian.
+            max_nfev: Some(plain.nfev + 12),
+            ..base
+        };
+        let mut exhausted_warnings = Vec::new();
+        let (exhausted, exhausted_method) = solve_with_nonfinite_fallback(
+            &problem,
+            problem.geometry.state,
+            &nfev_exhausted,
+            &mut exhausted_warnings,
+        )
+        .unwrap();
+        assert_eq!(exhausted_method, JacobianMethod::Central);
+        assert_eq!(exhausted.status, STATUS_LIMIT);
+        assert!(exhausted.nfev <= nfev_exhausted.max_nfev.unwrap());
     }
 
     #[test]
@@ -6270,6 +6310,33 @@ mod tests {
     }
 
     #[test]
+    fn stage_fit_never_uses_an_invalid_covariance_as_a_seed() {
+        let mut fixture = linear_fixture(0.0);
+        for row in &mut fixture.predictor.design {
+            row[5] = 0.0;
+        }
+        let staged = stage_fit(
+            &fixture.predictor,
+            &orbit(TRUTH_STATE),
+            &fixture.observed,
+            &observers(),
+            &[true; NUM_OBS],
+            &WhitenedFitConfig {
+                jacobian: JacobianMethod::Central,
+                validate_covariance: false,
+                ..WhitenedFitConfig::default()
+            },
+            f64::INFINITY,
+            &NoopProvider,
+            &ZeroTranslationProvider,
+        )
+        .unwrap()
+        .expect_err("invalid covariance must make the correction stage unusable");
+        assert!(!staged.1);
+        assert!(staged.0.contains("status -3"));
+    }
+
+    #[test]
     fn invalid_covariance_is_candidate_local_unsuccessful_output() {
         let mut fixture = linear_fixture(0.0);
         // Predictions remain finite and the optimizer can terminate, but one
@@ -6377,6 +6444,17 @@ mod tests {
         invalid[6] = 1.0;
         assert!(covariance_validity(&invalid).is_err());
         assert!(covariance_quality(&invalid).is_err());
+
+        let correlation = |gap: f64| {
+            let mut covariance = identity;
+            covariance[1] = 1.0 - gap;
+            covariance[6] = 1.0 - gap;
+            covariance
+        };
+        assert!(covariance_validity(&correlation(4.0 * f64::EPSILON))
+            .unwrap_err()
+            .contains("numerically rank-deficient"));
+        assert!(covariance_validity(&correlation(64.0 * f64::EPSILON)).is_ok());
 
         invalid = identity;
         invalid[0] = 1.0e-13;

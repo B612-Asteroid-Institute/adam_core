@@ -180,6 +180,7 @@ def test_fused_equals_composed_every_provenance_field():
                     "implementation_version",
                     "implementation_entrypoint",
                     "implementation",
+                    "implementation_class",
                 ):
                     m.pop(key)
         assert fm == cm

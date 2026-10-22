@@ -687,6 +687,8 @@ def run_iod(
         Every scored candidate, the accepted index, the search counters and
         the reason when no orbit was accepted.
     """
+    if isinstance(max_triplets, bool):
+        raise ValueError("max_triplets must be a positive integer or None, not bool")
     if (
         span_settings is not None
         and "span_max_triplets" in span_settings

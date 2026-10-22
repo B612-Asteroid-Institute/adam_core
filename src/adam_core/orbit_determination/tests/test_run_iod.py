@@ -185,6 +185,8 @@ def test_spans_settings_reach_the_search(two_body_arc) -> None:  # noqa: F811
         ranging_settings={"ranging_enabled": False},
     )
     assert combinations_default.triplets_tried == 3
+    with pytest.raises(ValueError, match="max_triplets.*bool"):
+        run_iod(two_body_arc, TwoBodyPropagator(), max_triplets=True)
     with pytest.raises(ValueError, match="span_max_triplets.*bool"):
         run_iod(
             two_body_arc,

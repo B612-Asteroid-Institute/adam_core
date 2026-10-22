@@ -5474,6 +5474,54 @@ mod tests {
     }
 
     #[test]
+    fn prefit_outlier_call_site_uses_the_retained_arc_and_configured_minimum() {
+        struct LastRowOutlierPredictor {
+            perfect: Vec<f64>,
+        }
+        impl SphericalPredictor for LastRowOutlierPredictor {
+            fn predict_spherical(
+                &self,
+                _states: &[[f64; 6]],
+                _geometry: &OrbitGeometry,
+                _observers: &ObserverBatch,
+            ) -> PropagationResultValue<Result<Vec<f64>, String>> {
+                let mut predicted = self.perfect.clone();
+                predicted[(NUM_OBS - 1) * 6 + 1] += 1.0;
+                Ok(Ok(predicted))
+            }
+        }
+
+        let observed = synthetic_observations();
+        let predictor = LastRowOutlierPredictor {
+            perfect: spherical_flat(&observed, "observed").unwrap(),
+        };
+        let result = run_iod(
+            &predictor,
+            &observed,
+            &observers(),
+            &IodConfig {
+                acceptance: IodAcceptance::Prefit,
+                observation_selection_method: ObservationSelectionMethod::Spans,
+                contamination_percentage: 20.0,
+                rchi2_threshold: 1.0e-12,
+                min_arc_length: 20.0,
+                max_triplets: Some(1),
+                ..IodConfig::default()
+            },
+        )
+        .unwrap();
+        assert!(
+            !result.found(),
+            "a retained 18-day arc must not pass 20 days"
+        );
+        assert!(result.candidates_evaluated >= 1);
+        assert!(result
+            .candidates
+            .iter()
+            .all(|candidate| !candidate.triplet.contains(&(NUM_OBS - 1))));
+    }
+
+    #[test]
     fn prefit_outlier_removal_rechecks_the_retained_time_arc() {
         let mut observed = synthetic_observations();
         let values = match &mut observed.values {
