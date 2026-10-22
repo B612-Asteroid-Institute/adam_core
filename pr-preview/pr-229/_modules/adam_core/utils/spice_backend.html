@@ -435,9 +435,9 @@
 <span class="sd">``RustBackend`` is a thin Python owner for the process-local Rust backend</span>
 <span class="sd">implemented in ``adam_core_rs_spice`` and exposed through</span>
 <span class="sd">``adam_core._rust_native.AdamCoreSpiceBackend``. Kernel registration,</span>
-<span class="sd">SPK/PCK reader dispatch (per epoch, as in CSPICE), text-kernel name bindings,</span>
-<span class="sd">and last-loaded-wins semantics live in Rust so standalone ``adam-core-rs`` can</span>
-<span class="sd">use the same behavior without importing Python ``spicekit``.</span>
+<span class="sd">SPK/PCK reader dispatch, text-kernel name bindings, and last-loaded-wins</span>
+<span class="sd">semantics live in Rust so standalone ``adam-core-rs`` can use the same</span>
+<span class="sd">behavior without importing Python ``spicekit``.</span>
 
 <span class="sd">Parity against CSPICE remains owned upstream by the public ``spicekit``</span>
 <span class="sd">crate's ``spicekit-bench`` suite. adam-core tests validate adam-core's</span>
@@ -547,9 +547,6 @@
                     <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">,</span>
                 <span class="p">)</span>
             <span class="k">except</span> <span class="p">(</span><span class="ne">RuntimeError</span><span class="p">,</span> <span class="ne">ValueError</span><span class="p">)</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
-                <span class="c1"># Keep the backend's message: it names the target, the</span>
-                <span class="c1"># observer, the frame, and the first epoch that no loaded</span>
-                <span class="c1"># kernel covers.</span>
                 <span class="k">raise</span> <span class="n">NotCovered</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">exc</span><span class="p">))</span> <span class="kn">from</span><span class="w"> </span><span class="nn">exc</span></div>
 
 
@@ -569,8 +566,6 @@
                     <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">,</span>
                 <span class="p">)</span>
             <span class="k">except</span> <span class="p">(</span><span class="ne">RuntimeError</span><span class="p">,</span> <span class="ne">ValueError</span><span class="p">)</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
-                <span class="c1"># Keep the backend's message: it names the frames and</span>
-                <span class="c1"># the first epoch that no loaded kernel covers.</span>
                 <span class="k">raise</span> <span class="n">NotCovered</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">exc</span><span class="p">))</span> <span class="kn">from</span><span class="w"> </span><span class="nn">exc</span></div>
 
 
@@ -590,8 +585,6 @@
                     <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">,</span>
                 <span class="p">)</span>
             <span class="k">except</span> <span class="p">(</span><span class="ne">RuntimeError</span><span class="p">,</span> <span class="ne">ValueError</span><span class="p">)</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
-                <span class="c1"># Keep the backend's message: it names the frames and</span>
-                <span class="c1"># the first epoch that no loaded kernel covers.</span>
                 <span class="k">raise</span> <span class="n">NotCovered</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">exc</span><span class="p">))</span> <span class="kn">from</span><span class="w"> </span><span class="nn">exc</span></div>
 
 
