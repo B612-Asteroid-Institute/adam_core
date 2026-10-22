@@ -126,41 +126,61 @@ def _arrow_array_sha256(value: pa.Array | pa.ChunkedArray) -> str:
     return _table_sha256(pa.table({"value": value}))
 
 
+_STDLIB_PUBLIC_CLASS_MODULES = {
+    "pathlib": frozenset(
+        {
+            "Path",
+            "PosixPath",
+            "PurePath",
+            "PurePosixPath",
+            "PureWindowsPath",
+            "WindowsPath",
+        }
+    )
+}
+
+
 def _named_identity(value: object, *, kind: str) -> dict[str, str]:
     """Stable public name without importing or inspecting the owning module."""
     module = _module_name(value, kind=kind)
     qualname = getattr(value, "__qualname__", None)
     if not isinstance(qualname, str) or not qualname:
         raise TypeError(f"{kind} has no reproducible qualified name")
+    # CPython 3.13 moved pathlib implementations into private submodules while
+    # preserving their public pathlib names. Provenance records the public API,
+    # not that interpreter-private relocation.
+    public_name = qualname.rsplit(".", 1)[-1]
+    if (
+        module.startswith("pathlib.")
+        and public_name in _STDLIB_PUBLIC_CLASS_MODULES["pathlib"]
+    ):
+        module = "pathlib"
+        qualname = public_name
     return {"kind": kind, "module": module, "qualname": qualname}
 
 
-def _canonical_float(value: float) -> float | dict[str, str]:
+def _canonical_float(value: float) -> str:
     if math.isnan(value):
-        return {"float": "nan"}
+        return "nan"
     if math.isinf(value):
-        return {"float": "+inf" if value > 0 else "-inf"}
+        return "+inf" if value > 0 else "-inf"
     if value == 0.0 and math.copysign(1.0, value) < 0:
-        return {"float": "-0"}
-    return value
+        return "-0"
+    # hex() is an exact, locale-independent representation and distinguishes
+    # every finite binary64 value.
+    return value.hex()
+
+
+def _tag(tag: str, **fields: Any) -> dict[str, Any]:
+    return {"tag": tag, **fields}
 
 
 def _canonical_numpy_scalar(value: np.generic) -> dict[str, Any]:
-    dtype = value.dtype.str
-    if isinstance(value, np.datetime64):
-        encoded: Any = str(value)
-    elif isinstance(value, np.timedelta64):
-        encoded = str(value)
-    elif isinstance(value, np.complexfloating):
-        encoded = {
-            "real": _canonical_float(float(value.real)),
-            "imag": _canonical_float(float(value.imag)),
-        }
-    elif isinstance(value, np.floating):
-        encoded = _canonical_float(float(value))
-    else:
-        encoded = value.item()
-    return {"dtype": dtype, "value": encoded}
+    """Exact scalar payload using the array byte-order canonicalizer."""
+    identity = _numpy_sha256(np.asarray(value))
+    # Scalar and zero-dimensional array categories remain distinct because the
+    # caller gives this payload the ``numpy-scalar`` tag.
+    return identity
 
 
 def _is_namedtuple_class(value: object) -> bool:
@@ -177,131 +197,157 @@ def _is_namedtuple_instance(value: object) -> bool:
 
 
 def _canonical_parameter(value: Any, seen: set[int]) -> Any:
-    """Canonical configuration independent of interpreter and import state."""
-    if value is None or isinstance(value, (bool, int, str)):
-        return value
+    """Injective tagged configuration independent of interpreter/import state.
+
+    User mappings are always encoded as tagged entry lists, so no mapping can
+    forge a scalar, sequence, set, array, object, or callable encoding.
+    """
+    if value is None:
+        return _tag("none")
+    if isinstance(value, bool):
+        return _tag("bool", value=value)
+    if isinstance(value, int):
+        return _tag("int", value=str(value))
+    if isinstance(value, str):
+        return _tag("str", value=value)
     if isinstance(value, float):
-        return _canonical_float(value)
+        return _tag("float64", value=_canonical_float(value))
     if isinstance(value, bytes):
-        return {"bytes_sha256": hashlib.sha256(value).hexdigest()}
+        return _tag("bytes", size=len(value), sha256=hashlib.sha256(value).hexdigest())
+    if isinstance(value, bytearray):
+        payload = bytes(value)
+        return _tag(
+            "bytearray", size=len(payload), sha256=hashlib.sha256(payload).hexdigest()
+        )
     if isinstance(value, np.generic):
-        return {"numpy_scalar": _canonical_numpy_scalar(value)}
+        return _tag("numpy-scalar", **_canonical_numpy_scalar(value))
     if isinstance(value, np.dtype):
-        return {"numpy_dtype": value.str}
+        return _tag("numpy-dtype", value=value.str)
     if isinstance(value, np.ufunc):
-        return {
-            "numpy_ufunc": value.__name__,
-            "nin": value.nin,
-            "nout": value.nout,
-        }
+        return _tag("numpy-ufunc", name=value.__name__, nin=value.nin, nout=value.nout)
     if isinstance(value, dt.datetime):
-        return {
-            "datetime": value.isoformat(timespec="microseconds"),
-            "fold": value.fold,
-        }
+        return _tag(
+            "datetime",
+            value=value.isoformat(timespec="microseconds"),
+            fold=value.fold,
+        )
     if isinstance(value, dt.date):
-        return {"date": value.isoformat()}
+        return _tag("date", value=value.isoformat())
     if isinstance(value, dt.time):
-        return {"time": value.isoformat(timespec="microseconds"), "fold": value.fold}
+        return _tag(
+            "time", value=value.isoformat(timespec="microseconds"), fold=value.fold
+        )
     if isinstance(value, dt.timedelta):
-        return {
-            "timedelta": {
-                "days": value.days,
-                "seconds": value.seconds,
-                "microseconds": value.microseconds,
-            }
-        }
+        return _tag(
+            "timedelta",
+            days=value.days,
+            seconds=value.seconds,
+            microseconds=value.microseconds,
+        )
     if isinstance(value, Path):
         if not value.is_file():
             raise ValueError(f"provenance path is not a readable file: {value}")
-        return {
-            "file_name": value.name,
-            "sha256": hashlib.sha256(value.read_bytes()).hexdigest(),
-        }
+        return _tag(
+            "file",
+            name=value.name,
+            size=value.stat().st_size,
+            sha256=hashlib.sha256(value.read_bytes()).hexdigest(),
+        )
     if isinstance(value, type) and issubclass(value, Enum):
-        return {"enum_class": _named_identity(value, kind="enum-class-v1")}
+        return _tag("enum-class", identity=_named_identity(value, kind="enum-class-v1"))
     if _is_namedtuple_class(value):
-        return {
-            "namedtuple_class": _named_identity(value, kind="namedtuple-class-v1"),
-            "fields": list(value._fields),
-        }
+        return _tag(
+            "namedtuple-class",
+            identity=_named_identity(value, kind="namedtuple-class-v1"),
+            fields=list(value._fields),
+        )
     if isinstance(value, type) and issubclass(value, np.generic):
-        return {"numpy_type": np.dtype(value).str}
+        return _tag("numpy-type", dtype=np.dtype(value).str)
     if isinstance(value, type):
-        return {"class": _named_identity(value, kind="class-v1")}
+        return _tag("class", identity=_named_identity(value, kind="class-v1"))
     if isinstance(value, Enum):
-        return {
-            "enum": _named_identity(type(value), kind="enum-class-v1"),
-            "name": value.name,
-        }
+        return _tag(
+            "enum-member",
+            identity=_named_identity(type(value), kind="enum-class-v1"),
+            name=value.name,
+        )
 
     identity = id(value)
     if identity in seen:
         raise ValueError("cyclic provenance configuration is not supported")
     if isinstance(value, np.ndarray):
-        return {"numpy": _numpy_sha256(value)}
+        return _tag("numpy-array", **_numpy_sha256(value))
     if isinstance(value, (pa.Table, qv.Table)):
-        return {"arrow_sha256": _table_sha256(value)}
+        return _tag("arrow-table", sha256=_table_sha256(value))
     if isinstance(value, (pa.Array, pa.ChunkedArray)):
-        return {"arrow_sha256": _arrow_array_sha256(value)}
+        return _tag("arrow-array", sha256=_arrow_array_sha256(value))
     if isinstance(value, functools.partial):
         seen.add(identity)
         try:
-            return {
-                "partial": {
-                    "function": _canonical_parameter(value.func, seen),
-                    "args": _canonical_parameter(value.args, seen),
-                    "keywords": _canonical_parameter(value.keywords or {}, seen),
-                    "fields": _canonical_parameter(vars(value), seen),
-                }
-            }
+            return _tag(
+                "partial",
+                function=_canonical_parameter(value.func, seen),
+                args=_canonical_parameter(value.args, seen),
+                keywords=_canonical_parameter(value.keywords or {}, seen),
+                fields=_canonical_parameter(vars(value), seen),
+            )
         finally:
             seen.remove(identity)
-    if isinstance(
-        value,
-        (
-            types.FunctionType,
-            types.BuiltinFunctionType,
-            types.BuiltinMethodType,
-            types.MethodType,
-        ),
-    ):
-        function = value.__func__ if isinstance(value, types.MethodType) else value
-        return {"callable": _named_identity(function, kind="callable-v1")}
+    if isinstance(value, (types.FunctionType, types.MethodType)):
+        raise TypeError(
+            "Python function/method provenance fields require an explicit portable "
+            "identity; encode the public choice as data and cover its science in "
+            "ModelProvenance.implementation_fingerprint"
+        )
+    if isinstance(value, (types.BuiltinFunctionType, types.BuiltinMethodType)):
+        function = getattr(value, "__func__", value)
+        return _tag(
+            "builtin-callable",
+            identity=_named_identity(function, kind="builtin-callable-v1"),
+        )
 
     seen.add(identity)
     try:
         if isinstance(value, Mapping):
-            encoded = [
-                (_canonical_parameter(key, seen), _canonical_parameter(item, seen))
+            entries = [
+                [_canonical_parameter(key, seen), _canonical_parameter(item, seen)]
                 for key, item in value.items()
             ]
-            encoded.sort(key=lambda pair: _json(pair[0]))
-            if all(isinstance(key, str) for key, _ in encoded):
-                return {key: item for key, item in encoded}
-            return {"mapping": encoded}
+            entries.sort(key=lambda pair: _json(pair[0]))
+            return _tag("mapping", entries=entries)
         if _is_namedtuple_instance(value):
-            return {
-                "namedtuple": _named_identity(type(value), kind="namedtuple-class-v1"),
-                "fields": {
-                    name: _canonical_parameter(getattr(value, name), seen)
+            return _tag(
+                "namedtuple",
+                identity=_named_identity(type(value), kind="namedtuple-class-v1"),
+                fields=[
+                    [name, _canonical_parameter(getattr(value, name), seen)]
                     for name in value._fields
-                },
-            }
-        if isinstance(value, Sequence):
-            return [_canonical_parameter(item, seen) for item in value]
+                ],
+            )
+        if isinstance(value, list):
+            return _tag(
+                "list", items=[_canonical_parameter(item, seen) for item in value]
+            )
+        if isinstance(value, tuple):
+            return _tag(
+                "tuple", items=[_canonical_parameter(item, seen) for item in value]
+            )
         if isinstance(value, (set, frozenset)):
             encoded = [_canonical_parameter(item, seen) for item in value]
-            return sorted(encoded, key=_json)
+            return _tag(
+                "frozenset" if isinstance(value, frozenset) else "set",
+                items=sorted(encoded, key=_json),
+            )
         fields = getattr(value, "__dict__", None)
         if isinstance(fields, dict):
-            return {
-                "object": _named_identity(type(value), kind="object-class-v1"),
-                "fields": {
-                    name: _canonical_parameter(item, seen)
+            return _tag(
+                "object",
+                identity=_named_identity(type(value), kind="object-class-v1"),
+                fields=[
+                    [name, _canonical_parameter(item, seen)]
                     for name, item in sorted(fields.items())
-                },
-            }
+                ],
+            )
     finally:
         seen.remove(identity)
     raise TypeError(
@@ -309,42 +355,40 @@ def _canonical_parameter(value: Any, seen: set[int]) -> Any:
     )
 
 
-def _builtin_model_classes() -> frozenset[type[Any]]:
-    from .observation_uncertainty import (
-        CompositeModel,
-        EFCC18DebiasModel,
-        EmpiricalCovarianceModel,
-        IdentityModel,
-        NightBatchDeweightingModel,
-        PerformanceWeightedModel,
-        SigmaFloorModel,
-    )
-    from .veres2017 import SigmaFillModel, VeresFloorModel, VeresReplaceModel
+def _builtin_behavior_registry() -> dict[type[Any], dict[str, object]]:
+    from .observation_uncertainty import _PROVENANCE_BEHAVIOR_METHODS as core
+    from .veres2017 import _PROVENANCE_BEHAVIOR_METHODS as veres
 
-    return frozenset(
-        {
-            IdentityModel,
-            EmpiricalCovarianceModel,
-            PerformanceWeightedModel,
-            SigmaFloorModel,
-            NightBatchDeweightingModel,
-            EFCC18DebiasModel,
-            CompositeModel,
-            VeresFloorModel,
-            VeresReplaceModel,
-            SigmaFillModel,
-        }
-    )
+    return {**core, **veres}
+
+
+def _static_class_member(cls: type[Any], name: str) -> object | None:
+    for owner in cls.__mro__:
+        if name in vars(owner):
+            return vars(owner)[name]
+    return None
 
 
 def _is_builtin_model(model: object) -> bool:
-    """Only exact shipped classes with no per-instance apply override are built-ins."""
+    """Whether all behavior-affecting hooks are the shipped function objects."""
     cls = type(model)
+    expected = _builtin_behavior_registry().get(cls)
+    if expected is None:
+        return False
+    for name, function in expected.items():
+        if _static_class_member(cls, name) is not function:
+            return False
     try:
         fields = vars(model)
     except TypeError:
         fields = {}
-    return cls in _builtin_model_classes() and "apply" not in fields
+    # A per-instance behavior/routing hook is custom even when it is not
+    # callable (for example, replacing _native_specs with None). More broadly,
+    # no instance callable may shadow a class member under a built-in identity.
+    for name, value in fields.items():
+        if name in expected or callable(value):
+            return False
+    return True
 
 
 def _validated_build_identity() -> tuple[str, str]:
@@ -394,8 +438,16 @@ def _model_fields(model: object, build_identity: tuple[str, str]) -> dict[str, A
 
 
 def _custom_contract(model: object) -> ModelProvenance:
-    hook = getattr(model, "model_provenance", None)
+    from .observation_uncertainty import ObservationUncertaintyModel
+
     cls = type(model)
+    if not isinstance(model, ObservationUncertaintyModel):
+        raise TypeError(
+            f"custom observation model {getattr(cls, '__module__', '<unknown>')}."
+            f"{getattr(cls, '__qualname__', cls.__name__)} must subclass "
+            "ObservationUncertaintyModel"
+        )
+    hook = getattr(model, "model_provenance", None)
     name = f"{getattr(cls, '__module__', '<unknown>')}.{getattr(cls, '__qualname__', cls.__name__)}"
     if not callable(hook):
         raise TypeError(
@@ -537,60 +589,105 @@ class _ProvenancePreflight:
     models: str
 
 
-def _relevant_untracked_source() -> tuple[str, ...]:
-    """Git-visible untracked source in a development checkout.
+def _runtime_source_path(path: str) -> bool:
+    if path.startswith("src/adam_core/"):
+        relative = path.removeprefix("src/adam_core/")
+        parts = relative.split("/")
+        return (
+            "tests" not in parts
+            and "__pycache__" not in parts
+            and relative != "_version.py"
+            and not relative.startswith("_rust_native")
+        )
+    return path.startswith("rust/") and (
+        "/src/" in path or path.endswith("/Cargo.toml") or path.endswith("/build.rs")
+    )
 
-    Cargo cannot watch for arbitrary new files without recursively watching
-    package directories (which creates a rebuild loop on ignored generated
-    artifacts). Exact tracked files remain Cargo inputs; this runtime preflight
-    closes the new-untracked-file gap for source-checkout OD runs. Release
-    builds re-run on their environment change and enforce the same check in
-    ``build.rs``.
-    """
-    repo = Path(__file__).resolve().parents[3]
-    if not (repo / ".git").exists():
-        return ()
+
+def _git_output(repo: Path, arguments: list[str]) -> bytes:
     try:
-        output = subprocess.run(
-            [
-                "git",
-                "-c",
-                f"safe.directory={repo}",
-                "ls-files",
-                "--others",
-                "--exclude-standard",
-                "-z",
-                "--",
-                "src/adam_core",
-                "rust",
-            ],
+        return subprocess.run(
+            ["git", "-c", f"safe.directory={repo}", *arguments],
             cwd=repo,
             check=True,
             capture_output=True,
         ).stdout
     except (OSError, subprocess.CalledProcessError) as error:
         raise RuntimeError("cannot verify development source provenance") from error
-    relevant = []
+
+
+def _decode_git_paths(output: bytes) -> set[str]:
+    paths: set[str] = set()
     for raw in output.split(b"\0"):
         if not raw:
             continue
         try:
-            path = raw.decode("utf-8")
+            paths.add(raw.decode("utf-8"))
         except UnicodeDecodeError as error:
-            raise RuntimeError("untracked source path is not valid UTF-8") from error
-        if (
-            path.startswith("src/adam_core/")
-            and "/tests/" not in path
-            and path.endswith(".py")
-        ):
-            relevant.append(path)
-        elif path.startswith("rust/") and (
-            "/src/" in path
-            or path.endswith("/Cargo.toml")
-            or path.endswith("/build.rs")
-        ):
-            relevant.append(path)
-    return tuple(sorted(relevant))
+            raise RuntimeError("source path is not valid UTF-8") from error
+    return paths
+
+
+def _source_checkout_problems(
+    build_commit: str, *, repo: Path | None = None
+) -> tuple[str, ...]:
+    """Return reproducibility failures for an executing Git source checkout.
+
+    Installed wheels have no enclosing Core ``.git`` and rely solely on their
+    embedded release identity. In a checkout, HEAD, tracked/staged runtime
+    source, visible untracked Rust source, and *every* importable package
+    Python file (including gitignored files) are verified before user work.
+    """
+    repo = (repo or Path(__file__).resolve().parents[3]).resolve()
+    if not (repo / ".git").exists():
+        return ()
+    actual = _git_output(repo, ["rev-parse", "HEAD"]).decode("ascii").strip()
+    problems: list[str] = []
+    if actual != build_commit:
+        problems.append(
+            f"checkout HEAD {actual!r} does not match native build commit {build_commit!r}"
+        )
+
+    modified = _decode_git_paths(
+        _git_output(
+            repo,
+            ["diff", "--name-only", "-z", "HEAD", "--", "src/adam_core", "rust"],
+        )
+    )
+    problems.extend(
+        f"tracked/staged source modification: {path}"
+        for path in sorted(path for path in modified if _runtime_source_path(path))
+    )
+
+    tracked = _decode_git_paths(
+        _git_output(repo, ["ls-files", "-z", "--", "src/adam_core", "rust"])
+    )
+    package = repo / "src" / "adam_core"
+    if package.is_dir():
+        for candidate in package.rglob("*.py"):
+            relative = candidate.relative_to(repo).as_posix()
+            if _runtime_source_path(relative) and relative not in tracked:
+                problems.append(f"untracked package Python source: {relative}")
+
+    rust = repo / "rust"
+    if rust.is_dir():
+        for candidate in rust.rglob("*"):
+            if not candidate.is_file():
+                continue
+            relative = candidate.relative_to(repo).as_posix()
+            if _runtime_source_path(relative) and relative not in tracked:
+                problems.append(f"untracked Rust source: {relative}")
+    return tuple(dict.fromkeys(problems))
+
+
+def _relevant_untracked_source() -> tuple[str, ...]:
+    """Backward-compatible detail used by older diagnostics/tests."""
+    _, build_commit = _validated_build_identity()
+    return tuple(
+        problem.split(": ", 1)[-1]
+        for problem in _source_checkout_problems(build_commit)
+        if problem.startswith(("untracked package Python", "untracked Rust"))
+    )
 
 
 def _preflight_provenance(
@@ -602,11 +699,11 @@ def _preflight_provenance(
     # Build/source validation comes first and performs no user-model work. The
     # validated identity is then reused for every shipped model descriptor.
     build_version, build_commit = _validated_build_identity()
-    untracked = _relevant_untracked_source()
-    if untracked:
+    source_problems = _source_checkout_problems(build_commit)
+    if source_problems:
         raise RuntimeError(
-            "native adam-core build identity cannot cover untracked source: "
-            + ", ".join(untracked)
+            "native adam-core build identity cannot cover executing source checkout: "
+            + "; ".join(source_problems)
         )
 
     settings: Optional[str] = None

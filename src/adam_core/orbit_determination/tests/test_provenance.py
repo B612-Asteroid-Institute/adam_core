@@ -16,6 +16,7 @@ from adam_core.orbit_determination import (
     OdProvenance,
 )
 from adam_core.orbit_determination.observation_uncertainty import (
+    ObservationUncertaintyModel,
     PerformanceWeightedModel,
 )
 from adam_core.orbit_determination.od_orchestration import run_od
@@ -37,10 +38,13 @@ from adam_core.orbit_determination.tests.test_observation_uncertainty import (
 _TEST_IMPLEMENTATION = "1" * 64
 
 
-class _ExplicitModel:
+class _ExplicitModel(ObservationUncertaintyModel):
     """Test helper implementing the public custom-model contract."""
 
     implementation_fingerprint = _TEST_IMPLEMENTATION
+
+    def apply(self, observations):
+        return observations
 
     def model_provenance(self):
         return ModelProvenance(
@@ -371,7 +375,8 @@ def test_custom_descriptor_is_stable_across_hash_seed_and_import_order(tmp_path)
     module_path = tmp_path / "seed_model.py"
     module_path.write_text(
         "from adam_core.orbit_determination import ModelProvenance\n"
-        "class Model:\n"
+        "from adam_core.orbit_determination.observation_uncertainty import ObservationUncertaintyModel\n"
+        "class Model(ObservationUncertaintyModel):\n"
         "    def __init__(self):\n"
         "        self.excluded = {'V', 'a', 'b', 'c'}\n"
         "    def apply(self, observations):\n"
@@ -476,7 +481,7 @@ def test_custom_fingerprint_is_the_implementation_identity():
 
 
 def test_custom_contract_is_validated_exactly():
-    class Model:
+    class Model(ObservationUncertaintyModel):
         def __init__(self, contract):
             self.contract = contract
 
@@ -524,9 +529,6 @@ def test_common_configuration_values_are_portable_and_distinct(tmp_path):
     Pair = namedtuple("Pair", "left right")
     OtherPair = namedtuple("OtherPair", "left right")
 
-    def helper(value, *, scale=1):
-        return value * scale
-
     path = tmp_path / "configuration.dat"
     path.write_text("content", encoding="utf-8")
 
@@ -556,7 +558,7 @@ def test_common_configuration_values_are_portable_and_distinct(tmp_path):
         "namedtuple": Pair(1, 2),
         "enum_class": Mode,
         "enum": Mode.FIRST,
-        "partial": functools.partial(helper, 3, scale=4),
+        "partial": functools.partial(sorted, [3, 1], reverse=True),
         "nested_class": Nested,
         "nested": Nested(7),
         "path": path,
@@ -578,8 +580,8 @@ def test_common_configuration_values_are_portable_and_distinct(tmp_path):
         {**configuration, "namedtuple": (1, 2)},
         {**configuration, "enum_class": OtherMode},
         {**configuration, "enum": Mode.SECOND},
-        {**configuration, "partial": functools.partial(helper, 4, scale=4)},
-        {**configuration, "partial": functools.partial(helper, 3, scale=5)},
+        {**configuration, "partial": functools.partial(sorted, [4, 1], reverse=True)},
+        {**configuration, "partial": functools.partial(sorted, [3, 1], reverse=False)},
         {**configuration, "nested_class": OtherNested},
         {**configuration, "nested": OtherNested(7)},
     ]
@@ -699,7 +701,7 @@ def test_preflight_describes_contract_before_apply_or_fit():
     contract_calls = 0
     fit_calls = 0
 
-    class Model:
+    class Model(ObservationUncertaintyModel):
         def apply(self, observations):
             nonlocal apply_calls
             apply_calls += 1
@@ -770,9 +772,213 @@ def test_runtime_untracked_source_guard_precedes_models(monkeypatch):
 
     monkeypatch.setattr(
         provenance,
-        "_relevant_untracked_source",
-        lambda: ("src/adam_core/relevant_untracked.py",),
+        "_source_checkout_problems",
+        lambda build_commit: (
+            "untracked package Python source: src/adam_core/relevant_untracked.py",
+        ),
     )
     with pytest.raises(RuntimeError, match="relevant_untracked.py"):
         provenance._preflight_provenance(object(), [Model()])
     assert contract_calls == 0
+
+
+def test_builtin_behavior_overrides_and_nested_overrides_require_contract(monkeypatch):
+    from adam_core.orbit_determination.observation_uncertainty import (
+        CompositeModel,
+        NightBatchDeweightingModel,
+    )
+
+    instance = NightBatchDeweightingModel(cap=2)
+    instance._native_specs = lambda: [{"model": "night_batch", "cap": 8}]
+    with pytest.raises(TypeError, match="model_provenance"):
+        model_descriptor(instance)
+    with pytest.raises(TypeError, match="model_provenance"):
+        model_descriptor(CompositeModel(instance))
+
+    monkeypatch.setattr(
+        NightBatchDeweightingModel,
+        "_native_specs",
+        lambda self: [{"model": "night_batch", "cap": 1}],
+    )
+    with pytest.raises(TypeError, match="model_provenance"):
+        model_descriptor(NightBatchDeweightingModel(cap=2))
+
+
+def test_nested_custom_model_contract_is_recursive_and_sensitive():
+    from adam_core.orbit_determination.observation_uncertainty import CompositeModel
+
+    class Custom(_ExplicitModel):
+        def __init__(self, fingerprint, scale):
+            self.implementation_fingerprint = fingerprint
+            self.scale = scale
+
+    first = model_descriptor(CompositeModel(Custom("1" * 64, 2)))
+    science = model_descriptor(CompositeModel(Custom("2" * 64, 2)))
+    config = model_descriptor(CompositeModel(Custom("1" * 64, 3)))
+    nested = first["models"][0]
+    assert nested["implementation"]["implementation_fingerprint"] == "1" * 64
+    assert first["descriptor_sha256"] != science["descriptor_sha256"]
+    assert first["descriptor_sha256"] != config["descriptor_sha256"]
+
+
+def test_canonical_configuration_is_injective_and_user_mappings_cannot_forge_tags():
+    class Model(_ExplicitModel):
+        def __init__(self, configuration):
+            self.configuration = configuration
+
+    values = [
+        [1, 2],
+        (1, 2),
+        {1, 2},
+        frozenset({1, 2}),
+        float("nan"),
+        {"tag": "float64", "value": "nan"},
+        np.dtype("<f8"),
+        {"tag": "numpy-dtype", "value": "<f8"},
+        {1: 2},
+        {"tag": "mapping", "entries": [[1, 2]]},
+    ]
+    hashes = [
+        model_descriptor(Model({"value": value}))["descriptor_sha256"]
+        for value in values
+    ]
+    assert len(set(hashes)) == len(hashes)
+
+
+def test_python_callable_configuration_requires_explicit_portable_data():
+    class Model(_ExplicitModel):
+        def __init__(self, function):
+            self.function = function
+
+    with pytest.raises(TypeError, match="explicit portable identity"):
+        model_descriptor(Model(lambda value: value))
+
+
+def test_public_pathlib_class_identity_is_normalized_across_private_relocation():
+    from pathlib import PurePosixPath
+
+    from adam_core.orbit_determination.provenance import _named_identity
+
+    relocated = type("PurePosixPath", (), {})
+    relocated.__module__ = "pathlib._local"
+    assert _named_identity(relocated, kind="class-v1") == _named_identity(
+        PurePosixPath, kind="class-v1"
+    )
+
+
+def test_contracted_moduleless_model_is_rejected():
+    class Model(_ExplicitModel):
+        pass
+
+    Model.__module__ = None
+    with pytest.raises(TypeError, match="module identity"):
+        model_descriptor(Model())
+
+
+def test_real_git_source_checkout_detector_is_fail_closed(tmp_path):
+    from adam_core.orbit_determination.provenance import _source_checkout_problems
+
+    repo = tmp_path / "checkout"
+    (repo / "src/adam_core/orbit_determination").mkdir(parents=True)
+    (repo / "rust/example/src").mkdir(parents=True)
+    (repo / "src/adam_core/runtime.py").write_text("VALUE = 1\n")
+    (repo / "src/adam_core/_version.py").write_text("__version__ = '0'\n")
+    (repo / "rust/example/src/lib.rs").write_text("pub fn value() -> u8 { 1 }\n")
+    (repo / ".gitignore").write_text("lib/\n*_version.py\nignored.rs\n")
+    subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
+    subprocess.run(
+        ["git", "config", "user.email", "test@example.invalid"], cwd=repo, check=True
+    )
+    subprocess.run(["git", "config", "user.name", "Test"], cwd=repo, check=True)
+    subprocess.run(["git", "add", "."], cwd=repo, check=True)
+    subprocess.run(["git", "commit", "-qm", "initial"], cwd=repo, check=True)
+    head = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=repo,
+        check=True,
+        text=True,
+        capture_output=True,
+    ).stdout.strip()
+    assert _source_checkout_problems(head, repo=repo) == ()
+
+    runtime = repo / "src/adam_core/runtime.py"
+    runtime.write_text("VALUE = 2\n")
+    assert any(
+        "tracked/staged" in item for item in _source_checkout_problems(head, repo=repo)
+    )
+    subprocess.run(["git", "add", str(runtime)], cwd=repo, check=True)
+    assert any(
+        "tracked/staged" in item for item in _source_checkout_problems(head, repo=repo)
+    )
+    subprocess.run(["git", "reset", "--hard", "-q", "HEAD"], cwd=repo, check=True)
+    assert _source_checkout_problems(head, repo=repo) == ()
+
+    visible = repo / "src/adam_core/visible.py"
+    visible.write_text("VALUE = 3\n")
+    assert any(
+        "visible.py" in item for item in _source_checkout_problems(head, repo=repo)
+    )
+    visible.unlink()
+    ignored = repo / "src/adam_core/orbit_determination/lib/override.py"
+    ignored.parent.mkdir(parents=True)
+    ignored.write_text("VALUE = 4\n")
+    assert any(
+        "lib/override.py" in item for item in _source_checkout_problems(head, repo=repo)
+    )
+    ignored.unlink()
+    ignored_version = repo / "src/adam_core/model_version.py"
+    ignored_version.write_text("VALUE = 5\n")
+    assert any(
+        "model_version.py" in item
+        for item in _source_checkout_problems(head, repo=repo)
+    )
+    ignored_version.unlink()
+    ignored_rust = repo / "rust/example/src/ignored.rs"
+    ignored_rust.write_text("pub fn ignored() {}\n")
+    subprocess.run(
+        ["git", "check-ignore", "-q", str(ignored_rust)], cwd=repo, check=True
+    )
+    assert any(
+        "ignored.rs" in item for item in _source_checkout_problems(head, repo=repo)
+    )
+    ignored_rust.unlink()
+    assert _source_checkout_problems(head, repo=repo) == ()
+
+    (repo / "README.md").write_text("next\n")
+    subprocess.run(["git", "add", "README.md"], cwd=repo, check=True)
+    subprocess.run(["git", "commit", "-qm", "move head"], cwd=repo, check=True)
+    assert any(
+        "does not match" in item for item in _source_checkout_problems(head, repo=repo)
+    )
+
+    installed = tmp_path / "installed-wheel"
+    installed.mkdir()
+    assert _source_checkout_problems(head, repo=installed) == ()
+
+
+def test_documented_custom_model_examples_are_executable_verbatim():
+    repository = Path(__file__).resolve().parents[4]
+
+    guide = (repository / "docs/source/use_cases/orbit_determination.rst").read_text()
+    guide_start = guide.index(
+        "   from adam_core.orbit_determination import ModelProvenance"
+    )
+    guide_end = guide.index("\n\nThe provider owns", guide_start)
+    guide_code = "\n".join(
+        line[3:] if line.startswith("   ") else line
+        for line in guide[guide_start:guide_end].splitlines()
+    )
+    guide_namespace: dict[str, object] = {}
+    exec(guide_code, guide_namespace)
+    guide_model = guide_namespace["MyModel"]()
+    marker = object()
+    assert guide_model.apply(marker) is marker
+    assert guide_model.model_provenance().package == "my-od-models"
+
+    migration = (repository / "migration/custom_model_provenance.md").read_text()
+    migration_code = migration.split("```python\n", 1)[1].split("\n```", 1)[0]
+    migration_namespace: dict[str, object] = {}
+    exec(migration_code, migration_namespace)
+    migration_model = migration_namespace["CalibratedModel"](1.5)
+    assert migration_model.apply(marker) is marker
+    assert migration_model.model_provenance().configuration == {"scale": 1.5}

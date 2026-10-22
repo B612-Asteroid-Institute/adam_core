@@ -437,3 +437,20 @@ class SigmaFillModel(_VeresSigmaModel):
 
     _MODEL = "fill"
     _DEFAULT_TABLE = V2_SIGMA_FILL_TABLE
+
+
+def _capture_provenance_behavior(cls: type) -> dict[str, object]:
+    """Capture shipped routing functions before callers can monkeypatch them."""
+    captured: dict[str, object] = {}
+    for name in ("apply", "_native_specs"):
+        for owner in cls.__mro__:
+            if name in vars(owner):
+                captured[name] = vars(owner)[name]
+                break
+    return captured
+
+
+_PROVENANCE_BEHAVIOR_METHODS = {
+    cls: _capture_provenance_behavior(cls)
+    for cls in (VeresFloorModel, VeresReplaceModel, SigmaFillModel)
+}

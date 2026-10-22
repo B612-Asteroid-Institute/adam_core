@@ -39,7 +39,11 @@ class ModelProvenance:
 
 @runtime_checkable
 class ProvenancedModel(Protocol):
-    """Structural hook required for custom observation models used by run_od."""
+    """Structural provenance hook implemented by custom observation models.
+
+    This protocol describes only the provenance facet. A model accepted by
+    ``run_od`` must also subclass ``ObservationUncertaintyModel``.
+    """
 
     def model_provenance(self) -> ModelProvenance:
         """Return this model instance's explicit immutable provenance."""

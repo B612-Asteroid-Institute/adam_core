@@ -227,12 +227,16 @@ They do not hash Python source trees, bytecode, interpreter versions, loaded
 modules, or import history.
 
 A custom model (including a subclass of a shipped model or a shipped instance
-with ``apply`` replaced) must implement the typed ``ProvenancedModel`` hook and
-return an immutable ``ModelProvenance``::
+with any behavior/routing hook replaced) must subclass
+``ObservationUncertaintyModel``, implement the typed ``ProvenancedModel``
+provenance hook, and return an immutable ``ModelProvenance``::
 
    from adam_core.orbit_determination import ModelProvenance
+   from adam_core.orbit_determination.observation_uncertainty import (
+       ObservationUncertaintyModel,
+   )
 
-   class MyModel:
+   class MyModel(ObservationUncertaintyModel):
        def apply(self, observations):
            return observations
 
@@ -246,9 +250,12 @@ return an immutable ``ModelProvenance``::
 
 The provider owns the lowercase 64-hex implementation/content fingerprint and
 must change it whenever science-affecting code changes. The configuration must
-be complete; adam-core canonicalizes mappings, sets, NumPy arrays/scalars/types
-and ufuncs, Arrow tables, dates/times, named tuples, enum classes/members,
-partials (including keywords), nested classes/objects and file content.
+be complete; adam-core uses explicit injective tags for scalars, mappings,
+lists, tuples, sets/frozensets, NumPy arrays/scalars/types and ufuncs, Arrow
+tables, dates/times, named tuples, enum classes/members, supported public
+built-in callables/partials, nested classes/objects and file content. Python
+functions/methods in configuration are rejected: encode their public choice as
+data and cover implementation science in ``implementation_fingerprint``.
 Absolute paths are not recorded. There is no inferred or fabricated fallback:
 missing/malformed contracts, unsupported fields, and uncontracted
 ``__main__``/dynamic/sourceless models raise ``TypeError`` before ``apply`` or
@@ -258,15 +265,21 @@ The native build identity must be one exact clean 40-hex Core commit.
 ``run_od`` refuses ``dirty:<commit>`` and ``unknown`` identities before work;
 this is intentional, because otherwise its run-level provenance would claim a
 source tree it cannot reproduce. Use an official wheel or rebuild from a clean
-checkout. Bare Cargo builds track Git refs and exact tracked inputs; Cargo
-cannot watch a nonexistent-file inventory or arbitrary new files without a
-rebuild loop, so source-overlay ``run_od`` independently refuses relevant
-untracked Python/Rust runtime source. The release/wheel workflow first runs
-``wheel-version``, which creates and validates the narrow source inventory. A
-release build without Git must set both ``ADAM_CORE_RELEASE_BUILD=1`` and
-``ADAM_CORE_BUILD_COMMIT=<40-hex-commit>``. Build artifacts (for example
-``wheelhouse/``), tests, caches, and the separately pinned nested
-``adam-assist/`` checkout are outside that inventory.
+checkout. In a source overlay, ``run_od`` verifies that checkout ``HEAD`` equals
+the embedded native commit, rejects tracked/staged runtime-source edits, and
+enumerates every importable package ``.py`` file directly (including ignored
+files). Only generated ``_version.py`` and native-extension artifacts are
+excluded. Installed wheels have no checkout and use their embedded exact
+identity.
+
+Bare Cargo builds track Git refs and exact tracked inputs without watching a
+missing sentinel, so repeated developer checks can remain ``Fresh``. Every
+official release wheel is instead built by
+``migration/scripts/build_release_wheel.py``. That wrapper writes a unique
+per-invocation nonce and full source digest immediately before Cargo, Cargo
+validates both, and the wheel checker compares every packaged Python file and
+hash with the packaged attestation. Direct release ``maturin build`` is not a
+supported release path.
 
 Kept as options but not defaults: ``loss="huber"`` (open covariance pathology
 on short arcs), ``VeresFloorModel`` / ``VeresReplaceModel``, ``SigmaFloorModel``
@@ -519,8 +532,11 @@ position/velocity units. A corrected-IOD correction fit, including its whole-obs
 stage, is still an intermediate seed for final refinement and may be rank
 deficient: only its finite state and objective warm-start the next wider stage
 or final refinement, and its covariance is neither reused nor reported.
-``run_od`` final refinement recomputes and validates the reportable covariance;
-a direct ``run_iod`` seed has no covariance when that intermediate gate fails.
+``run_od`` final refinement recomputes and validates the reportable covariance.
+``run_iod`` seeds are always state-only. A finite symmetric positive-definite
+intermediate covariance that fails only the reportable numerical-rank floor is
+retained privately for multiple-solution comparison; it is never exposed or
+reused as a seed.
 
 CMC2003 alone applies the stricter conditioning threshold and probes the
 selected-mask covariance along its weakest direction after every refit,

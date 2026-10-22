@@ -267,7 +267,7 @@ def test_two_distinct_epoch_arcs_are_refused_on_all_routes():
 
 
 def test_model_descriptor_numpy_variants():
-    class ArrayModel:
+    class ArrayModel(ObservationUncertaintyModel):
         def __init__(self, values):
             self.values = values
 

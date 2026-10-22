@@ -1,4 +1,6 @@
-use std::path::PathBuf;
+use sha2::{Digest, Sha256};
+use std::collections::BTreeSet;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 fn git_commit(repo: &PathBuf) -> Option<String> {
@@ -92,14 +94,14 @@ fn git_dirty(repo: &PathBuf) -> Option<bool> {
     relevant_untracked_files(repo).map(|paths| !paths.is_empty())
 }
 
-fn source_inventory_path(repo: &PathBuf) -> Option<PathBuf> {
+fn release_attestation_path(repo: &PathBuf) -> Option<PathBuf> {
     let output = Command::new("git")
         .args([
             "-c",
             &format!("safe.directory={}", repo.display()),
             "rev-parse",
             "--git-path",
-            "adam-core-source-inventory",
+            "adam-core-release-attestation",
         ])
         .current_dir(repo)
         .output()
@@ -118,10 +120,145 @@ fn source_inventory_path(repo: &PathBuf) -> Option<PathBuf> {
     }
 }
 
-fn emit_source_inventory_watch(repo: &PathBuf) {
-    if let Some(path) = source_inventory_path(repo).filter(|path| path.is_file()) {
-        println!("cargo:rerun-if-changed={}", path.display());
+fn update_inventory_digest(digest: &mut Sha256, relative: &str, payload: &[u8]) {
+    let encoded = relative.as_bytes();
+    digest.update((encoded.len() as u64).to_be_bytes());
+    digest.update(encoded);
+    digest.update((payload.len() as u64).to_be_bytes());
+    digest.update(payload);
+}
+
+fn source_python_files(root: &Path, repo: &Path) -> BTreeSet<String> {
+    fn visit(directory: &Path, repo: &Path, output: &mut BTreeSet<String>) {
+        let Ok(entries) = std::fs::read_dir(directory) else {
+            return;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                if path.file_name().and_then(|name| name.to_str()) != Some("__pycache__") {
+                    visit(&path, repo, output);
+                }
+            } else if path.extension().and_then(|value| value.to_str()) == Some("py") {
+                let Ok(relative) = path.strip_prefix(repo) else {
+                    continue;
+                };
+                let value = relative.to_string_lossy().replace('\\', "/");
+                if !value.split('/').any(|component| component == "tests")
+                    && !path
+                        .file_name()
+                        .and_then(|name| name.to_str())
+                        .is_some_and(|name| name.starts_with("test_"))
+                {
+                    output.insert(value);
+                }
+            }
+        }
     }
+    let mut output = BTreeSet::new();
+    visit(root, repo, &mut output);
+    output
+}
+
+fn validate_release_attestation(repo: &PathBuf, commit: &str) {
+    let digest_env = std::env::var("ADAM_CORE_RELEASE_INVENTORY_DIGEST").expect(
+        "release builds require ADAM_CORE_RELEASE_INVENTORY_DIGEST from the audited wrapper",
+    );
+    let nonce_env = std::env::var("ADAM_CORE_RELEASE_INVENTORY_NONCE").expect(
+        "release builds require ADAM_CORE_RELEASE_INVENTORY_NONCE from the audited wrapper",
+    );
+    assert!(
+        digest_env.len() == 64 && digest_env.bytes().all(|byte| byte.is_ascii_hexdigit()),
+        "release inventory digest must be 64 hexadecimal characters"
+    );
+    assert!(
+        nonce_env.len() == 64 && nonce_env.bytes().all(|byte| byte.is_ascii_hexdigit()),
+        "release inventory nonce must be 64 hexadecimal characters"
+    );
+    let path = release_attestation_path(repo)
+        .expect("release builds require a Git checkout and per-invocation attestation");
+    let raw = std::fs::read_to_string(&path)
+        .expect("release builds require a readable per-invocation attestation");
+    let mut lines = raw.lines();
+    assert_eq!(
+        lines.next(),
+        Some("adam-core-release-inventory-v2"),
+        "unsupported release inventory format"
+    );
+    let attested_commit = lines
+        .next()
+        .and_then(|line| line.strip_prefix("commit="))
+        .expect("release inventory is missing commit");
+    let attested_nonce = lines
+        .next()
+        .and_then(|line| line.strip_prefix("nonce="))
+        .expect("release inventory is missing nonce");
+    let attested_digest = lines
+        .next()
+        .and_then(|line| line.strip_prefix("digest="))
+        .expect("release inventory is missing digest");
+    assert_eq!(attested_commit, commit, "release inventory commit is stale");
+    assert_eq!(
+        attested_nonce, nonce_env,
+        "release inventory nonce is stale"
+    );
+    assert_eq!(
+        attested_digest, digest_env,
+        "release inventory digest environment is stale"
+    );
+    let files: Vec<String> = lines
+        .map(|line| {
+            line.strip_prefix("file=")
+                .expect("release inventory contains a malformed file entry")
+                .to_owned()
+        })
+        .collect();
+    let mut sorted = files.clone();
+    sorted.sort();
+    sorted.dedup();
+    assert_eq!(
+        files, sorted,
+        "release inventory files must be unique and sorted"
+    );
+
+    let mut digest = Sha256::new();
+    digest.update(b"adam-core-release-inventory-v2\0");
+    for relative in &files {
+        let payload = std::fs::read(repo.join(relative))
+            .unwrap_or_else(|_| panic!("release inventory source is missing: {relative}"));
+        update_inventory_digest(&mut digest, relative, &payload);
+    }
+    let actual = format!("{:x}", digest.finalize());
+    assert_eq!(
+        actual, digest_env,
+        "release inventory source digest is stale"
+    );
+
+    let expected_python: BTreeSet<String> = files
+        .iter()
+        .filter(|path| {
+            path.starts_with("src/adam_core/")
+                && path.ends_with(".py")
+                && !path.split('/').any(|component| component == "tests")
+                && !Path::new(path)
+                    .file_name()
+                    .and_then(|name| name.to_str())
+                    .is_some_and(|name| name.starts_with("test_"))
+        })
+        .cloned()
+        .collect();
+    let actual_python = source_python_files(&repo.join("src/adam_core"), repo);
+    assert_eq!(
+        actual_python, expected_python,
+        "release package Python file set is stale or contains untracked source"
+    );
+    // A release attestation is single-use. Removing the watched file makes a
+    // direct second release invocation rerun this script and fail closed;
+    // the audited wrapper always creates a fresh nonce and file first. This
+    // release-only missing sentinel never affects bare developer Cargo builds.
+    println!("cargo:rerun-if-changed={}", path.display());
+    std::fs::remove_file(&path)
+        .expect("release attestation could not be consumed after validation");
 }
 
 fn emit_git_path_watch(repo: &PathBuf, git_path: &str) {
@@ -221,37 +358,11 @@ fn main() {
             }
         }
     }
-    // The wheel-version pre-step refreshes this narrow inventory only when
-    // relevant new runtime source changes. Watch it only when it exists:
-    // Cargo treats a missing watched file as perpetually changed. Bare native
-    // builds intentionally rely on tracked inputs plus runtime source-checkout
-    // preflight; release builds require the generated inventory below.
-    let source_inventory = source_inventory_path(&repo);
     if std::env::var_os("ADAM_CORE_RELEASE_BUILD").is_some() {
-        // A Git checkout has an inventory path and must have run the release
-        // pre-step. A source archive without Git has no untracked-file concept
-        // and is instead authenticated by ADAM_CORE_BUILD_COMMIT above.
-        if let Some(path) = source_inventory.as_ref() {
-            assert!(
-                path.is_file(),
-                "release artifacts require the generated adam-core source inventory"
-            );
-            let expected = format!(
-                "source-inventory-v1\n{}{}",
-                relevant_untracked_files(&repo)
-                    .expect("release artifacts require a verifiable source inventory")
-                    .join("\n"),
-                "\n"
-            );
-            let actual = std::fs::read_to_string(path)
-                .expect("release artifacts require a readable adam-core source inventory");
-            assert_eq!(
-                actual, expected,
-                "release adam-core source inventory is stale; run wheel-version before building"
-            );
-        }
+        validate_release_attestation(&repo, &commit);
     }
-    emit_source_inventory_watch(&repo);
+    println!("cargo:rerun-if-env-changed=ADAM_CORE_RELEASE_INVENTORY_DIGEST");
+    println!("cargo:rerun-if-env-changed=ADAM_CORE_RELEASE_INVENTORY_NONCE");
 
     // The index detects staged paths and the current branch ref detects a
     // commit even though `.git/HEAD` still contains the same symbolic name.

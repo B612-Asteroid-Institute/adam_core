@@ -31,3 +31,6 @@ ureq = { version = "2.12", default-features = false, features = ["tls"] }
 adam_core_rs_coords = { version = "=0.7.0", path = "../adam_core_rs_coords" }
 adam_core_rs_orbit_determination = { version = "=0.7.0", path = "../adam_core_rs_orbit_determination" }
 adam_core_rs_spice = { version = "=0.7.0", path = "../adam_core_rs_spice" }
+
+[build-dependencies]
+sha2 = "0.10"

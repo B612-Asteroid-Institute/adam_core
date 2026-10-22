@@ -35,8 +35,12 @@ This file contains notable changes in adam-core
   its largest mode, far below CMC's separate ``1e-12`` conditioning gate.
   Corrected-IOD correction stages, including the whole-observation-arc stage,
   may retain only a finite state/objective as the next seed when their
-  intermediate covariance is rank deficient; that covariance is dropped, and
-  final ``run_od`` refinement recomputes and validates reportable covariance.
+  intermediate covariance is rank deficient; it is never exposed or reused as
+  a seed, and final ``run_od`` refinement recomputes and validates reportable
+  covariance. A finite symmetric positive-definite intermediate covariance
+  that fails only the reportable rank floor remains private for truthful IOD
+  ambiguity comparison. Covariance failure no longer erases a pre-existing
+  solver non-convergence status.
   Bounded triplet-search priorities
   now use millisecond-resolution keys, preventing
   external equivalent labels within the documented TT/TDB model difference
@@ -48,9 +52,10 @@ This file contains notable changes in adam-core
   plus stable class/entrypoint names and canonical configuration/data hashes;
   they do not inspect source closures, bytecode, interpreter versions, loaded
   modules, or import history. **Breaking custom-model migration:** external and
-  user-defined models (including subclasses and instance-overridden ``apply``)
-  must return the frozen public ``ModelProvenance`` contract from
-  ``model_provenance()``: package, version, a lowercase 64-hex
+  user-defined models (including subclasses and any instance/class behavior or
+  routing override) must subclass ``ObservationUncertaintyModel`` and return
+  the frozen public ``ModelProvenance`` contract from ``model_provenance()``:
+  package, version, a lowercase 64-hex
   implementation/content fingerprint, and complete configuration. Providers
   must change the fingerprint for science changes; there is no fabricated
   fallback. Common NumPy, Arrow, datetime, namedtuple, enum, partial, nested
@@ -60,15 +65,19 @@ This file contains notable changes in adam-core
   before work.
 
   ``run_od`` refuses native builds whose identity is ``dirty:*`` or
-  ``unknown``. Bare Cargo builds watch Git refs and exact tracked inputs but do
-  not watch a missing source-inventory file, so repeated fresh-checkout
-  cargo/test/Clippy no-ops reach ``Fresh``. The release/wheel version pre-step
-  creates the narrow content-stable relevant-untracked-source inventory and
-  release builds validate it; source-overlay runtime preflight independently
-  refuses relevant untracked Python/Rust source. Generated extensions, caches,
-  tests, ``target``, ``wheelhouse/`` and nested ``adam-assist/`` remain outside
-  the inventory. Release builds without Git must supply the exact 40-hex commit
-  in ``ADAM_CORE_BUILD_COMMIT`` with ``ADAM_CORE_RELEASE_BUILD=1``.
+  ``unknown``. In Git source overlays it also requires checkout ``HEAD`` to
+  equal the embedded native commit, rejects tracked/staged source changes, and
+  directly enumerates untracked and ignored package Python/Rust source.
+  Installed wheels continue to use their embedded exact identity.
+
+  Bare Cargo builds watch Git refs and exact tracked inputs without a missing
+  sentinel, so unchanged cargo/test/Clippy runs reach ``Fresh``. Official
+  wheels now have one supported audited wrapper. Each invocation creates a
+  unique nonce and full source digest immediately before Cargo; the build
+  script validates and consumes the single-use attestation, and wheel
+  inspection compares every packaged Python file/hash against it. Missing,
+  mismatched, reused, stale, or unexpectedly packaged source fails closed.
+
 
 
 - Orbit determination now owns every IOD, least-squares, rejection, linkage

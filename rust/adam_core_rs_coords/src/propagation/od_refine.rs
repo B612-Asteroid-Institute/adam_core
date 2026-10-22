@@ -748,19 +748,21 @@ fn covariance_from_jacobian(
     let (a, _) = normal_equations(&jac_scaled, residuals);
     inverse_6x6(&a)
         .filter(|cov| cov.iter().all(|v| v.is_finite()))
-        .map(|mut covariance| {
-            // Numerical elimination can round the two triangles differently
-            // on weak short arcs. A covariance is symmetric by construction;
-            // canonicalize that identity before structural validation.
-            for row in 0..6 {
-                for col in row + 1..6 {
-                    let value = 0.5 * (covariance[row * 6 + col] + covariance[col * 6 + row]);
-                    covariance[row * 6 + col] = value;
-                    covariance[col * 6 + row] = value;
-                }
-            }
-            covariance
-        })
+        .map(canonicalize_covariance_symmetry)
+}
+
+fn canonicalize_covariance_symmetry(mut covariance: [f64; 36]) -> [f64; 36] {
+    // Numerical elimination can round the two triangles differently on weak
+    // short arcs. A covariance is symmetric by construction; canonicalize
+    // that identity before structural validation.
+    for row in 0..6 {
+        for col in row + 1..6 {
+            let value = 0.5 * (covariance[row * 6 + col] + covariance[col * 6 + row]);
+            covariance[row * 6 + col] = value;
+            covariance[col * 6 + row] = value;
+        }
+    }
+    covariance
 }
 
 // ---------------------------------------------------------------------------
@@ -1272,7 +1274,7 @@ fn symmetric_covariance(covariance: &[f64; 36]) -> Result<[[f64; 6]; 6], String>
 /// velocity carry unlike units, so definiteness is tested on the congruent
 /// unit-diagonal matrix rather than on raw eigenvalues. This retains finite,
 /// full-rank SPD covariances even when their raw condition number is extreme.
-fn covariance_validity(covariance: &[f64; 36]) -> Result<(), String> {
+fn covariance_correlation_spectrum(covariance: &[f64; 36]) -> Result<(f64, f64), String> {
     let symmetric = symmetric_covariance(covariance)?;
     let mut scales = [0.0_f64; 6];
     for axis in 0..6 {
@@ -1291,16 +1293,21 @@ fn covariance_validity(covariance: &[f64; 36]) -> Result<(), String> {
         .copied()
         .fold(f64::NEG_INFINITY, f64::max);
     let lambda_min = eigenvalues.iter().copied().fold(f64::INFINITY, f64::min);
-    if !lambda_min.is_finite() || lambda_min <= 0.0 {
+    if !lambda_max.is_finite() || !lambda_min.is_finite() || lambda_min <= 0.0 {
         return Err("the fitted state covariance is not positive-definite".to_string());
     }
+    Ok((lambda_min, lambda_max))
+}
+
+fn covariance_validity(covariance: &[f64; 36]) -> Result<(), String> {
+    let (lambda_min, lambda_max) = covariance_correlation_spectrum(covariance)?;
     // A six-dimensional correlation matrix has O(1) spectrum. Eigenvalues
     // below n*epsilon relative to its largest mode are numerical null
     // directions, not evidence of a resolved full-rank covariance. This is a
     // scale-free rank test, deliberately far below CMC2003's 1e-12 quality
     // threshold.
     let rank_tolerance = 6.0 * f64::EPSILON * lambda_max;
-    if !lambda_max.is_finite() || lambda_min <= rank_tolerance {
+    if lambda_min <= rank_tolerance {
         return Err(format!(
             "the fitted state covariance is numerically rank-deficient (correlation minimum/maximum eigenvalue ratio = {:.3e})",
             lambda_min / lambda_max
@@ -1594,7 +1601,7 @@ fn fit_orbit_whitened_impl<T: OriginTranslationProvider>(
             "The fit did not produce a usable state covariance: {reason}. The state and statistics are retained, but the fit is marked unsuccessful."
         ));
     }
-    let status_code = if covariance_failure.is_some() && solution.status != STATUS_NON_FINITE {
+    let status_code = if covariance_failure.is_some() && solution.status > 0 {
         STATUS_INVALID_COVARIANCE
     } else {
         solution.status
@@ -2602,7 +2609,7 @@ fn is_ambiguous_with(best: &super::od::IodCandidate, other: &super::od::IodCandi
     let (Some(state), Some(other_state), Some(covariance), Some(best_score), Some(other_score)) = (
         best.corrected_state,
         other.corrected_state,
-        best.corrected_covariance,
+        best.ambiguity_covariance,
         best.whole_arc_score,
         other.whole_arc_score,
     ) else {
@@ -2817,6 +2824,7 @@ fn ranging_fallback<T: OriginTranslationProvider>(
                 converged: false,
                 corrected_state: None,
                 corrected_covariance: None,
+                ambiguity_covariance: None,
                 stages: 0,
                 correction_note: None,
                 accepted: false,
@@ -2850,6 +2858,16 @@ fn ranging_fallback<T: OriginTranslationProvider>(
 /// may still seed final refinement when this returns `None`.
 fn reportable_iod_covariance(covariance: &[f64; 36]) -> Option<[f64; 36]> {
     covariance_validity(covariance)
+        .is_ok()
+        .then_some(*covariance)
+}
+
+/// Less restrictive internal gate used only for truthful multiple-solution
+/// comparison. A covariance that fails solely at the reportable numerical
+/// rank floor remains useful here; non-finite, asymmetric, singular, or
+/// non-positive-definite matrices do not.
+fn ambiguity_iod_covariance(covariance: &[f64; 36]) -> Option<[f64; 36]> {
+    covariance_correlation_spectrum(covariance)
         .is_ok()
         .then_some(*covariance)
 }
@@ -3080,6 +3098,7 @@ fn correct_candidates<T: OriginTranslationProvider>(
                 record.whole_arc_score = Some(whole_arc_score(&output.evaluation));
                 record.corrected_state = Some(output.state);
                 record.corrected_covariance = reportable_iod_covariance(&output.covariance);
+                record.ambiguity_covariance = ambiguity_iod_covariance(&output.covariance);
                 record.removed = (0..n)
                     .filter(|&row| output.evaluation.outlier[row])
                     .collect();
@@ -6343,6 +6362,138 @@ mod tests {
         assert!(fixture.predictor.batches.borrow().is_empty());
     }
 
+    struct FailAfterPredictor<'a> {
+        inner: &'a dyn SphericalPredictor,
+        calls: std::cell::Cell<usize>,
+        fail_after: usize,
+        error: PropagationError,
+    }
+
+    impl SphericalPredictor for FailAfterPredictor<'_> {
+        fn predict_spherical(
+            &self,
+            states: &[[f64; 6]],
+            geometry: &OrbitGeometry,
+            observers: &ObserverBatch,
+        ) -> PropagationResultValue<Result<Vec<f64>, String>> {
+            let call = self.calls.get();
+            self.calls.set(call + 1);
+            if call >= self.fail_after {
+                return Err(self.error.clone());
+            }
+            self.inner.predict_spherical(states, geometry, observers)
+        }
+
+        fn backend(&self) -> super::super::BackendIdentity {
+            self.inner.backend()
+        }
+    }
+
+    fn corrected_iod_cmc_call_fixture(
+        error: PropagationError,
+    ) -> PropagationResultValue<super::super::od::IodResult> {
+        let observed = synthetic_observations(None);
+        let observers = observers();
+        let (propagator, options) = two_body();
+        let predictor = PropagatorPredictor {
+            propagator: &propagator,
+            options: &options,
+            provider: &NoopProvider,
+            translation_provider: &ZeroTranslationProvider,
+        };
+        let mut config = corrected_iod_config(1.0e-12);
+        config.correction.min_stage_obs = observed.len();
+        config.correction.max_corrections = 1;
+        config.correction.max_converged = 1;
+        config.correction.max_stages = 1;
+        let mut result =
+            super::super::od::iod_candidate_pool(&predictor, &observed, &observers, &config)?;
+        let candidate = result.candidates.first().expect("fixture candidate");
+        let seed_coordinates = CoordinateBatch::cartesian(
+            vec![candidate.state],
+            Frame::Ecliptic,
+            OriginArray::repeat(OriginId::from_code("SUN"), 1),
+            Some(crate::TimeArray::new(
+                candidate.epoch_scale,
+                vec![candidate.epoch],
+            )?),
+            None,
+        )?;
+        let seed = OrbitBatch::new(
+            vec![crate::OrbitId("iod-candidate".to_string())],
+            vec![None],
+            seed_coordinates,
+        )?;
+        let counter = FailAfterPredictor {
+            inner: &predictor,
+            calls: std::cell::Cell::new(0),
+            fail_after: usize::MAX,
+            error: error.clone(),
+        };
+        let stage_config = WhitenedFitConfig {
+            loss: LossType::Linear,
+            validate_covariance: false,
+            ..WhitenedFitConfig::default()
+        };
+        let output = stage_fit(
+            &counter,
+            &seed,
+            &observed,
+            &observers,
+            &vec![true; observed.len()],
+            &stage_config,
+            f64::INFINITY,
+            &NoopProvider,
+            &ZeroTranslationProvider,
+        )?
+        .expect("fixture whole-arc stage");
+        assert!(
+            output.evaluation.reduced_chi2 > config.rchi2_threshold,
+            "fixture must enter the CMC call site"
+        );
+        let failing = FailAfterPredictor {
+            inner: &predictor,
+            calls: std::cell::Cell::new(0),
+            fail_after: counter.calls.get(),
+            error,
+        };
+        correct_candidates(
+            &failing,
+            &observed,
+            &observers,
+            &config,
+            &WhitenedFitConfig::default(),
+            &NoopProvider,
+            &ZeroTranslationProvider,
+            &mut result,
+            &[0],
+        )?;
+        assert!(failing.calls.get() > failing.fail_after);
+        Ok(result)
+    }
+
+    #[test]
+    fn corrected_iod_cmc_call_site_propagates_fatal_errors_and_localizes_only_cmc() {
+        for fatal in [
+            PropagationError::Backend("provider".to_string()),
+            PropagationError::BackendProtocol("protocol".to_string()),
+            PropagationError::InvalidRequest("settings".to_string()),
+        ] {
+            let propagated = corrected_iod_cmc_call_fixture(fatal.clone())
+                .expect_err("fatal CMC call-site errors must propagate");
+            assert_eq!(propagated, fatal);
+        }
+
+        let local = corrected_iod_cmc_call_fixture(PropagationError::CmcCovarianceUnavailable(
+            "rank".to_string(),
+        ))
+        .expect("CMC covariance refusal must remain candidate-local");
+        assert_eq!(local.candidates_failed, 1);
+        assert!(local.candidate_failures[0]
+            .message
+            .contains("CMC2003 expected covariance unavailable"));
+    }
+
     #[test]
     fn corrected_iod_rejection_locality_records_only_candidate_failures() {
         let triplet = [2, 5, 9];
@@ -6458,6 +6609,58 @@ mod tests {
         .expect("candidate-local covariance failure must remain an output");
         assert!(!output.converged);
         assert_eq!(output.status_code, STATUS_INVALID_COVARIANCE);
+        assert!(output.covariance.iter().any(|value| !value.is_finite()));
+        assert!(output
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("usable state covariance")));
+    }
+
+    #[test]
+    fn jacobian_covariance_symmetrization_is_non_vacuous() {
+        let mut covariance = [0.0; 36];
+        for axis in 0..6 {
+            covariance[axis * 6 + axis] = 1.0;
+        }
+        covariance[1] = 2.0;
+        covariance[6] = 4.0;
+        let canonical = canonicalize_covariance_symmetry(covariance);
+        assert_eq!(canonical[1], 3.0);
+        assert_eq!(canonical[6], 3.0);
+        for row in 0..6 {
+            for col in 0..6 {
+                assert_eq!(
+                    canonical[row * 6 + col].to_bits(),
+                    canonical[col * 6 + row].to_bits()
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn invalid_covariance_does_not_erase_nonconvergence_status() {
+        let mut fixture = linear_fixture(0.0);
+        for row in &mut fixture.predictor.design {
+            row[5] = 0.0;
+        }
+        let output = fit_orbit_whitened_with(
+            &fixture.predictor,
+            &perturbed_start(),
+            &fixture.observed,
+            &observers(),
+            &[false; NUM_OBS],
+            &WhitenedFitConfig {
+                jacobian: JacobianMethod::Central,
+                validate_covariance: false,
+                max_iterations: 1,
+                ..WhitenedFitConfig::default()
+            },
+            &NoopProvider,
+            &ZeroTranslationProvider,
+        )
+        .expect("non-converged fit remains a diagnostic output");
+        assert!(!output.converged);
+        assert_eq!(output.status_code, STATUS_LIMIT);
         assert!(output.covariance.iter().any(|value| !value.is_finite()));
         assert!(output
             .warnings
@@ -8179,7 +8382,7 @@ mod tests {
         )
         .unwrap();
         let best = result.accepted_candidate().unwrap().clone();
-        let covariance = best.corrected_covariance.unwrap();
+        let covariance = best.ambiguity_covariance.unwrap();
         let sigma_x = covariance[0].sqrt();
         assert!(sigma_x.is_finite() && sigma_x > 0.0);
         let shifted = |k: f64, score: f64| {
@@ -8199,8 +8402,27 @@ mod tests {
         assert!(!is_ambiguous_with(&best, &shifted(1e3, rchi2 + 10.0)));
         // Without a usable covariance the solutions are not compared.
         let mut blind = best.clone();
-        blind.corrected_covariance = Some([f64::NAN; 36]);
+        blind.ambiguity_covariance = Some([f64::NAN; 36]);
         assert!(!is_ambiguous_with(&blind, &shifted(1e3, rchi2)));
+    }
+
+    #[test]
+    fn rank_floor_covariance_is_internal_for_ambiguity_only() {
+        let mut covariance = [0.0; 36];
+        for axis in 0..6 {
+            covariance[axis * 6 + axis] = 1.0;
+        }
+        covariance[1] = 1.0 - 2.0 * f64::EPSILON;
+        covariance[6] = covariance[1];
+        assert!(covariance_correlation_spectrum(&covariance).is_ok());
+        assert!(covariance_validity(&covariance).is_err());
+        assert!(reportable_iod_covariance(&covariance).is_none());
+        assert_eq!(ambiguity_iod_covariance(&covariance), Some(covariance));
+
+        covariance[0] = -1.0;
+        assert!(ambiguity_iod_covariance(&covariance).is_none());
+        covariance[0] = f64::NAN;
+        assert!(ambiguity_iod_covariance(&covariance).is_none());
     }
 
     #[test]

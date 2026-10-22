@@ -1825,6 +1825,9 @@ pub struct IodCandidate {
     /// Row-major 6x6 covariance of `corrected_state` from the whole-arc fit
     /// (NaN when singular); used to tell distinct solutions apart.
     pub corrected_covariance: Option<[f64; 36]>,
+    /// Finite symmetric positive-definite covariance retained only for
+    /// multiple-solution comparison. It is never exposed or reused as a seed.
+    pub(super) ambiguity_covariance: Option<[f64; 36]>,
     /// Correction stages run (0 when not corrected).
     pub stages: usize,
     /// Why the correction stopped short of the whole arc, if it did.
@@ -2640,6 +2643,7 @@ fn run_iod_sorted(
                 converged: false,
                 corrected_state: None,
                 corrected_covariance: None,
+                ambiguity_covariance: None,
                 stages: 0,
                 correction_note: None,
                 accepted: false,

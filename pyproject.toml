@@ -187,10 +187,7 @@ check = { composite = ["lint", "typecheck", "test"] }
 script-preflight = "python migration/scripts/check_pdm_ci_scripts.py"
 public-surface-check = "python migration/scripts/audit_public_surface.py --check"
 wheel-version = "python migration/scripts/write_maturin_version.py"
-wheel-build = { composite = [
-  "pdm run wheel-version",
-  "pdm build --no-sdist --dest dist",
-] }
+wheel-build = "python migration/scripts/build_release_wheel.py --out dist"
 wheel-inspect = "python migration/scripts/check_wheel_artifacts.py dist"
 format = { composite = ["black ./src/adam_core", "isort ./src/adam_core"] }
 lint = { composite = [
@@ -270,5 +267,9 @@ module-name = "adam_core._rust_native"
 python-source = "src"
 exclude = ["adam_core/**/tests/**", "adam_core/**/test_*.py"]
 # Maturin uses rust/adam_core_py/Cargo.toml [package].version for wheel
-# metadata. `pdm run wheel-version` mirrors that value into adam_core._version.
-include = [{ path = "adam_core/_version.py", format = "wheel" }]
+# metadata. The audited release wrapper mirrors that value into
+# adam_core._version before creating its per-invocation source attestation.
+include = [
+  { path = "adam_core/_version.py", format = "wheel" },
+  { path = "adam_core/_release_inventory.json", format = "wheel" },
+]

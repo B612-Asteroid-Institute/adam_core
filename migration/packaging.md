@@ -4,11 +4,21 @@ Last updated: 2026-10-21.
 
 ## Supported Build Path
 
-- `pdm run wheel-build` is the authoritative local and CI wheel build command.
-- `pdm run wheel-build` runs `pdm run wheel-version`, then `pdm build --no-sdist --dest dist`.
-- `pdm run wheel-inspect` must pass before uploading or using `dist/*.whl` as a release artifact. It rejects build-only runtime dependencies and packaged test modules as well as version/native-extension errors.
-- `pdm run rust-build` is an alias for `pdm run wheel-build`.
-- Direct Maturin manylinux jobs must run `migration/scripts/write_maturin_version.py` before building and `migration/scripts/check_wheel_artifacts.py` on the produced Core wheel before artifact upload. Clean-room acceptance also compares runtime package versions with installed distribution metadata.
+- `pdm run wheel-build` is the authoritative local and CI Core-wheel command.
+  It invokes `migration/scripts/build_release_wheel.py`; direct release
+  `maturin build`, `pdm build`, or a hand-assembled release environment is not
+  a supported release path.
+- The wrapper mirrors the Cargo version, creates a unique per-invocation source
+  digest and nonce immediately before Maturin, builds, and runs
+  `check_wheel_artifacts.py` before returning success.
+- `pdm run wheel-inspect` may be run again before upload. It rejects build-only
+  runtime dependencies, packaged tests, version/native-extension errors, a
+  missing release attestation, or any packaged Python file/hash not present in
+  that attestation.
+- `pdm run rust-build` is an alias for `pdm run wheel-build`. For explicit
+  manylinux arguments call the same wrapper, for example
+  `python migration/scripts/build_release_wheel.py --out wheelhouse -- --zig
+  --target aarch64-unknown-linux-gnu --manylinux 2_17 -i python3.12`.
 
 ## Version Source
 
@@ -40,15 +50,22 @@ Last updated: 2026-10-21.
 ## Source inventory and native identity
 
 Bare `cargo`, Clippy, and Rust test builds identify the current commit and watch
-Git refs plus exact tracked distribution inputs. They do **not** watch a
-nonexistent `.git/adam-core-source-inventory` (Cargo would rerun the build
-script forever), and they cannot discover arbitrary new files without broad
-source-directory watches that include generated extensions and caches.
+Git refs plus exact tracked inputs. They do **not** watch a nonexistent
+sentinel, so repeated unchanged developer builds can reach `Fresh`.
 
-`pdm run wheel-version` / `migration/scripts/write_maturin_version.py` creates
-the narrow inventory without rewriting unchanged content. Every release/wheel
-build must run that step first; `ADAM_CORE_RELEASE_BUILD=1` validates that the
-inventory exists and exactly matches relevant untracked Python/Rust runtime
-source before compiling. Source-overlay `run_od` separately performs the same
-Git untracked-source check at runtime. Tests, generated extensions, caches,
-`target`, wheelhouse, and nested Assist are intentionally excluded.
+Every official release invocation instead uses the audited wrapper. Immediately
+before Cargo it requires a clean tracked checkout; enumerates tracked inputs and
+all package/Rust source directly (including ignored files); writes a full source
+digest, unique nonce, and exact Python-file hashes; and passes those values to
+Cargo. The build script verifies and consumes that single-use attestation. A
+second direct release build cannot reuse it. The packaged JSON attestation is
+then checked against the wheel's exact Python file set and content hashes.
+Missing, mismatched, reused, or stale attestations fail closed.
+
+Source-overlay `run_od` performs an independent runtime check: checkout `HEAD`
+must equal the embedded native commit, tracked/staged runtime source must be
+clean, and no untracked or ignored package Python/Rust source may be present.
+Generated `_version.py`, native-extension artifacts, tests, caches, `target/`,
+wheelhouse, and the independently pinned nested `adam-assist/` checkout are
+excluded where appropriate. Installed wheels have no checkout and rely on the
+embedded exact release identity and packaged attestation.

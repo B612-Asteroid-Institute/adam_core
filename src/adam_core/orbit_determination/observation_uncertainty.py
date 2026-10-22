@@ -721,3 +721,31 @@ class CompositeModel(ObservationUncertaintyModel):
 
     def _native_specs(self) -> Optional[list[dict]]:
         return native_model_specs(self.models)
+
+
+def _capture_provenance_behavior(cls: type) -> dict[str, object]:
+    """Capture shipped routing functions before callers can monkeypatch them."""
+    captured: dict[str, object] = {}
+    for name in ("apply", "_native_specs"):
+        for owner in cls.__mro__:
+            if name in vars(owner):
+                captured[name] = vars(owner)[name]
+                break
+    return captured
+
+
+# Private immutable-at-import registry consumed by provenance preflight. Values
+# are function objects, not names, so class-level monkeypatching cannot retain a
+# shipped built-in identity.
+_PROVENANCE_BEHAVIOR_METHODS = {
+    cls: _capture_provenance_behavior(cls)
+    for cls in (
+        IdentityModel,
+        EmpiricalCovarianceModel,
+        PerformanceWeightedModel,
+        SigmaFloorModel,
+        NightBatchDeweightingModel,
+        EFCC18DebiasModel,
+        CompositeModel,
+    )
+}
