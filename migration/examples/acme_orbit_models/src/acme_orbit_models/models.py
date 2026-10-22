@@ -1,4 +1,4 @@
-"""A minimal explicitly provenanced observation model."""
+"""A live Python model that reproducible run_od intentionally refuses."""
 
 from importlib.metadata import version
 
@@ -9,7 +9,7 @@ from adam_core.orbit_determination.observation_uncertainty import (
 
 
 class CalibratedModel(ObservationUncertaintyModel):
-    """No-op arithmetic used only to demonstrate the provenance contract."""
+    """No-op live behavior used to prove package metadata is insufficient."""
 
     def __init__(self, scale: float = 1.5, mode: str = "calibrated") -> None:
         self.scale = scale

@@ -36,8 +36,8 @@ def allow_synthetic_model_distribution(monkeypatch):
     """
     from .. import provenance
 
-    validator = provenance._validate_custom_model_distribution
+    validator = provenance._custom_contract
     monkeypatch.setattr(
-        provenance, "_validate_custom_model_distribution", lambda cls, contract: None
+        provenance, "_custom_contract", provenance._declared_custom_contract
     )
     return validator

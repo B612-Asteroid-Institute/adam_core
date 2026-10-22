@@ -47,6 +47,7 @@ from __future__ import annotations
 
 import importlib
 from abc import ABC, abstractmethod
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Iterable, Literal, Optional, Sequence, Union
 
@@ -54,12 +55,15 @@ import numpy as np
 import numpy.typing as npt
 import pyarrow as pa
 
+from adam_core import _rust_native as _provenance_native
+
 from ..coordinates.covariances import CoordinateCovariances
 from ..observations.efcc18 import (
     EFCC18_N_CATALOGS,
     EFCC18_N_TILES,
     load_efcc18_biases,
 )
+from . import _native_dispatch as _provenance_native_dispatch
 from .evaluate import OrbitDeterminationObservations
 from .model_provenance import _capture_behavior_spec
 
@@ -724,13 +728,39 @@ class CompositeModel(ObservationUncertaintyModel):
         return native_model_specs(self.models)
 
 
+def _behavior_delegate(namespace: Mapping[str, object], name: str):
+    return (namespace, name, namespace[name])
+
+
+_MODULE = globals()
+_NATIVE = vars(_provenance_native)
+_NATIVE_DISPATCH = vars(_provenance_native_dispatch)
+_COORDINATE_COVARIANCES = vars(CoordinateCovariances)
+_BIAS_DELEGATES = tuple(
+    _behavior_delegate(_MODULE, name)
+    for name in (
+        "load_bias_table",
+        "validate_bias_table",
+        "_float_column",
+        "_latitudes",
+        "_covariances",
+        "_with_covariances",
+    )
+) + (
+    _behavior_delegate(_NATIVE, "bias_table_model_apply_numpy"),
+    _behavior_delegate(_COORDINATE_COVARIANCES, "from_matrix"),
+)
+
+
 # Explicit, minimal built-in behavior registry. Capturing only ``apply`` and
 # ``_native_specs`` is insufficient: inherited constructors and routing class
 # data such as ``_MODEL``/``_ROW_COLUMNS`` also select native science.
 
 _PROVENANCE_BEHAVIOR_REGISTRY = {
     IdentityModel: _capture_behavior_spec(
-        IdentityModel, ("__init__", "apply", "_native_specs")
+        IdentityModel,
+        ("__init__", "apply", "_native_specs"),
+        module_delegates=(_behavior_delegate(_MODULE, "validate_bias_table"),),
     ),
     EmpiricalCovarianceModel: _capture_behavior_spec(
         EmpiricalCovarianceModel,
@@ -743,6 +773,7 @@ _PROVENANCE_BEHAVIOR_REGISTRY = {
             "_bands",
             "_columns",
         ),
+        module_delegates=_BIAS_DELEGATES,
     ),
     PerformanceWeightedModel: _capture_behavior_spec(
         PerformanceWeightedModel,
@@ -755,6 +786,7 @@ _PROVENANCE_BEHAVIOR_REGISTRY = {
             "_bands",
             "_columns",
         ),
+        module_delegates=_BIAS_DELEGATES,
     ),
     SigmaFloorModel: _capture_behavior_spec(
         SigmaFloorModel,
@@ -767,20 +799,36 @@ _PROVENANCE_BEHAVIOR_REGISTRY = {
             "_bands",
             "_columns",
         ),
+        module_delegates=_BIAS_DELEGATES,
     ),
     NightBatchDeweightingModel: _capture_behavior_spec(
         NightBatchDeweightingModel,
         ("__init__", "apply", "_native_specs"),
         instance_fields=("cap",),
+        module_delegates=(
+            _behavior_delegate(_MODULE, "_covariances"),
+            _behavior_delegate(_MODULE, "_with_covariances"),
+            _behavior_delegate(_NATIVE, "night_batch_deweighting_model_apply_numpy"),
+            _behavior_delegate(_COORDINATE_COVARIANCES, "from_matrix"),
+        ),
     ),
     EFCC18DebiasModel: _capture_behavior_spec(
         EFCC18DebiasModel,
         ("__init__", "apply", "_native_specs"),
         instance_fields=("bias_table", "exclude_astcats", "_bias_table_f32"),
+        module_delegates=(
+            _behavior_delegate(_MODULE, "load_efcc18_biases"),
+            _behavior_delegate(_MODULE, "_latitudes"),
+            _behavior_delegate(_NATIVE, "efcc18_debias_model_apply_numpy"),
+        ),
     ),
     CompositeModel: _capture_behavior_spec(
         CompositeModel,
         ("__init__", "apply", "_native_specs"),
         instance_fields=("models",),
+        module_delegates=(
+            _behavior_delegate(_MODULE, "native_model_specs"),
+            _behavior_delegate(_NATIVE_DISPATCH, "_has_compatible_native_spec"),
+        ),
     ),
 }

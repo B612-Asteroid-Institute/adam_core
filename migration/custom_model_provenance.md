@@ -1,53 +1,38 @@
 # Migrating custom observation-model provenance for 0.7
 
-`run_od` no longer infers a custom model's implementation from Python source,
-bytecode, `sys.modules`, import closure, or interpreter metadata. Those signals
-cannot simultaneously identify lazily loaded science, executing code after a
-disk edit, and equivalent environments on Python 3.11–3.13.
+`run_od` does not accept live third-party Python observation-model behavior in
+reproducible fits. A package name, version, source file, wheel `RECORD`, and
+provider-chosen fingerprint cannot bind the class and instance that Python is
+actually executing: classes can be created dynamically, module/qualified names
+can be borrowed, methods can be replaced on the class or instance, module
+delegates can be patched, and editable/duplicate/overlapping installations can
+change ownership after metadata inspection.
 
-Every model not shipped as an exact adam-core built-in must subclass
-`ObservationUncertaintyModel`, implement `model_provenance()`, and return the
-frozen public `ModelProvenance` value:
+adam-core deliberately does **not** infer identity from Python source closure,
+CPython bytecode, `sys.modules`, import history, mutable closures, absolute
+paths, or arbitrary imports. Consequently, `ModelProvenance` and the
+`ProvenancedModel` protocol remain data/type declarations only; they do not
+make an executable Python `ObservationUncertaintyModel` acceptable to
+`run_od`. Subclasses of shipped models, dynamic/notebook/`__main__` classes,
+installed classes, and class or instance monkeypatches all fail provenance
+preflight before the provenance hook, model application, fitter, or provider
+work.
+
+Use an exact shipped adam-core model and express every supported choice through
+its constructor configuration or immutable input table. Those classes are
+attested by the clean native Core commit plus an import-time exact behavior
+graph, and their declarative native specifications execute in Core Rust. For
+example:
 
 ```python
-# Install migration/examples/acme_orbit_models first, then import its class.
-from acme_orbit_models import CalibratedModel
+from adam_core.orbit_determination.observation_uncertainty import IdentityModel
 
-model = CalibratedModel(scale=1.5)
+model = IdentityModel()
 ```
 
-The complete example is an installable distribution at
-`migration/examples/acme_orbit_models`; install it with
-`python -m pip install migration/examples/acme_orbit_models`. Defining the class
-in a script, notebook, `__main__`, or an `exec` namespace is intentionally not a
-reproducible replacement for installing it.
-
-The package/provider chooses the lowercase 64-hex fingerprint. It should be a
-release-manifest or content hash covering all science-affecting implementation
-and data dependencies, and **must change when that science changes**. adam-core
-does not fabricate a weaker fallback. `version` and `package` are mandatory. The named distribution must be
-installed, its immutable installed version must match exactly, and package
-metadata must list readable Python source that declares the model class.
-`configuration` must include every instance choice and data table/file.
-
-adam-core canonicalizes supported configuration with injective explicit tags,
-including NumPy scalars/arrays/types/ufuncs, Arrow tables, distinct
-mapping/list/tuple/set/frozenset values, enums, namedtuples, datetimes,
-supported public built-in callable partials, nested classes/objects, and file
-content. Python function/method values are unsupported without an explicit
-portable identity: encode the choice as data and cover its implementation in
-the contract fingerprint. Absolute file paths are omitted. Unsupported
-or cyclic fields fail closed. A subclass of an adam-core model and an instance
-whose `apply` was replaced are custom and need their own contract. A missing or
-malformed contract (including an uncontracted `__main__`, dynamic, notebook, or
-sourceless model) raises `TypeError` during provenance preflight, before model
-application or fitting.
-
-Built-in model descriptors instead use the exact clean adam-core native build
-commit, stable class/entrypoint name, and canonical instance configuration/data
-hashes. They are independent of import order and Python minor version.
-
-
-`ProvenancedModel` is a structural protocol for the provenance hook only. It is
-useful to type-check providers, but it does **not** replace the runtime
-`ObservationUncertaintyModel` subclass requirement. Both are required.
+A future external extension mechanism must be declarative: adam-core must own,
+validate, and execute the complete behavior in Core Rust. Merely packaging a
+Python class more strictly is insufficient. The installable package under
+`migration/examples/acme_orbit_models` is retained as a negative migration
+fixture proving that even a genuine installed class, and class/instance
+monkeypatches of it, are refused.

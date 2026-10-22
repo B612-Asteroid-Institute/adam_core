@@ -44,10 +44,13 @@ cos(dec) once (in addition to the arcsec -> degree scaling) before squaring.
 from __future__ import annotations
 
 import importlib
+from collections.abc import Mapping
 
 import numpy as np
 import numpy.typing as npt
 import pyarrow as pa
+
+from adam_core import _rust_native as _provenance_native
 
 from ..coordinates.covariances import CoordinateCovariances
 from .evaluate import OrbitDeterminationObservations
@@ -440,6 +443,24 @@ class SigmaFillModel(_VeresSigmaModel):
     _DEFAULT_TABLE = V2_SIGMA_FILL_TABLE
 
 
+def _behavior_delegate(namespace: Mapping[str, object], name: str):
+    return (namespace, name, namespace[name])
+
+
+_MODULE = globals()
+_NATIVE = vars(_provenance_native)
+_COORDINATE_COVARIANCES = vars(CoordinateCovariances)
+_LOOKUP_DELEGATES = (
+    _behavior_delegate(_MODULE, "validate_veres_sigma_table"),
+    _behavior_delegate(_MODULE, "load_sigma_table"),
+    _behavior_delegate(_NATIVE, "veres_sigma_lookup_numpy"),
+)
+_MODEL_DELEGATES = _LOOKUP_DELEGATES + (
+    _behavior_delegate(_NATIVE, "veres_model_apply_numpy"),
+    _behavior_delegate(_COORDINATE_COVARIANCES, "from_matrix"),
+)
+
+
 # The lookup is a recursively used behavior collaborator: its exact type,
 # routing methods, and any instance shadows are part of the built-in identity.
 
@@ -454,6 +475,7 @@ _VERES_LOOKUP_BEHAVIOR = _capture_behavior_spec(
         "_sigma_ra",
         "_sigma_dec",
     ),
+    module_delegates=_LOOKUP_DELEGATES,
 )
 
 
@@ -469,6 +491,7 @@ def _veres_model_behavior(cls: type) -> _BehaviorSpec:
         ),
         instance_fields=("lookup", "fill_missing"),
         collaborators=(("lookup", _VERES_LOOKUP_BEHAVIOR),),
+        module_delegates=_MODEL_DELEGATES,
     )
 
 

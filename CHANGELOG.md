@@ -51,23 +51,18 @@ This file contains notable changes in adam-core
   Shipped adam-core observation models use the exact clean native build commit
   plus stable class/entrypoint names and canonical configuration/data hashes;
   they do not inspect source closures, bytecode, interpreter versions, loaded
-  modules, or import history. **Breaking custom-model migration:** external and
-  user-defined models (including subclasses and any instance/class behavior or
-  routing override) must subclass ``ObservationUncertaintyModel`` and return
-  the frozen public ``ModelProvenance`` contract from ``model_provenance()``:
-  package, version, a lowercase 64-hex
-  implementation/content fingerprint, and complete configuration. Providers
-  must change the fingerprint for science changes; there is no fabricated
-  fallback. Common NumPy, Arrow, datetime, namedtuple, enum, partial, nested
-  object/class and file-content values are canonical across Python 3.11–3.13
-  without absolute paths or arbitrary module imports. Built-in identity now
-  verifies an explicit exact registry of constructors, routing methods, class
-  constants, instance-data shadows, and recursive collaborators. Custom model
-  claims require an installed distribution at the exact claimed version whose
-  metadata owns readable Python source declaring the class. Unsupported,
-  malformed, nonexistent/mismatched-package, local, ``__main__``, dynamic, and
-  sourceless models fail with ``TypeError`` before model, fitter, or provider
-  work.
+  modules, or import history. Built-in identity now verifies the exact MRO and
+  class dictionaries (including absence of new special lookup hooks or
+  descriptors), instance shadows, recursive collaborators, and every explicitly
+  used mutable module delegate. **Breaking custom-model migration:** live custom
+  Python behavior is no longer accepted. Package/version, source, wheel
+  metadata/RECORD, and a provider fingerprint cannot bind the executing
+  class/instance without forbidden mutable runtime state or bytecode. Installed
+  classes, subclasses, local/``__main__``/dynamic/sourceless models, and class or
+  instance monkeypatches fail before provenance-hook, model, fitter, or provider
+  work. ``ModelProvenance`` remains a declaration type, not runtime
+  authentication. Only exact shipped models with declarative configuration
+  executed by Core Rust retain reproducible built-in identity.
 
   ``run_od`` refuses native builds whose identity is ``dirty:*`` or
   ``unknown``. In Git source overlays it also requires checkout ``HEAD`` to

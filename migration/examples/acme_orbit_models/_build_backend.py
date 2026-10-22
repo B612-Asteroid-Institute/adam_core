@@ -13,7 +13,7 @@ DIST_INFO = f"{NAME}-{VERSION}.dist-info"
 METADATA = f"""Metadata-Version: 2.1
 Name: acme-orbit-models
 Version: {VERSION}
-Summary: Installable custom provenance example for adam-core
+Summary: Negative live-Python provenance fixture for adam-core
 Requires-Python: >=3.11
 Requires-Dist: adam-core>=0.7.0
 """.encode()

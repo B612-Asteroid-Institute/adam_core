@@ -1,4 +1,4 @@
-"""Installable custom observation-model provenance example."""
+"""Negative installed custom-model provenance fixture."""
 
 from .models import CalibratedModel
 

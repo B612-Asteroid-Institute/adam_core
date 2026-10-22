@@ -226,30 +226,24 @@ native build commit plus their stable class and ``apply`` entrypoint names.
 They do not hash Python source trees, bytecode, interpreter versions, loaded
 modules, or import history.
 
-A custom model (including a subclass of a shipped model or a shipped instance
-with any behavior/routing hook replaced) must subclass
-``ObservationUncertaintyModel``, implement the typed ``ProvenancedModel``
-provenance hook, and return an immutable ``ModelProvenance``::
+Live custom Python observation models are not accepted for reproducible
+``run_od`` fits. ``ModelProvenance`` and ``ProvenancedModel`` remain public
+data/type declarations, but a package/version/fingerprint cannot authenticate
+the class and instance Python is actually executing without forbidden mutable
+runtime state or bytecode. This includes installed classes, subclasses of a
+shipped model, dynamic/notebook/``__main__`` classes, and class or instance
+monkeypatches. They fail provenance preflight before the provenance hook, model
+application, fitter, or provider work.
 
-   # Install migration/examples/acme_orbit_models first.
-   from acme_orbit_models import CalibratedModel as MyModel
+Use an exact shipped adam-core model whose choices are declarative constructor
+configuration or immutable input tables and whose native specification is
+validated and executed by Core Rust::
 
-   model = MyModel(scale=1.5, mode="calibrated")
+   from adam_core.orbit_determination.observation_uncertainty import IdentityModel
 
-The provider owns the lowercase 64-hex implementation/content fingerprint and
-must change it whenever science-affecting code changes. The configuration must
-be complete; adam-core uses explicit injective tags for scalars, mappings,
-lists, tuples, sets/frozensets, NumPy arrays/scalars/types and ufuncs, Arrow
-tables, dates/times, named tuples, enum classes/members, supported public
-built-in callables/partials, nested classes/objects and file content. Python
-functions/methods in configuration are rejected: encode their public choice as
-data and cover implementation science in ``implementation_fingerprint``.
-Absolute paths are not recorded. There is no inferred or fabricated fallback. The claimed distribution must be
-installed at the exact claimed version, and its package metadata must own
-readable Python source that declares the model class. Missing/malformed
-contracts, unsupported fields, nonexistent or mismatched distributions, and
-``__main__``/local/dynamic/sourceless models raise ``TypeError`` before model,
-fitter, or provider work. See ``migration/custom_model_provenance.md``.
+   model = IdentityModel()
+
+See ``migration/custom_model_provenance.md`` for the breaking migration policy.
 
 The native build identity must be one exact clean 40-hex Core commit.
 ``run_od`` refuses ``dirty:<commit>`` and ``unknown`` identities before work;

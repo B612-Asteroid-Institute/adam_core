@@ -6,6 +6,6 @@ backend-path = ["."]
 [project]
 name = "acme-orbit-models"
 version = "3.2.0"
-description = "Installable custom provenance example for adam-core"
+description = "Negative live-Python provenance fixture for adam-core"
 requires-python = ">=3.11"
 dependencies = ["adam-core>=0.7.0"]

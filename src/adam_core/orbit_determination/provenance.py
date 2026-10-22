@@ -8,7 +8,6 @@ are deliberately outside the identity contract.
 
 from __future__ import annotations
 
-import ast
 import datetime as dt
 import functools
 import hashlib
@@ -21,7 +20,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from enum import Enum
 from importlib import metadata
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional, cast
 
 import numpy as np
@@ -376,8 +375,17 @@ def _class_defines_member(cls: type[Any], name: str) -> bool:
 
 def _matches_behavior_spec(value: object, spec: _BehaviorSpec) -> bool:
     """Match an exact shipped type, its named members, and collaborators."""
-    if type(value) is not spec.model_type:
+    if type(value) is not spec.model_type or spec.model_type.__mro__ != spec.exact_mro:
         return False
+    for owner, expected_items in spec.class_surfaces:
+        current = vars(owner)
+        if set(current) != {name for name, _ in expected_items}:
+            return False
+        if any(current[name] is not expected for name, expected in expected_items):
+            return False
+    for namespace, name, expected in spec.module_delegates:
+        if namespace.get(name) is not expected:
+            return False
     member_names = {name for name, _ in spec.class_members}
     for name, expected in spec.class_members:
         if _static_class_member(spec.model_type, name) is not expected:
@@ -454,120 +462,7 @@ def _model_fields(model: object, build_identity: tuple[str, str]) -> dict[str, A
     return fields
 
 
-def _canonical_distribution_name(name: str) -> str:
-    return re.sub(r"[-_.]+", "-", name).lower()
-
-
-def _declares_class(source: str, filename: str, qualname: str) -> bool:
-    """Whether a module source file declares this non-local class path."""
-    try:
-        body = ast.parse(source, filename=filename).body
-    except (SyntaxError, ValueError):
-        return False
-    for part in qualname.split("."):
-        declaration = next(
-            (
-                node
-                for node in body
-                if isinstance(node, ast.ClassDef) and node.name == part
-            ),
-            None,
-        )
-        if declaration is None:
-            return False
-        body = declaration.body
-    return True
-
-
-def _validate_custom_model_distribution(
-    cls: type[Any], contract: ModelProvenance
-) -> None:
-    """Validate a custom class against immutable installed metadata.
-
-    This reads only the claimed distribution's metadata and its directly
-    listed module source. It imports no provider module and does not consult
-    ``sys.modules``, import history, bytecode, or source closure.
-    """
-    module = _module_name(cls, kind="model class")
-    qualname = getattr(cls, "__qualname__", None)
-    if module == "__main__" or module.startswith("__main__."):
-        raise TypeError(
-            "custom observation models from __main__ are not reproducible; "
-            "use a class from an installed distribution"
-        )
-    if (
-        not isinstance(qualname, str)
-        or not qualname
-        or "<locals>" in qualname
-        or any(not part.isidentifier() for part in qualname.split("."))
-    ):
-        raise TypeError(
-            "custom observation model must be a non-local class declared by an "
-            "installed distribution"
-        )
-    module_parts = module.split(".")
-    if any(not part.isidentifier() for part in module_parts):
-        raise TypeError(
-            "custom observation model module must be an installed Python module"
-        )
-
-    try:
-        distribution = metadata.distribution(contract.package)
-        installed_name = distribution.metadata.get("Name")
-        installed_version = distribution.version
-    except Exception as error:
-        raise TypeError(
-            f"model provenance distribution {contract.package!r} is not installed"
-        ) from error
-    if not isinstance(installed_name, str) or _canonical_distribution_name(
-        installed_name
-    ) != _canonical_distribution_name(contract.package):
-        raise TypeError(
-            f"model provenance package {contract.package!r} does not match the "
-            "installed distribution identity"
-        )
-    if installed_version != contract.version:
-        raise TypeError(
-            f"model provenance version {contract.version!r} does not match "
-            f"installed {contract.package!r} version {installed_version!r}"
-        )
-
-    module_path = PurePosixPath(*module_parts)
-    candidates = {
-        module_path.with_suffix(".py").as_posix(),
-        (module_path / "__init__.py").as_posix(),
-    }
-    files = distribution.files
-    if files is None:
-        files = []
-    matching = []
-    for file in files:
-        relative = PurePosixPath(str(file).replace("\\", "/"))
-        if relative.is_absolute() or ".." in relative.parts:
-            continue
-        if relative.as_posix() in candidates:
-            matching.append(file)
-    if len(matching) != 1:
-        raise TypeError(
-            f"custom observation model module {module!r} is not Python source "
-            f"owned by installed distribution {contract.package!r}"
-        )
-    source_file = matching[0]
-    try:
-        source = Path(distribution.locate_file(source_file)).read_text(encoding="utf-8")
-    except (OSError, UnicodeError) as error:
-        raise TypeError(
-            f"custom observation model module {module!r} has no readable installed "
-            "Python source"
-        ) from error
-    if not _declares_class(source, str(source_file), qualname):
-        raise TypeError(
-            f"custom observation model {module}.{qualname} is dynamic or not "
-            f"declared by installed distribution {contract.package!r}"
-        )
-
-
-def _custom_contract(model: object) -> ModelProvenance:
+def _declared_custom_contract(model: object) -> ModelProvenance:
     from .observation_uncertainty import ObservationUncertaintyModel
 
     cls = type(model)
@@ -601,8 +496,33 @@ def _custom_contract(model: object) -> ModelProvenance:
         )
     if not isinstance(contract.configuration, Mapping):
         raise TypeError("model provenance configuration must be a mapping")
-    _validate_custom_model_distribution(cls, contract)
     return contract
+
+
+def _custom_contract(model: object) -> ModelProvenance:
+    """Fail closed for live third-party Python behavior.
+
+    A package/version/fingerprint assertion cannot bind the executing class or
+    instance without relying on forbidden mutable runtime state or bytecode.
+    Only exact shipped classes whose behavior graph is attested above can run.
+    """
+    from .observation_uncertainty import ObservationUncertaintyModel
+
+    cls = type(model)
+    module = type.__getattribute__(cls, "__module__")
+    qualname = type.__getattribute__(cls, "__qualname__")
+    name = f"{module}.{qualname}"
+    if ObservationUncertaintyModel not in type.__getattribute__(cls, "__mro__"):
+        raise TypeError(
+            f"custom observation model {name} must subclass "
+            "ObservationUncertaintyModel"
+        )
+    raise TypeError(
+        f"custom observation model {name} is live Python behavior; "
+        "model_provenance cannot authenticate it for reproducible run_od. "
+        "Use an exact shipped Core model whose declarative configuration "
+        "executes in Core Rust"
+    )
 
 
 def model_descriptor(
@@ -614,9 +534,9 @@ def model_descriptor(
     absolute paths contribute to the descriptor.
     """
     cls = type(model)
-    cls_module = _module_name(cls, kind="model class")
-    type_name = f"{cls_module}.{cls.__qualname__}"
     if _is_builtin_model(model):
+        cls_module = _module_name(cls, kind="model class")
+        type_name = f"{cls_module}.{cls.__qualname__}"
         build_version, build_commit = _build_identity or _validated_build_identity()
         implementation = {
             "kind": "adam-core-built-in-v1",
@@ -634,6 +554,8 @@ def model_descriptor(
         }
     else:
         contract = _custom_contract(model)
+        cls_module = _module_name(cls, kind="model class")
+        type_name = f"{cls_module}.{cls.__qualname__}"
         implementation = {
             "kind": "explicit-model-provenance-v1",
             "package": contract.package,
