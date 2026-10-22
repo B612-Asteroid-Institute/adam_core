@@ -20,6 +20,8 @@ lives here so callers exchange ordinary ``Orbits``/``VariantOrbits`` objects.
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import pyarrow as pa
 
 from adam_core import _rust_native as _rn
@@ -29,6 +31,9 @@ from adam_core._rust.arrow import to_quivr_metadata as _to_quivr_metadata
 from adam_core.observers import Observers
 from adam_core.orbits import Orbits
 from adam_core.orbits.variants import VariantOrbits
+
+if TYPE_CHECKING:
+    from adam_core.coordinates.cartesian import CartesianCoordinates
 
 _NESTED_SCHEMA = "OrbitBatch.cartesian.nested.quivr.v1"
 _VARIANT_NESTED_SCHEMA = "OrbitVariantBatch.cartesian.nested.quivr.v1"
@@ -155,6 +160,39 @@ def _to_record_batch(
         table, representation, frame, scale, schema_name
     )
     return contiguous_record_batch(stamped)
+
+
+def _coordinates_to_record_batch(
+    coordinates: "CartesianCoordinates", representation: str
+) -> pa.RecordBatch:
+    """Materialize coordinates as one metadata-stamped I/O RecordBatch."""
+    return _to_record_batch(
+        coordinates.table,
+        representation=representation,
+        frame=coordinates.frame,
+        scale=coordinates.time.scale,
+        schema_name="CoordinateBatch.nested.quivr.v1",
+    )
+
+
+def _cartesian_coordinates_from_record_batch(
+    record_batch: pa.RecordBatch,
+) -> "CartesianCoordinates":
+    """Wrap a Rust-produced Cartesian coordinate RecordBatch without matrix math."""
+    from adam_core.coordinates.cartesian import CartesianCoordinates
+
+    table = pa.Table.from_batches([record_batch])
+    return CartesianCoordinates.from_pyarrow(_to_quivr_metadata(table))
+
+
+def _without_nongrav_covariance(
+    coordinates: "CartesianCoordinates",
+) -> "CartesianCoordinates":
+    """Drop an extended covariance's A1/A2/A3 block in typed Rust."""
+    output = _rn._coordinates_without_nongrav_covariance_arrow(
+        _coordinates_to_record_batch(coordinates, "cartesian")
+    )
+    return _cartesian_coordinates_from_record_batch(output)
 
 
 def orbits_to_record_batch(orbits: Orbits) -> pa.RecordBatch:

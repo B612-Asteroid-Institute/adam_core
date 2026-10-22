@@ -486,6 +486,40 @@ impl CovarianceBatch {
         }
         Ok(out)
     }
+
+    /// Return only the leading six-dimensional coordinate covariance block.
+    ///
+    /// Six-dimensional batches are cloned unchanged. Extended nine-dimensional
+    /// solved-state batches are projected row-by-row in Rust while preserving
+    /// covariance units and row validity. Other dimensions fail closed.
+    pub fn coordinate_block(&self) -> SchemaResult<Self> {
+        self.validate()?;
+        if self.dimension == 6 {
+            return Ok(self.clone());
+        }
+        if self.dimension != 9 {
+            return Err(SchemaError::InvalidCovarianceShape {
+                rows: self.rows,
+                dimension: self.dimension,
+                values: self.values_row_major.len(),
+            });
+        }
+
+        let mut values = Vec::with_capacity(self.rows * 6 * 6);
+        for row in 0..self.rows {
+            let source = self.row_values(row);
+            for coordinate_row in 0..6 {
+                let start = coordinate_row * self.dimension;
+                values.extend_from_slice(&source[start..start + 6]);
+            }
+        }
+        let coordinate_covariance =
+            Self::new(self.rows, 6, values, self.units.clone())?;
+        match self.row_validity.clone() {
+            Some(validity) => coordinate_covariance.with_row_validity(validity),
+            None => Ok(coordinate_covariance),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -652,6 +686,20 @@ impl CoordinateBatch {
                 .map(|covariance| covariance.take(indices))
                 .transpose()?,
         )
+    }
+
+    /// Clone these coordinates with any extended A1/A2/A3 covariance block
+    /// removed. Coordinate values, origins, times, frame, and null-row identity
+    /// are preserved exactly.
+    pub fn without_non_gravitational_covariance(&self) -> SchemaResult<Self> {
+        let mut coordinates = self.clone();
+        coordinates.covariance = self
+            .covariance
+            .as_ref()
+            .map(CovarianceBatch::coordinate_block)
+            .transpose()?;
+        coordinates.validate()?;
+        Ok(coordinates)
     }
 
     pub fn validate(&self) -> SchemaResult<()> {
@@ -1353,6 +1401,57 @@ mod tests {
             CoordinateBatch::cartesian(values, Frame::Ecliptic, origins, None, Some(covariance))
                 .unwrap_err();
         assert!(matches!(err, SchemaError::InvalidCovarianceShape { .. }));
+    }
+
+    #[test]
+    fn covariance_coordinate_block_projects_nine_dimensions_and_preserves_validity() {
+        let values = (0..2 * 9 * 9).map(|value| value as f64).collect::<Vec<_>>();
+        let validity = Validity::from_bools(&[true, false]);
+        let covariance = CovarianceBatch::new(
+            2,
+            9,
+            values.clone(),
+            CovarianceUnits::Coordinate(CoordinateRepresentation::Cartesian),
+        )
+        .unwrap()
+        .with_row_validity(validity.clone())
+        .unwrap();
+
+        let coordinate = covariance.coordinate_block().unwrap();
+        let mut expected = Vec::new();
+        for row in 0..2 {
+            for coordinate_row in 0..6 {
+                let start = row * 81 + coordinate_row * 9;
+                expected.extend_from_slice(&values[start..start + 6]);
+            }
+        }
+        assert_eq!(coordinate.dimension, 6);
+        assert_eq!(coordinate.values_row_major, expected);
+        assert_eq!(coordinate.row_validity, Some(validity));
+    }
+
+    #[test]
+    fn covariance_coordinate_block_keeps_six_dimensions_and_rejects_other_widths() {
+        let six = CovarianceBatch::new(
+            1,
+            6,
+            vec![3.0; 36],
+            CovarianceUnits::Coordinate(CoordinateRepresentation::Cartesian),
+        )
+        .unwrap();
+        assert_eq!(six.coordinate_block().unwrap(), six);
+
+        let other = CovarianceBatch::new(
+            1,
+            2,
+            vec![0.0; 4],
+            CovarianceUnits::Coordinate(CoordinateRepresentation::Cartesian),
+        )
+        .unwrap();
+        assert!(matches!(
+            other.coordinate_block().unwrap_err(),
+            SchemaError::InvalidCovarianceShape { .. }
+        ));
     }
 
     #[test]

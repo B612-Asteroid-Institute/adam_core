@@ -2267,6 +2267,29 @@ fn orbits_nested_round_trip_arrow<'py>(
         .map_err(|err| PyValueError::new_err(format!("failed to export RecordBatch: {err}")))
 }
 
+/// Reduce an extended coordinate covariance to its leading six-dimensional
+/// state block. The Arrow boundary carries quivr storage only; dimensional
+/// selection and null-row preservation are owned by the typed Rust batch.
+#[pyfunction(name = "_coordinates_without_nongrav_covariance_arrow")]
+fn coordinates_without_nongrav_covariance_arrow<'py>(
+    py: Python<'py>,
+    batch: &Bound<'py, PyAny>,
+) -> PyResult<PyObject> {
+    let record_batch = RecordBatch::from_pyarrow_bound(batch)
+        .map_err(|err| PyValueError::new_err(format!("invalid coordinates RecordBatch: {err}")))?;
+    let coordinates = DataCoordinateBatch::try_from_nested_record_batch(&record_batch)
+        .map_err(|err| PyValueError::new_err(format!("failed to decode coordinates: {err}")))?;
+    let stripped = coordinates
+        .without_non_gravitational_covariance()
+        .map_err(|err| PyValueError::new_err(format!("failed to strip covariance block: {err}")))?;
+    let output = stripped
+        .into_nested_record_batch()
+        .map_err(|err| PyValueError::new_err(format!("failed to encode coordinates: {err}")))?;
+    output
+        .to_pyarrow(py)
+        .map_err(|err| PyRuntimeError::new_err(format!("failed to export RecordBatch: {err}")))
+}
+
 /// W1 data-model bridge (bead personal-cmy.13 / OD slice 2): round-trip a quivr
 /// `Observers` table (Arrow IPC, nested quivr layout) through the Rust-canonical
 /// `ObserverBatch` and back. Establishes the observers transport for OD.
@@ -7375,6 +7398,10 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(generate_ephemeris_arrow, m)?)?;
     m.add_function(wrap_pyfunction!(benchmark_generate_ephemeris_arrow, m)?)?;
     m.add_function(wrap_pyfunction!(orbits_nested_round_trip_arrow, m)?)?;
+    m.add_function(wrap_pyfunction!(
+        coordinates_without_nongrav_covariance_arrow,
+        m
+    )?)?;
     m.add_function(wrap_pyfunction!(observers_nested_ipc_round_trip, m)?)?;
     m.add_function(wrap_pyfunction!(observations_nested_ipc_round_trip, m)?)?;
     m.add_function(wrap_pyfunction!(exposure_midpoint_ipc, m)?)?;

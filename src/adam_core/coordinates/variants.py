@@ -101,11 +101,9 @@ def create_coordinate_variants(
         If the input coordinates are not supported.
     """
 
+    # Dense conversion is Python I/O only; Rust owns undefined/non-finite
+    # covariance validation together with the sampling policy.
     covariances = coordinates.covariance.to_matrix()
-    if np.all(np.isnan(covariances)):
-        raise ValueError(
-            "Cannot sample coordinate covariances when covariances are all undefined."
-        )
 
     class VariantCoordinates(qv.Table):
         index = qv.Int64Column()

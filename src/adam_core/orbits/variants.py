@@ -37,18 +37,13 @@ class VariantOrbits(qv.Table):
 
     def without_non_gravitational_parameters(self) -> "VariantOrbits":
         """Strip non-grav values and reduce extended covariance to its 6D block."""
-        variants = self.set_column(
+        from .arrow_bridge import _without_nongrav_covariance
+
+        coordinates = _without_nongrav_covariance(self.coordinates)
+        return self.set_column(
             "non_gravitational_parameters",
             NonGravitationalParameters.nulls(len(self)),
-        )
-        if variants.coordinates.covariance.has_nongrav_block():
-            variants = variants.set_column(
-                "coordinates.covariance",
-                CoordinateCovariances.from_matrix(
-                    variants.coordinates.covariance.to_matrix()
-                ),
-            )
-        return variants
+        ).set_column("coordinates", coordinates)
 
     @classmethod
     def create(

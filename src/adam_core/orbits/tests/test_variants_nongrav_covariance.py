@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 import quivr as qv
 
 from adam_core.coordinates.cartesian import CartesianCoordinates
@@ -92,6 +93,63 @@ def test_sigma_point_variants_sample_and_collapse_full_nongrav_state() -> None:
         mean[6:],
         rtol=0,
         atol=3e-26,
+    )
+
+
+def test_strip_nongrav_covariance_is_rust_owned(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    orbit, _, covariance = _extended_orbit()
+    variants = VariantOrbits.create(orbit, method="sigma-point")
+
+    def forbidden(*_args, **_kwargs):
+        raise AssertionError("Python dense covariance conversion must not execute")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(CoordinateCovariances, "to_matrix", forbidden)
+        patch.setattr(CoordinateCovariances, "from_matrix", forbidden)
+        stripped_orbit = orbit.without_non_gravitational_parameters()
+        stripped_variants = variants.without_non_gravitational_parameters()
+
+    assert not stripped_orbit.has_non_gravitational_solution()
+    assert not stripped_variants.has_non_gravitational_parameters()
+    assert not stripped_variants.coordinates.covariance.has_nongrav_block()
+    np.testing.assert_array_equal(
+        stripped_orbit.coordinates.covariance.to_matrix()[0], covariance[:6, :6]
+    )
+    np.testing.assert_array_equal(
+        stripped_variants.coordinates.covariance.to_matrix(),
+        variants.coordinates.covariance.to_full_matrix()[:, :6, :6],
+    )
+
+
+def test_strip_nongrav_covariance_preserves_mixed_and_null_rows() -> None:
+    extended, _, covariance = _extended_orbit()
+    coordinate_only = extended.set_column(
+        "coordinates.covariance",
+        CoordinateCovariances.from_matrix(covariance[None, :6, :6]),
+    )
+    null_covariance = extended.set_column(
+        "coordinates.covariance",
+        CoordinateCovariances.from_kwargs(values=[None]),
+    )
+    coordinate_only_stripped = coordinate_only.without_non_gravitational_parameters()
+    np.testing.assert_array_equal(
+        coordinate_only_stripped.coordinates.covariance.to_matrix()[0],
+        covariance[:6, :6],
+    )
+    null_stripped = null_covariance.without_non_gravitational_parameters()
+    assert null_stripped.coordinates.covariance.values.to_pylist() == [None]
+
+    mixed = qv.concatenate([coordinate_only, extended, null_covariance])
+    stripped = mixed.without_non_gravitational_parameters()
+
+    assert len(stripped) == 3
+    assert not stripped.has_non_gravitational_solution()
+    assert stripped.coordinates.covariance.values.to_pylist()[2] is None
+    np.testing.assert_array_equal(
+        stripped.coordinates.covariance.to_matrix()[:2],
+        np.repeat(covariance[None, :6, :6], 2, axis=0),
     )
 
 
