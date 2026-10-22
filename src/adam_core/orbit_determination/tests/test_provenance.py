@@ -878,6 +878,13 @@ def test_contracted_moduleless_model_is_rejected():
 def test_real_git_source_checkout_detector_is_fail_closed(tmp_path):
     from adam_core.orbit_determination.provenance import _source_checkout_problems
 
+    # Exercise the default path resolution against this real source checkout;
+    # this kills fail-open and wrong-repository-root implementations rather
+    # than only testing an explicitly supplied temporary path.
+    assert any(
+        "does not match" in problem for problem in _source_checkout_problems("0" * 40)
+    )
+
     repo = tmp_path / "checkout"
     (repo / "src/adam_core/orbit_determination").mkdir(parents=True)
     (repo / "rust/example/src").mkdir(parents=True)
