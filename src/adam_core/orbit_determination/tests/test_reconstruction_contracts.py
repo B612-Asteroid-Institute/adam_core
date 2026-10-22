@@ -179,10 +179,15 @@ def test_fused_equals_composed_every_provenance_field():
         # The explicit custom contract owns its complete configuration rather
         # than relying on Core's built-in field inventory. Both nevertheless
         # identify the exact same input bias table content.
-        assert (
-            fm[0]["tables_sha256"]["bias_table"]
-            == cm[0]["parameters"]["bias_table"]["arrow_sha256"]
+        configuration = cm[0]["parameters"]
+        assert configuration["tag"] == "mapping"
+        custom_bias_table = next(
+            value
+            for key, value in configuration["entries"]
+            if key == {"tag": "str", "value": "bias_table"}
         )
+        assert custom_bias_table["tag"] == "arrow-table"
+        assert fm[0]["tables_sha256"]["bias_table"] == custom_bias_table["sha256"]
     assert not diffs, diffs
 
 

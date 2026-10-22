@@ -138,7 +138,15 @@ def test_run_od_records_provenance(route):
     if route == "fused":
         assert all(len(h) == 64 for h in descriptor["tables_sha256"].values())
     else:
-        assert len(descriptor["parameters"]["bias_table"]["arrow_sha256"]) == 64
+        configuration = descriptor["parameters"]
+        assert configuration["tag"] == "mapping"
+        bias_table = next(
+            value
+            for key, value in configuration["entries"]
+            if key == {"tag": "str", "value": "bias_table"}
+        )
+        assert bias_table["tag"] == "arrow-table"
+        assert len(bias_table["sha256"]) == 64
     assert descriptor["implementation_version"] == (
         "1.0" if route == "composed" else adam_core.__version__
     )
