@@ -47,6 +47,12 @@ def test_errors(orbits):
     nan = with_covariances(orbits, np.full((5, 6, 6), np.nan))
     with pytest.raises(ValueError, match="no covariance"):
         LocalFrameCovariances.from_orbits(nan)
+    extended_nongrav_only = np.full((5, 9, 9), np.nan)
+    extended_nongrav_only[:, 6, 6] = 1.0
+    with pytest.raises(ValueError, match="no covariance"):
+        LocalFrameCovariances.from_orbits(
+            with_covariances(orbits, extended_nongrav_only)
+        )
     with pytest.raises(ValueError, match="inertial frame, got 'itrf93'"):
         local_frame_jacobians(transform_coordinates(coords, frame_out="itrf93"), "VNC")
     radial = coords.set_column("vx", coords.x).set_column("vy", coords.y)

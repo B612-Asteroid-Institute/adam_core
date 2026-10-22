@@ -1287,8 +1287,28 @@ pub fn rotate_cartesian_covariance_flat(
     }
     let rows = flat_cov.len() / (dimension * dimension);
     let indices = vec![0; rows];
+    // Match the historical NumPy `nan_to_num(..., nan=0.0)` preparation:
+    // NaNs are masked/restored by the shared transform, while infinities are
+    // replaced by the finite extrema before multiplication. In particular,
+    // this prevents zero matrix entries from turning an unrelated infinity
+    // into NaN through IEEE `0 * inf` propagation.
+    let finite_covariance = (dimension == 9).then(|| {
+        flat_cov
+            .iter()
+            .map(|value| {
+                if *value == f64::INFINITY {
+                    f64::MAX
+                } else if *value == f64::NEG_INFINITY {
+                    f64::MIN
+                } else {
+                    *value
+                }
+            })
+            .collect::<Vec<_>>()
+    });
+    let covariance = finite_covariance.as_deref().unwrap_or(flat_cov);
     let mut output =
-        apply_linear_covariance_transform_flat(flat_cov, dimension, &indices, matrix_flat)?;
+        apply_linear_covariance_transform_flat(covariance, dimension, &indices, matrix_flat)?;
     let mut near_zero = 0;
     for row in 0..rows {
         let row_start = row * dimension * dimension;
@@ -2021,6 +2041,31 @@ mod cartesian_covariance_rotation_tests {
         assert_eq!(rotated[0], 2.0);
         assert_eq!(rotated[10], 1.0);
         assert!(near_zero > 0);
+    }
+
+    #[test]
+    fn extended_rotation_matches_legacy_nan_and_infinity_normalization() {
+        let mut covariance = vec![0.0_f64; 81];
+        covariance[0] = f64::INFINITY;
+        covariance[1] = f64::NEG_INFINITY;
+        covariance[2] = f64::NAN;
+        covariance[6 * 9 + 6] = f64::INFINITY;
+        let mut identity = [0.0_f64; 36];
+        for index in 0..6 {
+            identity[index * 6 + index] = 1.0;
+        }
+
+        let (rotated, _) =
+            rotate_cartesian_covariance_flat(&covariance, 9, &identity, 0.0).unwrap();
+
+        assert_eq!(rotated[0], f64::MAX);
+        assert_eq!(rotated[1], f64::MIN);
+        assert!(rotated[2].is_nan());
+        assert_eq!(rotated[6 * 9 + 6], f64::MAX);
+        assert!(!rotated
+            .iter()
+            .enumerate()
+            .any(|(index, value)| { !matches!(index, 2) && value.is_nan() }));
     }
 
     #[test]

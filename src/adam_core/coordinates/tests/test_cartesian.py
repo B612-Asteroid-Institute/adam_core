@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 
 from ..cartesian import SPECIFIC_ANGULAR_MOMENTUM_TOLERANCE, CartesianCoordinates
 from ..covariances import CoordinateCovariances
@@ -63,6 +64,69 @@ def test_CartesianCoordinates_rotate():
         coords_rotated.covariance.to_matrix(), covariances_rotated
     )
     return
+
+
+def test_cartesian_rotate_extended_special_values_and_matrix_shapes():
+    covariance = np.zeros((1, 9, 9), dtype=np.float64)
+    covariance[0, 0, 0] = np.inf
+    covariance[0, 0, 1] = -np.inf
+    covariance[0, 2, 2] = np.nan
+    covariance[0, 3, 3] = 1e-30
+    covariance[0, 6, 6] = 1e-30
+    covariance[0, 6, 7] = np.inf
+    coordinates = CartesianCoordinates.from_kwargs(
+        x=[1.0],
+        y=[2.0],
+        z=[3.0],
+        vx=[0.1],
+        vy=[0.2],
+        vz=[0.3],
+        covariance=CoordinateCovariances.from_matrix(covariance),
+        origin=Origin.from_kwargs(code=["origin"]),
+        frame="equatorial",
+    )
+    matrix = np.eye(6)
+
+    rotated_2d = coordinates.rotate(matrix, "identity")
+    rotated_3d = coordinates.rotate(matrix[None, :, :], "identity")
+
+    expected = np.nan_to_num(covariance, nan=0.0)
+    expected[np.isnan(covariance)] = np.nan
+    coordinate_block = expected[:, :6, :6]
+    expected[:, :6, :6] = np.where(
+        np.abs(coordinate_block) < 1e-25, 0.0, coordinate_block
+    )
+    np.testing.assert_equal(rotated_2d.covariance.to_full_matrix(), expected)
+    np.testing.assert_equal(
+        rotated_3d.covariance.to_full_matrix(),
+        rotated_2d.covariance.to_full_matrix(),
+    )
+    assert rotated_2d.covariance.to_full_matrix()[0, 0, 0] == np.finfo(float).max
+    assert rotated_2d.covariance.to_full_matrix()[0, 0, 1] == np.finfo(float).min
+    assert np.isnan(rotated_2d.covariance.to_full_matrix()[0, 2, 2])
+    assert rotated_2d.covariance.to_full_matrix()[0, 3, 3] == 0.0
+    assert rotated_2d.covariance.to_full_matrix()[0, 6, 6] == 1e-30
+    assert rotated_2d.covariance.to_full_matrix()[0, 6, 7] == np.finfo(float).max
+
+
+@pytest.mark.parametrize("shape", [(36,), (5, 5), (2, 6, 6), (6, 6, 1)])
+def test_cartesian_rotate_rejects_noncanonical_matrix_shapes(shape):
+    coordinates = CartesianCoordinates.from_kwargs(
+        x=[1.0],
+        y=[2.0],
+        z=[3.0],
+        vx=[0.1],
+        vy=[0.2],
+        vz=[0.3],
+        covariance=CoordinateCovariances.from_matrix(np.eye(6)[None]),
+        origin=Origin.from_kwargs(code=["origin"]),
+        frame="equatorial",
+    )
+    with pytest.raises(
+        ValueError,
+        match=r"rotation_matrix must have shape \(6, 6\) or \(1, 6, 6\)",
+    ):
+        coordinates.rotate(np.zeros(shape), "invalid")
 
 
 def test_CartesianCoordinates_translate():

@@ -283,7 +283,10 @@ class CoordinateCovariances(qv.Table):
 
     def is_all_nan(self) -> bool:
         """
-        Check if all covariance matrix values are NaN.
+        Check if all six-dimensional coordinate covariance values are NaN.
+
+        Extended A1/A2/A3 covariance values do not make coordinate covariance
+        defined.
 
         Returns
         -------
@@ -292,7 +295,13 @@ class CoordinateCovariances(qv.Table):
         """
         from adam_core import _rust_native
 
-        return _rust_native.covariance_is_all_nan_numpy(self.to_transform_matrix())
+        values = self.values
+        if isinstance(values, pa.ChunkedArray):
+            values = values.combine_chunks()
+        payload = pa.RecordBatch.from_arrays([values], names=["values"])
+        return bool(
+            _rust_native._coordinate_covariance_values_are_all_nan_arrow(payload)
+        )
 
 
 def make_positive_semidefinite(

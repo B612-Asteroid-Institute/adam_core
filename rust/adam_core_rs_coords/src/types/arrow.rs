@@ -246,6 +246,28 @@ pub fn coordinate_covariance_values_to_six(
     Ok(output.finish())
 }
 
+/// Return whether every value in the six-dimensional coordinate block is NaN.
+///
+/// Extended A1/A2/A3 covariance values are deliberately ignored to preserve
+/// the public `CoordinateCovariances.is_all_nan()` contract. Projection,
+/// mixed-width validation, list-null normalization, and child-null handling
+/// are shared with the authoritative covariance payload transform above.
+pub fn coordinate_covariance_values_are_all_nan(values: &LargeListArray) -> SchemaResult<bool> {
+    let coordinate_blocks = coordinate_covariance_values_to_six(values)?;
+    let values = coordinate_blocks
+        .values()
+        .as_any()
+        .downcast_ref::<Float64Array>()
+        .ok_or_else(|| {
+            SchemaError::InvalidRecordBatch(
+                "projected covariance.values items must be Float64".to_string(),
+            )
+        })?;
+    Ok(values
+        .iter()
+        .all(|value| value.is_none_or(|value| value.is_nan())))
+}
+
 fn nested_covariance_struct(
     coordinates: &CoordinateBatch,
     rows: usize,
@@ -1823,6 +1845,29 @@ mod tests {
         let error = coordinate_covariance_values_to_six(&builder.finish()).unwrap_err();
         assert!(matches!(error, SchemaError::InvalidRecordBatch(message) if
             message == "Covariance row 0 has 4 values; expected 36 or 81."));
+    }
+
+    #[test]
+    fn covariance_payload_all_nan_uses_only_coordinate_block_and_preserves_slices() {
+        let mut builder = LargeListBuilder::new(Float64Builder::new());
+        for index in 0..81 {
+            builder
+                .values()
+                .append_value(if index == 6 * 9 + 6 { 1.0 } else { f64::NAN });
+        }
+        builder.append(true);
+        builder.values().append_slice(&[f64::NAN; 36]);
+        builder.append(true);
+        builder.values().append_slice(&[0.0; 36]);
+        builder.append(true);
+        builder.append(false);
+        let values = builder.finish();
+
+        assert!(!coordinate_covariance_values_are_all_nan(&values).unwrap());
+        let only_undefined = values.slice(0, 2);
+        assert!(coordinate_covariance_values_are_all_nan(&only_undefined).unwrap());
+        let list_null = values.slice(3, 1);
+        assert!(coordinate_covariance_values_are_all_nan(&list_null).unwrap());
     }
 
     #[test]

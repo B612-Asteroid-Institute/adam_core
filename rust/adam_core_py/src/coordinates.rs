@@ -6,7 +6,9 @@ use adam_core_rs_coords::propagation::{
     EphemerisPhotometryOptions, EpochPolicy, PropagationDiagnostics, PropagationFailureCode,
     PropagationOptions, PropagationRequest, Propagator, TwoBodyPropagator, TwoBodyPropagatorConfig,
 };
-use adam_core_rs_coords::types::arrow::coordinate_covariance_values_to_six;
+use adam_core_rs_coords::types::arrow::{
+    coordinate_covariance_values_are_all_nan, coordinate_covariance_values_to_six,
+};
 use adam_core_rs_coords::{
     apply_cosine_latitude_correction_flat, apply_linear_covariance_transform_flat,
     bound_longitude_residuals_flat, bound_longitude_value, calculate_chi2_flat,
@@ -2311,6 +2313,25 @@ fn orbits_nested_round_trip_arrow<'py>(
         .map_err(|err| PyValueError::new_err(format!("failed to encode OrbitBatch: {err}")))?;
     out.to_pyarrow(py)
         .map_err(|err| PyValueError::new_err(format!("failed to export RecordBatch: {err}")))
+}
+
+/// Test only the six-dimensional coordinate blocks of covariance-list
+/// payloads. Extended A1/A2/A3 covariance values do not make coordinate
+/// covariance defined.
+#[pyfunction(name = "_coordinate_covariance_values_are_all_nan_arrow")]
+fn coordinate_covariance_values_are_all_nan_arrow(batch: &Bound<'_, PyAny>) -> PyResult<bool> {
+    let record_batch = RecordBatch::from_pyarrow_bound(batch)
+        .map_err(|err| PyValueError::new_err(format!("invalid covariance RecordBatch: {err}")))?;
+    let values = record_batch
+        .column_by_name("values")
+        .ok_or_else(|| PyValueError::new_err("missing covariance values column"))?
+        .as_any()
+        .downcast_ref::<LargeListArray>()
+        .ok_or_else(|| PyValueError::new_err("covariance values must be LargeList<Float64>"))?;
+    coordinate_covariance_values_are_all_nan(values).map_err(|err| match err {
+        SchemaError::InvalidRecordBatch(message) => PyValueError::new_err(message),
+        other => PyValueError::new_err(other.to_string()),
+    })
 }
 
 /// Reduce covariance-list payloads to their leading six-dimensional blocks.
@@ -7455,6 +7476,10 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(generate_ephemeris_arrow, m)?)?;
     m.add_function(wrap_pyfunction!(benchmark_generate_ephemeris_arrow, m)?)?;
     m.add_function(wrap_pyfunction!(orbits_nested_round_trip_arrow, m)?)?;
+    m.add_function(wrap_pyfunction!(
+        coordinate_covariance_values_are_all_nan_arrow,
+        m
+    )?)?;
     m.add_function(wrap_pyfunction!(
         coordinate_covariance_values_to_six_arrow,
         m

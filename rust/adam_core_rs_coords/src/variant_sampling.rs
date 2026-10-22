@@ -560,6 +560,9 @@ fn sample_coordinate_covariances_dimension<const N: usize>(
         }
         OrbitVariantSamplingMethod::MonteCarlo => validate_monte_carlo_parameters(num_samples)?,
     }
+    if rows == 0 {
+        return Ok((Vec::new(), Vec::new(), Vec::new(), Vec::new()));
+    }
     if covariances_flat.iter().all(|value| value.is_nan()) {
         return Err(SchemaError::InvalidRecordBatch(
             "Cannot sample coordinate covariances when covariances are all undefined.".to_string(),
@@ -2039,6 +2042,57 @@ mod tests {
             ),
             other => panic!("unexpected error: {other:?}"),
         }
+    }
+
+    #[test]
+    fn flat_covariance_sampling_empty_input_preserves_output_and_validation_precedence() {
+        let empty = sample_coordinate_covariances_flat(
+            &[],
+            &[],
+            DIM,
+            OrbitVariantSamplingMethod::SigmaPoint,
+            13,
+            None,
+            1.0,
+            0.0,
+            0.0,
+        )
+        .unwrap();
+        assert_eq!(empty, (Vec::new(), Vec::new(), Vec::new(), Vec::new()));
+
+        let sigma_error = sample_coordinate_covariances_flat(
+            &[],
+            &[],
+            DIM,
+            OrbitVariantSamplingMethod::SigmaPoint,
+            13,
+            None,
+            0.0,
+            0.0,
+            0.0,
+        )
+        .unwrap_err();
+        assert!(
+            matches!(sigma_error, SchemaError::InvalidRecordBatch(message) if
+            message == "sigma-point alpha must be positive")
+        );
+
+        let monte_carlo_error = sample_coordinate_covariances_flat(
+            &[],
+            &[],
+            DIM,
+            OrbitVariantSamplingMethod::MonteCarlo,
+            0,
+            None,
+            1.0,
+            0.0,
+            0.0,
+        )
+        .unwrap_err();
+        assert!(
+            matches!(monte_carlo_error, SchemaError::InvalidRecordBatch(message) if
+            message == "Monte Carlo covariance sampling requires num_samples > 0")
+        );
     }
 
     #[test]

@@ -43,11 +43,62 @@ def test_coordinate_variants_all_undefined_error_precedes_other_validation():
             create_coordinate_variants(coordinates, **kwargs)
         assert str(error.value) == expected
 
+    with pytest.raises(ValueError) as error:
+        create_coordinate_variants(coordinates[:0], method="sigma-point")
+    assert str(error.value) == expected
 
-def test_is_all_nan_checks_extended_nongrav_block():
+
+def test_is_all_nan_uses_coordinate_block_in_native_payload(
+    monkeypatch: pytest.MonkeyPatch,
+):
     covariance = np.full((1, 9, 9), np.nan)
     covariance[0, 6, 6] = 1.0
-    assert not CoordinateCovariances.from_matrix(covariance).is_all_nan()
+    extended = CoordinateCovariances.from_matrix(covariance)
+    mixed = CoordinateCovariances.from_kwargs(
+        values=[
+            covariance[0].reshape(-1).tolist(),
+            None,
+            np.eye(6).reshape(-1).tolist(),
+        ]
+    )
+    child_nulls = covariance[0].reshape(-1).tolist()
+    child_nulls[0] = None
+    child_null_covariance = CoordinateCovariances.from_kwargs(values=[child_nulls])
+
+    def forbidden(*_args, **_kwargs):
+        raise AssertionError("dense Python covariance conversion must not execute")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(CoordinateCovariances, "to_matrix", forbidden)
+        patch.setattr(CoordinateCovariances, "to_full_matrix", forbidden)
+        assert extended.is_all_nan()
+        assert mixed[:2].is_all_nan()
+        assert not mixed.is_all_nan()
+        assert child_null_covariance.is_all_nan()
+
+
+def test_native_coordinate_variant_sampling_empty_boundary_and_validation():
+    from adam_core import _rust_native
+
+    means = np.empty((0, 6), dtype=np.float64)
+    covariances = np.empty((0, 6, 6), dtype=np.float64)
+    samples, weights, weights_cov, source_rows = (
+        _rust_native.sample_coordinate_variants_numpy(means, covariances, "sigma-point")
+    )
+    assert samples.shape == (0, 6)
+    assert weights.shape == weights_cov.shape == source_rows.shape == (0,)
+
+    with pytest.raises(ValueError, match="sigma-point alpha must be positive"):
+        _rust_native.sample_coordinate_variants_numpy(
+            means, covariances, "sigma-point", alpha=0.0
+        )
+    with pytest.raises(
+        ValueError,
+        match="Monte Carlo covariance sampling requires num_samples > 0",
+    ):
+        _rust_native.sample_coordinate_variants_numpy(
+            means, covariances, "monte-carlo", num_samples=0
+        )
 
 
 def test_sample_covariance_sigma_points():

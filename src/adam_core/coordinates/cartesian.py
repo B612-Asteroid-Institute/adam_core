@@ -295,8 +295,8 @@ class CartesianCoordinates(qv.Table):
 
         Parameters
         ----------
-        matrix:
-            6x6 rotation matrix.
+        rotation_matrix:
+            6x6 rotation matrix, optionally with one leading singleton dimension.
         frame_out: str
             Name of the frame to which coordinates are being rotated.
 
@@ -307,6 +307,13 @@ class CartesianCoordinates(qv.Table):
         from adam_core import _rust_native
 
         from .._rust.api import rotate_cartesian_time_varying_numpy
+
+        rotation_matrix = np.asarray(rotation_matrix, dtype=np.float64)
+        if rotation_matrix.shape == (1, 6, 6):
+            rotation_matrix = rotation_matrix[0]
+        elif rotation_matrix.shape != (6, 6):
+            raise ValueError("rotation_matrix must have shape (6, 6) or (1, 6, 6)")
+        rotation_matrix = np.ascontiguousarray(rotation_matrix)
 
         n = len(self)
         cov_matrix = np.ascontiguousarray(
