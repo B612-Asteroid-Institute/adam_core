@@ -26,6 +26,7 @@ use spicekit::frame::{
     apply_sxform, invert_sxform, j2000_to_eclipj2000, pck_euler_rotation_and_derivative,
     sxform_from_rotation,
 };
+use spicekit::pool::{KernelPool, PoolError};
 use spicekit::{
     bodc2n as spicekit_bodc2n, bodn2c as spicekit_bodn2c, parse_text_kernel, BodyBinding,
     FrameAssociation, LeapSecondsKernel, NaifIdError, TextKernelContent, TextKernelError,
@@ -44,6 +45,8 @@ const ITRF93_FRAME_CODE: i32 = 3000;
 /// per-call Rayon spawn tax exceeds the Chebyshev evaluation cost for small
 /// batches (mirrors the coords-crate kernel policy).
 const RAYON_SERIAL_THRESHOLD_EPOCHS: usize = 1024;
+/// Epochs per Rayon task above the serial threshold.
+const RESOLVE_CHUNK_EPOCHS: usize = 256;
 pub const KM_PER_AU: f64 = 149_597_870.700;
 pub const SECONDS_PER_DAY: f64 = 86_400.0;
 pub const EARTH_NAIF_ID: i32 = 399;
@@ -69,6 +72,12 @@ pub enum SpiceBackendError {
         path: String,
         #[source]
         source: PckError,
+    },
+    #[error("cannot furnish {path}: {source}")]
+    Furnish {
+        path: String,
+        #[source]
+        source: PoolError,
     },
     #[error("cannot parse text kernel {path}: {source}")]
     TextKernel {
@@ -99,14 +108,8 @@ impl SpiceBackendError {
 }
 
 enum Kernel {
-    Spk {
-        path: String,
-        reader: SpkFile,
-    },
-    Pck {
-        path: String,
-        reader: PckFile,
-    },
+    /// An SPK or a binary PCK. Its reader lives in the backend's pool.
+    Binary { path: String },
     Text {
         path: String,
         content: TextKernelContent,
@@ -116,19 +119,20 @@ enum Kernel {
 impl Kernel {
     fn path(&self) -> &str {
         match self {
-            Kernel::Spk { path, .. } | Kernel::Pck { path, .. } | Kernel::Text { path, .. } => path,
+            Kernel::Binary { path } | Kernel::Text { path, .. } => path,
         }
     }
 }
 
 /// Process-local SPICE backend state.
 ///
-/// Kernel precedence matches CSPICE's effective behavior for adam-core's
-/// use cases: later-loaded SPK/PCK files are tried first, and text-kernel
-/// body bindings are replayed in load order so the most recent binding
-/// wins.
+/// `kernels` registers every furnished path in load order. SPK and binary
+/// PCK readers live in `pool`, which resolves each epoch across the set with
+/// CSPICE `furnsh` priority. Text-kernel body bindings are replayed in load
+/// order so the most recent binding wins.
 pub struct AdamCoreSpiceBackend {
     kernels: Vec<Kernel>,
+    pool: KernelPool,
     custom_names: HashMap<String, i32>,
     obscodes: HashMap<String, GroundObserverSite>,
     spkez_state_cache: SpkezStateCache,
@@ -296,6 +300,7 @@ impl AdamCoreSpiceBackend {
     pub fn new() -> Self {
         Self {
             kernels: Vec::new(),
+            pool: KernelPool::new(),
             custom_names: HashMap::new(),
             obscodes: HashMap::new(),
             spkez_state_cache: SpkezStateCache::default(),
@@ -540,6 +545,7 @@ impl AdamCoreSpiceBackend {
     /// caller that needs a clean kernel pool.
     pub fn clear(&mut self) {
         self.kernels.clear();
+        self.pool.clear();
         self.custom_names.clear();
         self.obscodes.clear();
     }
@@ -783,25 +789,11 @@ impl AdamCoreSpiceBackend {
         }
 
         match peek_daf_idword(path)? {
-            Some(idword) if idword.starts_with(b"DAF/SPK") => {
-                let reader = SpkFile::open(path).map_err(|source| SpiceBackendError::SpkOpen {
-                    path: path_s.clone(),
-                    source,
-                })?;
-                self.kernels.push(Kernel::Spk {
-                    path: path_s,
-                    reader,
-                });
-            }
-            Some(idword) if idword.starts_with(b"DAF/PCK") => {
-                let reader = PckFile::open(path).map_err(|source| SpiceBackendError::PckOpen {
-                    path: path_s.clone(),
-                    source,
-                })?;
-                self.kernels.push(Kernel::Pck {
-                    path: path_s,
-                    reader,
-                });
+            Some(idword) if idword.starts_with(b"DAF/SPK") || idword.starts_with(b"DAF/PCK") => {
+                self.pool
+                    .furnish(path)
+                    .map_err(|source| furnish_error(path_s.clone(), source))?;
+                self.kernels.push(Kernel::Binary { path: path_s });
             }
             _ => {
                 let content =
@@ -827,6 +819,7 @@ impl AdamCoreSpiceBackend {
 
     pub fn unload<P: AsRef<Path>>(&mut self, path: P) {
         let path_s = path.as_ref().display().to_string();
+        self.pool.unload(path.as_ref());
         let mut had_text = false;
         self.kernels.retain(|k| {
             if k.path() != path_s {
@@ -861,12 +854,6 @@ impl AdamCoreSpiceBackend {
         ets: &[f64],
     ) -> Result<Vec<f64>, SpiceBackendError> {
         self.try_spk_state_batch(target, observer, frame, ets)
-            .ok_or_else(|| {
-                SpiceBackendError::NotCovered(format!(
-                    "rust SPK readers do not cover target={target} observer={observer} frame={frame} across {} epochs",
-                    ets.len()
-                ))
-            })
     }
 
     pub fn pxform_batch(
@@ -876,11 +863,6 @@ impl AdamCoreSpiceBackend {
         ets: &[f64],
     ) -> Result<Vec<f64>, SpiceBackendError> {
         self.try_pxform_batch(frame_from, frame_to, ets)
-            .ok_or_else(|| {
-                SpiceBackendError::NotCovered(format!(
-                    "rust PCK readers do not cover pxform({frame_from},{frame_to})"
-                ))
-            })
     }
 
     pub fn sxform_batch(
@@ -889,12 +871,7 @@ impl AdamCoreSpiceBackend {
         frame_to: &str,
         ets: &[f64],
     ) -> Result<Vec<f64>, SpiceBackendError> {
-        self.try_sxform_batch(frame_from, frame_to, ets)
-            .ok_or_else(|| {
-                SpiceBackendError::NotCovered(format!(
-                    "rust PCK readers do not cover sxform({frame_from},{frame_to})"
-                ))
-            })
+        self.try_sxform_batch(frame_from, frame_to, ets, "sxform")
     }
 
     pub fn bodn2c(&self, name: &str) -> Result<i32, SpiceBackendError> {
@@ -1356,93 +1333,50 @@ impl AdamCoreSpiceBackend {
             .collect()
     }
 
+    /// Per-epoch states through the pool, flattened. An uncovered epoch is
+    /// a `NotCovered` error naming it.
     fn try_spk_state_batch(
         &self,
         target: i32,
         center: i32,
         frame: &str,
         ets: &[f64],
-    ) -> Option<Vec<f64>> {
-        let readers: Vec<&SpkFile> = self
-            .kernels
-            .iter()
-            .rev()
-            .filter_map(|k| match k {
-                Kernel::Spk { reader, .. } => Some(reader),
-                _ => None,
-            })
-            .collect();
-        if readers.is_empty() {
-            return None;
-        }
+    ) -> Result<Vec<f64>, SpiceBackendError> {
+        let what = format!(
+            "rust SPK readers do not cover target={target} observer={center} frame={frame}"
+        );
+        let inertial = match frame {
+            "J2000" | "ITRF93" => NaifFrame::J2000,
+            "ECLIPJ2000" => NaifFrame::EclipJ2000,
+            _ => return Err(SpiceBackendError::NotCovered(what)),
+        };
+        let states = resolve_chunked(ets, |chunk| {
+            self.pool.spk_state_batch(target, center, inertial, chunk)
+        })
+        .map_err(|err| not_covered(&what, err))?;
 
-        if matches!(frame, "J2000" | "ECLIPJ2000") {
-            let out_frame = if frame == "J2000" {
-                NaifFrame::J2000
-            } else {
-                NaifFrame::EclipJ2000
-            };
-            for reader in readers {
-                let evaluate = |&et: &f64| {
-                    if frame == "J2000" {
-                        reader.state(target, center, et).map_err(|_| ())
-                    } else {
-                        reader
-                            .state_in_frame(target, center, et, out_frame)
-                            .map_err(|_| ())
-                    }
-                };
-                // Chebyshev evaluation is read-only per epoch; parallelize
-                // large batches (multi-thread gate policy) and stay serial
-                // below the spawn-tax threshold.
-                let states: Result<Vec<_>, ()> = if ets.len() >= RAYON_SERIAL_THRESHOLD_EPOCHS {
-                    ets.par_iter().map(evaluate).collect()
-                } else {
-                    ets.iter().map(evaluate).collect()
-                };
-                if let Ok(states) = states {
-                    let mut out = Vec::with_capacity(ets.len() * 6);
-                    for state in states {
-                        out.extend_from_slice(&state);
-                    }
-                    return Some(out);
-                }
-            }
-            return None;
-        }
-
+        let mut out = Vec::with_capacity(ets.len() * 6);
         if frame == "ITRF93" {
-            let sxform = self.try_sxform_batch("J2000", "ITRF93", ets)?;
-            for reader in readers {
-                let mut out = Vec::with_capacity(ets.len() * 6);
-                let mut covered = true;
-                for (i, &et) in ets.iter().enumerate() {
-                    match reader.state(target, center, et) {
-                        Ok(s) => {
-                            let m = slice_to_mat6(&sxform[i * 36..(i + 1) * 36]);
-                            let rotated = apply_sxform(&m, &s);
-                            out.extend_from_slice(&rotated);
-                        }
-                        Err(_) => {
-                            covered = false;
-                            break;
-                        }
-                    }
-                }
-                if covered {
-                    return Some(out);
-                }
+            let sxform = self.try_sxform_batch("J2000", "ITRF93", ets, "sxform")?;
+            for (i, state) in states.iter().enumerate() {
+                let m = slice_to_mat6(&sxform[i * 36..(i + 1) * 36]);
+                out.extend_from_slice(&apply_sxform(&m, state));
+            }
+        } else {
+            for state in &states {
+                out.extend_from_slice(state);
             }
         }
-
-        None
+        Ok(out)
     }
 
-    fn try_pxform_batch(&self, frame_from: &str, frame_to: &str, ets: &[f64]) -> Option<Vec<f64>> {
-        if frame_from != "ITRF93" && frame_to != "ITRF93" {
-            return None;
-        }
-        let sx = self.try_sxform_batch(frame_from, frame_to, ets)?;
+    fn try_pxform_batch(
+        &self,
+        frame_from: &str,
+        frame_to: &str,
+        ets: &[f64],
+    ) -> Result<Vec<f64>, SpiceBackendError> {
+        let sx = self.try_sxform_batch(frame_from, frame_to, ets, "pxform")?;
         let mut out = Vec::with_capacity(ets.len() * 9);
         for i in 0..ets.len() {
             let base = i * 36;
@@ -1452,33 +1386,78 @@ impl AdamCoreSpiceBackend {
                 }
             }
         }
-        Some(out)
+        Ok(out)
     }
 
-    fn try_sxform_batch(&self, frame_from: &str, frame_to: &str, ets: &[f64]) -> Option<Vec<f64>> {
-        if frame_from != "ITRF93" && frame_to != "ITRF93" {
-            return None;
-        }
-        for reader in self.kernels.iter().rev().filter_map(|k| match k {
-            Kernel::Pck { reader, .. } => Some(reader),
-            _ => None,
-        }) {
-            let evaluate =
-                |&et: &f64| pck_sxform_matrix(reader, frame_from, frame_to, et).map_err(|_| ());
-            let matrices: Result<Vec<_>, ()> = if ets.len() >= RAYON_SERIAL_THRESHOLD_EPOCHS {
-                ets.par_iter().map(evaluate).collect()
-            } else {
-                ets.iter().map(evaluate).collect()
+    /// Per-epoch inertial to body-fixed transforms through the pool,
+    /// flattened 6x6. An uncovered epoch is a `NotCovered` error naming it.
+    fn try_sxform_batch(
+        &self,
+        frame_from: &str,
+        frame_to: &str,
+        ets: &[f64],
+        op: &str,
+    ) -> Result<Vec<f64>, SpiceBackendError> {
+        let what = format!("rust PCK readers do not cover {op}({frame_from},{frame_to})");
+        let (inertial_name, body_name, body_is_to) =
+            match (is_inertial(frame_from), is_inertial(frame_to)) {
+                (true, false) => (frame_from, frame_to, true),
+                (false, true) => (frame_to, frame_from, false),
+                _ => return Err(SpiceBackendError::NotCovered(what)),
             };
-            if let Ok(matrices) = matrices {
-                let mut out = Vec::with_capacity(ets.len() * 36);
-                for m in matrices {
-                    out.extend(m.iter().flat_map(|row| row.iter()).copied());
-                }
-                return Some(out);
-            }
+        let body_frame =
+            body_frame_code(body_name).map_err(|_| SpiceBackendError::NotCovered(what.clone()))?;
+        let inertial = if inertial_name == "J2000" {
+            NaifFrame::J2000
+        } else {
+            NaifFrame::EclipJ2000
+        };
+        let matrices = resolve_chunked(ets, |chunk| {
+            self.pool.pck_sxform_batch(body_frame, inertial, chunk)
+        })
+        .map_err(|err| not_covered(&what, err))?;
+        let mut out = Vec::with_capacity(ets.len() * 36);
+        for m in &matrices {
+            let m = if body_is_to { *m } else { invert_sxform(m) };
+            out.extend(m.iter().flat_map(|row| row.iter()).copied());
         }
-        None
+        Ok(out)
+    }
+}
+
+/// Run `evaluate` over `ets`, serially below the spawn-tax threshold and in
+/// chunks on Rayon above it.
+fn resolve_chunked<T, F>(ets: &[f64], evaluate: F) -> Result<Vec<T>, PoolError>
+where
+    T: Send,
+    F: Fn(&[f64]) -> Result<Vec<T>, PoolError> + Sync,
+{
+    if ets.len() < RAYON_SERIAL_THRESHOLD_EPOCHS {
+        return evaluate(ets);
+    }
+    let chunks: Vec<Vec<T>> = ets
+        .par_chunks(RESOLVE_CHUNK_EPOCHS)
+        .map(&evaluate)
+        .collect::<Result<_, _>>()?;
+    Ok(chunks.into_iter().flatten().collect())
+}
+
+/// `NotCovered` naming the uncovered epoch when the pool reports one.
+fn not_covered(what: &str, err: PoolError) -> SpiceBackendError {
+    SpiceBackendError::NotCovered(match err {
+        PoolError::SpkInsufficientData { et, .. } | PoolError::PckInsufficientData { et, .. } => {
+            format!("{what} at MJD {:.5} TDB", 51544.5 + et / SECONDS_PER_DAY)
+        }
+        other => format!("{what}: {other}"),
+    })
+}
+
+/// Map a pool `furnish` failure onto the backend's open errors.
+fn furnish_error(path: String, source: PoolError) -> SpiceBackendError {
+    match source {
+        PoolError::Spk(source) => SpiceBackendError::SpkOpen { path, source },
+        PoolError::Pck(source) => SpiceBackendError::PckOpen { path, source },
+        source => SpiceBackendError::Furnish { path, source },
     }
 }
 
@@ -2307,5 +2286,59 @@ mod tests {
                 < 1.0e-18
         );
         assert!(values[0][4].abs() < 1.0e-18);
+    }
+
+    fn write_spk_window(dir: &Path, name: &str, start_et: f64, end_et: f64, x_km: f64) -> String {
+        let path = dir.join(name);
+        let mut writer = SpkWriter::new_spk("adam-core-rs-spice-coverage-test");
+        writer
+            .add_type9(Type9Segment {
+                target: 42,
+                center: 0,
+                frame_id: 1,
+                start_et,
+                end_et,
+                segment_id: "TEST BODY".to_string(),
+                degree: 1,
+                states: vec![x_km, 0.0, 0.0, 0.0, 0.0, 0.0, x_km, 0.0, 0.0, 0.0, 0.0, 0.0],
+                epochs: vec![start_et, end_et],
+            })
+            .unwrap();
+        writer.write(&path).unwrap();
+        path.display().to_string()
+    }
+
+    #[test]
+    fn spkez_batch_reads_across_two_spk_files_per_epoch() {
+        let dir = tempdir().unwrap();
+        let early = write_spk_window(dir.path(), "early.bsp", 0.0, 100.0, 1.0);
+        let late = write_spk_window(dir.path(), "late.bsp", 200.0, 300.0, 2.0);
+        let mut backend = AdamCoreSpiceBackend::new();
+        backend.furnsh(&early).unwrap();
+        backend.furnsh(&late).unwrap();
+
+        // Each epoch on its own already worked. The batch is the regression.
+        let states = backend
+            .spkez_batch(42, 0, "J2000", &[50.0, 250.0, 10.0])
+            .expect("the union of the two files covers the batch");
+        assert_eq!(states.len(), 18);
+        assert!((states[0] - 1.0).abs() < 1.0e-9, "{}", states[0]);
+        assert!((states[6] - 2.0).abs() < 1.0e-9, "{}", states[6]);
+        assert!((states[12] - 1.0).abs() < 1.0e-9, "{}", states[12]);
+    }
+
+    #[test]
+    fn spkez_batch_names_the_first_uncovered_epoch() {
+        let dir = tempdir().unwrap();
+        let early = write_spk_window(dir.path(), "early.bsp", 0.0, 100.0, 1.0);
+        let mut backend = AdamCoreSpiceBackend::new();
+        backend.furnsh(&early).unwrap();
+
+        let err = backend
+            .spkez_batch(42, 0, "J2000", &[50.0, 10_000.0])
+            .expect_err("10000 s past J2000 is outside the only loaded file");
+        let message = err.to_string();
+        assert!(err.is_not_covered(), "{message}");
+        assert!(message.contains("MJD 51544.61574"), "{message}");
     }
 }

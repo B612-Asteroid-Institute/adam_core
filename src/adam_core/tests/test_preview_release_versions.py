@@ -446,7 +446,7 @@ def test_rust_ci_is_reproducible_and_downstream_sources_are_exact() -> None:
     nightly = (workflows / "nightly-rust-benchmark.yml").read_text()
     release_matrix = (workflows / "release-candidate-wheel-matrix.yml").read_text()
     tier1 = (workflows / "tier1-dependent-smoke.yml").read_text()
-    assist_sha = "8c95fdfcaf2df68e7dc1b5c7ee540f938103bb8b"
+    assist_sha = "8eba85d28b6b266548f2b3892b90db3857763625"
 
     assert "dtolnay/rust-toolchain@1.87.0" in normal_ci
     assert "components: rustfmt, clippy" in normal_ci
