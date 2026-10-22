@@ -14,6 +14,7 @@ import pytest
 import adam_core
 from adam_core import _rust_native
 from adam_core.orbit_determination import (
+    ModelProvenance,
     NativeOrbitFitter,
     OdProvenance,
     refine,
@@ -48,6 +49,9 @@ def _record(orbits) -> dict:
 class PythonAppliedModel(PerformanceWeightedModel):
     def apply(self, observations):
         return super().apply(observations)
+
+    def model_provenance(self):
+        return ModelProvenance("adam-core-tests", "1", "2" * 64, dict(vars(self)))
 
 
 def _fitter(**kw):
@@ -172,18 +176,13 @@ def test_fused_equals_composed_every_provenance_field():
         assert isinstance(fm[0]["implementation"], dict)
         assert isinstance(cm[0]["implementation"], dict)
         assert fm[0]["implementation"] != cm[0]["implementation"]
-        for d in (fm, cm):
-            for m in d:
-                for key in (
-                    "type",
-                    "descriptor_sha256",
-                    "implementation_version",
-                    "implementation_entrypoint",
-                    "implementation",
-                    "implementation_class",
-                ):
-                    m.pop(key)
-        assert fm == cm
+        # The explicit custom contract owns its complete configuration rather
+        # than relying on Core's built-in field inventory. Both nevertheless
+        # identify the exact same input bias table content.
+        assert (
+            fm[0]["tables_sha256"]["bias_table"]
+            == cm[0]["parameters"]["bias_table"]["arrow_sha256"]
+        )
     assert not diffs, diffs
 
 
@@ -248,6 +247,9 @@ def test_two_distinct_epoch_arcs_are_refused_on_all_routes():
         def apply(self, value):
             return value
 
+        def model_provenance(self):
+            return ModelProvenance("adam-core-tests", "1", "3" * 64, {})
+
     for models in (None, [PythonIdentity()]):
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
@@ -271,6 +273,11 @@ def test_model_descriptor_numpy_variants():
 
         def apply(self, o):
             return o
+
+        def model_provenance(self):
+            return ModelProvenance(
+                "adam-core-tests", "1", "4" * 64, {"values": self.values}
+            )
 
     def sha(v):
         return model_descriptor(ArrayModel(v))["descriptor_sha256"]

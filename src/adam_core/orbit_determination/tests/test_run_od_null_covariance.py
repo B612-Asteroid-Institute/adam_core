@@ -16,6 +16,7 @@ import pytest
 
 from ...coordinates.covariances import CoordinateCovariances
 from ..evaluate import OrbitDeterminationObservations
+from ..model_provenance import ModelProvenance
 from ..native_orbit_fitter import NativeOrbitFitter
 from ..od_orchestration import run_od
 from ..veres2017 import VERES2017_SIGMA_TABLE_SCHEMA, SigmaFillModel
@@ -125,6 +126,9 @@ def test_native_and_python_applied_model_routes_agree_with_filled_sigmas(
 
         def apply(self, observations):
             return super().apply(observations)
+
+        def model_provenance(self):
+            return ModelProvenance("adam-core-tests", "1", "5" * 64, dict(vars(self)))
 
     python_model = PythonAppliedSigmaFillModel(
         global_fill_table(), fallback_sigma_arcsec=None

@@ -6,6 +6,7 @@ import pytest
 import adam_core
 from adam_core import _rust_native
 from adam_core.coordinates import CoordinateCovariances
+from adam_core.orbit_determination import ModelProvenance
 from adam_core.orbit_determination.native_orbit_fitter import NativeOrbitFitter
 from adam_core.orbit_determination.observation_uncertainty import (
     CompositeModel,
@@ -35,6 +36,15 @@ class RecordingNativePropagator(NativeTwoBodyPropagator):
 
 class ScaleSigmas(IdentityModel):
     factor = 2.0
+    implementation_fingerprint = "6" * 64
+
+    def model_provenance(self):
+        return ModelProvenance(
+            "adam-core-tests",
+            "1",
+            self.implementation_fingerprint,
+            {"factor": self.factor},
+        )
 
     def apply(self, observations):
         self.calls = getattr(self, "calls", 0) + 1
@@ -47,6 +57,8 @@ class ScaleSigmas(IdentityModel):
 
 
 class NativeScaleSigmas(ScaleSigmas):
+    implementation_fingerprint = "7" * 64
+
     """Explicitly describe the inherited custom apply method for Rust."""
 
     def _native_specs(self):
@@ -56,18 +68,26 @@ class NativeScaleSigmas(ScaleSigmas):
 
 
 class ChangedNativeScaleSigmas(NativeScaleSigmas):
+    implementation_fingerprint = "8" * 64
+
     def apply(self, observations):
         # This extra scaling is absent from the inherited native specification.
         return super().apply(super().apply(observations))
 
 
 class ScalingComposite(CompositeModel):
+    def model_provenance(self):
+        return ModelProvenance(
+            "adam-core-tests", "1", "9" * 64, {"models": self.models}
+        )
+
     def apply(self, observations):
         return ScaleSigmas().apply(super().apply(observations))
 
 
 class UnchangedIdentity(IdentityModel):
-    pass
+    def model_provenance(self):
+        return ModelProvenance("adam-core-tests", "1", "a" * 64, {})
 
 
 class UnchangedFitter(NativeOrbitFitter):
@@ -256,6 +276,12 @@ def test_custom_fitter_runs_before_native_settings_validation(observations):
 def test_instance_model_override_is_honored(observations, monkeypatch):
     model = IdentityModel()
     monkeypatch.setattr(model, "apply", ScaleSigmas().apply)
+    monkeypatch.setattr(
+        model,
+        "model_provenance",
+        lambda: ModelProvenance("adam-core-tests", "1", "b" * 64, {"factor": 2.0}),
+        raising=False,
+    )
     propagator = RecordingNativePropagator()
     _, members = run_od(observations, make_fitter(), model, propagator=propagator)
     npt.assert_allclose(

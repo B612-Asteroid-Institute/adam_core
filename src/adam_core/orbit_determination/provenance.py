@@ -1,30 +1,25 @@
-"""
-Compact orbit-determination provenance (`OdProvenance` on `FittedOrbits`).
+"""Compact, reproducible orbit-determination provenance.
 
-The IOD stage records whether its solution was ambiguous; `run_od` completes
-the record on either route: adam-core version, route, fitter, IOD and
-refinement providers (identity, ABI, capabilities, time scale and immutable
-configuration/data hashes), source build, exact ordered fitting-input hash,
-settings, complete observation-model configuration/content hashes, native IOD
-and CMC diagnostics, and the outliers the final fit rejected.
+Built-in adam-core observation models are identified by the exact clean native
+build commit and a stable entrypoint name. Custom models must declare an
+explicit :class:`ModelProvenance`; runtime source inspection and import history
+are deliberately outside the identity contract.
 """
 
 from __future__ import annotations
 
-import ast
+import datetime as dt
 import functools
 import hashlib
-import inspect
 import json
+import math
+import re
 import subprocess
-import sys
 import types
-import weakref
 from collections.abc import Mapping, Sequence
-from copy import deepcopy
 from dataclasses import dataclass
 from enum import Enum
-from importlib import import_module, metadata
+from importlib import metadata
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional, cast
 
@@ -34,9 +29,13 @@ import quivr as qv
 
 from ._native_dispatch import native_backend
 from .fitted_orbits import FittedOrbitMembers, FittedOrbits, OdProvenance
+from .model_provenance import ModelProvenance
 
 if TYPE_CHECKING:
     from ..propagator import Propagator
+
+_CONTRACT_NAME = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9_.-]*[A-Za-z0-9])?$")
+_HEX64 = re.compile(r"^[0-9a-f]{64}$")
 
 
 def _module_name(value: object, *, kind: str) -> str:
@@ -47,6 +46,7 @@ def _module_name(value: object, *, kind: str) -> str:
 
 
 def _package_version(module: str) -> Optional[str]:
+    """Installed package version for backend display only; never imports it."""
     if not isinstance(module, str) or not module:
         raise TypeError("provenance module identity must be a non-empty string")
     top = module.split(".")[0]
@@ -62,367 +62,8 @@ def _package_version(module: str) -> Optional[str]:
     return None
 
 
-def _is_stdlib_module(module_name: str) -> bool:
-    """Whether *module_name* belongs to Python's versioned standard library."""
-    return module_name.split(".")[0] in sys.stdlib_module_names
-
-
-_MODULE_SOURCE_CACHE: weakref.WeakKeyDictionary[types.ModuleType, str] = (
-    weakref.WeakKeyDictionary()
-)
-_MODULE_EXECUTION_TOKENS: weakref.WeakKeyDictionary[
-    types.ModuleType, dict[str, weakref.ReferenceType[object]]
-] = weakref.WeakKeyDictionary()
-_SOURCE_IDENTITY_CACHE: weakref.WeakKeyDictionary[object, dict[str, Any]] = (
-    weakref.WeakKeyDictionary()
-)
-
-
-def _source_tree_roots(module: types.ModuleType) -> list[Path]:
-    top_name = module.__name__.split(".")[0]
-    try:
-        top = import_module(top_name)
-    except Exception:
-        top = module
-    package_paths = getattr(top, "__path__", None)
-    if package_paths is not None:
-        roots = sorted(
-            {Path(item).resolve() for item in package_paths if Path(item).is_dir()},
-            key=str,
-        )
-        if roots:
-            return roots
-    try:
-        source_file = inspect.getsourcefile(top) or inspect.getsourcefile(module)
-    except TypeError:
-        source_file = None
-    return [] if source_file is None else [Path(source_file).resolve().parent]
-
-
-def _module_text(module: types.ModuleType) -> str | None:
-    spec = getattr(module, "__spec__", None)
-    loader = getattr(spec, "loader", None)
-    get_source = getattr(loader, "get_source", None)
-    if callable(get_source):
-        try:
-            source = get_source(module.__name__)
-        except Exception:
-            source = None
-        if isinstance(source, str):
-            return source
-    try:
-        source_file = inspect.getsourcefile(module)
-    except TypeError:
-        source_file = None
-    if source_file is not None:
-        try:
-            return Path(source_file).read_text(encoding="utf-8")
-        except (OSError, UnicodeError):
-            pass
-    return None
-
-
-def _local_source_record(
-    module_name: str, roots: Sequence[Path]
-) -> tuple[types.ModuleType, str, str] | None:
-    module = sys.modules.get(module_name)
-    if not isinstance(module, types.ModuleType):
-        return None
-    try:
-        source_file = inspect.getsourcefile(module)
-    except TypeError:
-        return None
-    if source_file is None:
-        return None
-    path = Path(source_file).resolve()
-    root_index = next(
-        (index for index, root in enumerate(roots) if path.is_relative_to(root)),
-        None,
-    )
-    if root_index is None or path.suffix != ".py" or path.name == "_version.py":
-        return None
-    source = _module_text(module)
-    if source is None:
-        raise TypeError(
-            f"provenance module {module_name!r} has no reproducible source content"
-        )
-    relative = path.relative_to(roots[root_index]).as_posix()
-    return module, f"{root_index}/{relative}", source
-
-
-def _imported_local_modules(
-    module: types.ModuleType, source: str, roots: Sequence[Path]
-) -> list[str]:
-    """Return statically imported local modules without broad package hashing."""
-    try:
-        tree = ast.parse(source)
-    except SyntaxError as error:
-        raise TypeError(
-            f"provenance module {module.__name__!r} has invalid source"
-        ) from error
-    package = (
-        module.__name__
-        if getattr(module, "__path__", None) is not None
-        else module.__name__.rpartition(".")[0]
-    )
-    imported: set[str] = set()
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Import):
-            imported.update(alias.name for alias in node.names)
-            continue
-        if not isinstance(node, ast.ImportFrom):
-            continue
-        if node.level:
-            if not package:
-                continue
-            relative = "." * node.level + (node.module or "")
-            try:
-                base = __import__(
-                    "importlib.util", fromlist=["resolve_name"]
-                ).resolve_name(relative, package)
-            except (ImportError, ValueError):
-                continue
-        elif node.module:
-            base = node.module
-        else:
-            continue
-        if len(node.names) == 1 and node.names[0].name == "*":
-            imported.add(base)
-            continue
-        found_child = False
-        for alias in node.names:
-            child = f"{base}.{alias.name}"
-            if _local_source_record(child, roots) is not None:
-                imported.add(child)
-                found_child = True
-        if not found_child:
-            imported.add(base)
-    return sorted(imported)
-
-
-def _source_tree_content(module: types.ModuleType) -> str:
-    """Deterministic executing-source dependency closure for local helpers.
-
-    Only the entrypoint module and local modules it statically imports are
-    included, recursively. This covers sibling/same-package delegated helpers
-    without making provenance depend on tests or unrelated package files.
-    """
-    roots = _source_tree_roots(module)
-    pending = [module.__name__]
-    seen: set[str] = set()
-    records: dict[str, bytes] = {}
-    while pending:
-        module_name = pending.pop()
-        if module_name in seen:
-            continue
-        seen.add(module_name)
-        record = _local_source_record(module_name, roots)
-        if record is None:
-            continue
-        local_module, relative, source = record
-        records[relative] = source.encode("utf-8")
-        pending.extend(_imported_local_modules(local_module, source, roots))
-    if not records:
-        raise TypeError(
-            f"provenance module {module.__name__!r} has no reproducible source tree"
-        )
-    digest = hashlib.sha256()
-    for relative, payload in sorted(records.items()):
-        encoded = relative.encode("utf-8")
-        digest.update(len(encoded).to_bytes(8, "big"))
-        digest.update(encoded)
-        digest.update(len(payload).to_bytes(8, "big"))
-        digest.update(payload)
-    return f"python-source-dependencies-v1:{digest.hexdigest()}"
-
-
-def _note_executing_object(module_name: str, qualname: str, value: object) -> None:
-    """Invalidate a source snapshot only when executing objects were reloaded.
-
-    File edits alone leave the loaded class/function object unchanged and must
-    not alter provenance. Re-executing/reloading a definition creates a new
-    object for the same qualified name, at which point a fresh source-tree
-    snapshot truthfully describes the new executing implementation.
-    """
-    try:
-        module = import_module(module_name)
-        reference = weakref.ref(value)
-    except (Exception, TypeError):
-        return
-    tokens = _MODULE_EXECUTION_TOKENS.setdefault(module, {})
-    prior = tokens.get(qualname)
-    if prior is not None and prior() is not value:
-        _MODULE_SOURCE_CACHE.pop(module, None)
-    tokens[qualname] = reference
-
-
-def _module_source(module_name: str) -> str:
-    """Stable executing-package source snapshot or a fail-closed error.
-
-    The first identity request snapshots the loaded module's deterministic
-    source tree. Later on-disk edits cannot falsely claim that already-loaded
-    executing code changed; reloading into a fresh module/process takes a new
-    snapshot.
-    """
-    try:
-        module = import_module(module_name)
-    except Exception as error:
-        raise TypeError(
-            f"cannot import provenance module {module_name!r} reproducibly"
-        ) from error
-    cached = _MODULE_SOURCE_CACHE.get(module)
-    if cached is not None:
-        return cached
-    source = _module_text(module)
-    if not isinstance(source, str):
-        raise TypeError(
-            f"provenance module {module_name!r} has no reproducible source content"
-        )
-    # Hashing the serialized tree marker through the existing module-source
-    # field preserves the stable descriptor schema while covering same-package
-    # and sibling local delegated helpers.
-    snapshot = source + "\n" + _source_tree_content(module)
-    _MODULE_SOURCE_CACHE[module] = snapshot
-    return snapshot
-
-
-def _entrypoint_source(
-    value: object, module_name: str, qualname: str, kind: str
-) -> str:
-    try:
-        return inspect.getsource(value)
-    except (OSError, TypeError) as error:
-        raise TypeError(
-            f"{kind} {module_name}.{qualname} has no reproducible source content"
-        ) from error
-
-
-def _named_source_identity(
-    module_name: str, qualname: str, *, kind: str, implementation_version: Optional[str]
-) -> dict[str, Any]:
-    return {
-        "module": module_name,
-        "qualname": qualname,
-        "implementation_version": implementation_version,
-        "implementation_kind": kind,
-    }
-
-
-def _source_identity(value: object, *, kind: str) -> dict[str, Any]:
-    """Interpreter-independent implementation identity.
-
-    Local and package Python code is identified by its entrypoint and a cached
-    deterministic source-tree snapshot. Standard-library and language classes
-    are represented by stable public names rather than version-specific stdlib
-    source. CPython bytecode is deliberately excluded.
-    """
-    try:
-        cached = _SOURCE_IDENTITY_CACHE.get(value)
-    except TypeError:
-        cached = None
-    if cached is not None:
-        return deepcopy(cached)
-
-    module_name = _module_name(value, kind=kind)
-    qualname = getattr(value, "__qualname__", None)
-    if not isinstance(qualname, str) or not qualname:
-        raise TypeError(f"{kind} has no reproducible qualified name")
-    version = _package_version(module_name)
-    _note_executing_object(module_name, qualname, value)
-    if _is_stdlib_module(module_name):
-        identity = _named_source_identity(
-            module_name,
-            qualname,
-            kind="stdlib-named-v1",
-            implementation_version=None,
-        )
-    else:
-        try:
-            source_file = inspect.getsourcefile(value)
-        except TypeError:
-            source_file = None
-        if source_file is None and version is not None:
-            # Extension-defined classes/functions have no Python entrypoint
-            # source. Their immutable installed package tree, public name and
-            # distribution version form the portable identity.
-            identity = _named_source_identity(
-                module_name,
-                qualname,
-                kind="installed-distribution-v1",
-                implementation_version=version,
-            )
-            identity["module_source_sha256"] = hashlib.sha256(
-                _module_source(module_name).encode("utf-8")
-            ).hexdigest()
-        else:
-            if version is None:
-                entrypoint_source = _entrypoint_source(
-                    value, module_name, qualname, kind
-                )
-            else:
-                try:
-                    entrypoint_source = inspect.getsource(value)
-                except (OSError, TypeError):
-                    identity = _named_source_identity(
-                        module_name,
-                        qualname,
-                        kind="installed-distribution-v1",
-                        implementation_version=version,
-                    )
-                    identity["module_source_sha256"] = hashlib.sha256(
-                        _module_source(module_name).encode("utf-8")
-                    ).hexdigest()
-                    entrypoint_source = None
-            if entrypoint_source is None:
-                module_source = None
-            else:
-                module_source = _module_source(module_name)
-                identity = _portable_python_source_identity(
-                    module_name,
-                    qualname,
-                    version,
-                    entrypoint_source,
-                    module_source,
-                )
-    if inspect.isclass(value):
-        identity["mro"] = [
-            _source_identity(base, kind="base class")
-            for base in value.__mro__[1:]
-            if base is not object
-        ]
-    try:
-        _SOURCE_IDENTITY_CACHE[value] = deepcopy(identity)
-    except TypeError:
-        pass
-    return identity
-
-
-def _portable_python_source_identity(
-    module_name: str,
-    qualname: str,
-    implementation_version: str | None,
-    entrypoint_source: str,
-    module_source: str,
-) -> dict[str, Any]:
-    # Keep this small source/content core stable for independent mutation
-    # verification while richer MRO and package identity is added by callers.
-    return {
-        "module": module_name,
-        "qualname": qualname,
-        "implementation_version": _package_version(module_name),
-        "entrypoint_source_sha256": hashlib.sha256(
-            entrypoint_source.encode("utf-8")
-        ).hexdigest(),
-        "module_source_sha256": hashlib.sha256(
-            module_source.encode("utf-8")
-        ).hexdigest(),
-    }
-
-
 def backend_identity(propagator: object) -> Optional[str]:
-    """``"name version"`` of a propagator's `NativeBackend`, else
-    ``"python:module.qualname[ version]"``; None for None. A class is
-    identified as an instance of it would be."""
+    """Return the declared native backend identity or a stable Python name."""
     if propagator is None:
         return None
     instance = (
@@ -440,9 +81,6 @@ def backend_identity(propagator: object) -> Optional[str]:
 def _table_bytes(table: pa.Table | qv.Table) -> bytes:
     if isinstance(table, qv.Table):
         table = table.table
-    # IPC stream bytes otherwise retain arbitrary caller chunk boundaries.
-    # One canonical chunk per typed column preserves order/schema/content but
-    # makes logically identical Arrow layouts hash identically.
     table = table.combine_chunks()
     sink = pa.BufferOutputStream()
     with pa.ipc.new_stream(sink, table.schema) as writer:
@@ -455,12 +93,7 @@ def _table_sha256(table: pa.Table | qv.Table) -> str:
 
 
 def _fit_input_sha256(observations: qv.Table, members: FittedOrbitMembers) -> str:
-    """Hash the ordered caller table and the exact astrometry consumed.
-
-    ``used_astrometry`` is emitted by the same native run that fit the orbit,
-    so this also covers native observation-model output without re-running a
-    Python provider after the fit.
-    """
+    """Hash the ordered caller table and exact astrometry consumed by native OD."""
     used = members.table.select(["obs_id", "used_astrometry"])
     digest = hashlib.sha256()
     for label, payload in (
@@ -475,7 +108,7 @@ def _fit_input_sha256(observations: qv.Table, members: FittedOrbitMembers) -> st
 
 
 def _numpy_sha256(value: np.ndarray[Any, Any]) -> dict[str, Any]:
-    """Canonical NumPy identity independent of byte order/view layout."""
+    """Canonical NumPy identity independent of byte order and view layout."""
     array = np.asarray(value)
     if array.dtype.hasobject:
         raise TypeError("object-dtype NumPy provenance is not supported")
@@ -493,85 +126,115 @@ def _arrow_array_sha256(value: pa.Array | pa.ChunkedArray) -> str:
     return _table_sha256(pa.table({"value": value}))
 
 
-def _builtin_identity(value: Any) -> dict[str, Any]:
-    """Stable identity for a named Python/runtime or extension builtin.
-
-    Builtins expose no Python source. Their public module/qualified name is the
-    reproducible entrypoint; an owning distribution version and module source
-    hash are included when available. This deliberately excludes interpreter
-    bytecode and interpreter-minor-version details.
-    """
-    module_name = _module_name(value, kind="builtin callable")
+def _named_identity(value: object, *, kind: str) -> dict[str, str]:
+    """Stable public name without importing or inspecting the owning module."""
+    module = _module_name(value, kind=kind)
     qualname = getattr(value, "__qualname__", None)
     if not isinstance(qualname, str) or not qualname:
-        raise TypeError("builtin callable has no reproducible qualified name")
-    identity: dict[str, Any] = {
-        "module": module_name,
-        "qualname": qualname,
-        "implementation_version": _package_version(module_name),
-        "implementation_kind": "builtin",
-    }
-    try:
-        if _is_stdlib_module(module_name):
-            raise TypeError("stdlib source is interpreter-version-specific")
-        source = _module_source(module_name)
-    except TypeError:
-        # Language builtins and extension-only modules have no Python source;
-        # their stable named API (plus package version, for extensions) is the
-        # strongest portable identity available across supported CPython minors.
-        identity["source_identity"] = "named-builtin-v1"
-    else:
-        identity["module_source_sha256"] = hashlib.sha256(
-            source.encode("utf-8")
-        ).hexdigest()
-    return identity
+        raise TypeError(f"{kind} has no reproducible qualified name")
+    return {"kind": kind, "module": module, "qualname": qualname}
 
 
-def _callable_identity(value: Any, seen: set[int]) -> dict[str, Any]:
-    function = value.__func__ if inspect.ismethod(value) else value
-    identity = _source_identity(function, kind="callable")
-    closure = [
-        _canonical_parameter(cell.cell_contents, seen)
-        for cell in function.__closure__ or ()
-    ]
-    identity.update(
-        {
-            "defaults": _canonical_parameter(function.__defaults__, seen),
-            "kwdefaults": _canonical_parameter(function.__kwdefaults__, seen),
-            "closure": closure,
-            # fmt: off
-            "bound_to_model": bool(
-                inspect.ismethod(value)
-                and id(getattr(value, "__self__", None)) in seen
-            ),
-            # fmt: on
+def _canonical_float(value: float) -> float | dict[str, str]:
+    if math.isnan(value):
+        return {"float": "nan"}
+    if math.isinf(value):
+        return {"float": "+inf" if value > 0 else "-inf"}
+    if value == 0.0 and math.copysign(1.0, value) < 0:
+        return {"float": "-0"}
+    return value
+
+
+def _canonical_numpy_scalar(value: np.generic) -> dict[str, Any]:
+    dtype = value.dtype.str
+    if isinstance(value, np.datetime64):
+        encoded: Any = str(value)
+    elif isinstance(value, np.timedelta64):
+        encoded = str(value)
+    elif isinstance(value, np.complexfloating):
+        encoded = {
+            "real": _canonical_float(float(value.real)),
+            "imag": _canonical_float(float(value.imag)),
         }
+    elif isinstance(value, np.floating):
+        encoded = _canonical_float(float(value))
+    else:
+        encoded = value.item()
+    return {"dtype": dtype, "value": encoded}
+
+
+def _is_namedtuple_class(value: object) -> bool:
+    return (
+        isinstance(value, type)
+        and issubclass(value, tuple)
+        and isinstance(getattr(value, "_fields", None), tuple)
+        and all(isinstance(field, str) for field in value._fields)
     )
-    return identity
+
+
+def _is_namedtuple_instance(value: object) -> bool:
+    return isinstance(value, tuple) and _is_namedtuple_class(type(value))
 
 
 def _canonical_parameter(value: Any, seen: set[int]) -> Any:
-    if value is None or isinstance(value, (bool, int, float, str)):
+    """Canonical configuration independent of interpreter and import state."""
+    if value is None or isinstance(value, (bool, int, str)):
         return value
+    if isinstance(value, float):
+        return _canonical_float(value)
     if isinstance(value, bytes):
         return {"bytes_sha256": hashlib.sha256(value).hexdigest()}
+    if isinstance(value, np.generic):
+        return {"numpy_scalar": _canonical_numpy_scalar(value)}
+    if isinstance(value, np.dtype):
+        return {"numpy_dtype": value.str}
+    if isinstance(value, np.ufunc):
+        return {
+            "numpy_ufunc": value.__name__,
+            "nin": value.nin,
+            "nout": value.nout,
+        }
+    if isinstance(value, dt.datetime):
+        return {
+            "datetime": value.isoformat(timespec="microseconds"),
+            "fold": value.fold,
+        }
+    if isinstance(value, dt.date):
+        return {"date": value.isoformat()}
+    if isinstance(value, dt.time):
+        return {"time": value.isoformat(timespec="microseconds"), "fold": value.fold}
+    if isinstance(value, dt.timedelta):
+        return {
+            "timedelta": {
+                "days": value.days,
+                "seconds": value.seconds,
+                "microseconds": value.microseconds,
+            }
+        }
     if isinstance(value, Path):
         if not value.is_file():
             raise ValueError(f"provenance path is not a readable file: {value}")
         return {
-            "path": str(value),
+            "file_name": value.name,
             "sha256": hashlib.sha256(value.read_bytes()).hexdigest(),
         }
     if isinstance(value, type) and issubclass(value, Enum):
-        return {"enum_class": _source_identity(value, kind="enum class")}
-    if isinstance(value, type):
-        return {"class": _source_identity(value, kind="class")}
-    if isinstance(value, Enum):
-        cls = type(value)
+        return {"enum_class": _named_identity(value, kind="enum-class-v1")}
+    if _is_namedtuple_class(value):
         return {
-            "enum": _source_identity(cls, kind="enum class"),
+            "namedtuple_class": _named_identity(value, kind="namedtuple-class-v1"),
+            "fields": list(value._fields),
+        }
+    if isinstance(value, type) and issubclass(value, np.generic):
+        return {"numpy_type": np.dtype(value).str}
+    if isinstance(value, type):
+        return {"class": _named_identity(value, kind="class-v1")}
+    if isinstance(value, Enum):
+        return {
+            "enum": _named_identity(type(value), kind="enum-class-v1"),
             "name": value.name,
         }
+
     identity = id(value)
     if identity in seen:
         raise ValueError("cyclic provenance configuration is not supported")
@@ -582,9 +245,6 @@ def _canonical_parameter(value: Any, seen: set[int]) -> Any:
     if isinstance(value, (pa.Array, pa.ChunkedArray)):
         return {"arrow_sha256": _arrow_array_sha256(value)}
     if isinstance(value, functools.partial):
-        identity = id(value)
-        if identity in seen:
-            raise ValueError("cyclic provenance configuration is not supported")
         seen.add(identity)
         try:
             return {
@@ -597,34 +257,46 @@ def _canonical_parameter(value: Any, seen: set[int]) -> Any:
             }
         finally:
             seen.remove(identity)
-    if inspect.isfunction(value) or inspect.ismethod(value):
-        return {"callable": _callable_identity(value, seen)}
-    if inspect.isbuiltin(value):
-        return {"callable": _builtin_identity(value)}
+    if isinstance(
+        value,
+        (
+            types.FunctionType,
+            types.BuiltinFunctionType,
+            types.BuiltinMethodType,
+            types.MethodType,
+        ),
+    ):
+        function = value.__func__ if isinstance(value, types.MethodType) else value
+        return {"callable": _named_identity(function, kind="callable-v1")}
+
     seen.add(identity)
     try:
         if isinstance(value, Mapping):
             encoded = [
-                (
-                    _canonical_parameter(key, seen),
-                    _canonical_parameter(item, seen),
-                )
+                (_canonical_parameter(key, seen), _canonical_parameter(item, seen))
                 for key, item in value.items()
             ]
             encoded.sort(key=lambda pair: _json(pair[0]))
             if all(isinstance(key, str) for key, _ in encoded):
                 return {key: item for key, item in encoded}
             return {"mapping": encoded}
+        if _is_namedtuple_instance(value):
+            return {
+                "namedtuple": _named_identity(type(value), kind="namedtuple-class-v1"),
+                "fields": {
+                    name: _canonical_parameter(getattr(value, name), seen)
+                    for name in value._fields
+                },
+            }
         if isinstance(value, Sequence):
             return [_canonical_parameter(item, seen) for item in value]
         if isinstance(value, (set, frozenset)):
             encoded = [_canonical_parameter(item, seen) for item in value]
-            return sorted(encoded, key=lambda item: _json(item))
+            return sorted(encoded, key=_json)
         fields = getattr(value, "__dict__", None)
         if isinstance(fields, dict):
-            cls = type(value)
             return {
-                "object": _source_identity(cls, kind="object class"),
+                "object": _named_identity(type(value), kind="object-class-v1"),
                 "fields": {
                     name: _canonical_parameter(item, seen)
                     for name, item in sorted(fields.items())
@@ -637,43 +309,163 @@ def _canonical_parameter(value: Any, seen: set[int]) -> Any:
     )
 
 
-def model_descriptor(model: object) -> dict[str, Any]:
-    """Reproducible model implementation, configuration, and content."""
+def _builtin_model_classes() -> frozenset[type[Any]]:
+    from .observation_uncertainty import (
+        CompositeModel,
+        EFCC18DebiasModel,
+        EmpiricalCovarianceModel,
+        IdentityModel,
+        NightBatchDeweightingModel,
+        PerformanceWeightedModel,
+        SigmaFloorModel,
+    )
+    from .veres2017 import SigmaFillModel, VeresFloorModel, VeresReplaceModel
+
+    return frozenset(
+        {
+            IdentityModel,
+            EmpiricalCovarianceModel,
+            PerformanceWeightedModel,
+            SigmaFloorModel,
+            NightBatchDeweightingModel,
+            EFCC18DebiasModel,
+            CompositeModel,
+            VeresFloorModel,
+            VeresReplaceModel,
+            SigmaFillModel,
+        }
+    )
+
+
+def _is_builtin_model(model: object) -> bool:
+    """Only exact shipped classes with no per-instance apply override are built-ins."""
     cls = type(model)
-    cls_module = _module_name(cls, kind="model class")
-    apply = getattr(model, "apply", None)
-    descriptor: dict[str, Any] = {
-        "type": f"{cls_module}.{cls.__qualname__}",
-        "implementation_version": _package_version(cls_module),
-        "implementation_class": _source_identity(cls, kind="model class"),
-    }
-    if callable(apply):
-        descriptor["implementation_entrypoint"] = "apply"
-        descriptor["implementation"] = _callable_identity(apply, {id(model)})
-    else:
-        descriptor["implementation_entrypoint"] = "class"
-        descriptor["implementation"] = _source_identity(cls, kind="model class")
+    try:
+        fields = vars(model)
+    except TypeError:
+        fields = {}
+    return cls in _builtin_model_classes() and "apply" not in fields
+
+
+def _validated_build_identity() -> tuple[str, str]:
+    from adam_core import _rust_native
+
+    from .. import __version__
+
+    build_version, build_commit = _rust_native.build_identity()
+    if build_version != __version__:
+        raise RuntimeError(
+            f"native adam-core version {build_version!r} does not match Python {__version__!r}"
+        )
+    if not isinstance(build_commit, str) or not re.fullmatch(
+        r"[0-9a-f]{40}", build_commit
+    ):
+        raise RuntimeError(
+            "native adam-core build identity must be an exact clean source commit"
+        )
+    return str(build_version), build_commit
+
+
+def _model_fields(model: object, build_identity: tuple[str, str]) -> dict[str, Any]:
     parameters: dict[str, Any] = {}
     tables: dict[str, str] = {}
     nested: list[dict[str, Any]] = []
     for name, value in sorted(vars(model).items()):
-        field_name = name
         if isinstance(value, (pa.Table, qv.Table)):
-            tables[field_name] = _table_sha256(value)
+            tables[name] = _table_sha256(value)
         elif (
             isinstance(value, (list, tuple))
             and value
             and all(hasattr(item, "apply") for item in value)
         ):
-            nested.extend(model_descriptor(item) for item in value)
+            nested.extend(
+                model_descriptor(item, _build_identity=build_identity) for item in value
+            )
         else:
-            parameters[field_name] = _canonical_parameter(value, {id(model)})
+            parameters[name] = _canonical_parameter(value, {id(model)})
+    fields: dict[str, Any] = {}
     if parameters:
-        descriptor["parameters"] = parameters
+        fields["parameters"] = parameters
     if tables:
-        descriptor["tables_sha256"] = tables
+        fields["tables_sha256"] = tables
     if nested:
-        descriptor["models"] = nested
+        fields["models"] = nested
+    return fields
+
+
+def _custom_contract(model: object) -> ModelProvenance:
+    hook = getattr(model, "model_provenance", None)
+    cls = type(model)
+    name = f"{getattr(cls, '__module__', '<unknown>')}.{getattr(cls, '__qualname__', cls.__name__)}"
+    if not callable(hook):
+        raise TypeError(
+            f"custom observation model {name} must implement model_provenance() "
+            "and return ModelProvenance"
+        )
+    contract = hook()
+    if not isinstance(contract, ModelProvenance):
+        raise TypeError(
+            f"custom observation model {name} model_provenance() must return ModelProvenance"
+        )
+    if not _CONTRACT_NAME.fullmatch(contract.package):
+        raise TypeError(
+            "model provenance package must be a stable non-empty package name"
+        )
+    if not isinstance(contract.version, str) or not contract.version.strip():
+        raise TypeError("model provenance version must be a non-empty string")
+    if not _HEX64.fullmatch(contract.implementation_fingerprint):
+        raise TypeError(
+            "model provenance implementation_fingerprint must be 64 lowercase hexadecimal characters"
+        )
+    if not isinstance(contract.configuration, Mapping):
+        raise TypeError("model provenance configuration must be a mapping")
+    return contract
+
+
+def model_descriptor(
+    model: object, *, _build_identity: tuple[str, str] | None = None
+) -> dict[str, Any]:
+    """Return deterministic implementation, configuration, and data identity.
+
+    No source files, bytecode, loaded-module state, interpreter version, or
+    absolute paths contribute to the descriptor.
+    """
+    cls = type(model)
+    cls_module = _module_name(cls, kind="model class")
+    type_name = f"{cls_module}.{cls.__qualname__}"
+    if _is_builtin_model(model):
+        build_version, build_commit = _build_identity or _validated_build_identity()
+        implementation = {
+            "kind": "adam-core-built-in-v1",
+            "build_commit": build_commit,
+            "class": type_name,
+            "entrypoint": "apply",
+        }
+        descriptor: dict[str, Any] = {
+            "type": type_name,
+            "implementation_version": build_version,
+            "implementation_entrypoint": "apply",
+            "implementation_class": implementation,
+            "implementation": implementation,
+            **_model_fields(model, (build_version, build_commit)),
+        }
+    else:
+        contract = _custom_contract(model)
+        implementation = {
+            "kind": "explicit-model-provenance-v1",
+            "package": contract.package,
+            "version": contract.version,
+            "implementation_fingerprint": contract.implementation_fingerprint,
+            "entrypoint": "apply",
+        }
+        descriptor = {
+            "type": type_name,
+            "implementation_version": contract.version,
+            "implementation_entrypoint": "apply",
+            "implementation_class": implementation,
+            "implementation": implementation,
+            "parameters": _canonical_parameter(contract.configuration, {id(model)}),
+        }
     descriptor["descriptor_sha256"] = hashlib.sha256(
         _json(descriptor).encode("utf-8")
     ).hexdigest()
@@ -681,7 +473,7 @@ def model_descriptor(model: object) -> dict[str, Any]:
 
 
 def _json(value: Any) -> str:
-    return json.dumps(value, sort_keys=True, default=str, separators=(",", ":"))
+    return json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False)
 
 
 def _provenance_with_fields(current: OdProvenance, **updates: object) -> OdProvenance:
@@ -805,8 +597,17 @@ def _preflight_provenance(
     fitter: object, models: Sequence[object]
 ) -> _ProvenancePreflight:
     """Validate and freeze every Python-owned provenance field before fitting."""
-    from .. import __version__
     from .native_orbit_fitter import NativeOrbitFitter
+
+    # Build/source validation comes first and performs no user-model work. The
+    # validated identity is then reused for every shipped model descriptor.
+    build_version, build_commit = _validated_build_identity()
+    untracked = _relevant_untracked_source()
+    if untracked:
+        raise RuntimeError(
+            "native adam-core build identity cannot cover untracked source: "
+            + ", ".join(untracked)
+        )
 
     settings: Optional[str] = None
     if isinstance(fitter, NativeOrbitFitter):
@@ -814,27 +615,11 @@ def _preflight_provenance(
         settings = _json(
             {"iod": iod_settings, "refinement": refinement, "fit": fit_settings}
         )
-    descriptors = _json([model_descriptor(model) for model in models])
-    from adam_core import _rust_native
-
-    build_version, build_commit = _rust_native.build_identity()
-    untracked = _relevant_untracked_source()
-    if untracked:
-        raise RuntimeError(
-            "native adam-core build identity cannot cover untracked source: "
-            + ", ".join(untracked)
-        )
-    if build_version != __version__:
-        raise RuntimeError(
-            f"native adam-core version {build_version!r} does not match Python {__version__!r}"
-        )
-    if len(build_commit) != 40 or any(
-        character not in "0123456789abcdef" for character in build_commit
-    ):
-        raise RuntimeError(
-            "native adam-core build identity must be an exact clean source commit"
-        )
-    return _ProvenancePreflight(__version__, build_commit, settings, descriptors)
+    build_identity = (build_version, build_commit)
+    descriptors = _json(
+        [model_descriptor(model, _build_identity=build_identity) for model in models]
+    )
+    return _ProvenancePreflight(build_version, build_commit, settings, descriptors)
 
 
 def _uniform_provider(values: list[Optional[str]], stage: str) -> Optional[str]:

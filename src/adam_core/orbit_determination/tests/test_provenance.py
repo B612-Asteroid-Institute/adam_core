@@ -11,7 +11,11 @@ import pytest
 
 import adam_core
 from adam_core import _rust_native
-from adam_core.orbit_determination import NativeOrbitFitter, OdProvenance
+from adam_core.orbit_determination import (
+    ModelProvenance,
+    NativeOrbitFitter,
+    OdProvenance,
+)
 from adam_core.orbit_determination.observation_uncertainty import (
     PerformanceWeightedModel,
 )
@@ -31,6 +35,22 @@ from adam_core.orbit_determination.tests.test_observation_uncertainty import (
     make_bias_table,
 )
 
+_TEST_IMPLEMENTATION = "1" * 64
+
+
+class _ExplicitModel:
+    """Test helper implementing the public custom-model contract."""
+
+    implementation_fingerprint = _TEST_IMPLEMENTATION
+
+    def model_provenance(self):
+        return ModelProvenance(
+            package="adam-core-tests",
+            version="1.0",
+            implementation_fingerprint=self.implementation_fingerprint,
+            configuration=dict(vars(self)),
+        )
+
 
 def _record(orbits) -> dict:
     assert len(orbits) == 1
@@ -45,7 +65,7 @@ def test_run_od_records_provenance(route):
     observations = make_synthetic_observations()
     table = make_bias_table([{"obs_code": "500", "chi2_per_obs": 1.0}])
 
-    class PythonAppliedModel(PerformanceWeightedModel):
+    class PythonAppliedModel(PerformanceWeightedModel, _ExplicitModel):
         """Same arithmetic, with an override that selects core orchestration."""
 
         def apply(self, observations):
@@ -112,8 +132,13 @@ def test_run_od_records_provenance(route):
     assert descriptor["type"].endswith(
         "PythonAppliedModel" if route == "composed" else "PerformanceWeightedModel"
     )
-    assert all(len(h) == 64 for h in descriptor["tables_sha256"].values())
-    assert descriptor["implementation_version"] == adam_core.__version__
+    if route == "fused":
+        assert all(len(h) == 64 for h in descriptor["tables_sha256"].values())
+    else:
+        assert len(descriptor["parameters"]["bias_table"]["arrow_sha256"]) == 64
+    assert descriptor["implementation_version"] == (
+        "1.0" if route == "composed" else adam_core.__version__
+    )
     # The IOD's ambiguity reaches the final orbit on both routes.
     assert record["iod_ambiguous"] is False and record["iod_alternatives"] == 0
     rejected = sum(members.outlier.to_pylist())
@@ -210,7 +235,7 @@ def test_model_descriptor_hashes_table_content():
 def test_model_descriptor_hashes_numpy_configuration_and_sets():
     import numpy as np
 
-    class ArrayModel:
+    class ArrayModel(_ExplicitModel):
         def __init__(self, values, excluded):
             self.values = values
             self.excluded = excluded
@@ -235,7 +260,7 @@ def test_model_descriptor_canonicalizes_colliding_sets_and_mapping_order():
         def __eq__(self, other):
             return isinstance(other, Key) and self.name == other.name
 
-    class Model:
+    class Model(_ExplicitModel):
         def __init__(self, values, mapping):
             self.values = values
             self.mapping = mapping
@@ -282,7 +307,7 @@ def test_input_fingerprint_hashes_caller_and_used_astrometry_independently():
 
 
 def test_model_descriptor_rejects_unsupported_and_cyclic_configuration():
-    class Model:
+    class Model(_ExplicitModel):
         pass
 
     unsupported = Model()
@@ -340,161 +365,217 @@ def test_ambiguous_iod_survives_refinement():
     assert _record(orbits)["iod_ambiguous"] is False
 
 
-def test_model_descriptor_is_stable_across_python_hash_seeds(tmp_path):
+def test_custom_descriptor_is_stable_across_hash_seed_and_import_order(tmp_path):
     import os
     import sys
 
     module_path = tmp_path / "seed_model.py"
     module_path.write_text(
+        "from adam_core.orbit_determination import ModelProvenance\n"
         "class Model:\n"
         "    def __init__(self):\n"
         "        self.excluded = {'V', 'a', 'b', 'c'}\n"
         "    def apply(self, observations):\n"
-        "        return observations\n",
+        "        return observations\n"
+        "    def model_provenance(self):\n"
+        "        return ModelProvenance('example-model', '2.1', 'a' * 64, "
+        "{'excluded': self.excluded})\n",
         encoding="utf-8",
     )
     script = (
-        "from seed_model import Model; "
+        "{imports}; from seed_model import Model; "
         "from adam_core.orbit_determination.provenance import model_descriptor; "
         "print(model_descriptor(Model())['descriptor_sha256'])"
     )
     hashes = set()
     for seed in ("0", "1", "12345", "random"):
-        environment = dict(os.environ, PYTHONHASHSEED=seed)
-        pythonpath = os.pathsep.join(
-            part for part in (str(tmp_path), environment.get("PYTHONPATH")) if part
-        )
-        environment["PYTHONPATH"] = pythonpath
-        hashes.add(
-            subprocess.check_output(
-                [sys.executable, "-c", script],
-                env=environment,
-                text=True,
-            ).strip()
-        )
+        for imports in (
+            "pass",
+            "import scipy.optimize, pathlib, adam_core.coordinates._conversion",
+        ):
+            environment = dict(os.environ, PYTHONHASHSEED=seed)
+            source_root = str(Path(__file__).resolve().parents[3])
+            environment["PYTHONPATH"] = os.pathsep.join(
+                part
+                for part in (
+                    str(tmp_path),
+                    source_root,
+                    environment.get("PYTHONPATH"),
+                )
+                if part
+            )
+            hashes.add(
+                subprocess.check_output(
+                    [sys.executable, "-c", script.format(imports=imports)],
+                    env=environment,
+                    text=True,
+                ).strip()
+            )
     assert len(hashes) == 1
 
 
-def test_callable_identity_is_source_based_and_captures_delegated_helpers(
-    tmp_path, monkeypatch
-):
-    import importlib
-    import linecache
-    import sys
+def test_builtin_descriptor_uses_exact_build_and_not_import_history():
+    table = make_bias_table([{"obs_code": "500", "chi2_per_obs": 4.0}])
+    before = model_descriptor(PerformanceWeightedModel(table))
+    import adam_core.coordinates._conversion  # noqa: F401
+    import adam_core.observations.arrow_bridge  # noqa: F401
 
-    module_name = "_adam_core_provenance_helper_fixture"
-    module_path = tmp_path / f"{module_name}.py"
-
-    def write(helper_value: int) -> None:
-        module_path.write_text(
-            "def helper():\n"
-            f"    return {helper_value}\n\n"
-            "class Model:\n"
-            "    def apply(self, observations):\n"
-            "        helper()\n"
-            "        return observations\n",
-            encoding="utf-8",
-        )
-        importlib.invalidate_caches()
-        linecache.clearcache()
-
-    monkeypatch.syspath_prepend(str(tmp_path))
-    write(1)
-    module = importlib.import_module(module_name)
-    first = model_descriptor(module.Model())
-    implementation = first["implementation"]
-    assert "bytecode_sha256" not in json.dumps(implementation)
-    assert len(implementation["entrypoint_source_sha256"]) == 64
-    assert len(implementation["module_source_sha256"]) == 64
-
-    write(2)
-    source = compile(module_path.read_text(encoding="utf-8"), str(module_path), "exec")
-    spec = module.__spec__
-    module.__dict__.clear()
-    module.__dict__.update(
-        {
-            "__name__": module_name,
-            "__file__": str(module_path),
-            "__package__": "",
-            "__spec__": spec,
-        }
-    )
-    exec(source, module.__dict__)
-    second = model_descriptor(module.Model())
-    assert (
-        first["implementation"]["entrypoint_source_sha256"]
-        == second["implementation"]["entrypoint_source_sha256"]
-    )
-    assert (
-        first["implementation"]["module_source_sha256"]
-        != second["implementation"]["module_source_sha256"]
-    )
-    assert first["descriptor_sha256"] != second["descriptor_sha256"]
-    sys.modules.pop(module_name, None)
+    after = model_descriptor(PerformanceWeightedModel(table))
+    assert before == after
+    implementation = before["implementation"]
+    assert implementation == before["implementation_class"]
+    assert implementation["kind"] == "adam-core-built-in-v1"
+    assert implementation["entrypoint"] == "apply"
+    assert implementation["build_commit"] == _rust_native.build_identity()[1]
+    encoded = json.dumps(before, sort_keys=True)
+    for forbidden in (
+        "bytecode",
+        "sys.version",
+        "module_source",
+        "entrypoint_source",
+        "source_tree",
+    ):
+        assert forbidden not in encoded
 
 
-def test_callable_identity_preserves_closure_defaults_path_and_enum(tmp_path):
+def test_custom_fingerprint_is_the_implementation_identity():
+    class Model(_ExplicitModel):
+        def __init__(self, fingerprint, scale=1):
+            self.implementation_fingerprint = fingerprint
+            self.scale = scale
+
+        def apply(self, observations):
+            return observations
+
+    first = model_descriptor(Model("1" * 64))
+    same = model_descriptor(Model("1" * 64))
+    changed_science = model_descriptor(Model("2" * 64))
+    changed_config = model_descriptor(Model("1" * 64, scale=2))
+    assert first == same
+    assert first["descriptor_sha256"] != changed_science["descriptor_sha256"]
+    assert first["descriptor_sha256"] != changed_config["descriptor_sha256"]
+
+
+def test_custom_contract_is_validated_exactly():
+    class Model:
+        def __init__(self, contract):
+            self.contract = contract
+
+        def apply(self, observations):
+            return observations
+
+        def model_provenance(self):
+            return self.contract
+
+    with pytest.raises(TypeError, match="must return ModelProvenance"):
+        model_descriptor(Model({}))
+    invalid = [
+        ModelProvenance("bad package!", "1", "a" * 64, {}),
+        ModelProvenance("package", "", "a" * 64, {}),
+        ModelProvenance("package", "1", "A" * 64, {}),
+        ModelProvenance("package", "1", "a" * 63, {}),
+        ModelProvenance("package", "1", "a" * 64, []),
+    ]
+    for contract in invalid:
+        with pytest.raises(TypeError, match="model provenance"):
+            model_descriptor(Model(contract))
+
+
+def test_common_configuration_values_are_portable_and_distinct(tmp_path):
+    import datetime
+    import functools
+    from collections import namedtuple
     from enum import Enum
 
-    def make_apply(marker):
-        def apply(observations, default="default-value"):
-            if marker:
-                return observations
-            return observations
-
-        return apply
-
     class Mode(Enum):
-        FIRST = "same-value"
-        SECOND = "same-value-too"
+        FIRST = "same"
+        SECOND = "other"
 
-    class Model:
-        def __init__(self, marker, path, mode):
-            self.apply = make_apply(marker)
-            self.path = path
-            self.mode = mode
+    class Nested:
+        def __init__(self, value):
+            self.value = value
+
+    Pair = namedtuple("Pair", "left right")
+
+    def helper(value, *, scale=1):
+        return value * scale
 
     path = tmp_path / "configuration.dat"
-    path.write_text("first", encoding="utf-8")
-    first = model_descriptor(Model("closure-a", path, Mode.FIRST))
-    implementation = first["implementation"]
-    assert implementation["closure"] == ["closure-a"]
-    assert implementation["defaults"] == ["default-value"]
-    assert first["parameters"]["path"]["sha256"] == hashlib.sha256(b"first").hexdigest()
-    assert first["parameters"]["mode"]["name"] == "FIRST"
+    path.write_text("content", encoding="utf-8")
 
-    closure_changed = model_descriptor(Model("closure-b", path, Mode.FIRST))
-    enum_changed = model_descriptor(Model("closure-a", path, Mode.SECOND))
-    path.write_text("second", encoding="utf-8")
-    path_changed = model_descriptor(Model("closure-a", path, Mode.FIRST))
-    assert first["descriptor_sha256"] != closure_changed["descriptor_sha256"]
-    assert first["descriptor_sha256"] != enum_changed["descriptor_sha256"]
-    assert first["descriptor_sha256"] != path_changed["descriptor_sha256"]
+    class Model(_ExplicitModel):
+        def __init__(self, configuration):
+            self.configuration = configuration
 
-
-def test_builtin_callable_identity_is_named_and_interpreter_independent():
-    class Model:
-        def __init__(self, callback):
-            self.callback = callback
+        def model_provenance(self):
+            return ModelProvenance(
+                "portable-config",
+                "1",
+                self.implementation_fingerprint,
+                self.configuration,
+            )
 
         def apply(self, observations):
             return observations
 
-    length = model_descriptor(Model(len))
-    absolute = model_descriptor(Model(abs))
-    encoded = json.dumps(length["parameters"]["callback"], sort_keys=True)
-    assert "bytecode" not in encoded
-    assert '"implementation_kind": "builtin"' in encoded
-    assert length["descriptor_sha256"] != absolute["descriptor_sha256"]
+    configuration = {
+        "int": np.int64(5),
+        "float": np.float32(1.5),
+        "type": np.float64,
+        "ufunc": np.sqrt,
+        "date": datetime.date(2024, 2, 29),
+        "datetime": datetime.datetime(2024, 2, 29, 12, 1, 2, 3),
+        "namedtuple_class": Pair,
+        "namedtuple": Pair(1, 2),
+        "enum_class": Mode,
+        "enum": Mode.FIRST,
+        "partial": functools.partial(helper, 3, scale=4),
+        "nested_class": Nested,
+        "nested": Nested(7),
+        "path": path,
+    }
+    first = model_descriptor(Model(configuration))
+    reordered = model_descriptor(Model(dict(reversed(list(configuration.items())))))
+    assert first == reordered
+    assert str(tmp_path) not in json.dumps(first, sort_keys=True)
+
+    second = dict(configuration)
+    second["partial"] = functools.partial(helper, 3, scale=5)
+    assert (
+        first["descriptor_sha256"]
+        != model_descriptor(Model(second))["descriptor_sha256"]
+    )
+    plain_tuple = dict(configuration)
+    plain_tuple["namedtuple"] = (1, 2)
+    assert (
+        first["descriptor_sha256"]
+        != model_descriptor(Model(plain_tuple))["descriptor_sha256"]
+    )
 
 
-def test_dynamic_callable_without_module_fails_closed():
+def test_custom_subclass_and_instance_apply_override_require_contract():
+    table = make_bias_table([{"obs_code": "500", "chi2_per_obs": 1.0}])
+
+    class Subclass(PerformanceWeightedModel):
+        pass
+
+    with pytest.raises(TypeError, match="must implement model_provenance"):
+        model_descriptor(Subclass(table))
+
+    instance = PerformanceWeightedModel(table)
+    instance.apply = lambda observations: observations
+    with pytest.raises(TypeError, match="must implement model_provenance"):
+        model_descriptor(instance)
+
+
+@pytest.mark.parametrize("module_name", ["__main__", None])
+def test_unsupported_dynamic_model_has_documented_type_error(module_name):
     class Model:
         def apply(self, observations):
             return observations
 
-    Model.apply.__module__ = None
-    with pytest.raises(TypeError, match="no reproducible Python module identity"):
+    Model.__module__ = module_name
+    with pytest.raises(TypeError, match="custom observation model|module identity"):
         model_descriptor(Model())
 
 
@@ -544,16 +625,8 @@ def test_complete_provenance_keeps_distinct_native_stage_providers():
     )
     assert len(fitted) == 1
     base = fitted.provenance
-    iod = {
-        "name": "iod-native",
-        "version": "1",
-        "abi_version": 2,
-    }
-    refinement = {
-        "name": "refinement-native",
-        "version": "2",
-        "abi_version": 2,
-    }
+    iod = {"name": "iod-native", "version": "1", "abi_version": 2}
+    refinement = {"name": "refinement-native", "version": "2", "abi_version": 2}
     modified = fitted.set_column(
         "provenance",
         OdProvenance.from_kwargs(
@@ -578,15 +651,21 @@ def test_complete_provenance_keeps_distinct_native_stage_providers():
     assert json.loads(record["refinement_provider"])["name"] == "refinement-native"
 
 
-def test_preflight_describes_actual_models_before_apply_or_fit():
+def test_preflight_describes_contract_before_apply_or_fit():
     apply_calls = 0
+    contract_calls = 0
     fit_calls = 0
 
-    class UndescribableModel:
+    class Model:
         def apply(self, observations):
             nonlocal apply_calls
             apply_calls += 1
             return observations
+
+        def model_provenance(self):
+            nonlocal contract_calls
+            contract_calls += 1
+            raise TypeError("deliberate contract refusal")
 
     class CountingFitter:
         def full_od(self, *args, **kwargs):
@@ -594,285 +673,63 @@ def test_preflight_describes_actual_models_before_apply_or_fit():
             fit_calls += 1
             raise AssertionError("fit must not run before model provenance preflight")
 
-    UndescribableModel.apply.__module__ = None
-    with pytest.raises(TypeError, match="no reproducible Python module identity"):
-        run_od(
-            make_synthetic_observations(),
-            CountingFitter(),
-            [UndescribableModel()],
-            propagator=TwoBodyPropagator(),
-        )
-    assert apply_calls == 0
-    assert fit_calls == 0
-
-
-def test_preflight_rejects_native_python_version_mismatch_before_work(monkeypatch):
-    apply_calls = 0
-    fit_calls = 0
-
-    class Model:
-        def apply(self, observations):
-            nonlocal apply_calls
-            apply_calls += 1
-            return observations
-
-    class CountingFitter:
-        def full_od(self, *args, **kwargs):
-            nonlocal fit_calls
-            fit_calls += 1
-            raise AssertionError("fit must not run after version mismatch")
-
-    monkeypatch.setattr(
-        _rust_native,
-        "build_identity",
-        lambda: ("999.0.0", "0" * 40),
-    )
-    with pytest.raises(RuntimeError, match="does not match Python"):
+    with pytest.raises(TypeError, match="deliberate contract refusal"):
         run_od(
             make_synthetic_observations(),
             CountingFitter(),
             [Model()],
             propagator=TwoBodyPropagator(),
         )
+    assert contract_calls == 1
     assert apply_calls == 0
     assert fit_calls == 0
 
 
-def test_sourceless_module_and_entrypoint_fail_closed(monkeypatch):
-    import sys
-    import types
+def test_preflight_rejects_native_python_version_mismatch_before_model_work(
+    monkeypatch,
+):
+    contract_calls = 0
+    apply_calls = 0
 
+    class Model(_ExplicitModel):
+        def model_provenance(self):
+            nonlocal contract_calls
+            contract_calls += 1
+            return super().model_provenance()
+
+        def apply(self, observations):
+            nonlocal apply_calls
+            apply_calls += 1
+            return observations
+
+    monkeypatch.setattr(_rust_native, "build_identity", lambda: ("999.0.0", "0" * 40))
+    with pytest.raises(RuntimeError, match="does not match Python"):
+        run_od(
+            make_synthetic_observations(),
+            object(),
+            [Model()],
+            propagator=TwoBodyPropagator(),
+        )
+    assert contract_calls == 0
+    assert apply_calls == 0
+
+
+def test_runtime_untracked_source_guard_precedes_models(monkeypatch):
     import adam_core.orbit_determination.provenance as provenance
 
-    module_name = "_adam_core_sourceless_provenance_fixture"
-    module = types.ModuleType(module_name)
-    module.__file__ = None
-    module.__spec__ = None
-    exec(
-        compile(
-            "class Model:\n"
-            "    def apply(self, observations):\n"
-            "        return observations\n",
-            "<dynamic-provenance>",
-            "exec",
-        ),
-        module.__dict__,
+    contract_calls = 0
+
+    class Model(_ExplicitModel):
+        def model_provenance(self):
+            nonlocal contract_calls
+            contract_calls += 1
+            return super().model_provenance()
+
+    monkeypatch.setattr(
+        provenance,
+        "_relevant_untracked_source",
+        lambda: ("src/adam_core/relevant_untracked.py",),
     )
-    sys.modules[module_name] = module
-    try:
-        with pytest.raises(TypeError, match="no reproducible source content"):
-            model_descriptor(module.Model())
-
-        monkeypatch.setattr(
-            provenance.inspect,
-            "getsource",
-            lambda _value: "def apply(self, observations): return observations",
-        )
-        with pytest.raises(TypeError, match="no reproducible source content"):
-            model_descriptor(module.Model())
-    finally:
-        sys.modules.pop(module_name, None)
-
-
-def test_callable_identity_covers_kwdefaults_without_bytecode():
-    class Model:
-        def __init__(self, callback):
-            self.callback = callback
-
-        def apply(self, observations):
-            return observations
-
-    def first(*, scale=1):
-        return scale
-
-    def second(*, scale=2):
-        return scale
-
-    one = model_descriptor(Model(first))
-    two = model_descriptor(Model(second))
-    identity = one["parameters"]["callback"]["callable"]
-    assert identity["kwdefaults"] == {"scale": 1}
-    encoded = json.dumps(identity, sort_keys=True)
-    assert "bytecode_sha256" not in encoded
-    assert "code" not in identity
-    assert one["descriptor_sha256"] != two["descriptor_sha256"]
-
-
-def test_enum_class_type_and_nested_object_classes_are_distinct():
-    from enum import Enum
-
-    class FirstEnum(Enum):
-        VALUE = "same"
-
-    class SecondEnum(Enum):
-        VALUE = "same"
-
-    class FirstConfig:
-        def __init__(self):
-            self.value = 1
-
-    class SecondConfig:
-        def __init__(self):
-            self.value = 1
-
-    class Model:
-        def __init__(self, parameter):
-            self.parameter = parameter
-
-        def apply(self, observations):
-            return observations
-
-    pairs = [
-        (FirstEnum, SecondEnum),
-        (FirstEnum.VALUE, SecondEnum.VALUE),
-        (int, float),
-        (np.float32, np.float64),
-        (FirstConfig(), SecondConfig()),
-    ]
-    for left, right in pairs:
-        assert (
-            model_descriptor(Model(left))["descriptor_sha256"]
-            != model_descriptor(Model(right))["descriptor_sha256"]
-        )
-
-
-def test_class_parameter_identity_covers_same_named_implementation_changes(
-    tmp_path, monkeypatch
-):
-    import importlib
-    import linecache
-    import sys
-
-    module_name = "_adam_core_provenance_class_parameter_fixture"
-    module_path = tmp_path / f"{module_name}.py"
-
-    def write(marker: int) -> None:
-        module_path.write_text(
-            "class Parameter:\n" f"    marker = {marker}\n", encoding="utf-8"
-        )
-        importlib.invalidate_caches()
-        linecache.clearcache()
-
-    class Model:
-        def __init__(self, parameter):
-            self.parameter = parameter
-
-        def apply(self, observations):
-            return observations
-
-    monkeypatch.syspath_prepend(str(tmp_path))
-    write(1)
-    module = importlib.import_module(module_name)
-    first = model_descriptor(Model(module.Parameter))
-
-    write(2)
-    source = compile(module_path.read_text(encoding="utf-8"), str(module_path), "exec")
-    spec = module.__spec__
-    module.__dict__.clear()
-    module.__dict__.update(
-        {
-            "__name__": module_name,
-            "__file__": str(module_path),
-            "__package__": "",
-            "__spec__": spec,
-        }
-    )
-    exec(source, module.__dict__)
-    second = model_descriptor(Model(module.Parameter))
-    assert first["descriptor_sha256"] != second["descriptor_sha256"]
-    sys.modules.pop(module_name, None)
-
-
-def test_partial_and_stdlib_object_parameters_are_portable_and_distinct():
-    import argparse
-    import functools
-
-    def helper(value):
-        return value
-
-    class Model:
-        def __init__(self, parameter):
-            self.parameter = parameter
-
-        def apply(self, observations):
-            return observations
-
-    one = model_descriptor(Model(functools.partial(helper, 1)))
-    two = model_descriptor(Model(functools.partial(helper, 2)))
-    assert one["descriptor_sha256"] != two["descriptor_sha256"]
-    namespace = model_descriptor(Model(argparse.Namespace(a=1)))
-    encoded = json.dumps(namespace["parameters"]["parameter"], sort_keys=True)
-    assert "stdlib-named-v1" in encoded
-    assert "module_source_sha256" not in encoded
-
-
-def test_model_identity_covers_mro_overrides_and_sibling_helpers(tmp_path):
-    import os
-    import sys
-
-    base = (
-        "class Base:\n"
-        "    def apply(self, observations):\n"
-        "        return self.transform(observations)\n"
-        "    def transform(self, observations):\n"
-        "        return observations\n"
-    )
-    user = (
-        "import helper_module\n"
-        "class User:\n"
-        "    def apply(self, observations):\n"
-        "        return helper_module.transform(observations)\n"
-    )
-    (tmp_path / "base_module.py").write_text(base, encoding="utf-8")
-    (tmp_path / "user_module.py").write_text(user, encoding="utf-8")
-    script = (
-        "from subclass_module import Sub; from user_module import User; "
-        "from adam_core.orbit_determination.provenance import model_descriptor; "
-        "print(model_descriptor(Sub())['descriptor_sha256']); "
-        "print(model_descriptor(User())['descriptor_sha256'])"
-    )
-    hashes = []
-    for marker in ("first", "second"):
-        (tmp_path / "subclass_module.py").write_text(
-            "from base_module import Base\n"
-            "class Sub(Base):\n"
-            "    def transform(self, observations):\n"
-            f"        marker = {marker!r}\n"
-            "        return observations\n",
-            encoding="utf-8",
-        )
-        (tmp_path / "helper_module.py").write_text(
-            "def transform(observations):\n"
-            f"    marker = {marker!r}\n"
-            "    return observations\n",
-            encoding="utf-8",
-        )
-        environment = dict(os.environ)
-        environment["PYTHONPATH"] = os.pathsep.join(
-            [str(tmp_path), environment.get("PYTHONPATH", "")]
-        )
-        hashes.append(
-            subprocess.check_output(
-                [sys.executable, "-c", script], env=environment, text=True
-            )
-            .strip()
-            .splitlines()
-        )
-    assert hashes[0][0] != hashes[1][0]
-    assert hashes[0][1] != hashes[1][1]
-
-    # Unrelated sibling/test-like source is not part of the executing import
-    # closure and therefore must not make an installed/source checkout differ.
-    (tmp_path / "unrelated_module.py").write_text("marker = 'unrelated'\n")
-    environment = dict(os.environ)
-    environment["PYTHONPATH"] = os.pathsep.join(
-        [str(tmp_path), environment.get("PYTHONPATH", "")]
-    )
-    unrelated = (
-        subprocess.check_output(
-            [sys.executable, "-c", script], env=environment, text=True
-        )
-        .strip()
-        .splitlines()
-    )
-    assert unrelated == hashes[1]
+    with pytest.raises(RuntimeError, match="relevant_untracked.py"):
+        provenance._preflight_provenance(object(), [Model()])
+    assert contract_calls == 0

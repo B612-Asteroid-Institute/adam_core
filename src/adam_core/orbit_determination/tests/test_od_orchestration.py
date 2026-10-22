@@ -27,6 +27,7 @@ import quivr as qv
 from ...coordinates.covariances import CoordinateCovariances
 from ..evaluate import OrbitDeterminationObservations
 from ..fitted_orbits import FittedOrbitMembers, FittedOrbits, ObservationAstrometry
+from ..model_provenance import ModelProvenance
 from ..native_orbit_fitter import NativeOrbitFitter
 from ..observation_uncertainty import (
     ARCSEC_PER_DEG,
@@ -981,6 +982,11 @@ class TestCoreRunOdRoutes:
         self, two_body_observations
     ) -> None:
         class ScaleSigmas(ObservationUncertaintyModel):
+            def model_provenance(self):
+                return ModelProvenance(
+                    "adam-core-tests", "1", "c" * 64, {"factor": 2.0}
+                )
+
             def apply(self, observations):
                 covariances = observations.coordinates.covariance.to_matrix() * 4.0
                 return observations.set_column(

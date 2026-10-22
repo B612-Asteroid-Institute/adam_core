@@ -23,6 +23,7 @@ from .iod import (
     select_observations,
     sort_by_id_and_time,
 )
+from .model_provenance import ModelProvenance, ProvenancedModel
 from .native_orbit_fitter import NativeOrbitFitter
 from .observation_uncertainty import (
     BIAS_TABLE_SCHEMA,

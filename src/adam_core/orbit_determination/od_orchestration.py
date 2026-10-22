@@ -371,7 +371,9 @@ def run_od(
         Notes), whose tables come from data packages. Pass None (or an empty
         sequence) to fit the observations exactly as supplied (members then
         record ``used_astrometry`` equal to ``original_astrometry``), or your
-        own model(s).
+        own model(s). Every custom model, subclass, or instance-overridden
+        ``apply`` must provide ``model_provenance()`` returning
+        `ModelProvenance`; provenance preflight runs before model work.
     propagator : `~adam_core.propagator.Propagator`
         Propagator used by the backend during refinement.
     object_id : str, optional
@@ -408,8 +410,9 @@ def run_od(
         wheel or an exact clean-checkout build so its provenance is
         reproducible; this check runs before models or fitting.
     TypeError
-        If a model or fitter configuration has no reproducible source/content
-        identity. This provenance preflight also runs before models or fitting.
+        If a custom model does not provide a valid explicit `ModelProvenance`
+        contract, or its configuration contains an unsupported value. This
+        provenance preflight runs before models or fitting.
     ImportError, FileNotFoundError
         If ``models="default"`` and the ``adam-observatory-uncertainties``
         data package or JPL's EFCC18 ``bias.dat`` is not installed: one
