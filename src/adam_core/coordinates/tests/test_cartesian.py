@@ -66,6 +66,121 @@ def test_CartesianCoordinates_rotate():
     return
 
 
+def _cartesian_with_covariance_rows(
+    covariance: np.ndarray,
+) -> CartesianCoordinates:
+    rows = len(covariance)
+    values = np.tile(np.array([1.0, 2.0, 3.0, 0.1, 0.2, 0.3]), (rows, 1))
+    return CartesianCoordinates.from_kwargs(
+        x=values[:, 0],
+        y=values[:, 1],
+        z=values[:, 2],
+        vx=values[:, 3],
+        vy=values[:, 4],
+        vz=values[:, 5],
+        covariance=CoordinateCovariances.from_matrix(covariance),
+        origin=Origin.from_kwargs(code=["origin"] * rows),
+        frame="equatorial",
+    )
+
+
+def _nonidentity_xy_rotation() -> np.ndarray:
+    cosine = np.sqrt(0.5)
+    matrix = np.eye(6)
+    matrix[:2, :2] = [[cosine, -cosine], [cosine, cosine]]
+    return matrix
+
+
+def test_cartesian_rotate_6d_nonidentity_preserves_ieee_infinity_policy():
+    covariance = np.zeros((3, 6, 6), dtype=np.float64)
+    covariance[0, 0, 0], covariance[0, 1, 1] = np.inf, -np.inf
+    covariance[1, 0, 0], covariance[1, 1, 1] = -np.inf, np.inf
+    covariance[2] = np.diag([1.0, 2.0, 3.0, 4.0, 5.0, 6.0])
+    covariance[2, 4, 5] = np.nan
+    matrix = _nonidentity_xy_rotation()
+
+    rotated = _cartesian_with_covariance_rows(covariance).rotate(
+        matrix, "nonidentity-6d"
+    )
+    actual = rotated.covariance.to_matrix()
+
+    expected_nan = np.ones_like(covariance, dtype=bool)
+    expected_nan[:2, :2, :2] = np.array([[True, False], [False, True]])
+    expected_nan[2] = False
+    expected_nan[2, 4, 5] = True
+    np.testing.assert_array_equal(np.isnan(actual), expected_nan)
+
+    expected_positive_infinity = np.zeros_like(expected_nan)
+    expected_positive_infinity[0, 0, 1] = True
+    expected_positive_infinity[0, 1, 0] = True
+    np.testing.assert_array_equal(np.isposinf(actual), expected_positive_infinity)
+    expected_negative_infinity = np.zeros_like(expected_nan)
+    expected_negative_infinity[1, 0, 1] = True
+    expected_negative_infinity[1, 1, 0] = True
+    np.testing.assert_array_equal(np.isneginf(actual), expected_negative_infinity)
+
+    finite_expected = np.diag([1.5000000000000004, 1.5000000000000004, 3, 4, 5, 6])
+    finite_expected[0, 1] = finite_expected[1, 0] = -0.5000000000000001
+    finite_expected[4, 5] = np.nan
+    expected = np.full_like(covariance, np.nan)
+    expected[0, 0, 1] = expected[0, 1, 0] = np.inf
+    expected[1, 0, 1] = expected[1, 1, 0] = -np.inf
+    expected[2] = finite_expected
+    np.testing.assert_array_equal(actual, expected)
+
+
+def test_cartesian_rotate_9d_nonidentity_normalizes_infinities_before_rotation():
+    covariance = np.zeros((3, 9, 9), dtype=np.float64)
+    covariance[0, 0, 0], covariance[0, 1, 1] = np.inf, -np.inf
+    covariance[1, 0, 0], covariance[1, 1, 1] = -np.inf, np.inf
+    covariance[0, 2, 3] = np.nan
+    covariance[0, 6, 6] = np.inf
+    covariance[1, 7, 7] = -np.inf
+    covariance[2] = np.diag(np.arange(1.0, 10.0))
+    covariance[2, 4, 5] = np.nan
+    matrix = _nonidentity_xy_rotation()
+
+    rotated = _cartesian_with_covariance_rows(covariance).rotate(
+        matrix[None, :, :], "nonidentity-9d"
+    )
+    actual = rotated.covariance.to_full_matrix()
+
+    expected_nan = np.zeros_like(covariance, dtype=bool)
+    expected_nan[0, 2, 3] = True
+    expected_nan[2, 4, 5] = True
+    np.testing.assert_array_equal(np.isnan(actual), expected_nan)
+
+    expected_positive_infinity = np.zeros_like(expected_nan)
+    expected_positive_infinity[0, 0, 1] = True
+    expected_positive_infinity[0, 1, 0] = True
+    np.testing.assert_array_equal(np.isposinf(actual), expected_positive_infinity)
+    expected_negative_infinity = np.zeros_like(expected_nan)
+    expected_negative_infinity[1, 0, 1] = True
+    expected_negative_infinity[1, 1, 0] = True
+    np.testing.assert_array_equal(np.isneginf(actual), expected_negative_infinity)
+
+    assert actual[0, 0, 0] == 0.0
+    assert actual[0, 1, 1] == 0.0
+    assert actual[1, 0, 0] == 0.0
+    assert actual[1, 1, 1] == 0.0
+    assert actual[0, 6, 6] == np.finfo(np.float64).max
+    assert actual[1, 7, 7] == np.finfo(np.float64).min
+
+    finite_expected = np.diag(
+        [1.5000000000000004, 1.5000000000000004, 3, 4, 5, 6, 7, 8, 9]
+    )
+    finite_expected[0, 1] = finite_expected[1, 0] = -0.5000000000000001
+    finite_expected[4, 5] = np.nan
+    expected = np.zeros_like(covariance)
+    expected[0, 0, 1] = expected[0, 1, 0] = np.inf
+    expected[0, 2, 3] = np.nan
+    expected[0, 6, 6] = np.finfo(np.float64).max
+    expected[1, 0, 1] = expected[1, 1, 0] = -np.inf
+    expected[1, 7, 7] = np.finfo(np.float64).min
+    expected[2] = finite_expected
+    np.testing.assert_array_equal(actual, expected)
+
+
 def test_cartesian_rotate_extended_special_values_and_matrix_shapes():
     covariance = np.zeros((1, 9, 9), dtype=np.float64)
     covariance[0, 0, 0] = np.inf
