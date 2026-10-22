@@ -8382,6 +8382,10 @@ mod tests {
         )
         .unwrap();
         let best = result.accepted_candidate().unwrap().clone();
+        assert!(
+            best.corrected_covariance.is_some(),
+            "a reportable corrected-IOD covariance remains available to Rust callers"
+        );
         let covariance = best.ambiguity_covariance.unwrap();
         let sigma_x = covariance[0].sqrt();
         assert!(sigma_x.is_finite() && sigma_x > 0.0);
