@@ -402,9 +402,10 @@ def test_custom_descriptor_is_stable_across_hash_seed_and_import_order(tmp_path)
         check=True,
     )
     script = (
-        "{imports}; from acme_orbit_models import CalibratedModel as Model; "
-        "from adam_core.orbit_determination import IdentityModel; "
-        "from adam_core.orbit_determination.provenance import model_descriptor; "
+        "{imports}\n"
+        "from acme_orbit_models import CalibratedModel as Model\n"
+        "from adam_core.orbit_determination import IdentityModel\n"
+        "from adam_core.orbit_determination.provenance import model_descriptor\n"
         "try:\n model_descriptor(Model())\nexcept TypeError:\n print('custom-refused')\n"
         "else:\n raise AssertionError('live custom model accepted')\n"
         "print(model_descriptor(IdentityModel())['descriptor_sha256'])"
