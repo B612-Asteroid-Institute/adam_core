@@ -3008,7 +3008,8 @@ fn oem_parse_kvn(path: &str) -> PyResult<String> {
 #[pyfunction]
 #[pyo3(signature = (
     path, orbits_ipc, originator, creation_date, *, version, object_name=None, object_id=None,
-    comments=Vec::new(), include_covariance=true, covariance_frame=None, table_frames_only=false
+    comments=Vec::new(), include_covariance=true, covariance_frame=None, table_frames_only=false,
+    covariance_label=None
 ))]
 #[allow(clippy::too_many_arguments)]
 fn oem_write_orbits_kvn(
@@ -3016,13 +3017,14 @@ fn oem_write_orbits_kvn(
     orbits_ipc: &Bound<'_, PyBytes>,
     originator: &str,
     creation_date: &str,
-    version: String,
+    version: Option<String>,
     object_name: Option<String>,
     object_id: Option<String>,
     comments: Vec<String>,
     include_covariance: bool,
     covariance_frame: Option<String>,
     table_frames_only: bool,
+    covariance_label: Option<String>,
 ) -> PyResult<usize> {
     let orbits =
         DataOrbitBatch::try_from_nested_record_batch(&read_orbit_ipc(orbits_ipc.as_bytes())?)
@@ -3035,6 +3037,7 @@ fn oem_write_orbits_kvn(
         include_covariance,
         covariance_frame,
         table_frames_only,
+        covariance_label,
     };
     adam_core_rs_coords::oem_io::oem_write_orbits_kvn(
         std::path::Path::new(path),

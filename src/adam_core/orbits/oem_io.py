@@ -24,9 +24,9 @@ from . import Orbits
 
 logger = logging.getLogger(__name__)
 
-# Default CCSDS OEM version of orbit_to_oem. Matches the Python `oem`
-# package's CURRENT_VERSION ('2.0'), which this module's Rust KVN engine
-# replaced (bead personal-cmy.28).
+# CCSDS OEM version of the legacy product orbit_to_oem writes without a
+# ``version``. Matches the Python `oem` package's CURRENT_VERSION ('2.0'),
+# which this module's Rust KVN engine replaced (bead personal-cmy.28).
 OEM_VERSION = "2.0"
 
 REF_FRAME_VALUES = (
@@ -306,7 +306,7 @@ def orbit_to_oem(
     output_file: str,
     originator: str = "ADAM CORE USER",
     *,
-    version: str = OEM_VERSION,
+    version: Optional[str] = None,
     object_name: Optional[str] = None,
     object_id: Optional[str] = None,
     creation_date: Optional[str] = None,
@@ -314,6 +314,7 @@ def orbit_to_oem(
     include_covariance: bool = True,
     covariance_frame: Optional[str] = None,
     table_frames_only: bool = False,
+    covariance_label: Optional[str] = None,
 ) -> str:
     """
     Convert Orbit object to an OEM file.
@@ -326,16 +327,23 @@ def orbit_to_oem(
         The Orbit object to convert, must be pre-propagated to the desired times.
     output_file : str
         Path to the output OEM file
-    version : str
-        "2.0" (REF_FRAME EME2000) or "3.0" (REF_FRAME ICRF, 16 significant
-        digits, epochs rounded to the millisecond with a warning).
+    version : str, optional
+        None writes the legacy 2.0 product (REF_FRAME EME2000, 15 significant
+        digits). "2.0" or "3.0" write a validated CCSDS file: REF_FRAME ICRF,
+        16 significant digits, epochs rounded to the millisecond with a warning.
     object_name, object_id, creation_date, comments : optional
         OBJECT_NAME and OBJECT_ID (default the object_id), CREATION_DATE
         (default now, UTC for 3.0) and COMMENT lines after META_START.
     include_covariance, covariance_frame, table_frames_only : optional
         Write covariance blocks in REF_FRAME (None) or a local orbital frame:
-        RSW, RTN, TNW, or in 3.0 any name ``LocalFrameCovariances`` accepts,
-        unless table_frames_only.
+        RSW, RTN, TNW (the standard's own set, rotated at each epoch), or in
+        3.0 any name ``LocalFrameCovariances`` accepts unless table_frames_only.
+    covariance_label : str, optional
+        COV_REF_FRAME text for the blocks when it must differ from the frame's
+        registry name: a table label (RSW, RTN, TNW) of the same family, so
+        ``covariance_frame="TNW_ROTATING", covariance_label="TNW"`` gives a
+        2.0 reader the rotating frame velocity rows under the label it knows.
+        A COMMENT names the content.
 
     Returns
     -------
@@ -369,6 +377,7 @@ def orbit_to_oem(
         include_covariance=include_covariance,
         covariance_frame=covariance_frame,
         table_frames_only=table_frames_only,
+        covariance_label=covariance_label,
     )
 
     return output_file
@@ -378,7 +387,7 @@ def _write_oem_fused(
     orbits: Orbits,
     output_file: str,
     originator: str,
-    version: str = OEM_VERSION,
+    version: Optional[str] = None,
     creation_date: Optional[str] = None,
     **options: Any,
 ) -> None:
@@ -405,7 +414,7 @@ def _write_oem_fused(
     if creation_date is None:
         now = datetime.datetime.now
         utc = now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
-        creation_date = now().isoformat() if version == "2.0" else utc
+        creation_date = now().isoformat() if version is None else utc
     rounded = _rn.oem_write_orbits_kvn(
         str(output_file),
         orbits_to_ipc(orbits),
