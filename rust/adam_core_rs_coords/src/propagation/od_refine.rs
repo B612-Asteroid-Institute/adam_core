@@ -51,6 +51,16 @@ use crate::{CoordinateBatch, ObserverBatch, OrbitBatch};
 /// the covariance's weakest direction (`_DELTA_CHI2_WINDOW`).
 pub const DELTA_CHI2_WINDOW: (f64, f64) = (0.1, 10.0);
 
+/// Scale of the second probe, run only when the 1-sigma probe fails: a
+/// quadratic chi2 surface gives `SMALL_PROBE_SCALE^2` (0.01) of the 1-sigma
+/// rise there.
+pub const SMALL_PROBE_SCALE: f64 = 0.1;
+
+/// A too-steep 1-sigma rise that shrinks by less than this factor at the
+/// small probe (a quadratic shrinks by 100) is evaluation noise, not
+/// curvature: the predictions jump under small state changes.
+const NOISE_SCALING_FACTOR: f64 = 10.0;
+
 /// How the residual Jacobian is obtained for the solver and the covariance.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum JacobianMethod {
@@ -1093,14 +1103,17 @@ fn solve(
 // Covariance validation
 // ---------------------------------------------------------------------------
 
-/// Measured change of the fit cost at a 1-sigma displacement along the
-/// covariance's weakest-constrained direction (`_weak_direction_delta_chi2`).
+/// Measured change of the fit cost at a `scale`-sigma displacement (both
+/// signs, averaged so the gradient term cancels) along the covariance's
+/// weakest-constrained direction (`_weak_direction_delta_chi2`). A
+/// covariance consistent with the fit's chi2 surface gives `scale^2`.
 fn weak_direction_delta_cost(
     problem: &WhitenedProblem<'_>,
     state: &[f64; 6],
     covariance: &[f64; 36],
     cost_solution: f64,
     config: &WhitenedFitConfig,
+    scale: f64,
 ) -> PropagationResultValue<Result<f64, String>> {
     let (eigenvalues, vectors) = symmetric_eigen_6x6(&covariance_matrix(covariance));
     let mut weakest = 0;
@@ -1112,7 +1125,7 @@ fn weak_direction_delta_cost(
     if eigenvalues[weakest].is_nan() || eigenvalues[weakest] <= 0.0 {
         return Ok(Err("the covariance has no positive eigenvalue".to_string()));
     }
-    let sigma = eigenvalues[weakest].sqrt();
+    let sigma = scale * eigenvalues[weakest].sqrt();
     let mut plus = *state;
     let mut minus = *state;
     for i in 0..6 {
@@ -1154,30 +1167,72 @@ fn validated_covariance(
     warnings: &mut Vec<String>,
 ) -> PropagationResultValue<[f64; 36]> {
     let (lower, upper) = DELTA_CHI2_WINDOW;
-    let delta = match weak_direction_delta_cost(problem, state, &covariance, cost_solution, config)?
-    {
-        Ok(delta) => delta,
-        Err(message) => {
-            warnings.push(format!(
-                "The fit covariance could not be validated: evaluating residuals at a \
+    let delta =
+        match weak_direction_delta_cost(problem, state, &covariance, cost_solution, config, 1.0)? {
+            Ok(delta) => delta,
+            Err(message) => {
+                warnings.push(format!(
+                    "The fit covariance could not be validated: evaluating residuals at a \
                  1-sigma displacement along its weakest direction failed ({message}). The \
                  covariance may be unreliable in weakly constrained directions."
-            ));
-            return Ok(covariance);
-        }
-    };
+                ));
+                return Ok(covariance);
+            }
+        };
     if (lower..=upper).contains(&delta) {
         return Ok(covariance);
     }
+    // Second scale: curvature scales as the square of the step, evaluation
+    // noise does not. Only run when the 1-sigma probe has failed.
+    let small = weak_direction_delta_cost(
+        problem,
+        state,
+        &covariance,
+        cost_solution,
+        config,
+        SMALL_PROBE_SCALE,
+    )?
+    .ok();
+    let small_text = small.map_or("could not be evaluated".to_string(), |v| format!("{v:.3}"));
+    let expected_small = SMALL_PROBE_SCALE * SMALL_PROBE_SCALE;
+    if delta > upper {
+        if let Some(small) = small.filter(|&v| v.is_finite() && v * NOISE_SCALING_FACTOR > delta) {
+            warnings.push(format!(
+                "The weak-direction consistency check could not test the fit covariance: the \
+                 chi2 surface is not smooth at the probe scale. Steps along the covariance's \
+                 weakest axis raised chi2 by {delta:.3} at 1 sigma and {small:.3} at \
+                 {SMALL_PROBE_SCALE} sigma, where a quadratic surface gives ~1 and \
+                 ~{expected_small}: the predictions jump under small state changes. This is \
+                 typically the propagator's integration tolerance (for ASSIST, tighten \
+                 epsilon, e.g. ASSISTPropagator(epsilon=1e-9)); the same noise can stall \
+                 convergence and shift the fitted orbit."
+            ));
+            return Ok(covariance);
+        }
+    }
+    let direction = if delta < lower {
+        "the covariance is overconfident in that direction (the true uncertainty is \
+         larger than reported)"
+    } else {
+        "the chi2 surface is steeper than the covariance implies in that direction (the \
+         reported uncertainty is larger than the fit supports, or the surface is \
+         non-quadratic at 1 sigma)"
+    };
+    let measured = format!(
+        "a 1-sigma step along its weakest axis raised chi2 by {delta:.3} (expected ~1; \
+         {small_text} at {SMALL_PROBE_SCALE} sigma, expected ~{expected_small})"
+    );
+    let scope = "The check tests consistency with the fit's own chi2 surface, not the \
+                 realism of the uncertainty: dynamics-model or weighting errors are not \
+                 detected.";
     match jacobian_method {
         JacobianMethod::Analytic => {
             warnings.push(format!(
                 "The analytic (2-body) fit covariance failed the weak-direction consistency \
-                 check (measured delta-chi2 = {delta:.3} at a 1-sigma displacement along the \
-                 weakest axis; expected ~1). This typically indicates dynamics inside the arc \
-                 that the 2-body state transition matrix does not model (e.g. a planetary \
-                 encounter). Falling back to a central-difference Jacobian computed through \
-                 the full residual pipeline."
+                 check: {measured}, so {direction}. This typically indicates dynamics inside \
+                 the arc that the 2-body state transition matrix does not model (e.g. a \
+                 planetary encounter). Falling back to a central-difference Jacobian computed \
+                 through the full residual pipeline."
             ));
             let jac = problem.jacobian(JacobianMethod::Central, state, residuals_solution)?;
             match covariance_from_jacobian(&jac, residuals_solution, config.loss, config.f_scale) {
@@ -1203,23 +1258,19 @@ fn validated_covariance(
         }
         JacobianMethod::TwoPoint => {
             warnings.push(format!(
-                "The fit covariance failed the weak-direction consistency check (measured \
-                 delta-chi2 = {delta:.3} at a 1-sigma displacement along the weakest axis; \
-                 expected ~1). The covariance was computed from the solver's \
+                "The fit covariance failed the weak-direction consistency check: {measured}, \
+                 so {direction}. The covariance was computed from the solver's \
                  forward-difference Jacobian, whose implied steps can sit below the numerical \
                  noise floor of the residual pipeline; in weakly constrained (line-of-sight) \
                  directions the resulting confidence is fabricated by finite-difference noise. \
-                 Use jacobian='analytic' or jacobian='central' instead."
+                 Use jacobian='analytic' or jacobian='central' instead. {scope}"
             ));
             Ok(covariance)
         }
         JacobianMethod::Central | JacobianMethod::Propagator | JacobianMethod::Auto => {
             warnings.push(format!(
-                "The fit covariance failed the weak-direction consistency check (measured \
-                 delta-chi2 = {delta:.3} at a 1-sigma displacement along the weakest axis; \
-                 expected ~1). The covariance may be unreliable in weakly constrained \
-                 directions (the chi2 surface disagrees with the local quadratic model, e.g. \
-                 because the solution has not fully converged along a flat valley)."
+                "The fit covariance failed the weak-direction consistency check: {measured}, \
+                 so {direction}. {scope}"
             ));
             Ok(covariance)
         }
@@ -1483,8 +1534,9 @@ pub fn validate_fit_covariance_with<T: OriginTranslationProvider>(
     let cost = robust_cost(&residuals, config.loss, config.f_scale);
     // In-band probe failures are reported as NaN (and as a warning by the
     // validation below); a backend error propagates.
-    let delta_cost = weak_direction_delta_cost(&problem, &state, &covariance, cost, &probe_config)?
-        .unwrap_or(f64::NAN);
+    let delta_cost =
+        weak_direction_delta_cost(&problem, &state, &covariance, cost, &probe_config, 1.0)?
+            .unwrap_or(f64::NAN);
     let mut warnings = Vec::new();
     let validated = validated_covariance(
         &problem,
@@ -3479,6 +3531,103 @@ mod tests {
             }
             Ok(predicted)
         }
+    }
+
+    /// Two-body predictions plus a deterministic jump keyed to the exact bits
+    /// of each state (as a loose integrator tolerance gives): any state
+    /// change, however small, moves every prediction by up to `amplitude_deg`.
+    struct JitteryPredictor<'a> {
+        inner: &'a dyn SphericalPredictor,
+        amplitude_deg: f64,
+    }
+
+    impl SphericalPredictor for JitteryPredictor<'_> {
+        fn predict_spherical(
+            &self,
+            states: &[[f64; 6]],
+            geometry: &OrbitGeometry,
+            observers: &ObserverBatch,
+        ) -> PropagationResultValue<Result<Vec<f64>, String>> {
+            let mut predicted = self.inner.predict_spherical(states, geometry, observers)?;
+            if let Ok(values) = &mut predicted {
+                let m = observers.len();
+                for (k, state) in states.iter().enumerate() {
+                    let mut seed = state.iter().fold(0x9E37_79B9_7F4A_7C15_u64, |h, v| {
+                        (h ^ v.to_bits()).wrapping_mul(0x100_0000_01B3)
+                    });
+                    for row in values[k * m * 6..(k + 1) * m * 6].chunks_exact_mut(6) {
+                        for axis in [1, 2] {
+                            seed = seed
+                                .wrapping_mul(6364136223846793005)
+                                .wrapping_add(1442695040888963407);
+                            let u = (seed >> 11) as f64 / (1u64 << 53) as f64 * 2.0 - 1.0;
+                            row[axis] += self.amplitude_deg * u;
+                        }
+                    }
+                }
+            }
+            Ok(predicted)
+        }
+    }
+
+    #[test]
+    fn noisy_predictions_are_reported_as_noise_not_as_a_bad_covariance() {
+        let propagator = TwoBodyPropagator::default();
+        let options = ephemeris_options();
+        let inner = PropagatorPredictor {
+            propagator: &propagator,
+            options: &options,
+            provider: &NoopProvider,
+            translation_provider: &ZeroTranslationProvider,
+        };
+        let observed = synthetic_observations(None);
+        let config = WhitenedFitConfig {
+            jacobian: JacobianMethod::Analytic,
+            ..WhitenedFitConfig::default()
+        };
+        let run = |predictor: &dyn SphericalPredictor| {
+            fit_orbit_whitened_with(
+                predictor,
+                &orbit(TRUTH_STATE),
+                &observed,
+                &observers(),
+                &[false; NUM_OBS],
+                &config,
+                &NoopProvider,
+                &ZeroTranslationProvider,
+            )
+            .unwrap()
+            .warnings
+        };
+        // Smooth predictions: the check passes silently.
+        let clean = run(&inner);
+        assert!(
+            clean.iter().all(|w| !w.contains("weak-direction")),
+            "{clean:?}"
+        );
+        // Jumps of up to 2 sigma under any state change: the check names the
+        // noise (with the tolerance hint) instead of blaming the covariance,
+        // and does not fall back to a central-difference covariance.
+        let jittery = JitteryPredictor {
+            inner: &inner,
+            amplitude_deg: 2.0 * SIGMA_DEG,
+        };
+        let noisy = run(&jittery);
+        let probe: Vec<&String> = noisy
+            .iter()
+            .filter(|w| w.contains("weak-direction"))
+            .collect();
+        assert_eq!(probe.len(), 1, "{noisy:?}");
+        assert!(
+            probe[0].contains("not smooth at the probe scale"),
+            "{}",
+            probe[0]
+        );
+        assert!(probe[0].contains("epsilon"), "{}", probe[0]);
+        assert!(
+            noisy.iter().all(|w| !w.contains("Falling back")),
+            "{noisy:?}"
+        );
     }
 
     fn solve_counted(config: &WhitenedFitConfig, reject_trials: bool) -> (Solution, Vec<usize>) {

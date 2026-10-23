@@ -402,6 +402,15 @@ This file contains notable changes in adam-core
 
 ### Fixed
 
+- The weak-direction covariance check probes twice when it fails: at 1 sigma and at
+  0.1 sigma along the weakest axis. A rise that does not shrink with the step
+  (curvature shrinks 100x) is reported as evaluation noise, with the integration
+  tolerance hint (ASSIST `epsilon`), instead of blaming the covariance or
+  convergence, and the analytic-Jacobian central-difference fallback is skipped for
+  it. Curvature failures say whether the covariance is overconfident or too large,
+  and every message states that the check tests consistency with the fit, not
+  realism. (Two long main-belt arcs failed the old check from ASSIST's default
+  `epsilon=1e-6`, whose predictions jump under 1e-12 au state changes.)
 - Corrected IOD enforces `min_obs` after rejection: the whole-arc CMC2003
   rejection never leaves fewer than `min_obs` observations
   (`Cmc2003FitConfig.min_kept`, default CMC2003's own floor of 4), and a
