@@ -68,12 +68,18 @@ Generate OEM from a Seed Orbit (Propagation Included)
        originator="ADAM CORE USER",
    )
 
-OEM 3.0 with Local Frame Covariances
-------------------------------------
+CCSDS Labels and Local Frame Covariances
+----------------------------------------
 
-``version="3.0"`` writes ``REF_FRAME = ICRF``, 16 significant digits and millisecond
-epochs. ``covariance_frame`` writes the covariance blocks in RSW, RTN or TNW, or in
-3.0 in any SANA registry frame such as ``VNC_ROTATING``, which a COMMENT notes.
+``version="2.0"`` or ``version="3.0"`` writes a validated file with ``REF_FRAME = ICRF``,
+16 significant digits and millisecond epochs. Without ``version`` the legacy product
+(``REF_FRAME = EME2000``) is written unchanged. ``covariance_frame`` writes the covariance
+blocks in RSW, RTN or TNW, the frames the standard itself lists, or in 3.0 in any SANA
+registry frame such as ``VNC_ROTATING``, which a COMMENT notes. A bare table label is the
+pure rotation of the covariance (the registry's ``_INERTIAL`` meaning). ``covariance_label``
+writes a table label over a registry frame of the same family, so ``covariance_frame=
+"TNW_ROTATING", covariance_label="TNW"`` gives a 2.0 reader the rotating frame velocity
+rows under the label it knows, with a COMMENT naming the content.
 
 .. code-block:: python
 
@@ -82,11 +88,10 @@ epochs. ``covariance_frame`` writes the covariance blocks in RSW, RTN or TNW, or
 
    # One object_id with multiple epochs, as above.
    orbits = propagated_orbits
+   orbit_to_oem(orbits, "tnw.oem", version="2.0", covariance_frame="TNW")
+   orbit_to_oem(orbits, "tnw_rotating.oem", version="2.0", covariance_frame="TNW_ROTATING", covariance_label="TNW")
    orbit_to_oem(orbits, "vnc.oem", version="3.0", covariance_frame="VNC_ROTATING")
-   orbit_to_oem(
-       orbits, "tnw.oem", version="3.0", covariance_frame="TNW", table_frames_only=True
-   )
-   LocalFrameCovariances.from_orbits(orbits, "VNC_ROTATING").to_parquet("vnc.parquet")
+   LocalFrameCovariances.from_orbits(orbits, "TNW_ROTATING").to_parquet("tnw_rotating.parquet")
 
 Read OEM Back into ``Orbits``
 -----------------------------

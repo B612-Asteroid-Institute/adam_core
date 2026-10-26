@@ -554,10 +554,7 @@
                     <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">,</span>
                 <span class="p">)</span>
             <span class="k">except</span> <span class="p">(</span><span class="ne">RuntimeError</span><span class="p">,</span> <span class="ne">ValueError</span><span class="p">)</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
-                <span class="k">raise</span> <span class="n">NotCovered</span><span class="p">(</span>
-                    <span class="sa">f</span><span class="s2">"rust SPK readers do not cover target=</span><span class="si">{</span><span class="n">target</span><span class="si">}</span><span class="s2"> "</span>
-                    <span class="sa">f</span><span class="s2">"observer=</span><span class="si">{</span><span class="n">observer</span><span class="si">}</span><span class="s2"> frame=</span><span class="si">{</span><span class="n">frame</span><span class="si">}</span><span class="s2"> across </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">ets</span><span class="p">)</span><span class="si">}</span><span class="s2"> epochs"</span>
-                <span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">exc</span></div>
+                <span class="k">raise</span> <span class="n">NotCovered</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">exc</span><span class="p">))</span> <span class="kn">from</span><span class="w"> </span><span class="nn">exc</span></div>
 
 
 <div class="viewcode-block" id="RustBackend.pxform_batch">
@@ -576,9 +573,7 @@
                     <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">,</span>
                 <span class="p">)</span>
             <span class="k">except</span> <span class="p">(</span><span class="ne">RuntimeError</span><span class="p">,</span> <span class="ne">ValueError</span><span class="p">)</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
-                <span class="k">raise</span> <span class="n">NotCovered</span><span class="p">(</span>
-                    <span class="sa">f</span><span class="s2">"rust PCK readers do not cover pxform(</span><span class="si">{</span><span class="n">frame_from</span><span class="si">}</span><span class="s2">,</span><span class="si">{</span><span class="n">frame_to</span><span class="si">}</span><span class="s2">)"</span>
-                <span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">exc</span></div>
+                <span class="k">raise</span> <span class="n">NotCovered</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">exc</span><span class="p">))</span> <span class="kn">from</span><span class="w"> </span><span class="nn">exc</span></div>
 
 
 <div class="viewcode-block" id="RustBackend.sxform_batch">
@@ -597,9 +592,7 @@
                     <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">,</span>
                 <span class="p">)</span>
             <span class="k">except</span> <span class="p">(</span><span class="ne">RuntimeError</span><span class="p">,</span> <span class="ne">ValueError</span><span class="p">)</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
-                <span class="k">raise</span> <span class="n">NotCovered</span><span class="p">(</span>
-                    <span class="sa">f</span><span class="s2">"rust PCK readers do not cover sxform(</span><span class="si">{</span><span class="n">frame_from</span><span class="si">}</span><span class="s2">,</span><span class="si">{</span><span class="n">frame_to</span><span class="si">}</span><span class="s2">)"</span>
-                <span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">exc</span></div>
+                <span class="k">raise</span> <span class="n">NotCovered</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">exc</span><span class="p">))</span> <span class="kn">from</span><span class="w"> </span><span class="nn">exc</span></div>
 
 
 <div class="viewcode-block" id="RustBackend.load_mpc_obscodes">
@@ -884,7 +877,7 @@
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-10-20</div>
+              Last updated on 2026-10-26</div>
           </div>
           <div class="right-details">
             
