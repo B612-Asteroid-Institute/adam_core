@@ -219,6 +219,16 @@ Current Migrated APIs
     determination loop remains in Python: Python owns ids, the
     ``OrbitFitter`` plugin boundary, table loading and table assembly.
     Settings that only the scipy solver understood raise ``ValueError``.
+  - Covariance check (``validate_covariance=True``): a 1-sigma step (both
+    signs) along the covariance's weakest axis must raise chi2 by 0.1 to 10
+    (about 1 for a covariance consistent with the fit). On a failure a second
+    probe at 0.1 sigma separates curvature (scales as the step squared, about
+    0.01) from evaluation noise (does not scale): noise is reported as a
+    non-smooth chi2 surface, typically the propagator's integration tolerance,
+    without the central-difference fallback; a curvature failure says whether
+    the covariance is overconfident or too large in that direction. The check
+    tests consistency with the fit's own chi2 surface, not the realism of the
+    uncertainty (dynamics-model or weighting errors are not detected).
   - Error behavior: driver errors raise ``ValueError`` for invalid inputs and
     ``RuntimeError`` for backend failures; a propagator without a native
     backend raises ``TypeError``.

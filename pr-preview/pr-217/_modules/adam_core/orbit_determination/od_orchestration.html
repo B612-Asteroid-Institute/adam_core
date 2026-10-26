@@ -897,6 +897,15 @@
 <span class="sd">    internally (e.g. FindOrb) will apply them on top of the models supplied</span>
 <span class="sd">    here; disabling such internal handling when models are supplied is the</span>
 <span class="sd">    responsibility of the backend plugin.</span>
+
+<span class="sd">    **Integration tolerance (recommendation).** OD runs with ``propagator``</span>
+<span class="sd">    as constructed. ASSIST's default ``epsilon=1e-6`` can make predictions</span>
+<span class="sd">    jump under sub-metre state changes on long, heavily observed main-belt</span>
+<span class="sd">    arcs, which stalls convergence and shifts the fit (1458: 139 km, 20 sigma,</span>
+<span class="sd">    on 5,490 observations); ``epsilon=1e-8`` is converged and was the fastest</span>
+<span class="sd">    setting on a 30-asteroid main-belt sample. Pass</span>
+<span class="sd">    ``ASSISTPropagator(epsilon=1e-8)`` to the fitter and as ``propagator``.</span>
+<span class="sd">    Avoid 1e-12 (ASSIST's STM integration stalls).</span>
 <span class="sd">    """</span>
     <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">observations</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
         <span class="k">return</span> <span class="n">FittedOrbits</span><span class="o">.</span><span class="n">empty</span><span class="p">(),</span> <span class="n">FittedOrbitMembers</span><span class="o">.</span><span class="n">empty</span><span class="p">()</span>

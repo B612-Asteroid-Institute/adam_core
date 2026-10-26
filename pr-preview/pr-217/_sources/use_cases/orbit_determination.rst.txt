@@ -225,6 +225,17 @@ pre-2026-09 loop). The lower-level entry points (``initial_orbit_determination``
 not the shipped pipeline, and work without the data packages. The same notes
 are in the ``run_od`` docstring.
 
+**Integration tolerance (recommendation).** Orbit determination runs with the
+propagator you pass it, as constructed. ASSIST's default IAS15 tolerance
+(``ASSISTPropagator(epsilon=1e-6)``) suits propagation, but on some long,
+heavily observed main-belt arcs its predictions jump under sub-metre state
+changes, which stalls convergence and shifts the fitted orbit (1458: 139 km,
+20 sigma, on 5,490 observations over 1962-2025). ``epsilon=1e-8`` is
+converged (within 0.06 km of 1e-11) and was the fastest setting on a sample
+of 30 main-belt asteroids with 1,200-8,800 observations, so pass
+``ASSISTPropagator(epsilon=1e-8)`` both to the fitter and as ``propagator``.
+Avoid 1e-12, where ASSIST's state-transition-matrix integration stalls.
+
 The IOD policy
 ~~~~~~~~~~~~~~
 

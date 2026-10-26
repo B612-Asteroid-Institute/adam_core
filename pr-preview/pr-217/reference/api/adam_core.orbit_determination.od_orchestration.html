@@ -659,6 +659,14 @@ sigma. The lower-level entry points (<cite>initial_orbit_determination</cite>,
 internally (e.g. FindOrb) will apply them on top of the models supplied
 here; disabling such internal handling when models are supplied is the
 responsibility of the backend plugin.</p>
+<p><strong>Integration tolerance (recommendation).</strong> OD runs with <code class="docutils literal notranslate"><span class="pre">propagator</span></code>
+as constructed. ASSIST’s default <code class="docutils literal notranslate"><span class="pre">epsilon=1e-6</span></code> can make predictions
+jump under sub-metre state changes on long, heavily observed main-belt
+arcs, which stalls convergence and shifts the fit (1458: 139 km, 20 sigma,
+on 5,490 observations); <code class="docutils literal notranslate"><span class="pre">epsilon=1e-8</span></code> is converged and was the fastest
+setting on a 30-asteroid main-belt sample. Pass
+<code class="docutils literal notranslate"><span class="pre">ASSISTPropagator(epsilon=1e-8)</span></code> to the fitter and as <code class="docutils literal notranslate"><span class="pre">propagator</span></code>.
+Avoid 1e-12 (ASSIST’s STM integration stalls).</p>
 </dd></dl>
 
 </section>
