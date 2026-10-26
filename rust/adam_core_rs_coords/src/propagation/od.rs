@@ -3763,20 +3763,33 @@ pub(super) fn validate_od_observations(
     Ok(())
 }
 
+/// Reject unsupported observation-covariance storage before any OD path can
+/// interpret values with the fixed 6x6 stride. A missing covariance is allowed
+/// here because `run_od` may apply a sigma-filling model before it is required.
+pub(super) fn validate_od_covariance_dimension(
+    observed: &CoordinateBatch,
+) -> PropagationResultValue<()> {
+    if let Some(covariance) = &observed.covariance {
+        if covariance.dimension != 6 {
+            return Err(PropagationError::InvalidRequest(format!(
+                "orbit determination observation covariance must have dimension 6, got {}",
+                covariance.dimension
+            )));
+        }
+    }
+    Ok(())
+}
+
 pub(super) fn observed_covariance_flat(
     observed: &CoordinateBatch,
 ) -> PropagationResultValue<Vec<f64>> {
-    let covariance = observed
+    validate_od_covariance_dimension(observed)?;
+    Ok(observed
         .covariance
         .as_ref()
-        .ok_or_else(|| PropagationError::InvalidRequest(MISSING_COVARIANCE_REMEDY.to_string()))?;
-    if covariance.dimension != 6 {
-        return Err(PropagationError::InvalidRequest(format!(
-            "orbit determination observation covariance must have dimension 6, got {}",
-            covariance.dimension
-        )));
-    }
-    Ok(covariance.values_row_major.clone())
+        .ok_or_else(|| PropagationError::InvalidRequest(MISSING_COVARIANCE_REMEDY.to_string()))?
+        .values_row_major
+        .clone())
 }
 
 #[cfg(test)]

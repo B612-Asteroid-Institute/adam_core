@@ -56,6 +56,8 @@ _REQUIRED_NATIVE_SYMBOLS = (
     "refinement_run_config_from_json",
     "evaluation_config",
     "apply_observation_pipeline_ipc",
+    "benchmark_od_fit_ipc",
+    "native_build_profile",
     "benchmark_transform_coordinates_arrow",
     "benchmark_calc_gauss",
     "benchmark_calc_gibbs",

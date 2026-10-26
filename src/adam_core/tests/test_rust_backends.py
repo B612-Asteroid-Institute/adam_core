@@ -153,6 +153,9 @@ class _FakeRustNative:
 def test_rust_api_mandatory_native_contract() -> None:
     assert rust_api.RUST_BACKEND_AVAILABLE is True
     assert rust_api.SPICEKIT_AVAILABLE is True
+    assert {"benchmark_od_fit_ipc", "native_build_profile"} <= set(
+        rust_api._REQUIRED_NATIVE_SYMBOLS
+    )
     missing = [
         name
         for name in rust_api._REQUIRED_NATIVE_SYMBOLS
