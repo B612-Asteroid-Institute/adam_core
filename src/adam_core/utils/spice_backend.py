@@ -90,10 +90,7 @@ class RustBackend:
                     dtype=np.float64,
                 )
             except (RuntimeError, ValueError) as exc:
-                raise NotCovered(
-                    f"rust SPK readers do not cover target={target} "
-                    f"observer={observer} frame={frame} across {len(ets)} epochs"
-                ) from exc
+                raise NotCovered(str(exc)) from exc
 
     def pxform_batch(
         self,
@@ -109,9 +106,7 @@ class RustBackend:
                     dtype=np.float64,
                 )
             except (RuntimeError, ValueError) as exc:
-                raise NotCovered(
-                    f"rust PCK readers do not cover pxform({frame_from},{frame_to})"
-                ) from exc
+                raise NotCovered(str(exc)) from exc
 
     def sxform_batch(
         self,
@@ -127,9 +122,7 @@ class RustBackend:
                     dtype=np.float64,
                 )
             except (RuntimeError, ValueError) as exc:
-                raise NotCovered(
-                    f"rust PCK readers do not cover sxform({frame_from},{frame_to})"
-                ) from exc
+                raise NotCovered(str(exc)) from exc
 
     def load_mpc_obscodes(self, json_text: str) -> int:
         """Parse + cache MPC observatory parallax coefficients Rust-side."""

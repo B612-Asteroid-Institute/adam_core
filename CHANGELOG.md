@@ -121,6 +121,8 @@ This file contains notable changes in adam-core
 
 ### Changed
 
+- `orbit_to_oem(version="2.0")` now writes a validated OEM 2.0 file like `version="3.0"` does for 3.0: `REF_FRAME = ICRF`, 16 significant digits (CCSDS 502.0-B-2 6.5.5), millisecond epochs, comments and covariance blocks in RSW, RTN or TNW. The default `version=None` keeps the legacy output unchanged, and the SANA orbit-relative frames such as `VNC_ROTATING` remain a 3.0 provision. `covariance_label` writes a table label (RSW, RTN, TNW) over a SANA frame of the same family, for instance `TNW_ROTATING` content under `TNW`, with a COMMENT naming the content.
+
 - IOD default policy (bead a6w.4): a Gauss orbit is a seed for differential
   corrections, not the answer. `IodAcceptance::Corrected` (Python
   `acceptance="corrected"`, `NativeOrbitFitter(iod_acceptance=...)`) scores
@@ -402,6 +404,9 @@ This file contains notable changes in adam-core
 
 ### Fixed
 
+- SPICE lookups resolve each epoch across every furnished kernel through
+  spicekit's `KernelPool` (spicekit 0.2.3), as CSPICE does, instead of
+  requiring one file to cover a whole batch.
 - The weak-direction covariance check probes twice when it fails: at 1 sigma and at
   0.1 sigma along the weakest axis. A rise that does not shrink with the step
   (curvature shrinks 100x) is reported as evaluation noise, with the integration
@@ -456,6 +461,23 @@ This file contains notable changes in adam-core
 - The fused `run_od` route (a Rust-backed propagator's `run_od` work unit) runs the observation models before requiring an observed covariance, so observations without reported uncertainties can be filled by a `SigmaFillModel` exactly as on the composed route; after the models every observation must carry finite, positive lon/lat variances, else `ValueError` names `SigmaFillModel` as the remedy (the same message every other OD entry point now gives for a missing covariance).
 
 - Gauss IOD (`iod`, `NativeOrbitFitter.initial_fit` / `full_od`, `run_od`, the linkage batch) is deterministic in the caller's row order: the Rust driver sorts observations by epoch, station code and input row before selecting triplets and maps every member array back to the input order. A zero contamination percentage only disables outlier removal (a rejected candidate is followed by the next candidate and triplet instead of ending the search), a candidate whose prediction fails is counted and skipped instead of aborting the search (`InvalidRequest` / schema errors still propagate), and the IOD dict carries `triplets_tried`, `candidates_evaluated`, `candidates_failed` and `not_found_reason`, logged at debug level when no orbit is accepted.
+
+## [0.6.1] - 2026-10-16
+
+### Fixed
+
+- Restored fresh Cargo resolution for Rust 1.87 consumers after all `zip`
+  releases compatible with that MSRV were yanked. Kernel-data wheel extraction
+  now uses `rawzip` with the existing pure-Rust `flate2` backend while
+  retaining Stored and Deflate support, Zip64 parsing, CRC/size verification,
+  and atomic cache publication.
+
+### Compatibility
+
+- No numerical algorithm, scientific model, covariance behavior, `SourceCatalog`
+  schema, OEM behavior, or public Python/Rust API changed. The Python package
+  and all six public Rust crates advance together to `0.6.1` so exact internal
+  crate requirements remain coherent.
 
 ## [0.6.0] - 2026-10-15
 

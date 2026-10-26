@@ -37,20 +37,18 @@ jobs:
           # adam-assist 0.5.0 pairing + the native OD propagator (capsule and
           # STMs) this branch's Rust API requires: branch
           # pairing/adam-assist-0.5.0-native-od-core-pr217 (8c95fdf + 2 commits).
+          # Main's ASSIST pin lacks the OD capsule. The lock preparation below
+          # aligns this candidate's spicekit with the Core lock from #229.
           ref: c06164a18e8d90d8bf83d7ab58e479dc97e1be41
           path: dependent
       - name: Build reference propagator in the Core test environment
         env:
           ADAM_ASSIST_RUST_REPO: ${{ github.workspace }}/dependent
         run: pdm run assist-rust-develop
-      - name: Patch unpublished Core crates into the dependent
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-          from migration.scripts.develop_downstream_adam_assist import _write_core_patch
-
-          _write_core_patch(Path("dependent").resolve())
-          PY
+      - name: Prepare compatible ASSIST lock for dependent install
+        env:
+          ADAM_ASSIST_RUST_REPO: ${{ github.workspace }}/dependent
+        run: python migration/scripts/develop_downstream_adam_assist.py --prepare-only
       - name: Install dependent and adam_core wheel
         run: |
           python -m pip install --upgrade pip
@@ -72,7 +70,7 @@ jobs:
           import adam_core
           from adam_assist.version import __version__ as assist_version
 
-          assert version("adam-core") == adam_core.__version__ == "0.6.0"
+          assert version("adam-core") == adam_core.__version__ == "0.6.1"
           assert version("adam-assist") == assist_version == "0.5.0"
           PY
       - name: Run dependent import smoke
@@ -86,7 +84,7 @@ jobs:
           import adam_core
           from adam_assist.version import __version__ as assist_version
 
-          assert version("adam-core") == adam_core.__version__ == "0.6.0"
+          assert version("adam-core") == adam_core.__version__ == "0.6.1"
           assert version("adam-assist") == assist_version == "0.5.0"
           PY
       - name: Run Core integration tests with the reference propagator
