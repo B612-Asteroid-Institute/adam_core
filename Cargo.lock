@@ -2494,9 +2494,9 @@ checksum = "1b6b67fb9a61334225b5b790716f609cd58395f895b3fe8b328786812a40bc3b"
 
 [[package]]
 name = "spicekit"
-version = "0.2.2"
+version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "17c159ac803c5c3a0193eab3603690d9651ae3071dfa07705ba6e5ce1d376406"
+checksum = "be636b2fdf4077e7c45f093ebb3f589f0f5416c4022a3420ec1f68c111fe4207"
 dependencies = [
  "bytemuck",
  "memmap2",
