@@ -452,12 +452,13 @@ def run_od(
     responsibility of the backend plugin.
 
     **Integration tolerance (recommendation).** OD runs with ``propagator``
-    as constructed. ASSIST's default ``epsilon=1e-6`` makes predictions jump
-    under sub-metre state changes on long, heavily observed main-belt arcs,
-    which stalls convergence and shifts the fit (1458: 139 km, 20 sigma, on
-    5,490 observations); ``epsilon=1e-9`` is converged at similar fit cost.
-    For such arcs pass ``ASSISTPropagator(epsilon=1e-9)`` to the fitter and
-    as ``propagator``. Avoid 1e-12 (ASSIST's STM integration stalls).
+    as constructed. ASSIST's default ``epsilon=1e-6`` can make predictions
+    jump under sub-metre state changes on long, heavily observed main-belt
+    arcs, which stalls convergence and shifts the fit (1458: 139 km, 20 sigma,
+    on 5,490 observations); ``epsilon=1e-8`` is converged and was the fastest
+    setting on a 30-asteroid main-belt sample. Pass
+    ``ASSISTPropagator(epsilon=1e-8)`` to the fitter and as ``propagator``.
+    Avoid 1e-12 (ASSIST's STM integration stalls).
     """
     if len(observations) == 0:
         return FittedOrbits.empty(), FittedOrbitMembers.empty()
