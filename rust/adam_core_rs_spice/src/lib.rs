@@ -2328,6 +2328,46 @@ mod tests {
     }
 
     #[test]
+    fn spkez_chains_segments_across_furnished_files_and_honors_unload() {
+        let dir = tempdir().unwrap();
+        let parent = write_spk_window(dir.path(), "parent.bsp", 0.0, 100.0, 1.0);
+        let child = dir.path().join("child.bsp");
+        let mut writer = SpkWriter::new_spk("adam-core-rs-spice-chain-test");
+        writer
+            .add_type9(Type9Segment {
+                target: 43,
+                center: 42,
+                frame_id: 1,
+                start_et: 0.0,
+                end_et: 100.0,
+                segment_id: "CHILD BODY".to_string(),
+                degree: 1,
+                states: vec![2.0, 0.0, 0.0, 0.0, 0.0, 0.0, 2.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+                epochs: vec![0.0, 100.0],
+            })
+            .unwrap();
+        writer.write(&child).unwrap();
+
+        let mut backend = AdamCoreSpiceBackend::new();
+        backend.furnsh(&parent).unwrap();
+        backend.furnsh(&child).unwrap();
+        // Neither file alone supplies 43 relative to 0. The pool must follow
+        // 43 -> 42 in the child file and 42 -> 0 in the parent file.
+        assert!((backend.spkez(43, 50.0, "J2000", 0).unwrap()[0] - 3.0).abs() < 1.0e-9);
+
+        let override_parent = write_spk_window(dir.path(), "override.bsp", 0.0, 100.0, 10.0);
+        backend.furnsh(&override_parent).unwrap();
+        assert!((backend.spkez(43, 50.0, "J2000", 0).unwrap()[0] - 12.0).abs() < 1.0e-9);
+        backend.unload(&override_parent);
+        assert!((backend.spkez(43, 50.0, "J2000", 0).unwrap()[0] - 3.0).abs() < 1.0e-9);
+        backend.clear();
+        assert!(backend
+            .spkez(43, 50.0, "J2000", 0)
+            .unwrap_err()
+            .is_not_covered());
+    }
+
+    #[test]
     fn spkez_batch_names_the_first_uncovered_epoch() {
         let dir = tempdir().unwrap();
         let early = write_spk_window(dir.path(), "early.bsp", 0.0, 100.0, 1.0);

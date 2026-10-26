@@ -3,7 +3,7 @@ from typing import Tuple
 import numpy as np
 import pyarrow.compute as pc
 
-from .differential_correction import OrbitDeterminationObservations
+from .evaluate import OrbitDeterminationObservations
 from .fitted_orbits import FittedOrbitMembers
 
 
