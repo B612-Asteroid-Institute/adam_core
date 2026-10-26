@@ -18,11 +18,12 @@
 //! integer split; lower-triangle covariance reconstruction to a symmetric
 //! 6x6; `COMMENT` lines skipped; multiple segments supported.
 //!
-//! OEM 3.0 output (CCSDS 502.0-B-3) differs in REF_FRAME ICRF, 16 significant
-//! digits, epochs rounded to the millisecond, COMMENT lines, stricter
-//! validation and covariance blocks in a local orbital frame.
+//! Given a `version` ("2.0" or "3.0") the renderer writes a validated CCSDS file
+//! instead of that legacy product: REF_FRAME ICRF, 16 significant digits,
+//! epochs rounded to the millisecond, COMMENT lines and covariance blocks in a
+//! local orbital frame (RSW, RTN, TNW; in 3.0 any SANA orbit-relative frame).
 
-use crate::local_frames::{local_frame_covariances, LocalFrame};
+use crate::local_frames::{local_frame_covariances, LocalFrame, LocalFrameFamily};
 use crate::types::{
     origin_mu_au3_day2, CoordinateBatch, CoordinateRepresentation, CovarianceBatch,
     CovarianceUnits, Epoch, Frame, ObjectId, OrbitBatch, OrbitId, OriginArray, OriginId,
@@ -725,8 +726,9 @@ fn time_system_upper(scale: TimeScale) -> String {
 /// Options of [`oem_render_orbits_kvn`]; the default is the legacy OEM 2.0 product.
 #[derive(Debug, Clone, PartialEq)]
 pub struct OemWriteOptions {
-    /// "2.0" or "3.0".
-    pub version: String,
+    /// None writes the legacy 2.0 product unchanged; "2.0" or "3.0" write a
+    /// validated file (REF_FRAME ICRF, 16 significant digits).
+    pub version: Option<String>,
     /// OBJECT_NAME and OBJECT_ID; None or empty means the orbits' object_id.
     pub object_name: Option<String>,
     pub object_id: Option<String>,
@@ -738,18 +740,24 @@ pub struct OemWriteOptions {
     pub covariance_frame: Option<String>,
     /// Refuse covariance frames outside table 5-4 (always on for 2.0).
     pub table_frames_only: bool,
+    /// COV_REF_FRAME text when it must differ from the frame's registry name: a
+    /// table 5-4 label (RSW, RTN, TNW) of the frame's family, so that for
+    /// instance TNW_ROTATING content travels under the TNW label a 2.0 reader
+    /// accepts. A COMMENT names the content.
+    pub covariance_label: Option<String>,
 }
 
 impl Default for OemWriteOptions {
     fn default() -> Self {
         Self {
-            version: OEM_VERSION.to_string(),
+            version: None,
             object_name: None,
             object_id: None,
             comments: Vec::new(),
             include_covariance: true,
             covariance_frame: None,
             table_frames_only: false,
+            covariance_label: None,
         }
     }
 }
@@ -767,10 +775,12 @@ pub fn oem_render_orbits_kvn(
 ) -> SchemaResult<(String, usize)> {
     use serde_json::{Map, Value};
 
-    let version_3 = match options.version.as_str() {
-        "2.0" => false,
-        "3.0" => true,
-        other => {
+    // `validated` is any file with a version, `version_3` the 3.0 provisions.
+    let (validated, version_3) = match options.version.as_deref() {
+        None => (false, false),
+        Some("2.0") => (true, false),
+        Some("3.0") => (true, true),
+        Some(other) => {
             return Err(invalid(format!(
                 "OEM version must be \"2.0\" or \"3.0\", got \"{other}\""
             )))
@@ -803,8 +813,9 @@ pub fn oem_render_orbits_kvn(
         ));
     }
 
-    // 3.0 rounds to the millisecond, ties to even, so EPOCH strings read back exactly.
-    let step = if version_3 { 1_000_000 } else { 1 };
+    // Validated files round to the millisecond, ties to even, so EPOCH strings
+    // read back exactly.
+    let step = if validated { 1_000_000 } else { 1 };
     let round = |nanos: i64| (nanos as f64 / step as f64).round_ties_even() as i64 * step;
     let epochs: Vec<Epoch> = (times.epochs.iter())
         .map(|epoch| Epoch::new(epoch.days, round(epoch.nanos)))
@@ -814,8 +825,8 @@ pub fn oem_render_orbits_kvn(
     order.sort_by_key(|&i| (epochs[i].days, epochs[i].nanos));
     let scale = times.scale;
 
-    // One object about one center per file; 2.0 without a covariance frame
-    // takes the first center.
+    // One object about one center per file; the legacy product without a
+    // covariance frame takes the first center.
     let object_ids: HashSet<Option<&str>> = (orbits.object_id.iter())
         .map(|id| id.as_ref().map(|id| id.0.as_str()))
         .collect();
@@ -823,7 +834,7 @@ pub fn oem_render_orbits_kvn(
     let centers: HashSet<String> = (orbits.coordinates.origins.origins.iter())
         .map(OriginId::code)
         .collect();
-    let one_center = centers.len() == 1 || !(version_3 || options.covariance_frame.is_some());
+    let one_center = centers.len() == 1 || !(validated || options.covariance_frame.is_some());
     let object_id = match object_ids.iter().next() {
         Some(Some(object_id)) if object_ids.len() == 1 && one_center => object_id.to_string(),
         _ => {
@@ -835,7 +846,7 @@ pub fn oem_render_orbits_kvn(
             )))
         }
     };
-    if version_3 {
+    if validated {
         if let Some(pair) = order
             .windows(2)
             .find(|pair| epochs[pair[0]] == epochs[pair[1]])
@@ -851,7 +862,7 @@ pub fn oem_render_orbits_kvn(
             return Err(invalid(format!("State {i} has a non-finite value.")));
         }
     }
-    let oem_frame = if version_3 { "ICRF" } else { "EME2000" };
+    let oem_frame = if validated { "ICRF" } else { "EME2000" };
     // Parsed whenever given, so a bad name fails without a covariance block too.
     let local_frame =
         match (options.covariance_frame.as_deref()).map(|label| label.trim().to_uppercase()) {
@@ -865,9 +876,10 @@ pub fn oem_render_orbits_kvn(
     let stop = format_epoch(epochs[last].days, epochs[last].nanos, scale)?;
 
     let mut header = Map::new();
+    let version = options.version.as_deref().unwrap_or(OEM_VERSION);
     header.insert(
         "CCSDS_OEM_VERS".to_string(),
-        Value::String(options.version.clone()),
+        Value::String(version.to_string()),
     );
     header.insert(
         "CREATION_DATE".to_string(),
@@ -919,14 +931,46 @@ pub fn oem_render_orbits_kvn(
         .collect();
     let mut comments = options.comments.clone();
     let mut label = oem_frame.to_string();
-    if let Some((frame, given)) = local_frame.filter(|_| options.include_covariance) {
+    let custom_label = (options.covariance_label.as_deref()).map(|text| text.trim().to_uppercase());
+    let local_frame = local_frame.filter(|_| options.include_covariance);
+    if custom_label.is_some() && local_frame.is_none() {
+        return Err(invalid(
+            "covariance_label needs covariance_frame to name a local orbital frame and \
+             include_covariance."
+                .to_string(),
+        ));
+    }
+    if let Some((frame, given)) = local_frame {
         if rows.iter().all(Option::is_none) {
             return Err(invalid("The states carry no covariance.".to_string()));
         }
-        label = if TABLE_COVARIANCE_FRAMES.contains(&given.as_str()) {
+        let name = frame.canonical_name();
+        label = if let Some(custom) = custom_label {
+            // A table 5-4 label over a registry frame of its family, so that for
+            // instance TNW_ROTATING content travels under the TNW label a 2.0
+            // reader accepts; the COMMENT names the content.
+            let table_labels: &[&str] = match frame.family {
+                LocalFrameFamily::Rsw => &["RSW", "RTN"],
+                LocalFrameFamily::Tnw => &["TNW"],
+                LocalFrameFamily::Vnc => &[],
+            };
+            if !table_labels.contains(&custom.as_str()) {
+                return Err(invalid(format!(
+                    "covariance_label {custom:?} is not a table 5-4 label of {name}: RSW frames \
+                     take RSW or RTN, TNW frames take TNW, VNC frames have none."
+                )));
+            }
+            let velocity = match frame.rotating {
+                true => "velocity rows relative to the rotating frame",
+                false => "inertial velocity rows rotated into the frame",
+            };
+            comments.push(format!(
+                "COV_REF_FRAME {custom} carries the SANA {name} covariance: {velocity}."
+            ));
+            custom
+        } else if TABLE_COVARIANCE_FRAMES.contains(&given.as_str()) {
             given
         } else {
-            let name = frame.canonical_name();
             let note = format!(
                 "COV_REF_FRAME {name} follows the SANA orbit-relative reference frames \
                  registry (CCSDS 502.0-B-3 annex B5)."
@@ -981,7 +1025,7 @@ pub fn oem_render_orbits_kvn(
             for (index, &(row, col)) in LOWER_TRIANGLE_INDICES.iter().enumerate() {
                 lower_triangle[index] = matrix_km[row * 6 + col];
             }
-            if version_3 && !lower_triangle.iter().all(|value| value.is_finite()) {
+            if validated && !lower_triangle.iter().all(|value| value.is_finite()) {
                 return Err(invalid(format!(
                     "Covariance at epoch {} has a non-finite entry.",
                     format_epoch(epochs[i].days, epochs[i].nanos, scale)?
@@ -997,10 +1041,10 @@ pub fn oem_render_orbits_kvn(
     }
 
     // KVN values are printable ASCII on one line (7.3.4): every header and
-    // metadata value in 3.0, the caller's names and the comments always.
+    // metadata value in a validated file, the caller's names and the comments always.
     let given = ["OBJECT_NAME", "OBJECT_ID"].into_iter().zip(names);
     let kvn_values = (header.iter().chain(&metadata))
-        .filter(|_| version_3)
+        .filter(|_| validated)
         .map(|(key, value)| (key.as_str(), value.as_str().unwrap_or_default()))
         .chain(given.filter_map(|(key, name)| Some((key, name?))))
         .chain(comments.iter().map(|comment| ("COMMENT", comment.as_str())));
@@ -1021,7 +1065,8 @@ pub fn oem_render_orbits_kvn(
         }
     }
 
-    let decimals = if version_3 { 15 } else { 14 };
+    // 16 significant digits, the most 502.0-B-2 6.5.5 and 502.0-B-3 7.5.7 allow.
+    let decimals = if validated { 15 } else { 14 };
     let text = oem_to_kvn(
         &header_json,
         &metadata_json,
@@ -1274,9 +1319,8 @@ mod tests {
     }
 
     fn options_3() -> OemWriteOptions {
-        let version = "3.0".to_string();
         OemWriteOptions {
-            version,
+            version: Some("3.0".to_string()),
             ..Default::default()
         }
     }
@@ -1339,6 +1383,79 @@ mod tests {
     }
 
     #[test]
+    fn version_2_validated_layout_keeps_the_table_frame_label() {
+        let options = OemWriteOptions {
+            version: Some("2.0".to_string()),
+            comments: vec!["a comment".to_string()],
+            covariance_frame: Some(" tnw ".to_string()),
+            ..Default::default()
+        };
+        let (text, _) = render(&fixture(Frame::Equatorial), &options).unwrap();
+        let lines: Vec<&str> = text.lines().collect();
+        assert_eq!(lines[0], "CCSDS_OEM_VERS = 2.0");
+        assert_eq!(lines[5], "COMMENT a comment");
+        assert_eq!(lines[9], "REF_FRAME = ICRF");
+        assert_eq!(text.matches("COMMENT").count(), 1);
+        assert!(text.contains("\nEPOCH = 2023-02-27T00:00:00.000\nCOV_REF_FRAME = TNW\n"));
+        // 16 significant digits, allowed by 502.0-B-2 6.5.5 as in 3.0.
+        let numbers: Vec<&str> = (text.split_whitespace())
+            .filter(|token| token.contains('e') && token.parse::<f64>().is_ok())
+            .collect();
+        assert_eq!(numbers.len(), 3 * 6 + 21);
+        for token in numbers {
+            assert_eq!(token.trim_start_matches('-').find('e'), Some(17), "{token}");
+        }
+    }
+
+    #[test]
+    fn table_label_carries_a_registry_frame_of_its_family() {
+        let rotating = OemWriteOptions {
+            version: Some("2.0".to_string()),
+            covariance_frame: Some("tnw_rotating".to_string()),
+            covariance_label: Some(" tnw ".to_string()),
+            ..Default::default()
+        };
+        let (text, _) = render(&fixture(Frame::Equatorial), &rotating).unwrap();
+        let lines: Vec<&str> = text.lines().collect();
+        assert_eq!(
+            lines[5],
+            "COMMENT COV_REF_FRAME TNW carries the SANA TNW_ROTATING covariance: velocity rows \
+             relative to the rotating frame."
+        );
+        assert_eq!(text.matches("COMMENT").count(), 1);
+        assert!(text.contains("\nEPOCH = 2023-02-27T00:00:00.000\nCOV_REF_FRAME = TNW\n"));
+        // The block is the one a 3.0 file writes under the registry name.
+        let registry = OemWriteOptions {
+            covariance_frame: Some("TNW_ROTATING".to_string()),
+            ..options_3()
+        };
+        let (reference, _) = render(&fixture(Frame::Equatorial), &registry).unwrap();
+        fn block(text: &str) -> Vec<&str> {
+            let tail = text.split("COVARIANCE_START").nth(1).unwrap();
+            tail.lines()
+                .filter(|line| {
+                    !line.is_empty() && !line.starts_with("EPOCH") && !line.starts_with("COV")
+                })
+                .collect()
+        }
+        assert_eq!(block(&text).len(), 6);
+        assert_eq!(block(&text), block(&reference));
+        // An inertial frame under a table label of its family says so too.
+        let inertial = OemWriteOptions {
+            version: Some("2.0".to_string()),
+            covariance_frame: Some("rtn".to_string()),
+            covariance_label: Some("rsw".to_string()),
+            ..Default::default()
+        };
+        let (text, _) = render(&fixture(Frame::Equatorial), &inertial).unwrap();
+        assert!(text.contains(
+            "\nCOMMENT COV_REF_FRAME RSW carries the SANA RSW_INERTIAL covariance: inertial \
+             velocity rows rotated into the frame.\n"
+        ));
+        assert_eq!(text.matches("COV_REF_FRAME = RSW\n").count(), 1);
+    }
+
+    #[test]
     fn version_3_rounds_epochs_ties_to_even_and_refuses_duplicates() {
         let mut orbits = fixture(Frame::Equatorial);
         let nanos = vec![500_000, 1_500_000, 86_399_999_600_000];
@@ -1353,12 +1470,12 @@ mod tests {
         ] {
             assert!(text.contains(&format!("\n{epoch} ")), "{epoch}");
         }
-        // 2.0 keeps ERFA's formatting, which rounds half a millisecond up.
+        // The legacy product keeps ERFA's formatting, which rounds half a millisecond up.
         let (text, rounded) = render(&orbits, &OemWriteOptions::default()).unwrap();
         assert_eq!(rounded, 0);
         assert!(text.contains("\n2023-02-25T00:00:00.001 "));
 
-        // 400 microseconds apart round to the same millisecond; 2.0 writes both.
+        // 400 microseconds apart round to the same millisecond; the legacy product writes both.
         let times = TimeArray::from_parts(
             TimeScale::Tdb,
             vec![60000, 60001, 60000],
@@ -1409,9 +1526,9 @@ mod tests {
         let one_center = "An OEM needs a non-null object_id and carries one object about one \
                           center per file, got";
         let ascii = "must be non-empty printable ASCII on one line.";
-        let cases: [(Case, String); 15] = [
+        let cases: [(Case, String); 18] = [
             (
-                |_, o| o.version = "1.0".into(),
+                |_, o| o.version = Some("1.0".into()),
                 r#"OEM version must be "2.0" or "3.0", got "1.0""#.into(),
             ),
             (
@@ -1457,7 +1574,8 @@ mod tests {
             ),
             (
                 |_, o| {
-                    (o.covariance_frame, o.version) = (Some("VNC_ROTATING".into()), "2.0".into())
+                    (o.covariance_frame, o.version) =
+                        (Some("VNC_ROTATING".into()), Some("2.0".into()))
                 },
                 format!(
                     "{note} Annex B5 is an OEM 3.0 provision, pass version=\"3.0\" to write it."
@@ -1486,11 +1604,35 @@ mod tests {
                 "Covariance at epoch 2023-02-27T00:00:00.000 has a non-finite entry.".into(),
             ),
             (
+                |_, o| {
+                    (o.covariance_frame, o.covariance_label) =
+                        (Some("VNC_ROTATING".into()), Some("TNW".into()))
+                },
+                "covariance_label \"TNW\" is not a table 5-4 label of VNC_ROTATING: RSW frames \
+                 take RSW or RTN, TNW frames take TNW, VNC frames have none."
+                    .into(),
+            ),
+            (
+                |_, o| {
+                    (o.covariance_frame, o.covariance_label) =
+                        (Some("RSW_ROTATING".into()), Some(" tnw ".into()))
+                },
+                "covariance_label \"TNW\" is not a table 5-4 label of RSW_ROTATING: RSW frames \
+                 take RSW or RTN, TNW frames take TNW, VNC frames have none."
+                    .into(),
+            ),
+            (
+                |_, o| o.covariance_label = Some("TNW".into()),
+                "covariance_label needs covariance_frame to name a local orbital frame and \
+                 include_covariance."
+                    .into(),
+            ),
+            (
                 |b, _| b.object_id = vec![Some(ObjectId("\u{c9}".into())); 3],
                 format!("OEM value for OBJECT_NAME {ascii}"),
             ),
             (
-                |_, o| (o.version, o.comments) = ("2.0".into(), vec!["two\nlines".into()]),
+                |_, o| (o.version, o.comments) = (Some("2.0".into()), vec!["two\nlines".into()]),
                 format!("OEM value for COMMENT {ascii}"),
             ),
             (

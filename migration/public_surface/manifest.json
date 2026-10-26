@@ -13925,7 +13925,7 @@
       "kind": "function",
       "domain": "orbits",
       "source": "src/adam_core/orbits/oem_io.py",
-      "line": 468,
+      "line": 477,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -13981,7 +13981,7 @@
       "kind": "function",
       "domain": "orbits",
       "source": "src/adam_core/orbits/oem_io.py",
-      "line": 423,
+      "line": 432,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -20785,7 +20785,7 @@
       "kind": "method",
       "domain": "utils",
       "source": "src/adam_core/utils/spice_backend.py",
-      "line": 182,
+      "line": 175,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -20813,7 +20813,7 @@
       "kind": "method",
       "domain": "utils",
       "source": "src/adam_core/utils/spice_backend.py",
-      "line": 302,
+      "line": 295,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -20841,7 +20841,7 @@
       "kind": "method",
       "domain": "utils",
       "source": "src/adam_core/utils/spice_backend.py",
-      "line": 225,
+      "line": 218,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -20869,7 +20869,7 @@
       "kind": "method",
       "domain": "utils",
       "source": "src/adam_core/utils/spice_backend.py",
-      "line": 261,
+      "line": 254,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -20897,7 +20897,7 @@
       "kind": "method",
       "domain": "utils",
       "source": "src/adam_core/utils/spice_backend.py",
-      "line": 323,
+      "line": 316,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -20953,7 +20953,7 @@
       "kind": "method",
       "domain": "utils",
       "source": "src/adam_core/utils/spice_backend.py",
-      "line": 284,
+      "line": 277,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -21037,7 +21037,7 @@
       "kind": "method",
       "domain": "utils",
       "source": "src/adam_core/utils/spice_backend.py",
-      "line": 134,
+      "line": 127,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -21065,7 +21065,7 @@
       "kind": "method",
       "domain": "utils",
       "source": "src/adam_core/utils/spice_backend.py",
-      "line": 139,
+      "line": 132,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -21093,7 +21093,7 @@
       "kind": "method",
       "domain": "utils",
       "source": "src/adam_core/utils/spice_backend.py",
-      "line": 144,
+      "line": 137,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -21121,7 +21121,7 @@
       "kind": "method",
       "domain": "utils",
       "source": "src/adam_core/utils/spice_backend.py",
-      "line": 170,
+      "line": 163,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -21149,7 +21149,7 @@
       "kind": "method",
       "domain": "utils",
       "source": "src/adam_core/utils/spice_backend.py",
-      "line": 293,
+      "line": 286,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -21177,7 +21177,7 @@
       "kind": "method",
       "domain": "utils",
       "source": "src/adam_core/utils/spice_backend.py",
-      "line": 201,
+      "line": 194,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -21205,7 +21205,7 @@
       "kind": "method",
       "domain": "utils",
       "source": "src/adam_core/utils/spice_backend.py",
-      "line": 98,
+      "line": 95,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -21261,7 +21261,7 @@
       "kind": "method",
       "domain": "utils",
       "source": "src/adam_core/utils/spice_backend.py",
-      "line": 252,
+      "line": 245,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -21345,7 +21345,7 @@
       "kind": "method",
       "domain": "utils",
       "source": "src/adam_core/utils/spice_backend.py",
-      "line": 289,
+      "line": 282,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -21373,7 +21373,7 @@
       "kind": "method",
       "domain": "utils",
       "source": "src/adam_core/utils/spice_backend.py",
-      "line": 116,
+      "line": 111,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -21429,7 +21429,7 @@
       "kind": "function",
       "domain": "utils",
       "source": "src/adam_core/utils/spice_backend.py",
-      "line": 339,
+      "line": 332,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
