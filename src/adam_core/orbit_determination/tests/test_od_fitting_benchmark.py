@@ -68,6 +68,25 @@ def test_od_benchmark_artifact_binds_build_provider_and_timing_policy(
     )
     monkeypatch.setattr(benchmark.adam_core, "__version__", "0.7.0")
     monkeypatch.setattr(benchmark.metadata, "version", lambda name: "0.7.0")
+    monkeypatch.setattr(
+        benchmark,
+        "_installed_artifact_identity",
+        lambda: {
+            "installation_kind": "wheel",
+            "outside_git_checkout": True,
+            "native_build_profile": {
+                "cargo_profile": "release",
+                "cargo_opt_level": "3",
+                "cargo_target": "test-target",
+                "debug_assertions": False,
+            },
+        },
+    )
+    monkeypatch.setattr(
+        benchmark,
+        "_runtime_state",
+        lambda: {"threads": {"logical_cpu_count": 1}, "spice": {}},
+    )
 
     output = tmp_path / "benchmark.json"
     assert benchmark.main(["--quick", "--output", str(output)]) == 0
@@ -78,7 +97,57 @@ def test_od_benchmark_artifact_binds_build_provider_and_timing_policy(
     assert payload["identity"]["native_build_commit"] == "a" * 40
     assert payload["identity"]["provider"]["configuration_fingerprint"] == "b" * 64
     assert payload["identity"]["provider"]["data_fingerprint"] == "c" * 64
+    assert payload["identity"]["installed_artifact"]["outside_git_checkout"] is True
+    assert (
+        payload["identity"]["installed_artifact"]["native_build_profile"][
+            "cargo_profile"
+        ]
+        == "release"
+    )
+    assert payload["runtime_state"]["before_setup"]["threads"]["logical_cpu_count"] == 1
     assert len(payload["workloads"]) == 2
+
+
+@pytest.mark.parametrize(
+    "profile",
+    [
+        ("dev", "0", "test-target", True),
+        ("release", "0", "test-target", False),
+        ("release", "3", "test-target", True),
+    ],
+)
+def test_od_benchmark_rejects_nonoptimized_native_build(monkeypatch, profile) -> None:
+    monkeypatch.setattr(benchmark._rust_native, "native_build_profile", lambda: profile)
+    with pytest.raises(RuntimeError, match="optimized release native artifact"):
+        benchmark._native_build_profile_identity()
+
+
+def test_od_benchmark_accepts_exact_release_native_build(monkeypatch) -> None:
+    monkeypatch.setattr(
+        benchmark._rust_native,
+        "native_build_profile",
+        lambda: ("release", "3", "aarch64-unknown-linux-musl", False),
+    )
+    assert benchmark._native_build_profile_identity() == {
+        "cargo_profile": "release",
+        "cargo_opt_level": "3",
+        "cargo_target": "aarch64-unknown-linux-musl",
+        "debug_assertions": False,
+    }
+
+
+def test_od_benchmark_rejects_package_imported_from_git_checkout(
+    monkeypatch, tmp_path: Path
+) -> None:
+    checkout = tmp_path / "checkout"
+    (checkout / ".git").mkdir(parents=True)
+    package = checkout / "src" / "adam_core" / "__init__.py"
+    package.parent.mkdir(parents=True)
+    package.write_text("")
+    monkeypatch.setattr(benchmark.adam_core, "__file__", str(package))
+
+    with pytest.raises(RuntimeError, match="executes from Git checkout"):
+        benchmark._installed_artifact_identity()
 
 
 def test_od_benchmark_rejects_identity_mismatch_before_work(

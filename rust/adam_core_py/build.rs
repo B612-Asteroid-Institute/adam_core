@@ -331,6 +331,15 @@ fn main() {
         );
     }
     println!("cargo:rustc-env=ADAM_CORE_BUILD_COMMIT={commit}");
+    for (source, target) in [
+        ("PROFILE", "ADAM_CORE_CARGO_PROFILE"),
+        ("OPT_LEVEL", "ADAM_CORE_CARGO_OPT_LEVEL"),
+        ("TARGET", "ADAM_CORE_CARGO_TARGET"),
+    ] {
+        let value = std::env::var(source)
+            .unwrap_or_else(|_| panic!("Cargo did not provide required build variable {source}"));
+        println!("cargo:rustc-env={target}={value}");
+    }
     println!("cargo:rerun-if-env-changed=ADAM_CORE_BUILD_COMMIT");
     println!("cargo:rerun-if-env-changed=ADAM_CORE_RELEASE_BUILD");
     // Every tracked distribution input is an explicit dependency. This

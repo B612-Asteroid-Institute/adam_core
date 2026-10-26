@@ -35,9 +35,21 @@ fn build_identity() -> (&'static str, &'static str) {
     (env!("CARGO_PKG_VERSION"), env!("ADAM_CORE_BUILD_COMMIT"))
 }
 
+/// Compile-time Cargo profile metadata for benchmark/release evidence.
+#[pyfunction]
+fn native_build_profile() -> (&'static str, &'static str, &'static str, bool) {
+    (
+        env!("ADAM_CORE_CARGO_PROFILE"),
+        env!("ADAM_CORE_CARGO_OPT_LEVEL"),
+        env!("ADAM_CORE_CARGO_TARGET"),
+        cfg!(debug_assertions),
+    )
+}
+
 #[pymodule]
 fn _rust_native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(build_identity, m)?)?;
+    m.add_function(wrap_pyfunction!(native_build_profile, m)?)?;
     bandpass_vendor::register(m)?;
     coordinate_ops::register(m)?;
     coordinates::register(m)?;

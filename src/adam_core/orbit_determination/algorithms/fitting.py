@@ -71,7 +71,7 @@ def _fit_settings(
     the `fit_least_squares` options, tolerances, and independent iteration and
     residual-evaluation budgets. None leaves the evaluation count uncapped.
     """
-    return {
+    settings = {
         "loss": loss,
         "f_scale": f_scale,
         "jacobian": jacobian,
@@ -82,6 +82,13 @@ def _fit_settings(
         "max_iterations": kwargs.get("max_iterations", 100),
         "max_nfev": kwargs.get("max_nfev"),
     }
+    # Private bridge for the deprecated LeastSquares facade: Rust retains only
+    # the angular covariance block before any validation or whitening.
+    if "_legacy_angular_only_covariance" in kwargs:
+        settings["_legacy_angular_only_covariance"] = kwargs[
+            "_legacy_angular_only_covariance"
+        ]
+    return settings
 
 
 def _emit_native_warnings(output: dict) -> None:
@@ -718,7 +725,13 @@ def fit_least_squares(
     weak-direction consistency check probes the robust cost instead of chi2.
     """
     assert len(orbit) == 1, "Only one orbit can be differentially corrected"
-    if np.isfinite(observations.coordinates.rho.to_numpy(zero_copy_only=False)).any():
+    legacy_angular_only = kwargs.get("_legacy_angular_only_covariance") is True
+    if (
+        not legacy_angular_only
+        and np.isfinite(
+            observations.coordinates.rho.to_numpy(zero_copy_only=False)
+        ).any()
+    ):
         raise ValueError("orbit determination requires angular observations")
     _validate_loss(loss, f_scale)
     if jacobian not in ("auto", "analytic", "propagator", "central", "2-point"):

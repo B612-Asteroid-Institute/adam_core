@@ -3766,12 +3766,17 @@ pub(super) fn validate_od_observations(
 pub(super) fn observed_covariance_flat(
     observed: &CoordinateBatch,
 ) -> PropagationResultValue<Vec<f64>> {
-    Ok(observed
+    let covariance = observed
         .covariance
         .as_ref()
-        .ok_or_else(|| PropagationError::InvalidRequest(MISSING_COVARIANCE_REMEDY.to_string()))?
-        .values_row_major
-        .clone())
+        .ok_or_else(|| PropagationError::InvalidRequest(MISSING_COVARIANCE_REMEDY.to_string()))?;
+    if covariance.dimension != 6 {
+        return Err(PropagationError::InvalidRequest(format!(
+            "orbit determination observation covariance must have dimension 6, got {}",
+            covariance.dimension
+        )));
+    }
+    Ok(covariance.values_row_major.clone())
 }
 
 #[cfg(test)]

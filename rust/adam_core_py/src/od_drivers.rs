@@ -28,11 +28,12 @@ use adam_core_rs_coords::propagation::{
     EXTERNAL_PROPAGATOR_CAPSULE,
 };
 use adam_core_rs_coords::{
-    validate_loss, AssociationBatch, CoordinateBatch as DataCoordinateBatch, IntoNestedRecordBatch,
-    ObserverBatch as DataObserverBatch, OdConfig, OrbitBatch as DataOrbitBatch, SourceCatalogBatch,
-    TimeScale, TryFromNestedRecordBatch, TwoBodyModelConfig, CMC2003_APPARITION_GAP_DAYS,
-    CMC2003_CHI2_FRAC, CMC2003_CHI2_RECOVER, CMC2003_CHI2_REJECT, CMC2003_MAX_ITERATIONS,
-    CMC2003_MAX_REJECTED_FRACTION, CMC2003_PSD_FLOOR_FRAC,
+    validate_loss, AssociationBatch, CoordinateBatch as DataCoordinateBatch, CoordinateValues,
+    CovarianceBatch, IntoNestedRecordBatch, LossType, ObserverBatch as DataObserverBatch, OdConfig,
+    OrbitBatch as DataOrbitBatch, SourceCatalogBatch, TimeScale, TryFromNestedRecordBatch,
+    TwoBodyModelConfig, CMC2003_APPARITION_GAP_DAYS, CMC2003_CHI2_FRAC,
+    CMC2003_CHI2_RECOVER, CMC2003_CHI2_REJECT, CMC2003_MAX_ITERATIONS,
+    CMC2003_MAX_REJECTED_FRACTION, CMC2003_PSD_FLOOR_FRAC, HUBER_F_SCALE_DEFAULT,
 };
 use numpy::{IntoPyArray, PyReadonlyArray2};
 use pyo3::exceptions::PyValueError;
@@ -85,12 +86,64 @@ fn decode_orbit(orbit_ipc: &Bound<'_, PyBytes>) -> PyResult<DataOrbitBatch> {
         .map_err(|err| value_error(format!("failed to decode OrbitBatch: {err}")))
 }
 
+/// Preserve the deprecated Python ``LeastSquares`` contract without doing
+/// covariance science in Python. Only the observed lon/lat covariance block
+/// reaches the fitter; every other component (including a trailing 9D
+/// non-gravitational block) is deliberately ignored. Relevant angular values
+/// remain byte-for-byte values for the ordinary Rust whitening validation.
+fn retain_angular_observations(observed: &mut DataCoordinateBatch) -> PyResult<()> {
+    let CoordinateValues::Spherical(values) = &mut observed.values else {
+        return Err(value_error(
+            "legacy angular-only observations require spherical coordinates",
+        ));
+    };
+    for value in values {
+        for dimension in [0_usize, 3, 4, 5] {
+            value[dimension] = f64::NAN;
+        }
+    }
+
+    let covariance = observed
+        .covariance
+        .as_ref()
+        .ok_or_else(|| value_error("orbit determination observations require covariance"))?;
+    if !matches!(covariance.dimension, 6 | 9) {
+        return Err(value_error(format!(
+            "legacy angular-only covariance requires dimension 6 or 9, got {}",
+            covariance.dimension
+        )));
+    }
+    let rows = covariance.rows;
+    let dimension = covariance.dimension;
+    let mut values = vec![f64::NAN; rows * 36];
+    for row in 0..rows {
+        if !covariance.is_row_valid(row) {
+            continue;
+        }
+        let source = covariance.row_values(row);
+        for output_row in 1..=2 {
+            for output_column in 1..=2 {
+                values[row * 36 + output_row * 6 + output_column] =
+                    source[output_row * dimension + output_column];
+            }
+        }
+    }
+    observed.covariance = Some(
+        CovarianceBatch::new(rows, 6, values, covariance.units.clone())
+            .map_err(|err| value_error(format!("invalid angular-only covariance: {err}")))?,
+    );
+    observed
+        .validate()
+        .map_err(|err| value_error(format!("invalid angular-only observations: {err}")))
+}
+
 /// The whitened-fit options of every work unit, read from the
 /// ``fit_settings`` dict with `fit_least_squares` / two-body defaults.
 struct FitSettings {
     config: WhitenedFitConfig,
     options: EphemerisOptions,
     propagator: TwoBodyPropagator,
+    _legacy_angular_only_covariance: bool,
 }
 
 fn setting<'py, T: FromPyObject<'py>>(
@@ -184,6 +237,11 @@ fn parse_fit_settings(settings: Option<&Bound<'_, PyDict>>) -> PyResult<FitSetti
         config,
         options,
         propagator,
+        _legacy_angular_only_covariance: setting(
+            settings,
+            "_legacy_angular_only_covariance",
+            false,
+        )?,
     })
 }
 
@@ -868,8 +926,11 @@ fn fit_orbit_whitened_ipc<'py>(
     fit_settings: Option<&Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyDict>> {
     let orbit = decode_orbit(orbit_ipc)?;
-    let problem = decode_observations(observed_ipc, observers_ipc)?;
+    let mut problem = decode_observations(observed_ipc, observers_ipc)?;
     let settings = parse_fit_settings(fit_settings)?;
+    if settings._legacy_angular_only_covariance {
+        retain_angular_observations(&mut problem.observed)?;
+    }
     let n = problem.observed.len();
     let (output, provider) = run_with_predictor(py, propagator, &settings, |predictor| {
         fit_orbit_whitened_with(
@@ -3963,6 +4024,11 @@ fn benchmark_od_fit_ipc<'py>(
     out.set_item("operation", operation.as_str())?;
     out.set_item("timer", "std::time::Instant")?;
     out.set_item("provider_boundary", provider_boundary)?;
+    out.set_item(
+        "host_available_parallelism",
+        std::thread::available_parallelism().map_or(1, std::num::NonZeroUsize::get),
+    )?;
+    out.set_item("od_algorithm_threading", "serial")?;
     out.set_item("input_decoding_timed", false)?;
     out.set_item("settings_parsing_timed", false)?;
     out.set_item("samples_seconds", samples)?;

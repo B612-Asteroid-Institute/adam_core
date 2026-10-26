@@ -19,6 +19,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import platform
 import re
 import sys
@@ -28,6 +29,7 @@ from datetime import UTC, datetime
 from importlib import metadata
 from pathlib import Path
 from typing import Any, Callable
+from urllib.parse import unquote, urlparse
 
 import numpy as np
 
@@ -105,6 +107,7 @@ class Workload:
     observations: OrbitDeterminationObservations
     seed: Orbits
     arc_days: float
+    rng_seed: int
 
 
 @dataclass(frozen=True)
@@ -187,7 +190,7 @@ def _workload(name: str, n_obs: int, arc_days: float, seed: int) -> Workload:
             band=[None] * n_obs,
         ),
     )
-    return Workload(name, observations, _seed_orbit(), arc_days)
+    return Workload(name, observations, _seed_orbit(), arc_days, seed)
 
 
 def _state(fitted: Any) -> np.ndarray:
@@ -209,6 +212,8 @@ def _sample_public(
             result = call()
             trial.append(time.perf_counter() - started)
             _state(result[0])
+            # Keep result-table destruction outside the timed public boundary.
+            del result
         samples.append(trial)
     return samples
 
@@ -416,9 +421,188 @@ def _benchmark_workload(
             "state_parameters": 6,
             "station_codes": sorted(set(obs_code)),
         },
-        "input_sha256": _sha256_parts(orbit_ipc, observed_ipc, observers_ipc),
+        "input_identity": {
+            "combined_ipc_sha256": _sha256_parts(
+                orbit_ipc, observed_ipc, observers_ipc
+            ),
+            "orbit_ipc_sha256": hashlib.sha256(orbit_ipc).hexdigest(),
+            "observed_ipc_sha256": hashlib.sha256(observed_ipc).hexdigest(),
+            "observers_ipc_sha256": hashlib.sha256(observers_ipc).hexdigest(),
+            "rng_seed": workload.rng_seed,
+            "truth_state_au_au_per_day": TRUTH_STATE.tolist(),
+            "truth_epoch_mjd_tdb": EPOCH_MJD_TDB,
+            "sigma_arcsec": SIGMA_ARCSEC,
+        },
         "rows": rows,
     }
+
+
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _containing_git_checkout(path: Path) -> Path | None:
+    for candidate in (path, *path.parents):
+        if (candidate / ".git").exists():
+            return candidate
+    return None
+
+
+def _distribution_file(distribution: metadata.Distribution, suffix: str) -> Path | None:
+    matches = [
+        Path(str(distribution.locate_file(item))).resolve()
+        for item in distribution.files or ()
+        if str(item).endswith(suffix)
+    ]
+    if len(matches) > 1:
+        raise RuntimeError(f"installed adam-core has multiple {suffix!r} files")
+    return matches[0] if matches else None
+
+
+def _native_build_profile_identity() -> dict[str, Any]:
+    profile, opt_level, target, debug_assertions = _rust_native.native_build_profile()
+    if (
+        profile != "release"
+        or debug_assertions
+        or opt_level not in {"2", "3", "s", "z"}
+    ):
+        raise RuntimeError(
+            "OD fitting benchmarks require an optimized release native artifact; "
+            f"got profile={profile!r}, opt_level={opt_level!r}, "
+            f"debug_assertions={debug_assertions!r}"
+        )
+    return {
+        "cargo_profile": profile,
+        "cargo_opt_level": opt_level,
+        "cargo_target": target,
+        "debug_assertions": debug_assertions,
+    }
+
+
+def _installed_artifact_identity() -> dict[str, Any]:
+    package_file = Path(adam_core.__file__).resolve()
+    native_file = Path(_rust_native.__file__).resolve()
+    for label, path in (
+        ("Python package", package_file),
+        ("native extension", native_file),
+    ):
+        checkout = _containing_git_checkout(path)
+        if checkout is not None:
+            raise RuntimeError(
+                f"{label} executes from Git checkout {checkout}; install the release wheel "
+                "into an environment outside every checkout before benchmarking"
+            )
+
+    distribution = metadata.distribution("adam-core")
+    record_path = _distribution_file(distribution, ".dist-info/RECORD")
+    wheel_metadata_path = _distribution_file(distribution, ".dist-info/WHEEL")
+    direct_url_path = _distribution_file(distribution, ".dist-info/direct_url.json")
+    release_inventory = package_file.parent / "_release_inventory.json"
+    if (
+        record_path is None
+        or wheel_metadata_path is None
+        or not release_inventory.is_file()
+    ):
+        raise RuntimeError("installed adam-core wheel identity files are incomplete")
+
+    direct_url: dict[str, Any] | None = None
+    wheel_artifact: dict[str, Any] | None = None
+    if direct_url_path is not None:
+        direct_url = json.loads(direct_url_path.read_text())
+        if direct_url.get("dir_info", {}).get("editable") is True:
+            raise RuntimeError("benchmark refuses an editable adam-core installation")
+        parsed = urlparse(str(direct_url.get("url", "")))
+        if parsed.scheme == "file" and parsed.path.endswith(".whl"):
+            artifact = Path(unquote(parsed.path)).resolve()
+            if artifact.is_file():
+                wheel_artifact = {
+                    "path": str(artifact),
+                    "size_bytes": artifact.stat().st_size,
+                    "sha256": _sha256_file(artifact),
+                }
+                declared = str(direct_url.get("archive_info", {}).get("hash", ""))
+                if (
+                    declared.startswith("sha256=")
+                    and declared[7:] != wheel_artifact["sha256"]
+                ):
+                    raise RuntimeError(
+                        "installed wheel direct_url hash disagrees with artifact"
+                    )
+
+    return {
+        "installation_kind": "wheel",
+        "python_package_file": str(package_file),
+        "native_extension_file": str(native_file),
+        "outside_git_checkout": True,
+        "native_build_profile": _native_build_profile_identity(),
+        "installed_record": {
+            "path": str(record_path),
+            "sha256": _sha256_file(record_path),
+        },
+        "wheel_metadata": {
+            "path": str(wheel_metadata_path),
+            "sha256": _sha256_file(wheel_metadata_path),
+        },
+        "release_inventory_sha256": _sha256_file(release_inventory),
+        "direct_url": direct_url,
+        "wheel_artifact": wheel_artifact,
+    }
+
+
+def _kernel_identity(path_string: str) -> dict[str, Any]:
+    path = Path(path_string).resolve()
+    return {
+        "path": str(path),
+        "exists": path.is_file(),
+        "size_bytes": path.stat().st_size if path.is_file() else None,
+        "sha256": _sha256_file(path) if path.is_file() else None,
+    }
+
+
+def _runtime_state() -> dict[str, Any]:
+    from adam_core.utils.spice_backend import get_backend
+
+    backend = get_backend()
+    kernels = [_kernel_identity(path) for path in backend.registered_kernels()]
+    thread_environment = {
+        key: os.environ.get(key)
+        for key in (
+            "RAYON_NUM_THREADS",
+            "OMP_NUM_THREADS",
+            "OPENBLAS_NUM_THREADS",
+            "MKL_NUM_THREADS",
+            "NUMEXPR_NUM_THREADS",
+            "VECLIB_MAXIMUM_THREADS",
+        )
+    }
+    return {
+        "threads": {
+            "logical_cpu_count": os.cpu_count(),
+            "environment": thread_environment,
+            "od_algorithm": "serial Core-owned candidate/optimizer loops",
+            "provider_policy": "provider-controlled; two-body ABI capsule used here",
+        },
+        "spice": {
+            "backend": type(backend).__qualname__,
+            "registered_kernels": kernels,
+            "registered_kernel_count": len(kernels),
+            "spkez_state_cache_entries": backend.spkez_state_cache_len(),
+        },
+    }
+
+
+def _package_versions() -> dict[str, str | None]:
+    versions: dict[str, str | None] = {}
+    for package in ("adam-core", "numpy", "pyarrow", "quivr", "spiceypy"):
+        try:
+            versions[package] = metadata.version(package)
+        except metadata.PackageNotFoundError:
+            versions[package] = None
+    return versions
 
 
 def _validated_identity() -> dict[str, Any]:
@@ -441,8 +625,15 @@ def _validated_identity() -> dict[str, Any]:
         "adam_core_distribution_version": distribution_version,
         "native_build_version": build_version,
         "native_build_commit": build_commit,
+        "installed_artifact": _installed_artifact_identity(),
+        "benchmark_source": {
+            "path": str(Path(__file__).resolve()),
+            "sha256": _sha256_file(Path(__file__).resolve()),
+        },
+        "package_versions": _package_versions(),
         "provider": provider,
         "python": sys.version,
+        "python_executable": str(Path(sys.executable).resolve()),
         "platform": platform.platform(),
         "machine": platform.machine(),
     }
@@ -469,9 +660,16 @@ def main(argv: list[str] | None = None) -> int:
         raise ValueError("reps/trials must be >= 1 and warmup-reps must be >= 0")
 
     identity = _validated_identity()
+    runtime_before_setup = _runtime_state()
     workloads = [_workload(*spec) for spec in WORKLOAD_SPECS]
+    runtime_after_setup = _runtime_state()
+    benchmarked_workloads = [
+        _benchmark_workload(workload, reps=reps, trials=trials, warmup_reps=warmup_reps)
+        for workload in workloads
+    ]
+    runtime_after_timing = _runtime_state()
     payload = {
-        "schema_version": 1,
+        "schema_version": 2,
         "created_at_utc": datetime.now(UTC).isoformat(),
         "purpose": "current Core OD latency diagnostic; non-gating",
         "timing_policy": {
@@ -482,18 +680,30 @@ def main(argv: list[str] | None = None) -> int:
             "reps": reps,
             "trials": trials,
             "warmup_reps": warmup_reps,
+            "lane_order": [
+                "public correctness preflight",
+                "native correctness preflight",
+                "native Rust samples",
+                "public Python samples",
+            ],
+            "public_result_destruction_timed": False,
+            "native_result_destruction_timed": False,
         },
         "identity": identity,
+        "runtime_state": {
+            "before_setup": runtime_before_setup,
+            "after_setup": runtime_after_setup,
+            "after_timing": runtime_after_timing,
+            "cache_policy": (
+                "no explicit clearing; correctness preflights run before timing and each "
+                "trial has the recorded warmup count; native timing precedes public timing"
+            ),
+        },
         "propagation_call_diagnostics": {
             "status": "unavailable",
             "reason": "the in-process two-body Propagator does not expose a call counter",
         },
-        "workloads": [
-            _benchmark_workload(
-                workload, reps=reps, trials=trials, warmup_reps=warmup_reps
-            )
-            for workload in workloads
-        ],
+        "workloads": benchmarked_workloads,
     }
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
