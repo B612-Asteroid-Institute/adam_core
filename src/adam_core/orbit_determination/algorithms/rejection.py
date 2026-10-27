@@ -7,8 +7,8 @@ against its EXPECTED residual covariance rather than against its reported
 uncertainty alone. The scheme is the one implemented in OrbFit
 (``src/propag/least_squares.f90`` ``reject_obs``, defaults in
 ``lib/reject.def``) and used by NEODyS/AstDyS; this module ports it as an
-outlier treatment for adam_core's differential correction, selectable as
-``outlier_rejection="cmc2003"`` on `NativeOrbitFitter`.
+outlier treatment for adam_core's differential correction and as the
+Core-v1 typed refinement policy.
 
 Algorithm (one pass; passes repeat until no observation changes state)
 ----------------------------------------------------------------------
@@ -73,14 +73,16 @@ from typing import Any
 import numpy as np
 import numpy.typing as npt
 
-from ..orbits.orbits import Orbits
-from ..propagator.propagator import Propagator
-from ._native_dispatch import (
+from ...orbits.orbits import Orbits
+from ...propagator.propagator import Propagator
+from .._native_dispatch import (
     _warn_if_analytic_jacobian_mismatches,
     deprecated,
     native_propagator,
 )
-from .differential_correction import (
+from ..evaluate import OrbitDeterminationObservations
+from ..fitted_orbits import FittedOrbitMembers, FittedOrbits
+from .fitting import (
     _FUSED_LOOP_KWARGS,
     _NATIVE_FIT_KWARGS,
     HUBER_F_SCALE_DEFAULT,
@@ -92,8 +94,6 @@ from .differential_correction import (
     _native_problem,
     _whiten_residual_pairs,
 )
-from .evaluate import OrbitDeterminationObservations
-from .fitted_orbits import FittedOrbitMembers, FittedOrbits
 
 logger = logging.getLogger(__name__)
 

@@ -2,7 +2,7 @@ def test_gauss_iod_returns_rust_assembled_orbits(monkeypatch):
     """gaussIOD must wrap the Rust Orbits RecordBatch without from_kwargs."""
     import numpy as np
 
-    from adam_core.orbit_determination import gauss as gauss_module
+    import adam_core.orbit_determination.algorithms.gauss as gauss_module
     from adam_core.orbits import Orbits
 
     coords = np.array(
@@ -43,7 +43,7 @@ def test_gauss_iod_custom_mu_is_used_for_geometry_and_velocity():
     import numpy as np
 
     from adam_core.constants import Constants as c
-    from adam_core.orbit_determination.gauss import gaussIOD
+    from adam_core.orbit_determination.algorithms.gauss import gaussIOD
 
     coords = np.array(
         [

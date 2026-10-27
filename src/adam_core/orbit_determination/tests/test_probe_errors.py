@@ -6,7 +6,7 @@ import warnings
 
 import pytest
 
-from ..differential_correction import _fit_least_squares as fit_least_squares
+from ..algorithms.fitting import _fit_least_squares as fit_least_squares
 from .test_differential_correction import (
     TwoBodyPropagator,
     make_initial_guess,

@@ -10,12 +10,11 @@ Jacobian columns, and trials. ``iterations`` reports those evaluations while
 import numpy.testing as npt
 import pytest
 
-from adam_core.orbit_determination.differential_correction import (
+from adam_core.orbit_determination.algorithms.fitting import (
     fit_least_squares,
     iterative_fit,
 )
-from adam_core.orbit_determination.native_orbit_fitter import NativeOrbitFitter
-from adam_core.orbit_determination.rejection import cmc2003_fit
+from adam_core.orbit_determination.algorithms.rejection import cmc2003_fit
 from adam_core.orbit_determination.tests.test_differential_correction import (
     TwoBodyPropagator,
     make_initial_guess,
@@ -138,18 +137,6 @@ def test_rejection_loops_forward_the_evaluation_budget(observations, algorithm):
     assert fitted.iterations.to_pylist() == [1]
     assert fitted.optimizer_iterations.to_pylist() == [0]
     assert fitted.success.to_pylist() == [False]
-
-
-def test_fitter_serializes_both_solver_limits():
-    fitter = NativeOrbitFitter(
-        TwoBodyPropagator(),
-        outlier_rejection="worst_residual",
-        rejection_kwargs={"max_nfev": 11, "max_iterations": 3},
-    )
-    assert fitter.supports_native_full_od()
-    _, _, settings = fitter.native_settings()
-    assert settings["max_iterations"] == 3
-    assert settings["max_nfev"] == 11
 
 
 @pytest.mark.parametrize(

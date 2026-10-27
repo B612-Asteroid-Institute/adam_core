@@ -18,8 +18,8 @@ _TRUSTED_ENTRYPOINTS = (
     ("validate_full_od_settings", _TRUSTED_NATIVE_MODULE.validate_full_od_settings),
     ("run_od_ipc", _TRUSTED_NATIVE_MODULE.run_od_ipc),
     (
-        "apply_observation_models_ipc",
-        _TRUSTED_NATIVE_MODULE.apply_observation_models_ipc,
+        "apply_observation_pipeline_ipc",
+        _TRUSTED_NATIVE_MODULE.apply_observation_pipeline_ipc,
     ),
 )
 

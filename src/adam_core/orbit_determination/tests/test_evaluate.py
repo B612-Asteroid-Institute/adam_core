@@ -15,7 +15,25 @@ from adam_core.orbits.orbits import Orbits
 from adam_core.time.time import Timestamp
 from adam_core.utils.helpers.orbits import make_real_orbits
 
+from ..config import (
+    EvaluationConfig,
+    IodRunConfig,
+    OdConfig,
+    RefinementRunConfig,
+    ResourceBindings,
+)
 from ..evaluate import OrbitDeterminationObservations, evaluate_orbits
+from ..observation_pipeline import ObservationPipeline
+
+
+def _config() -> OdConfig:
+    return OdConfig.explicit(
+        observation_pipeline=ObservationPipeline.as_supplied(),
+        iod=IodRunConfig.core_v1(),
+        refinement=RefinementRunConfig.core_v1(),
+        evaluation=EvaluationConfig.six_dimensional(),
+        resources=ResourceBindings({}),
+    )
 
 
 class FixedEphemerisPropagator:
@@ -119,14 +137,13 @@ def test_evaluate_orbits_vectorized_statistics() -> None:
     num_observations = 8
     parameters = 6
     orbits, observations, propagator = make_evaluate_case(num_orbits, num_observations)
-    ignore = ["obs001", "obs006"]
+    ignore: list[str] = []
 
     fitted_orbits, fitted_orbit_members = evaluate_orbits(
         orbits,
         observations,
         propagator,
-        parameters=parameters,
-        ignore=ignore,
+        config=_config(),
     )
 
     include_mask = np.array(
@@ -155,35 +172,22 @@ def test_evaluate_orbits_vectorized_statistics() -> None:
     )
 
     expected_obs_ids = observations.id.to_pylist() * num_orbits
-    expected_outliers = [
-        False,
-        True,
-        False,
-        False,
-        False,
-        False,
-        True,
-        False,
-    ] * num_orbits
+    expected_outliers = [False] * (num_observations * num_orbits)
     assert fitted_orbit_members.obs_id.to_pylist() == expected_obs_ids
     assert fitted_orbit_members.outlier.to_pylist() == expected_outliers
 
 
-@pytest.mark.parametrize(
-    ("fixture_case", "ignore"),
-    [("normal", None), ("ignored", ["obs001", "obs006"])],
-)
-def test_evaluate_orbits_frozen_legacy_parity(fixture_case, ignore) -> None:
+def test_evaluate_orbits_frozen_reference_parity() -> None:
     fixture_path = (
         Path(__file__).resolve().parents[4]
         / "migration"
         / "artifacts"
         / "evaluate_orbits_fixture_2026-07-12.json"
     )
-    expected = json.loads(fixture_path.read_text())[fixture_case]
+    expected = json.loads(fixture_path.read_text())["normal"]
     orbits, observations, propagator = make_evaluate_case(4, 8)
     fitted, members = evaluate_orbits(
-        orbits, observations, propagator, parameters=6, ignore=ignore
+        orbits, observations, propagator, config=_config()
     )
 
     assert fitted.orbit_id.to_pylist() == expected["orbit_ids"]
@@ -209,17 +213,10 @@ def test_evaluate_orbits_frozen_legacy_parity(fixture_case, ignore) -> None:
     )
 
 
-def test_evaluate_orbits_empty_legacy_error() -> None:
-    fixture_path = (
-        Path(__file__).resolve().parents[4]
-        / "migration"
-        / "artifacts"
-        / "evaluate_orbits_fixture_2026-07-12.json"
-    )
-    expected = json.loads(fixture_path.read_text())["empty"]
+def test_evaluate_orbits_empty_error() -> None:
     orbits, observations, propagator = make_evaluate_case(1, 0)
-    with pytest.raises(ValueError, match=expected["error"]):
-        evaluate_orbits(orbits, observations, propagator)
+    with pytest.raises(ValueError, match="requires observation times"):
+        evaluate_orbits(orbits, observations, propagator, config=_config())
 
 
 def test_evaluate_orbits_rust_native_timing() -> None:
@@ -267,4 +264,4 @@ def test_evaluate_orbits_requires_grouped_ephemeris_order(indices) -> None:
     orbits, observations, propagator = make_evaluate_case(2, 3)
     propagator.ephemeris = propagator.ephemeris.take(indices)
     with pytest.raises(ValueError, match="Ephemeris rows must be grouped"):
-        evaluate_orbits(orbits, observations, propagator)
+        evaluate_orbits(orbits, observations, propagator, config=_config())

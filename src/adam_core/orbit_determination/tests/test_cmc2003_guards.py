@@ -16,7 +16,7 @@ import numpy.testing as npt
 import pyarrow as pa
 import pytest
 
-from ..rejection import _expected_residual_chi2, cmc2003_fit_detailed
+from ..algorithms.rejection import _expected_residual_chi2, cmc2003_fit_detailed
 from .test_cmc2003_rejection import select
 from .test_differential_correction import (
     TwoBodyPropagator,

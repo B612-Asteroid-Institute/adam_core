@@ -157,46 +157,31 @@ Current Migrated APIs
     units. Only ``xtol``, ``ftol``, ``gtol`` and ``max_nfev`` are accepted;
     any other solver keyword raises ``ValueError`` (there is no scipy path).
 
-- ``orbit_determination.iterative_fit`` / ``NativeOrbitFitter.full_od`` /
-  ``run_od`` (native orchestration)
-  - Boundary: nested Arrow IPC of the orbit, observed coordinates and observers
-    plus dicts of settings (``fit_settings``, ``iod_settings``, ``refinement``)
-    and, for ``run_od``, the per-observation station / band / catalog lists and
-    the models' ``_native_spec()`` dicts; outputs are dicts of scalars, lists
-    and NumPy arrays the veneer wraps into tables without further computation.
-  - Rust entrypoints (``adam_core_rs_coords::propagation``, generic over the
-    ``Propagator`` trait; two-body implementations in ``_rust_native``):
-    ``iterative_fit_barycentric`` / ``iterative_fit_2body_ipc`` (worst-residual
-    loop), ``cmc2003_fit_barycentric`` / ``cmc2003_fit_2body_ipc`` (CMC2003
-    loop), ``full_od_barycentric`` / ``full_od_2body_ipc`` (Gauss IOD decision
-    loop followed by the refinement loop) and ``run_od_barycentric`` /
-    ``run_od_2body_ipc`` (observation models in order, full OD on the used
-    observations, original / used astrometry snapshots for the members).
-  - External native propagators: a backend compiled in another extension
-    (adam-assist) exposes a propagation-only C-ABI table in a capsule named
-    ``adam_core.propagator.v2``. The v2 table and request carry ABI version,
-    structure size, identity and capability bits. The mandatory callback is
-    thread-safe batched propagation over flat state, exact epoch, frame,
-    origin, target-time, physical-parameter and optional active
-    A1/A2/A3/Marsden-parameter arrays.
-    Optional capability-gated STMs are derivatives of the provider's own
-    dynamics. Adam-core retains the capsule through the workflow, validates
-    its declared identity, releases the GIL and performs no Python call per
-    prediction. The complete lifetime, threading, error and no-unwind
-    contract is in :doc:`native_propagator_abi`.
-  - Dispatch: ``iterative_fit``, ``cmc2003_fit_detailed``, ``run_iod``,
-    ``NativeOrbitFitter.full_od`` and the native ``run_od`` route call the
-    adam-core PyO3 drivers directly, passing only refinement and (when
-    distinct) IOD propagation capsules. ``initial_orbit_determination`` uses
-    adam-core's linkage-batch driver, which applies the same ``run_iod`` stage
-    to all linkage row selections in one Python-to-Rust workflow call.
-    ``run_od`` uses its one-crossing native driver when the fitter keeps the
-    canonical hooks and every observation model has a native spec; otherwise
-    it exactly composes model application, ``fitter.full_od`` and provenance.
-    Providers never select or replace an OD algorithm. Python owns coarse API
-    composition, ids, table loading and table assembly, while all numeric
-    loops stay in Rust. Unsupported Python-only propagators raise
-    ``TypeError``.
+- ``orbit_determination.run_iod`` / ``run_od`` / ``refine`` /
+  ``evaluate_orbits`` (Core-owned orchestration)
+  - Boundary: nested Arrow IPC plus an explicit native ``OdConfig``. Python
+    binds semantic resource slots to paths and marshals tables; Rust validates
+    exact resource identity, parses tables, executes the ordered observation
+    pipeline, and owns every numerical loop. There are no model callback or
+    native-spec dictionaries.
+  - Authoritative configuration types live under
+    ``adam_core_rs_coords::od``; immutable profiles live under
+    ``adam_core_rs_coords::od::profiles``. ``run_od`` applies the pipeline
+    once, then uses the same prepared rows for IOD and refinement.
+  - Rust entrypoints remain generic over the ``Propagator`` trait, including
+    ``run_iod_with_predictor``, ``refine_with_predictor``, and
+    ``run_od_with_predictors``. The provider boundary supplies propagation
+    and optional capability-negotiated derivatives only.
+  - External native propagators expose a propagation-only C-ABI table in a
+    capsule named ``adam_core.propagator.v2``. The table and request carry ABI
+    version, structure size, identity and capabilities. The mandatory callback
+    is thread-safe batched propagation over complete state, epoch, frame,
+    origin, target-time, physical-parameter and optional nongravitational
+    arrays. Core retains the capsule, validates identity, releases the GIL, and
+    performs no Python call per prediction.
+  - Providers never select transforms, profiles, grouping, fitting, rejection,
+    covariance, or OD algorithms. Unsupported Python-only propagators fail
+    explicitly.
   - Error behavior: driver errors raise ``ValueError`` for invalid inputs and
     ``RuntimeError`` for backend failures; a propagator without a native
     backend raises ``TypeError``.
@@ -218,25 +203,20 @@ Current Migrated APIs
     ``cmc2003_select_numpy``.
   - Error behavior: raises ``ValueError`` on shape mismatch.
 
-- ``orbit_determination`` observation uncertainty models
-  - Boundary: NumPy ``(N, 6, 6)`` covariance plus Python lists of station codes,
-    bands and star catalogs; the quivr table is rebuilt in Python only when Rust
-    reports a change (``None`` return = input object returned untouched).
-  - Rust entrypoints: ``adam_core._rust_native.bias_table_model_apply_numpy``
-    (``empirical_covariance`` / ``performance_weighted`` / ``sigma_floor``),
-    ``night_batch_deweighting_model_apply_numpy``,
-    ``efcc18_debias_model_apply_numpy`` (positions), ``veres_model_apply_numpy``
-    (``floor`` / ``replace`` / ``fill``), ``veres_sigma_lookup_numpy``,
-    ``ades_angular_covariance_numpy``. No sigma table is bundled: the Python
-    veneer resolves a default table by importing the private
-    ``observatory_uncertainties`` data package (a soft import, never a
-    dependency) and raises ``ImportError`` naming it when absent.
-  - Position rule: every model except ``efcc18_debias_model_apply`` leaves the
-    lon/lat columns untouched; ``efcc18_debias_model_apply`` leaves the
-    covariance untouched.
-  - Error behavior: raises ``ValueError`` on duplicate ``(obs_code, band)`` bias
-    rows, an unknown ``mode``/``model``, a non-positive ``cap`` or sigma, and
-    on shape mismatch.
+- ``orbit_determination.ObservationPipeline``
+  - Boundary: an ordered, immutable declaration of native transforms plus
+    explicit bindings from semantic resource slots to local paths. Python does
+    not discover data packages, interpret transforms, or execute callbacks.
+  - Rust entrypoint: ``adam_core._rust_native.apply_observation_pipeline_ipc``
+    validates every required resource before applying any transform and returns
+    both original and used astrometry with canonical configuration provenance.
+  - Contract: declaration order and repeated transforms are authoritative.
+    Deliberate no-transform behavior is represented only by
+    ``ObservationPipeline.as_supplied()`` and is recorded as
+    ``transforms=[]``. Resource paths are excluded from canonical provenance.
+  - Error behavior: missing resources, byte-identity mismatches, schema errors,
+    and structural mismatches are aggregated before propagation or fitting;
+    an explicitly selected profile never falls back to another profile.
 
 - ``observations.efcc18`` (star-catalog debiasing)
   - Boundary: NumPy ``float64`` RA/Dec/JD arrays and Python catalog lists; the

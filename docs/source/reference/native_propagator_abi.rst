@@ -221,6 +221,7 @@ Migration from backend-owned OD methods
 Provider packages should delete or deprecate Python and PyO3 methods such as
 ``fit_least_squares``, ``fit_least_squares_evaluated``, ``od_fit``,
 ``initial_orbit_determination``, ``run_iod_linkages`` and ``run_od_fit``.
-Users call the unchanged adam-core APIs and pass the provider as the stage
-propagator. There is no bridge package: Python users install ``adam-core`` and
-the propagation provider only.
+Users call Core 0.7's canonical ``run_iod``, ``run_od``, ``refine``, or
+``evaluate_orbits`` workflow with an explicit complete ``OdConfig`` and pass
+the provider only as the stage propagator. There is no bridge package and no
+backend-owned OD compatibility route.

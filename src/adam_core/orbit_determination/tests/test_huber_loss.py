@@ -11,7 +11,6 @@ coverage moved to the active Rust tests mapped in
 
 from __future__ import annotations
 
-import pickle
 import warnings
 from typing import Any
 
@@ -24,8 +23,7 @@ from ...coordinates.cartesian import CartesianCoordinates
 from ...coordinates.origin import Origin
 from ...orbits.orbits import Orbits
 from ...time import Timestamp
-from .. import native_orbit_fitter as native_module
-from ..differential_correction import (
+from ..algorithms.fitting import (
     HUBER_F_SCALE_DEFAULT,
     LossType,
     _robust_cost,
@@ -37,7 +35,6 @@ from ..differential_correction import (
     residual_function,
 )
 from ..fitted_orbits import FittedOrbitMembers, FittedOrbits
-from ..native_orbit_fitter import NativeOrbitFitter
 from .test_differential_correction import (
     EPOCH_MJD_TDB,
     TRUTH_STATE,
@@ -259,48 +256,6 @@ class TestIterativeFitAndFitter:
         assert members.outlier.to_pylist() == [False] * 12
         weights = members.weight.to_numpy(zero_copy_only=False)
         assert np.argmin(weights) == 4 and weights[4] < 0.5
-
-    def test_native_fitter_forwards_loss_and_pickles(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        # The worst-residual path forwards through iterative_fit (the default
-        # CMC2003 path is covered in test_cmc2003_rejection).
-        fitter = NativeOrbitFitter(
-            TwoBodyPropagator(),
-            loss="huber",
-            f_scale=2.0,
-            outlier_rejection="worst_residual",
-        )
-        restored = pickle.loads(pickle.dumps(fitter))
-        assert restored.loss == "huber" and restored.f_scale == 2.0
-
-        captured: dict[str, Any] = {}
-
-        def fake_iterative_fit(
-            orbit: Any, observations: Any, propagator: Any, **kwargs: Any
-        ) -> Any:
-            captured.update(kwargs)
-            return FittedOrbits.empty(), FittedOrbitMembers.empty()
-
-        monkeypatch.setattr(native_module, "_iterative_fit", fake_iterative_fit)
-        fitted = FittedOrbits.from_kwargs(
-            orbit_id=["o"],
-            coordinates=orbit_at(TRUTH_STATE).coordinates,
-            arc_length=[1.0],
-            num_obs=[6],
-            chi2=[1.0],
-            reduced_chi2=[0.5],
-        )
-        fitter.refine_fit(
-            fitted, make_synthetic_observations(n_obs=6), TwoBodyPropagator()
-        )
-        assert captured["loss"] == "huber"
-        assert captured["f_scale"] == 2.0
-
-    def test_default_fitter_is_linear(self) -> None:
-        fitter = NativeOrbitFitter(TwoBodyPropagator())
-        assert fitter.loss == "linear"
-        assert fitter.f_scale == HUBER_F_SCALE_DEFAULT
 
 
 class TestValidation:

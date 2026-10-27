@@ -2,7 +2,7 @@ from importlib.resources import files
 
 import pytest
 
-from ..differential_correction import OrbitDeterminationObservations
+from ..algorithms.fitting import OrbitDeterminationObservations
 from ..fitted_orbits import FittedOrbitMembers, FittedOrbits
 
 

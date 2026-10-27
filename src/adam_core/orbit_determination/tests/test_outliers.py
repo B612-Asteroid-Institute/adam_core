@@ -6,9 +6,12 @@ from ...coordinates.residuals import Residuals
 from ...coordinates.spherical import SphericalCoordinates
 from ...observers.observers import Observers
 from ...time.time import Timestamp
-from ..differential_correction import OrbitDeterminationObservations
+from ..algorithms.fitting import OrbitDeterminationObservations
+from ..algorithms.outliers import (
+    calculate_max_outliers,
+    remove_lowest_probability_observation,
+)
 from ..fitted_orbits import FittedOrbitMembers
-from ..outliers import calculate_max_outliers, remove_lowest_probability_observation
 
 
 def test_calculate_max_outliers() -> None:

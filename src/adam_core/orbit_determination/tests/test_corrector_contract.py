@@ -14,7 +14,7 @@ from adam_core.coordinates.origin import Origin
 from adam_core.orbits import Orbits
 from adam_core.time import Timestamp
 
-from ..differential_correction import (
+from ..algorithms.fitting import (
     _analytic_jacobian,
     _analytic_jacobian_terms,
     fit_least_squares,

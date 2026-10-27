@@ -127,7 +127,15 @@ def coordinates_to_ipc(coordinates, representation: str) -> bytes:
     )
     sink = pa.BufferOutputStream()
     with pa.ipc.new_stream(sink, table.schema) as writer:
-        writer.write_table(table)
+        if len(table):
+            writer.write_table(table)
+        else:
+            writer.write_batch(
+                pa.RecordBatch.from_arrays(
+                    [pa.array([], type=field.type) for field in table.schema],
+                    schema=table.schema,
+                )
+            )
     return sink.getvalue().to_pybytes()
 
 

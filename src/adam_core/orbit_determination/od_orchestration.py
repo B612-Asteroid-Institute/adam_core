@@ -1,649 +1,114 @@
-"""
-Fit-time orbit determination orchestration.
+"""Canonical explicit-configuration one-group OD composition.
 
-`run_od` is the blessed entry point for orbit determination in adam_core. It
-takes the ORIGINAL observations together with the observation models to apply,
-runs the backend fitter on the transformed ("used") observations, and returns
-fitted orbits whose members record BOTH the original and the used astrometry
-for every observation.
-
-Design
-------
-* Observation models (`ObservationUncertaintyModel`: star-catalog debiasing,
-  uncertainty inflation, deweighting, ...) are applied here, at fit time, as
-  part of the OD step. They are not a separate preprocessing stage producing a
-  "modified observations" product: `OrbitDeterminationObservations` remains
-  the INPUT type and always holds the originals, and `run_od` returns no
-  modified-observation table. The values the fitter actually saw live on
-  `FittedOrbitMembers.used_astrometry`, next to ``original_astrometry`` and
-  the star catalog ``astcat``, so every fit is self-describing.
-* `run_od` is a free function rather than an `OrbitFitter` method so that it
-  is backend-agnostic. It drives the backend through `OrbitFitter.full_od`,
-  which the built-in `NativeOrbitFitter` inherits (Gauss IOD followed by
-  differential correction) and which external plugins such as adam_fo
-  (FindOrb) override. Fitters never see the models: they receive
-  pre-transformed observations, keeping the `OrbitFitter` interface flag-free.
-* ``run_od`` never executes a model's Python ``apply`` or ``_native_specs``
-  method. It schema-validates exact shipped instances, builds declarative specs,
-  and applies them in Core Rust. The public `apply_observation_models` helper is
-  a legacy/custom-model utility and is not part of blessed reproducible OD.
-* Called without ``models``, `run_od` uses observations exactly as supplied.
-  Explicit ``models="default"`` selects the Institute reference stack described
-  in its Notes; some models in that stack import data packages for their tables.
+The batch-native grouping and typed-failure layer is intentionally implemented
+by the separate Core 0.7 batch-workflow task.  This module establishes the
+one-group stage contract used by that layer: prepare once, IOD, then refine the
+same prepared observations.
 """
 
 from __future__ import annotations
 
-import uuid
-from dataclasses import dataclass
-from typing import Literal, Optional, TypeAlias, cast
+import json
 
+import numpy as np
 import pyarrow as pa
-import pyarrow.compute as pc
 
+from .. import _rust_native
 from ..orbits.orbits import Orbits
 from ..propagator.propagator import Propagator
-from ._native_dispatch import (
-    _warn_if_analytic_jacobian_mismatches,
-    native_propagator,
+from ._pipeline import (
+    apply_pipeline_once,
+    attach_configuration_provenance,
+    attach_original_and_used,
+    provenance_with_fields,
 )
-from ._native_trust import validate_native_trust
-from .differential_correction import OD_DEFAULTS
+from .config import IodRunConfig, OdConfig, RefinementRunConfig
 from .evaluate import OrbitDeterminationObservations
-from .fitted_orbits import FittedOrbitMembers, FittedOrbits, ObservationAstrometry
-from .observation_uncertainty import (
-    EFCC18DebiasModel,
-    EmpiricalCovarianceModel,
-    NightBatchDeweightingModel,
-    ObservationUncertaintyModel,
-)
-from .orbit_fitter import OrbitFitter
-from .provenance import (
-    _assert_preflight_models,
-    _freeze_preflight_models,
-    _precheck_default_model_types,
-    _preflight_provenance,
-    _with_preflight_backends,
-    backend_identity,
-    complete_provenance,
-)
-from .veres2017 import SigmaFillModel
+from .fitted_orbits import FittedOrbitMembers, FittedOrbits
+from .iod import _run_iod_prepared
 
-__all__ = [
-    "ObservationModels",
-    "apply_observation_models",
-    "attach_observation_provenance",
-    "run_od",
-]
-
-# Models accepted by run_od: a single model, an ordered sequence of models
-# (applied left to right), or None.
-ObservationModels: TypeAlias = (
-    ObservationUncertaintyModel
-    | list[ObservationUncertaintyModel]
-    | tuple[ObservationUncertaintyModel, ...]
-    | None
-)
-
-_DEFAULT_MODEL_CONSTRUCTORS: tuple[
-    tuple[str, type[ObservationUncertaintyModel]], ...
-] = (
-    ("SigmaFillModel", SigmaFillModel),
-    ("EFCC18DebiasModel", EFCC18DebiasModel),
-    ("EmpiricalCovarianceModel", EmpiricalCovarianceModel),
-    ("NightBatchDeweightingModel", NightBatchDeweightingModel),
-)
-_TRUSTED_DEFAULT_MODEL_CONSTRUCTORS = _DEFAULT_MODEL_CONSTRUCTORS
+__all__ = ["refine", "run_od"]
 
 
-def _as_array(column: pa.Array | pa.ChunkedArray) -> pa.Array:
-    if isinstance(column, pa.ChunkedArray):
-        return column.combine_chunks()
-    return column
-
-
-def apply_observation_models(
-    observations: OrbitDeterminationObservations,
-    models: ObservationModels,
-) -> OrbitDeterminationObservations:
-    """
-    Apply observation models to the original observations, producing the
-    observations a fitter will use.
-
-    This legacy utility executes each live Python ``model.apply`` method. The
-    reproducible `run_od` entry point does not call it; `run_od` accepts exact
-    shipped declarative state and applies that state in Core Rust.
-
-    Parameters
-    ----------
-    observations : `OrbitDeterminationObservations` (N)
-        Original observations.
-    models : `ObservationUncertaintyModel`, exact list/tuple of them, or None
-        Model(s) to apply. An exact built-in list or tuple is applied in order,
-        left to right. None or an empty container returns the observations
-        unchanged; arbitrary iterable/sequence containers are refused.
-
-    Returns
-    -------
-    used : `OrbitDeterminationObservations` (N)
-        Transformed observations, with the same ids in the same order as the
-        input.
-
-    Raises
-    ------
-    ValueError
-        If the models change the number, identity or order of the
-        observations. Models transform astrometry and uncertainties; they may
-        not add, drop or reorder observations, since fit provenance is keyed
-        by observation id.
-    """
-    model_list = _model_list(models)
-    used = observations
-    for model in model_list:
-        used = model.apply(used)
-        if len(used) != len(observations) or not _as_array(used.id).equals(
-            _as_array(observations.id)
-        ):
-            raise ValueError(
-                "Observation models must preserve the observations' ids and order: "
-                f"got {len(used)} observations from {len(observations)}"
-            )
-    return used
-
-
-def attach_observation_provenance(
-    members: FittedOrbitMembers,
-    original: OrbitDeterminationObservations,
-    used: OrbitDeterminationObservations,
-) -> FittedOrbitMembers:
-    """
-    Embed original and used astrometry (and the star catalog) on fitted orbit
-    members, joined by observation id.
-
-    Parameters
-    ----------
-    members : `FittedOrbitMembers` (M)
-        Members returned by a fitter; every ``obs_id`` must be an id of
-        ``original``.
-    original : `OrbitDeterminationObservations` (N)
-        Observations as originally supplied to orbit determination.
-    used : `OrbitDeterminationObservations` (N)
-        Observations as actually used by the fitter (after the observation
-        models); must contain the same ids as ``original``.
-
-    Returns
-    -------
-    members : `FittedOrbitMembers` (M)
-        Input members with ``original_astrometry``, ``used_astrometry`` and
-        ``astcat`` populated. Existing columns are unchanged.
-
-    Raises
-    ------
-    ValueError
-        If a member references an observation id absent from ``original`` or
-        ``used``.
-    """
-    if len(members) == 0:
-        return members
-
-    obs_ids = _as_array(members.obs_id)
-    original_indices = pc.index_in(obs_ids, value_set=_as_array(original.id))
-    used_indices = pc.index_in(obs_ids, value_set=_as_array(used.id))
-    for name, indices in (("original", original_indices), ("used", used_indices)):
-        if indices.null_count > 0:
-            unknown = pc.unique(pc.filter(obs_ids, pc.is_null(indices))).to_pylist()
-            raise ValueError(
-                f"Fitted orbit members reference observation ids absent from the "
-                f"{name} observations: {unknown}"
-            )
-
-    original_rows = original.take(original_indices)
-    used_rows = used.take(used_indices)
-    return (
-        members.set_column(
-            "original_astrometry",
-            ObservationAstrometry.from_spherical(original_rows.coordinates),
-        )
-        .set_column(
-            "used_astrometry",
-            ObservationAstrometry.from_spherical(used_rows.coordinates),
-        )
-        .set_column("astcat", original_rows.astcat)
-    )
-
-
-def _stamp_object_id(
-    fitted_orbits: FittedOrbits, object_id: str | None
-) -> FittedOrbits:
-    """
-    The ``object_id`` column every `run_od` route returns: the caller's
-    ``object_id`` on every row, null when none was given. The backend
-    identifier handed to the fitter is opaque and never leaks into it.
-    """
-    if len(fitted_orbits) == 0:
-        return fitted_orbits
-    return fitted_orbits.set_column(
+def _stamp_object_id(fitted: FittedOrbits, object_id: str | None) -> FittedOrbits:
+    if len(fitted) == 0:
+        return fitted
+    return fitted.set_column(
         "object_id",
-        pa.array([object_id] * len(fitted_orbits), type=pa.large_string()),
+        pa.array([object_id] * len(fitted), type=pa.large_string()),
     )
 
 
-def _default_models() -> list[ObservationUncertaintyModel]:
-    """
-    The explicit Institute reference stack of `run_od`, in application order
-    (see its Notes). Built here, not as a signature default, because the
-    models load their tables from data packages when constructed. Every model whose
-    data is missing is reported in one error, before any fit runs, so the
-    caller learns all of what to install at once.
-    """
-    constructors = _DEFAULT_MODEL_CONSTRUCTORS
-    models: list[ObservationUncertaintyModel] = []
-    missing: dict[str, list[str]] = {}
-    package_missing = False
-    for name, constructor in constructors:
-        try:
-            models.append(constructor())
-        except (ImportError, FileNotFoundError) as error:
-            package_missing |= isinstance(error, ImportError)
-            missing.setdefault(str(error), []).append(name)
-    if missing:
-        details = "\n".join(
-            f"  {', '.join(names)}: {reason}" for reason, names in missing.items()
-        )
-        message = (
-            "run_od(models='default') needs data that is not installed; install "
-            "it, or pass models=None or an explicit list of models:\n" + details
-        )
-        raise (ImportError if package_missing else FileNotFoundError)(message)
-    return models
-
-
-def _model_list(models: ObservationModels) -> list[ObservationUncertaintyModel]:
-    """Normalize without invoking structural containers or mutable ABC hooks."""
-    if models is None:
-        return []
-    model_mro = type.__getattribute__(type(models), "__mro__")
-    if ObservationUncertaintyModel in model_mro:
-        return [models]
-    if type(models) is list:
-        return models.copy()
-    if type(models) is tuple:
-        return list(models)
-    raise TypeError("models must be one model, an exact list/tuple, None, or 'default'")
-
-
-@dataclass(frozen=True)
-class _FusedInputs:
-    propagator: object
-    iod_propagator: object
-
-
-def _prepare_native_inputs(fitter, propagator, frozen):
-    """Resolve every fitter/provider hook before the final model snapshot."""
-    from .native_orbit_fitter import NativeOrbitFitter
-
-    refinement_backend = backend_identity(propagator)
-    iod_backend = None
-    fused = None
-    if frozen.native_settings is not None:
-        iod_provider = fitter.iod_propagator_for(propagator)
-        iod_backend = backend_identity(iod_provider)
-        if NativeOrbitFitter._supports_native_full_od_snapshot(fitter):
-            _, _, fit_settings = frozen.native_settings
-            _warn_if_analytic_jacobian_mismatches(propagator, fit_settings["jacobian"])
-            fused = _FusedInputs(
-                native_propagator(propagator), native_propagator(iod_provider)
-            )
-    return (
-        _with_preflight_backends(
-            frozen,
-            iod_backend=iod_backend,
-            refinement_backend=refinement_backend,
-        ),
-        fused,
-    )
-
-
-def _native_snapshots(output) -> dict[str, ObservationAstrometry]:
-    snapshots = {}
-    for name in ("original_astrometry", "used_astrometry"):
-        columns = output[name]
-        snapshots[name] = ObservationAstrometry.from_kwargs(
-            **{
-                column: pa.array(columns[column], type=pa.float64())
-                for column in (
-                    "lon",
-                    "lat",
-                    "sigma_lon",
-                    "sigma_lat",
-                    "cov_lonlat",
-                )
-            }
-        )
-    return snapshots
-
-
-def _attach_native_observation_provenance(
-    members: FittedOrbitMembers,
+def _refine_prepared(
+    orbit: Orbits | FittedOrbits,
     observations: OrbitDeterminationObservations,
-    output,
-) -> FittedOrbitMembers:
-    if len(members) == 0:
-        return members
-    indices = pc.index_in(
-        _as_array(members.obs_id), value_set=_as_array(observations.id)
-    )
-    if indices.null_count > 0:
-        unknown = pc.unique(
-            pc.filter(_as_array(members.obs_id), pc.is_null(indices))
-        ).to_pylist()
-        raise ValueError(
-            "Fitted orbit members reference observation ids absent from the "
-            f"original observations: {unknown}"
-        )
-    snapshots = _native_snapshots(output)
-    return (
-        members.set_column(
-            "original_astrometry", snapshots["original_astrometry"].take(indices)
-        )
-        .set_column("used_astrometry", snapshots["used_astrometry"].take(indices))
-        .set_column("astcat", observations.take(indices).astcat)
-    )
-
-
-def _apply_frozen_models_native(observations: OrbitDeterminationObservations, frozen):
-    """Apply the final declarative snapshot in Core Rust, without model code."""
-    from ..coordinates import SphericalCoordinates
-    from ..orbits.arrow_bridge import coordinates_from_ipc, coordinates_to_ipc
-
-    assert frozen.native_model_specs is not None
-    observed_ipc = coordinates_to_ipc(observations.coordinates, "spherical")
-    _, _, _, apply_models = validate_native_trust()
-    output = apply_models(
-        observed_ipc,
-        observations.observers.code.to_pylist(),
-        observations.photometry.band.to_pylist(),
-        observations.astcat.to_pylist(),
-        models=frozen.native_model_specs,
-    )
-    coordinates = coordinates_from_ipc(
-        output["used_coordinates_ipc"], SphericalCoordinates
-    )
-    return observations.set_column("coordinates", coordinates), output
-
-
-def _fused_run_od(
-    observations: OrbitDeterminationObservations,
-    fitter: OrbitFitter,
-    frozen,
-    inputs: _FusedInputs,
-    object_id: str | None,
-) -> tuple[FittedOrbits, FittedOrbitMembers]:
-    """Execute only the already-resolved, provenance-bound native snapshot."""
-    from .differential_correction import _native_problem
-    from .iod import _placeholder_orbit
-    from .native_orbit_fitter import tables_from_native_full_od
-
-    assert frozen.native_settings is not None
-    assert frozen.native_model_specs is not None
-    iod_settings, refinement, fit_settings = frozen.native_settings
-    backend_object_id = object_id if object_id is not None else uuid.uuid4().hex
-    _, observed_ipc, observers_ipc = _native_problem(
-        _placeholder_orbit(observations), observations
-    )
-
-    # Module/function identity is checked without calling a replacement, both
-    # before settings validation and immediately before native science.
-    _, validate_settings, _, _ = validate_native_trust()
-    validate_settings(iod_settings, refinement, fit_settings)
-    _, _, run_od_ipc, _ = validate_native_trust()
-    output = run_od_ipc(
-        inputs.propagator,
-        observed_ipc,
-        observers_ipc,
-        observations.observers.code.to_pylist(),
-        observations.photometry.band.to_pylist(),
-        observations.astcat.to_pylist(),
-        models=frozen.native_model_specs,
-        iod_settings=iod_settings,
-        refinement=refinement,
-        fit_settings=fit_settings,
-        iod_propagator=inputs.iod_propagator,
-    )
-    fitted_orbits, members = tables_from_native_full_od(
-        backend_object_id, observations, output
-    )
-    fitted_orbits = _stamp_object_id(fitted_orbits, object_id)
-    members = _attach_native_observation_provenance(members, observations, output)
-    return fitted_orbits, members
-
-
-def run_od(
-    observations: OrbitDeterminationObservations,
-    fitter: OrbitFitter,
-    models: ObservationModels | Literal["default"] = None,
-    *,
     propagator: Propagator,
-    object_id: str | None = None,
+    stage_config: RefinementRunConfig,
 ) -> tuple[FittedOrbits, FittedOrbitMembers]:
-    """
-    Run orbit determination on the original observations, applying observation
-    models at fit time and recording original vs. used astrometry on the
-    returned members.
+    """Refine against observations whose configured pipeline already ran."""
 
-    This is the blessed entry point for orbit determination. It
+    from ._native_dispatch import native_propagator
+    from .algorithms.fitting import (
+        _emit_native_warnings,
+        _fitted_tables_from_native_output,
+        _native_problem,
+    )
 
-    1. applies ``models`` to the ORIGINAL ``observations`` to obtain the
-       observations the fitter will use (`apply_observation_models`);
-    2. runs the backend's full orbit determination on the used observations
-       via `OrbitFitter.full_od` (initial fit followed by refinement for
-       `NativeOrbitFitter`; backend-specific pipelines for plugins that
-       override ``full_od``);
-    3. returns the fitted orbit(s) and members carrying residuals and
-       solution / outlier flags from the fitter together with the ORIGINAL and
-       USED position and uncertainty of each observation and its star catalog
-       (`attach_observation_provenance`).
-
-    Parameters
-    ----------
-    observations : `OrbitDeterminationObservations` (N)
-        Original observations of a single object, with unique ids. These are
-        never modified; the values the fitter used are recorded on the
-        returned members.
-    fitter : `OrbitFitter`
-        Backend used for the fit, e.g. `NativeOrbitFitter` or an external
-        plugin. The fitter receives the transformed observations and never
-        the models.
-    models : `ObservationUncertaintyModel`, sequence of them, None, or "default"
-        Observation model(s) to apply before fitting, in an exact list/tuple. The default
-        ``None`` uses observations exactly as supplied and requires no private data.
-        Explicit ``"default"`` applies the Institute stack (sigma fill, EFCC18
-        debiasing, empirical station covariance, nightly deweighting; see
-        Notes), whose tables come from data packages. Pass None (or an empty
-        sequence) to fit the observations exactly as supplied (members then
-        record ``used_astrometry`` equal to ``original_astrometry``). Only exact
-        shipped model classes with schema-valid declarative state are accepted.
-        Live Python subclasses and custom classes fail provenance preflight;
-        shipped Python model methods are never executed by this entry point.
-    propagator : `~adam_core.propagator.Propagator`
-        Propagator used by the backend during refinement.
-    object_id : str, optional
-        Object identifier stamped on the returned orbits. If None, the
-        orbits' ``object_id`` is null. Either way the fitter receives an
-        opaque backend identifier, never the object id, and whatever the
-        backend wrote in ``object_id`` is replaced, so both the fused and the
-        composed route return the same column.
-
-    Returns
-    -------
-    fitted_orbits : `FittedOrbits` (1 or 0)
-        Orbit(s) found by the backend (empty if the fit failed).
-        Its ``provenance`` (`OdProvenance`) records the adam-core version,
-        the route (fused or composed), the fitter, the IOD and refinement
-        backends, the settings, the observation models (with a SHA-256 of
-        each table), whether the IOD was ambiguous, and the number and
-        fraction of observations the final fit rejected.
-    fitted_orbit_members : `FittedOrbitMembers` (M)
-        Members with residuals and flags from the fitter and with
-        ``original_astrometry``, ``used_astrometry`` and ``astcat``
-        populated for every member observation.
-
-    Raises
-    ------
-    ValueError
-        If observation ids are not unique, if the models change the set or
-        order of observations, if the fitter returns members referencing
-        unknown observation ids, or if ``models`` is a string other than
-        ``"default"``.
-    RuntimeError
-        If the native extension version differs from Python or its embedded
-        source identity is dirty or unknown. ``run_od`` requires an official
-        wheel or an exact clean-checkout build so its provenance is
-        reproducible; this check runs before models or fitting.
-    TypeError
-        If a model is not an exact shipped Core model with schema-valid
-        declarative state. A `ModelProvenance` declaration cannot authenticate
-        live executable Python. This preflight runs before model, fitter, or
-        provider work.
-    ImportError, FileNotFoundError
-        If ``models="default"`` and the ``adam-observatory-uncertainties``
-        data package or JPL's EFCC18 ``bias.dat`` is not installed: one
-        error, raised before any fit runs, naming every missing input
-        (`ImportError` when a package is missing, `FileNotFoundError` when
-        only ``bias.dat`` is).
-
-    Notes
-    -----
-    **The explicit Institute reference configuration.**
-    ``models="default"`` together with a default-constructed
-    `NativeOrbitFitter` selects the Asteroid Institute configuration (decision
-    2026-09-23, from the 100-object walk-forward study). The models, in the
-    order applied:
-
-    1. ``SigmaFillModel()``: a sigma where the MPC reports none, from the
-       ``v2_sigma_fill`` station/catalog table (0.75" global fallback). Fills
-       ONLY missing sigmas. Runs first so every later model sees a finite
-       covariance.
-    2. ``EFCC18DebiasModel()``: star-catalog debiasing from JPL's EFCC18
-       ``bias.dat`` (HEALPix RING order, every tabulated catalog). The only
-       default that moves positions.
-    3. ``EmpiricalCovarianceModel()``: the station's measured 2x2 residual
-       covariance from the ``v2_full`` bias table ADDED to the reported
-       covariance (``mode="add"``); stations with fewer than 30 residuals
-       pass through.
-    4. ``NightBatchDeweightingModel()``: sigma scaled by sqrt(N/4) for
-       same-station same-night batches of N > 4 observations.
-
-    Three of the four import data packages when constructed without a table.
-    `SigmaFillModel` and `EmpiricalCovarianceModel` load ``v2_sigma_fill``
-    and ``v2_full`` from the private ``adam-observatory-uncertainties``
-    package (import name ``observatory_uncertainties``; `load_sigma_table`,
-    `load_bias_table`), and `EFCC18DebiasModel` locates ``bias.dat`` through
-    the ``jpl_debias_2018`` package, the ``ADAM_CORE_EFCC18_BIAS_DAT``
-    environment variable or the EFCC18 cache. adam_core does not depend on
-    these packages: the explicit ``models="default"`` stack raises an
-    `ImportError` / `FileNotFoundError` naming the missing one, and ``models=None`` or an
-    explicit model list built with your own tables needs none of them.
-
-    The fitter defaults are those of `NativeOrbitFitter`: Carpino-Milani-
-    Chesley (2003) outlier rejection with OrbFit's constants, linear loss,
-    and analytic 2-body optimizer steps. Every CMC2003 refit computes its
-    covariance and rejection scores from one central-difference Jacobian
-    through the full predictor, with the weak-direction covariance probe
-    enabled; Gauss IOD on every observation triplet,
-    accepted below reduced chi2 200, at least 6 observations over 1 day.
-    Kept as options, not defaults: ``loss="huber"``, `VeresFloorModel` /
-    `VeresReplaceModel`, `SigmaFloorModel`, `PerformanceWeightedModel`,
-    ``NightBatchDeweightingModel(cap=1)`` and
-    ``outlier_rejection="worst_residual"``. The models act on the fit only:
-    judge a held-out observation against its nominal position and original
-    sigma. The lower-level entry points (`initial_orbit_determination`,
-    `differential_correction`, `iterative_fit`) keep
-    ``observatory_bias_model=None``, so they work without the data packages.
-
-    Backends that perform their own observation debiasing or weighting
-    internally (e.g. FindOrb) will apply them on top of the models supplied
-    here; disabling such internal handling when models are supplied is the
-    responsibility of the backend plugin.
-    """
-    if type(models) is str:
-        if models != "default":
-            raise ValueError(
-                "models must be observation models, None or the exact string 'default'"
-            )
-        if _DEFAULT_MODEL_CONSTRUCTORS is not _TRUSTED_DEFAULT_MODEL_CONSTRUCTORS:
-            raise TypeError("default observation model constructor registry changed")
-        _precheck_default_model_types(
-            tuple(constructor for _, constructor in _TRUSTED_DEFAULT_MODEL_CONSTRUCTORS)
+    if not isinstance(stage_config, RefinementRunConfig):
+        raise TypeError("stage_config must be a RefinementRunConfig")
+    seed = orbit.to_orbits() if isinstance(orbit, FittedOrbits) else orbit
+    output = _rust_native.refine_config_ipc(
+        native_propagator(propagator),
+        *_native_problem(seed, observations),
+        stage_config._native,
+    )
+    _emit_native_warnings(output)
+    refined, members = _fitted_tables_from_native_output(
+        seed,
+        observations,
+        output,
+        np.asarray(output["weights"], dtype=np.float64),
+    )
+    if len(refined):
+        diagnostics = json.dumps(
+            {
+                "passes": int(output["passes"]),
+                "n_rejected": int(output["n_rejected"]),
+                "n_recovered": int(output["n_recovered"]),
+                "flags": sorted(output["flags"]),
+            },
+            sort_keys=True,
+            separators=(",", ":"),
         )
-        models = _default_models()
-
-    model_list = _model_list(models)
-    provenance = _preflight_provenance(fitter, model_list)
-    if len(observations) == 0:
-        if provenance.native_settings is not None:
-            _, validate_settings, _, _ = validate_native_trust()
-            validate_settings(*provenance.native_settings)
-        return FittedOrbits.empty(), FittedOrbitMembers.empty()
-
-    ids = _as_array(observations.id)
-    if ids.null_count > 0 or pc.count_distinct(ids).as_py() != len(ids):
-        raise ValueError("Observation ids must be unique and non-null")
-
-    # Every fitter/provider hook is resolved before this final model data/spec
-    # snapshot. No Python hook runs between it and the trusted fused call.
-    provenance, fused_inputs = _prepare_native_inputs(fitter, propagator, provenance)
-    provenance = _freeze_preflight_models(provenance, model_list)
-    if provenance.native_model_specs is None:
-        fused_inputs = None
-
-    if fused_inputs is not None:
-        fitted_orbits, fitted_orbit_members = _fused_run_od(
-            observations, fitter, provenance, fused_inputs, object_id
+        provider = json.dumps(
+            output["refinement_provider"],
+            sort_keys=True,
+            separators=(",", ":"),
         )
-        return (
-            complete_provenance(
-                fitted_orbits,
-                fitted_orbit_members,
-                fitter=fitter,
-                propagator=propagator,
-                models=model_list,
-                route="fused",
-                observations=observations,
-                preflight=provenance,
+        refined = refined.set_column(
+            "provenance",
+            provenance_with_fields(
+                refined.provenance,
+                refinement_provider=[provider] * len(refined),
+                refinement_diagnostics=[diagnostics] * len(refined),
             ),
-            fitted_orbit_members,
         )
-
-    # Composed execution consumes the same state only after an immediate exact
-    # descriptor recheck. Native fitter settings are the single frozen copy.
-    if provenance.native_settings is not None:
-        _, validate_settings, _, _ = validate_native_trust()
-        validate_settings(*provenance.native_settings)
-    _assert_preflight_models(provenance, model_list)
-    used, model_output = _apply_frozen_models_native(observations, provenance)
-
-    backend_object_id = object_id if object_id is not None else uuid.uuid4().hex
-    fitted_orbits, fitted_orbit_members = fitter.full_od(
-        backend_object_id, used, propagator
-    )
-
-    fitted_orbits = _stamp_object_id(fitted_orbits, object_id)
-
-    fitted_orbit_members = _attach_native_observation_provenance(
-        fitted_orbit_members, observations, model_output
-    )
-    fitted_orbits = complete_provenance(
-        fitted_orbits,
-        fitted_orbit_members,
-        fitter=fitter,
-        propagator=propagator,
-        models=model_list,
-        route="composed",
-        observations=observations,
-        preflight=provenance,
-    )
-    return fitted_orbits, fitted_orbit_members
+    if isinstance(orbit, FittedOrbits) and len(orbit) == 1 and len(refined):
+        updates = {}
+        for name in (
+            "iod_provider",
+            "iod_diagnostics",
+            "iod_ambiguous",
+            "iod_alternatives",
+        ):
+            value = orbit.provenance.table.column(name)[0].as_py()
+            if value is not None:
+                updates[name] = [value] * len(refined)
+        if updates:
+            refined = refined.set_column(
+                "provenance", provenance_with_fields(refined.provenance, **updates)
+            )
+    return refined, members
 
 
 def refine(
@@ -651,51 +116,45 @@ def refine(
     observations: OrbitDeterminationObservations,
     propagator: Propagator,
     *,
-    rejection: Literal["cmc2003", "worst_residual", "none"] = cast(
-        Literal["cmc2003", "worst_residual", "none"], OD_DEFAULTS["refinement"]
-    ),
-    rejection_settings: Optional[dict[str, object]] = None,
-    fit_settings: Optional[dict[str, object]] = None,
+    config: OdConfig,
 ) -> tuple[FittedOrbits, FittedOrbitMembers]:
+    """Refine one orbit group with an explicit complete configuration."""
+
+    if not isinstance(config, OdConfig):
+        raise TypeError("config must be an OdConfig")
+    stage_config = config.for_refinement()
+    used, _pipeline_output = apply_pipeline_once(observations, config)
+    refined, members = _refine_prepared(orbit, used, propagator, stage_config)
+    refined = attach_configuration_provenance(refined, config)
+    return refined, attach_original_and_used(members, observations, used)
+
+
+def run_od(
+    observations: OrbitDeterminationObservations,
+    propagator: Propagator,
+    *,
+    config: OdConfig,
+    object_id: str | None = None,
+) -> tuple[FittedOrbits, FittedOrbitMembers]:
+    """Run exact ``run_iod + refine`` composition with one pipeline execution.
+
+    Caller astrometry is retained for member provenance.  The configured Rust
+    pipeline runs exactly once, and both numerical stages consume that same
+    prepared table; refinement never reapplies transforms.
     """
-    The refinement stage: differential correction of ``orbit`` (e.g. the
-    orbit `run_iod` returns) against every observation on ``propagator``.
 
-    With `run_iod` it is the stage contract `run_od` composes: ``run_iod`` →
-    ``refine``. ``rejection`` selects the outlier treatment: ``"cmc2003"``
-    (default; Carpino, Milani & Chesley 2003 with OrbFit's constants,
-    `cmc2003_fit`), ``"worst_residual"`` (`iterative_fit`) or ``"none"``
-    (`fit_least_squares`). ``rejection_settings`` override that loop's
-    settings (``OD_DEFAULTS["cmc2003"]`` / ``["worst_residual"]``);
-    ``fit_settings`` the solver's (``OD_DEFAULTS["fit"]``: ``jacobian``,
-    ``loss``, ``f_scale``, ``validate_covariance``, tolerances). Every loop
-    runs in adam-core Rust in one crossing; the propagation provider supplies
-    only its native capsule and never owns a refinement work unit.
-
-    When ``orbit`` is a `FittedOrbits` row from `run_iod`, its IOD provenance
-    (ambiguity) is carried onto the refined orbit.
-    """
-    from .differential_correction import _fit_least_squares, _iterative_fit
-    from .provenance import carry_iod_provenance
-    from .rejection import _cmc2003_fit
-
-    seed = orbit.to_orbits() if isinstance(orbit, FittedOrbits) else orbit
-    settings = {**(fit_settings or {}), **(rejection_settings or {})}
-    if rejection == "cmc2003":
-        refined, members = _cmc2003_fit(seed, observations, propagator, **settings)
-    elif rejection == "worst_residual":
-        refined, members = _iterative_fit(seed, observations, propagator, **settings)
-    elif rejection == "none":
-        if rejection_settings:
-            raise ValueError("rejection='none' takes no rejection_settings")
-        refined, members = _fit_least_squares(
-            seed, observations, propagator, **settings
+    if not isinstance(config, OdConfig):
+        raise TypeError("config must be an OdConfig")
+    iod_config: IodRunConfig = config.for_iod()
+    refinement_config: RefinementRunConfig = config.for_refinement()
+    original = observations
+    used, _pipeline_output = apply_pipeline_once(original, config)
+    iod_orbits, iod_members, _report = _run_iod_prepared(used, propagator, iod_config)
+    if len(iod_orbits) == 0:
+        return FittedOrbits.empty(), attach_original_and_used(
+            iod_members, original, used
         )
-    else:
-        raise ValueError(
-            "rejection must be 'cmc2003', 'worst_residual' or 'none'; "
-            f"got {rejection!r}"
-        )
-    if isinstance(orbit, FittedOrbits):
-        refined = carry_iod_provenance(orbit, refined)
-    return refined, members
+    refined, members = _refine_prepared(iod_orbits, used, propagator, refinement_config)
+    refined = _stamp_object_id(refined, object_id)
+    refined = attach_configuration_provenance(refined, config)
+    return refined, attach_original_and_used(members, original, used)

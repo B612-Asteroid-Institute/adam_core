@@ -14,15 +14,17 @@
 
 use crate::coordinates::{read_orbit_ipc, write_orbit_ipc, ErfaTimeProvider};
 use crate::observation_uncertainty::{bias_table, efcc18_table, veres_lookup};
+use crate::od_config::{PyIodRunConfig, PyOdConfig, PyRefinementRunConfig};
 use crate::od_support::{od_error, LockingSpiceTranslation};
-use adam_core_rs_coords::observation_uncertainty::{
+use adam_core_rs_coords::_od_internal::{
     Efcc18DebiasModel, EmpiricalCovarianceMode, EmpiricalCovarianceModel, IdentityModel,
     NightBatchDeweightingModel, ObservationUncertaintyModel, PerformanceWeightedModel,
     SigmaFloorModel,
 };
+use adam_core_rs_coords::_od_internal::{SigmaFillModel, VeresFloorModel, VeresReplaceModel};
 use adam_core_rs_coords::propagation::adapter::{
     apply_observation_models, cmc2003_fit_with, fit_orbit_whitened_with, full_od_with,
-    iterative_fit_with, run_iod_linkages_with, run_iod_with, run_od_with,
+    iterative_fit_with, refine_with, run_iod_linkages_with, run_iod_with, run_od_with,
     validate_fit_covariance_with, PropagatorPredictor, SphericalPredictor,
 };
 use adam_core_rs_coords::propagation::{
@@ -34,7 +36,6 @@ use adam_core_rs_coords::propagation::{
     RangingSample, RefinementConfig, SpanSearchConfig, TwoBodyPropagator, TwoBodyPropagatorConfig,
     VelocityMethod, WhitenedFitConfig, WhitenedFitOutput, EXTERNAL_PROPAGATOR_CAPSULE,
 };
-use adam_core_rs_coords::veres2017::{SigmaFillModel, VeresFloorModel, VeresReplaceModel};
 use adam_core_rs_coords::{
     validate_loss, CoordinateBatch as DataCoordinateBatch, IntoNestedRecordBatch, LossType,
     ObserverBatch as DataObserverBatch, OrbitBatch as DataOrbitBatch, TimeScale,
@@ -188,6 +189,27 @@ fn parse_fit_settings(settings: Option<&Bound<'_, PyDict>>) -> PyResult<FitSetti
         options,
         propagator,
     })
+}
+
+/// Build the fixed ephemeris/provider adapter around an authoritative typed
+/// fit configuration. Every configurable two-body tolerance/budget is copied
+/// from that configuration; only non-configurable OD conventions remain fixed
+/// here (UTC output, no stellar aberration, no propagated covariance).
+fn fit_settings_from_config(config: WhitenedFitConfig) -> PyResult<FitSettings> {
+    config.validate().map_err(value_error)?;
+    let mut settings = parse_fit_settings(None)?;
+    let two_body = config.two_body;
+    settings.options.lt_tol = two_body.lt_tol;
+    settings.options.max_iter = two_body.ephemeris_max_iter;
+    settings.options.tol = two_body.ephemeris_tol;
+    settings.options.max_lt_iter = two_body.max_lt_iter;
+    settings.propagator = TwoBodyPropagator::new(TwoBodyPropagatorConfig {
+        max_iter: two_body.propagation_max_iter,
+        tol: two_body.propagation_tol,
+    })
+    .map_err(|err| value_error(format!("invalid typed propagator config: {err}")))?;
+    settings.config = config;
+    Ok(settings)
 }
 
 /// `IodConfig` from the ``iod_settings`` dict over `IodConfig::default()`.
@@ -1438,6 +1460,51 @@ fn cmc2003_fit_ipc<'py>(
     Ok(out)
 }
 
+/// Canonical refinement entry point. Every scientific refinement setting
+/// comes from the Rust-owned typed stage configuration, not Python kwargs.
+#[pyfunction]
+#[pyo3(signature = (propagator, orbit_ipc, observed_ipc, observers_ipc, config))]
+fn refine_config_ipc<'py>(
+    py: Python<'py>,
+    propagator: Option<&Bound<'py, PyAny>>,
+    orbit_ipc: &Bound<'py, PyBytes>,
+    observed_ipc: &Bound<'py, PyBytes>,
+    observers_ipc: &Bound<'py, PyBytes>,
+    config: PyRef<'py, PyRefinementRunConfig>,
+) -> PyResult<Bound<'py, PyDict>> {
+    let orbit = decode_orbit(orbit_ipc)?;
+    let problem = decode_observations(observed_ipc, observers_ipc)?;
+    let refinement = *config.inner.refinement();
+    drop(config);
+    let fit = match refinement {
+        RefinementConfig::WorstResidual(loop_config) => loop_config.fit,
+        RefinementConfig::Cmc2003(loop_config) => loop_config.fit,
+    };
+    let settings = fit_settings_from_config(fit)?;
+    let n = problem.observed.len();
+    let (output, provider) = run_with_predictor(py, propagator, &settings, |predictor| {
+        refine_with(
+            predictor,
+            &orbit,
+            &problem.observed,
+            &problem.observers,
+            &refinement,
+            &ErfaTimeProvider,
+            &LockingSpiceTranslation,
+        )
+    })?;
+    let out = fit_output_dict(py, output.fit, n)?;
+    out.set_item("passes", output.passes)?;
+    out.set_item("n_rejected", output.n_rejected)?;
+    out.set_item("n_recovered", output.n_recovered)?;
+    out.set_item("flags", output.flags)?;
+    out.set_item(
+        "refinement_provider",
+        provider_metadata_dict(py, &provider)?,
+    )?;
+    Ok(out)
+}
+
 /// `cmc2003_fit_ipc` over adam_core's two-body propagator.
 #[pyfunction]
 #[pyo3(signature = (
@@ -1508,6 +1575,39 @@ fn run_iod_ipc<'py>(
         parse_iod_settings(iod_settings)?,
         fit_settings,
     )
+}
+
+/// Canonical IOD entry point. Search, correction, ranging and correction-fit
+/// settings come only from the Rust-owned typed stage configuration.
+#[pyfunction]
+#[pyo3(signature = (iod_propagator, observed_ipc, observers_ipc, config))]
+fn run_iod_config_ipc<'py>(
+    py: Python<'py>,
+    iod_propagator: Option<&Bound<'py, PyAny>>,
+    observed_ipc: &Bound<'py, PyBytes>,
+    observers_ipc: &Bound<'py, PyBytes>,
+    config: PyRef<'py, PyIodRunConfig>,
+) -> PyResult<Bound<'py, PyDict>> {
+    let problem = decode_observations(observed_ipc, observers_ipc)?;
+    let iod_config = *config.inner.iod();
+    let correction_fit = *config.inner.correction_fit();
+    drop(config);
+    let settings = fit_settings_from_config(correction_fit)?;
+    let n = problem.observed.len();
+    let (result, provider) = run_with_predictor(py, iod_propagator, &settings, |predictor| {
+        run_iod_with(
+            predictor,
+            &problem.observed,
+            &problem.observers,
+            &iod_config,
+            &correction_fit,
+            &ErfaTimeProvider,
+            &LockingSpiceTranslation,
+        )
+    })?;
+    let out = iod_dict(py, result, n)?;
+    out.set_item("iod_provider", provider_metadata_dict(py, &provider)?)?;
+    Ok(out)
 }
 
 /// One-crossing IOD stage over multiple adam-core-owned linkage selections.
@@ -1694,25 +1794,30 @@ fn full_od_2body_ipc<'py>(
 /// Apply schema-validated observation-model specs in Core Rust and return
 /// the complete transformed coordinate batch for a composed fitter route.
 #[pyfunction]
-#[pyo3(signature = (observed_ipc, obs_code, band, astcat, models=None))]
-fn apply_observation_models_ipc<'py>(
+#[pyo3(signature = (observed_ipc, obs_code, band, astcat, config))]
+fn apply_observation_pipeline_ipc<'py>(
     py: Python<'py>,
     observed_ipc: &Bound<'py, PyBytes>,
     obs_code: Vec<String>,
     band: Vec<Option<String>>,
     astcat: Vec<Option<String>>,
-    models: Option<&Bound<'py, PyList>>,
+    config: PyRef<'py, PyOdConfig>,
 ) -> PyResult<Bound<'py, PyDict>> {
     let observed = DataCoordinateBatch::try_from_nested_record_batch(&read_orbit_ipc(
         observed_ipc.as_bytes(),
     )?)
     .map_err(|err| value_error(format!("failed to decode observed coordinates: {err}")))?;
+    let models = config
+        .inner
+        .observation_pipeline()
+        .native_models()
+        .map_err(value_error)?;
     let output = apply_observation_models(
         &observed,
         &obs_code,
         &band,
         &astcat,
-        models_from_specs(models)?,
+        models,
         &ErfaTimeProvider,
     )
     .map_err(od_error)?;
@@ -1727,7 +1832,8 @@ fn apply_observation_models_ipc<'py>(
     )?;
     out.set_item("original_astrometry", snapshot_dict(py, output.original)?)?;
     out.set_item("used_astrometry", snapshot_dict(py, output.used)?)?;
-    out.set_item("models_changed", output.models_changed)?;
+    out.set_item("pipeline_changed", output.models_changed)?;
+    out.set_item("configuration_provenance", config.inner.provenance_json())?;
     Ok(out)
 }
 
@@ -1881,8 +1987,10 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(iterative_fit_2body_ipc, m)?)?;
     m.add_function(wrap_pyfunction!(cmc2003_fit_ipc, m)?)?;
     m.add_function(wrap_pyfunction!(cmc2003_fit_2body_ipc, m)?)?;
+    m.add_function(wrap_pyfunction!(refine_config_ipc, m)?)?;
     m.add_function(wrap_pyfunction!(iod_fit_ipc, m)?)?;
     m.add_function(wrap_pyfunction!(run_iod_ipc, m)?)?;
+    m.add_function(wrap_pyfunction!(run_iod_config_ipc, m)?)?;
     m.add_function(wrap_pyfunction!(run_iod_linkages_ipc, m)?)?;
     m.add_function(wrap_pyfunction!(iod_defaults, m)?)?;
     m.add_function(wrap_pyfunction!(validate_iod_settings, m)?)?;
@@ -1892,7 +2000,7 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(run_iod_2body_ipc, m)?)?;
     m.add_function(wrap_pyfunction!(full_od_ipc, m)?)?;
     m.add_function(wrap_pyfunction!(full_od_2body_ipc, m)?)?;
-    m.add_function(wrap_pyfunction!(apply_observation_models_ipc, m)?)?;
+    m.add_function(wrap_pyfunction!(apply_observation_pipeline_ipc, m)?)?;
     m.add_function(wrap_pyfunction!(run_od_ipc, m)?)?;
     m.add_function(wrap_pyfunction!(run_od_2body_ipc, m)?)?;
     Ok(())

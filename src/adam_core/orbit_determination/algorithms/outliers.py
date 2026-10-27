@@ -3,8 +3,8 @@ from typing import Tuple
 import numpy as np
 import pyarrow.compute as pc
 
-from .evaluate import OrbitDeterminationObservations
-from .fitted_orbits import FittedOrbitMembers
+from ..evaluate import OrbitDeterminationObservations
+from ..fitted_orbits import FittedOrbitMembers
 
 
 def _lowest_probability_observation_index(orbit_members: FittedOrbitMembers) -> int:

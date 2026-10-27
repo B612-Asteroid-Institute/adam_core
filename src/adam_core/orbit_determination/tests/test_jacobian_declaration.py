@@ -7,7 +7,7 @@ import pytest
 from adam_core.propagator.propagator import Propagator
 
 from .._native_dispatch import _warn_if_analytic_jacobian_mismatches
-from ..differential_correction import fit_least_squares
+from ..algorithms.fitting import fit_least_squares
 from .test_differential_correction import (
     NativeTwoBodyPropagator,
     TwoBodyPropagator,

@@ -115,8 +115,8 @@ class OdProvenance(qv.Table):
 
     Written by `~adam_core.orbit_determination.run_od` (every field) and by
     the IOD stage (``iod_*``); null for orbits produced by other entry points.
-    Configurations and model descriptors are compact JSON; model tables are
-    identified by content hash, not copied.
+    The expanded native configuration is canonical JSON; bound scientific
+    resources are identified by content identity and are never copied.
     """
 
     #: adam-core version that produced the orbit.
@@ -128,7 +128,8 @@ class OdProvenance(qv.Table):
     input_fingerprint = qv.LargeStringColumn(nullable=True)
     #: ``"fused"`` (one native ``run_od`` crossing) or ``"composed"``.
     route = qv.LargeStringColumn(nullable=True)
-    #: The `OrbitFitter` class (``module.qualname``).
+    #: Historical producer label; canonical Core 0.7 workflows leave this null
+    #: because execution is selected by the typed native configuration.
     fitter = qv.LargeStringColumn(nullable=True)
     #: Backend of the IOD stage and of the refinement (``name version``; a
     #: propagator without a `NativeBackend` is ``python:module.qualname``).
@@ -142,12 +143,12 @@ class OdProvenance(qv.Table):
     #: refinement pass/rejection/recovery/CMC flags.
     iod_diagnostics = qv.LargeStringColumn(nullable=True)
     refinement_diagnostics = qv.LargeStringColumn(nullable=True)
-    #: IOD, refinement and solver settings (JSON), when the fitter exposes
-    #: them (`NativeOrbitFitter.native_settings`).
+    #: Historical settings field; canonical Core 0.7 workflows leave this null
+    #: and record the complete settings in ``configuration``.
     settings = qv.LargeStringColumn(nullable=True)
-    #: Observation models applied at fit time (JSON list of descriptors:
-    #: type, scalar parameters, SHA-256 of each table).
-    models = qv.LargeStringColumn(nullable=True)
+    #: Expanded complete OD configuration (canonical JSON): profile identity,
+    #: ordered transforms/resources, stage settings, and evaluation policy.
+    configuration = qv.LargeStringColumn(nullable=True)
     #: Whether the IOD found another converged solution, distinct from the
     #: accepted one yet fitting about as well, and how many.
     iod_ambiguous = qv.BooleanColumn(nullable=True)

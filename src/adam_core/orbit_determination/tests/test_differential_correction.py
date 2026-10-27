@@ -25,7 +25,7 @@ from ...orbits.ephemeris import Ephemeris
 from ...orbits.orbits import Orbits
 from ...propagator.propagator import NativeBackend, Propagator
 from ...time import Timestamp
-from ..differential_correction import (
+from ..algorithms.fitting import (
     _analytic_jacobian,
     _analytic_jacobian_terms,
     _observation_whitening_matrices,

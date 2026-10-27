@@ -9,7 +9,7 @@ try:
 except ImportError:
     PYOORBPropagator = None
 
-from ..differential_correction import iterative_fit
+from ..algorithms.fitting import iterative_fit
 
 
 @pytest.mark.skipif(

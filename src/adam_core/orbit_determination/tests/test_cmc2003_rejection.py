@@ -8,7 +8,6 @@ orbit with injected gross outliers (from ``test_differential_correction``).
 
 from __future__ import annotations
 
-import pickle
 import warnings
 from typing import Any
 
@@ -17,11 +16,8 @@ import numpy.testing as npt
 import pyarrow as pa
 import pytest
 
-from .. import native_orbit_fitter as native_module
-from ..differential_correction import fit_least_squares
-from ..fitted_orbits import FittedOrbitMembers, FittedOrbits
-from ..native_orbit_fitter import NativeOrbitFitter
-from ..rejection import (
+from ..algorithms.fitting import fit_least_squares
+from ..algorithms.rejection import (
     CMC2003_CHI2_FRAC,
     CMC2003_CHI2_RECOVER,
     CMC2003_CHI2_REJECT,
@@ -33,6 +29,7 @@ from ..rejection import (
     cmc2003_fit,
     cmc2003_fit_detailed,
 )
+from ..fitted_orbits import FittedOrbits
 from .test_differential_correction import (
     TRUTH_STATE,
     TwoBodyPropagator,
@@ -283,80 +280,6 @@ class TestTwoBodyIntegration:
                 make_synthetic_observations(n_obs=6)[:0],
                 TwoBodyPropagator(),
             )
-
-
-class TestNativeOrbitFitterDispatch:
-    def test_default_is_cmc2003(self) -> None:
-        fitter = NativeOrbitFitter(TwoBodyPropagator())
-        assert fitter.outlier_rejection == "cmc2003"
-        assert fitter.rejection_kwargs == {}
-
-    def test_unknown_scheme_raises(self) -> None:
-        with pytest.raises(ValueError, match="outlier_rejection"):
-            NativeOrbitFitter(
-                TwoBodyPropagator(),
-                outlier_rejection="cmc2004",  # type: ignore[arg-type]
-            )
-
-    def test_cmc2003_dispatch_forwards_loss_and_kwargs(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        fitter = NativeOrbitFitter(
-            TwoBodyPropagator(),
-            outlier_rejection="cmc2003",
-            loss="huber",
-            f_scale=2.0,
-            rejection_kwargs={"chi2_reject": 9.0, "max_nfev": 50},
-        )
-        restored = pickle.loads(pickle.dumps(fitter))
-        assert restored.outlier_rejection == "cmc2003"
-        assert restored.rejection_kwargs == {"chi2_reject": 9.0, "max_nfev": 50}
-
-        captured: dict[str, Any] = {}
-
-        def fake_cmc2003_fit(
-            orbit: Any, observations: Any, propagator: Any, **kwargs: Any
-        ) -> Any:
-            captured.update(kwargs)
-            return FittedOrbits.empty(), FittedOrbitMembers.empty()
-
-        monkeypatch.setattr(native_module, "_cmc2003_fit", fake_cmc2003_fit)
-        fitted = FittedOrbits.from_kwargs(
-            orbit_id=["o"],
-            coordinates=make_initial_guess().coordinates,
-            arc_length=[1.0],
-            num_obs=[6],
-            chi2=[1.0],
-            reduced_chi2=[0.5],
-        )
-        fitter.refine_fit(
-            fitted, make_synthetic_observations(n_obs=6), TwoBodyPropagator()
-        )
-        assert captured == {
-            "loss": "huber",
-            "f_scale": 2.0,
-            "chi2_reject": 9.0,
-            "max_nfev": 50,
-        }
-
-    def test_cmc2003_end_to_end_through_refine_fit(self) -> None:
-        fitter = NativeOrbitFitter(TwoBodyPropagator(), outlier_rejection="cmc2003")
-        start = FittedOrbits.from_kwargs(
-            orbit_id=["o"],
-            coordinates=make_initial_guess().coordinates,
-            arc_length=[60.0],
-            num_obs=[25],
-            chi2=[1.0],
-            reduced_chi2=[0.5],
-        )
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            fitted, members = fitter.refine_fit(
-                start, with_outliers({17: 15.0}), TwoBodyPropagator()
-            )
-        assert members.outlier.to_pylist().count(True) == 1
-        assert members.outlier.to_pylist()[17] is True
-        assert fitted.num_obs[0].as_py() == 24
 
 
 class TestCmc2003CapsuleDriver:

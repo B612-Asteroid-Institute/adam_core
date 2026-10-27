@@ -7,24 +7,22 @@ import numpy.typing as npt
 import pyarrow as pa
 import pyarrow.compute as pc
 
-from .. import _rust_native
-from ..coordinates.cartesian import CartesianCoordinates
-from ..coordinates.covariances import CoordinateCovariances
-from ..coordinates.origin import Origin, OriginCodes
-from ..coordinates.residuals import Residuals
-from ..coordinates.transform import transform_coordinates
-from ..orbits.orbits import Orbits
-from ..propagator.propagator import Propagator
-from ..time.time import Timestamp
-from ..utils.spice import get_perturber_state
-from ._native_dispatch import (
+from ... import _rust_native
+from ...coordinates.cartesian import CartesianCoordinates
+from ...coordinates.covariances import CoordinateCovariances
+from ...coordinates.origin import Origin, OriginCodes
+from ...coordinates.residuals import Residuals
+from ...coordinates.transform import transform_coordinates
+from ...orbits.orbits import Orbits
+from ...propagator.propagator import Propagator
+from ...time.time import Timestamp
+from ...utils.spice import get_perturber_state
+from .._native_dispatch import (
     _warn_if_analytic_jacobian_mismatches,
-    deprecated,
     native_propagator,
 )
-from .evaluate import OrbitDeterminationObservations
-from .fitted_orbits import FittedOrbitMembers, FittedOrbits
-from .observation_uncertainty import ObservationUncertaintyModel
+from ..evaluate import OrbitDeterminationObservations
+from ..fitted_orbits import FittedOrbitMembers, FittedOrbits
 
 # Acceptance window for the weak-direction consistency check: the measured
 # delta-chi2 at a 1-sigma displacement along the covariance's widest axis
@@ -45,9 +43,8 @@ HUBER_F_SCALE_DEFAULT = _rust_native.iod_defaults()["huber_f_scale"]
 #: The refinement defaults, read once from Rust's config types: ``fit``
 #: (`WhitenedFitConfig`), ``worst_residual`` (`IterativeFitConfig`),
 #: ``cmc2003`` (`Cmc2003FitConfig`, OrbFit's ``reject.def``) and
-#: ``refinement`` (the default loop). The signature defaults of
-#: `fit_least_squares`, `iterative_fit`, `cmc2003_fit_detailed` and
-#: `NativeOrbitFitter` are these values.
+#: ``refinement`` (the default loop). These defaults belong only to the
+#: lower-level algorithm functions; canonical workflows use typed configs.
 OD_DEFAULTS = MappingProxyType(
     {
         key: MappingProxyType(value) if isinstance(value, dict) else value
@@ -55,8 +52,7 @@ OD_DEFAULTS = MappingProxyType(
     }
 )
 
-# Legacy native fitter kwargs retained in the canonical core driver's
-# validation: the Rust Gauss-Newton solver accepts only these parameters.
+# Rust Gauss-Newton solver keyword set used by lower-level algorithm helpers.
 _NATIVE_FIT_KWARGS = {"xtol", "ftol", "max_iterations"}
 
 # Solver settings understood by adam-core's native whitened-fit driver.
@@ -367,8 +363,8 @@ def _native_problem(
 ) -> tuple[bytes, bytes, bytes]:
     """The orbit, observed coordinates and observers as the nested Arrow IPC
     bytes the Rust OD drivers decode, with the SPICE backend ready."""
-    from .._rust.arrow import ensure_spice_backend
-    from ..orbits.arrow_bridge import (
+    from ..._rust.arrow import ensure_spice_backend
+    from ...orbits.arrow_bridge import (
         coordinates_to_ipc,
         observers_to_ipc,
         orbits_to_ipc,
@@ -574,12 +570,11 @@ def _fitted_tables_from_native_output(
     return fitted_orbit, fitted_orbit_members
 
 
-def _fit_least_squares(
+def fit_least_squares(
     orbit: Orbits,
     observations: OrbitDeterminationObservations,
     propagator: Propagator,
     ignore: Optional[List[str]] = None,
-    observatory_bias_model: Optional[ObservationUncertaintyModel] = None,
     jacobian: Literal[
         "auto", "analytic", "propagator", "central", "2-point"
     ] = OD_DEFAULTS["fit"]["jacobian"],
@@ -602,11 +597,6 @@ def _fit_least_squares(
     ignore : list of str
         List of observation IDs to ignore when fitting the orbit with least squares.
         These observations will be marked as outliers in the fitted orbit members.
-    observatory_bias_model : `~adam_core.orbit_determination.ObservationUncertaintyModel`, optional
-        Observation uncertainty model applied to the observations before fitting
-        (e.g. inflating per-station sigmas from an observatory bias table). Default
-        None leaves the observations unchanged. The model is applied once at this
-        entry point and is not forwarded to nested calls.
     jacobian : {"auto", "analytic", "propagator", "central", "2-point"}, optional
         How the residual Jacobian is obtained for both the solver and the
         solution covariance.
@@ -740,9 +730,6 @@ def _fit_least_squares(
             f"'2-point'; got {jacobian!r}"
         )
 
-    if observatory_bias_model is not None:
-        observations = observatory_bias_model.apply(observations)
-
     # TODO: Investigate whether we want to add fitting for the epoch as well
     # Set up least squares problem
     mask = (
@@ -782,7 +769,7 @@ def _fit_least_squares(
     )
 
 
-def _iterative_fit(
+def iterative_fit(
     orbit: Orbits,
     observations: OrbitDeterminationObservations,
     propagator: Propagator,
@@ -792,7 +779,6 @@ def _iterative_fit(
     contamination_percentage: float = OD_DEFAULTS["worst_residual"][
         "contamination_percentage"
     ],
-    observatory_bias_model: Optional[ObservationUncertaintyModel] = None,
     loss: LossType = OD_DEFAULTS["fit"]["loss"],
     f_scale: float = HUBER_F_SCALE_DEFAULT,
     **kwargs,
@@ -826,11 +812,6 @@ def _iterative_fit(
     contamination_percentage : float, optional
         Maximum percentage of observations that may be rejected as outliers.
         Range is [0, 100]. Default is 20.0.
-    observatory_bias_model : `~adam_core.orbit_determination.ObservationUncertaintyModel`, optional
-        Observation uncertainty model applied to the observations before fitting
-        (e.g. inflating per-station sigmas from an observatory bias table). Default
-        None leaves the observations unchanged. The model is applied once at this
-        entry point and is not forwarded to nested calls.
     loss : {"linear", "huber"}, optional
         Loss used by every `fit_least_squares` call. ``"huber"`` bounds the
         influence of large residuals by downweighting them instead of (or in
@@ -858,11 +839,6 @@ def _iterative_fit(
         Fitted orbit members with residuals, outlier flags and weights.
     """
     assert len(orbit) == 1, "Only one orbit can be iteratively fitted"
-
-    if observatory_bias_model is not None:
-        # Applied once here; the inflated observations (not the model) are
-        # passed to the nested fit_least_squares calls below.
-        observations = observatory_bias_model.apply(observations)
 
     unsupported = set(kwargs) - _FUSED_LOOP_KWARGS - _NATIVE_FIT_KWARGS
     if unsupported:
@@ -901,17 +877,6 @@ def _iterative_fit(
     )
 
 
-@deprecated(
-    _fit_least_squares,
-    "refine(orbit, observations, propagator, rejection='none')",
-)
-def fit_least_squares(*args, **kwargs):  # pragma: no cover - replaced by the alias
-    """Deprecated alias of `_fit_least_squares`."""
-
-
-@deprecated(
-    _iterative_fit,
-    "refine(orbit, observations, propagator, rejection='worst_residual')",
-)
-def iterative_fit(*args, **kwargs):  # pragma: no cover - replaced by the alias
-    """Deprecated alias of `_iterative_fit`."""
+# Private implementation aliases retained only for Core's internal stage code.
+_fit_least_squares = fit_least_squares
+_iterative_fit = iterative_fit

@@ -152,6 +152,44 @@ def _generate_api_reference(_: object) -> None:
         ]
     )
 
+    # The OD package intentionally re-exports its canonical public API. Rendering
+    # those imported members again on the package page duplicates every table's
+    # ``Columns`` section label; authoritative member docs already live in the
+    # generated submodule pages. Keep the package page as a navigation index.
+    od_package = output_dir / "adam_core.orbit_determination.rst"
+    od_package.write_text(
+        r"""adam\_core.orbit\_determination package
+=======================================
+
+The package exports the four explicit-config workflows and immutable
+configuration/profile values. Their authoritative API documentation is in the
+submodules below.
+
+Subpackages
+-----------
+
+.. toctree::
+   :maxdepth: 4
+
+   adam_core.orbit_determination.algorithms
+
+Submodules
+----------
+
+.. toctree::
+   :maxdepth: 4
+
+   adam_core.orbit_determination.config
+   adam_core.orbit_determination.evaluate
+   adam_core.orbit_determination.fitted_orbits
+   adam_core.orbit_determination.iod
+   adam_core.orbit_determination.observation_pipeline
+   adam_core.orbit_determination.od_orchestration
+   adam_core.orbit_determination.profiles
+""",
+        encoding="utf-8",
+    )
+
 
 def setup(app: object) -> None:
     app.connect("builder-inited", _generate_api_reference)
