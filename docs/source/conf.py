@@ -161,9 +161,9 @@ def _generate_api_reference(_: object) -> None:
         r"""adam\_core.orbit\_determination package
 =======================================
 
-The package exports the four explicit-config workflows and immutable
-configuration/profile values. Their authoritative API documentation is in the
-submodules below.
+The package exports immutable configuration/profile values and OD result
+schemas. Focused one-group workflows live in the expert ``algorithms``
+namespace; they are not the canonical high-level batch workflows.
 
 Subpackages
 -----------
@@ -182,9 +182,7 @@ Submodules
    adam_core.orbit_determination.config
    adam_core.orbit_determination.evaluate
    adam_core.orbit_determination.fitted_orbits
-   adam_core.orbit_determination.iod
    adam_core.orbit_determination.observation_pipeline
-   adam_core.orbit_determination.od_orchestration
    adam_core.orbit_determination.profiles
 """,
         encoding="utf-8",
