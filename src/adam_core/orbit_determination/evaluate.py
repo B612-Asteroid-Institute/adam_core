@@ -16,7 +16,6 @@ from ..observations.ades import ADESObservations
 from ..observers.observers import Observers
 from ..orbits.orbits import Orbits
 from ..propagator.propagator import Propagator
-from .config import OdConfig
 from .fitted_orbits import FittedOrbitMembers, FittedOrbits
 
 
@@ -289,38 +288,3 @@ def _evaluate_orbits_prepared(
 
     assert len(fitted_orbit) == num_orbits
     return fitted_orbit, fitted_orbit_members
-
-
-def evaluate_orbits(
-    orbits: Union[Orbits, FittedOrbits],
-    observations: OrbitDeterminationObservations,
-    propagator: Propagator,
-    *,
-    config: "OdConfig",
-) -> Tuple["FittedOrbits", "FittedOrbitMembers"]:
-    """Evaluate one orbit group with an explicit complete configuration.
-
-    The observation pipeline executes once in Rust before prediction and
-    residual evaluation.  Original and used astrometry are retained on the
-    returned members. Explicit membership for batch evaluation is introduced
-    by the separate batch-workflow task.
-    """
-    from ._pipeline import (
-        apply_pipeline_once,
-        attach_configuration_provenance,
-        attach_original_and_used,
-    )
-
-    if not isinstance(config, OdConfig):
-        raise TypeError("config must be an OdConfig")
-    evaluation = config.for_evaluation()
-    used, _pipeline_output = apply_pipeline_once(observations, config)
-    fitted, members = _evaluate_orbits_prepared(
-        orbits,
-        used,
-        propagator,
-        parameters=evaluation.covariance_dimension,
-        ignore=None,
-    )
-    fitted = attach_configuration_provenance(fitted, config)
-    return fitted, attach_original_and_used(members, observations, used)

@@ -387,13 +387,15 @@ where
 // ---------------------------------------------------------------------------
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum OdMethod {
+#[allow(dead_code)]
+pub(crate) enum OdMethod {
     Central,
     Finite,
 }
 
 #[derive(Debug, Clone, Copy)]
-pub struct OdConfig {
+#[allow(dead_code)]
+pub(crate) struct OdConfig {
     pub rchi2_threshold: f64,
     pub min_obs: usize,
     pub min_arc_length: f64,
@@ -405,6 +407,7 @@ pub struct OdConfig {
 
 /// Full `od()` product for one orbit. When `found` is false the public
 /// veneer emits empty `FittedOrbits`/`FittedOrbitMembers` tables.
+#[allow(dead_code)]
 impl OdConfig {
     pub fn validate(&self) -> Result<(), String> {
         if !self.rchi2_threshold.is_finite() || self.rchi2_threshold <= 0.0 {
@@ -434,7 +437,8 @@ impl OdConfig {
 }
 
 #[derive(Debug, Clone)]
-pub struct OdOutput {
+#[allow(dead_code)]
+pub(crate) struct OdOutput {
     pub found: bool,
     pub state: [f64; 6],
     pub covariance: [f64; 36],
@@ -453,6 +457,7 @@ pub struct OdOutput {
     pub outlier: Vec<bool>,
 }
 
+#[allow(dead_code)]
 impl OdOutput {
     fn not_found(n: usize, iterations: usize) -> Self {
         Self {
@@ -474,13 +479,17 @@ impl OdOutput {
     }
 }
 
+#[allow(dead_code)]
 const OD_DELTA_INCREASE_FACTOR: f64 = 5.0;
+#[allow(dead_code)]
 const OD_DELTA_DECREASE_FACTOR: f64 = 100.0;
 
+#[allow(dead_code)]
 fn prefit_step_is_acceptable(improved: bool, arc_length: f64, min_arc_length: f64) -> bool {
     improved && arc_length >= min_arc_length
 }
 
+#[allow(dead_code)]
 fn retained_arc_allows_retry(times: &[f64], included: &[bool], min_arc_length: f64) -> bool {
     let (arc_length, _, _) = masked_arc_length(times, included);
     arc_length >= min_arc_length
@@ -516,7 +525,8 @@ fn prefit_outlier_is_acceptable(
 /// the weight/RHS rows are the first `num_obs` unmasked rows while the
 /// partials use mask-filtered rows.
 #[allow(clippy::too_many_arguments)]
-pub fn od_fit_barycentric<P, T>(
+#[allow(dead_code)]
+pub(crate) fn od_fit_barycentric<P, T>(
     propagator: &P,
     orbit: &OrbitBatch,
     observed: &CoordinateBatch,
@@ -539,6 +549,7 @@ where
     od_fit_with(&predictor, orbit, observed, observers, config)
 }
 
+#[allow(dead_code)]
 fn od_fit_with(
     predictor: &dyn SphericalPredictor,
     orbit: &OrbitBatch,
@@ -4255,6 +4266,7 @@ pub(super) fn masked_arc_length(values: &[f64], mask: &[bool]) -> (f64, f64, f64
 /// Non-finite input yields NaN, mirroring `np.linalg.cond` failing over to
 /// the legacy NaN branch.
 #[allow(clippy::needless_range_loop)]
+#[allow(dead_code)]
 fn symmetric_condition_number(a: &[[f64; 6]; 6]) -> f64 {
     if a.iter().flatten().any(|value| !value.is_finite()) {
         return f64::NAN;
@@ -4301,6 +4313,7 @@ fn symmetric_condition_number(a: &[[f64; 6]; 6]) -> f64 {
 
 /// `np.linalg.cond` of an `(6, 1)` matrix: the single singular value is the
 /// vector norm, so the ratio is 1 unless the vector is zero (NaN).
+#[allow(dead_code)]
 fn vector_condition_number(b: &[f64; 6]) -> f64 {
     if b.iter().any(|value| !value.is_finite()) {
         return f64::NAN;

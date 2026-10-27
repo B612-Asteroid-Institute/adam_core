@@ -2,8 +2,8 @@
 //! outlier policy, worst-observation selection, IOD observation selection,
 //! and linkage/member sorting.
 
-use adam_core_rs_coords::{Epoch, TimeArray, TimeScale};
-use numpy::{IntoPyArray, PyArray1, PyArray2, PyReadonlyArray1, PyReadonlyArray2};
+use adam_core_rs_coords::{ades_angular_covariance_flat, Epoch, TimeArray, TimeScale};
+use numpy::{IntoPyArray, PyArray1, PyArray2, PyArray3, PyReadonlyArray1, PyReadonlyArray2};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
@@ -740,6 +740,28 @@ where
     Ok(trial_samples)
 }
 
+/// `(N, 6, 6)` spherical covariance from ADES angular uncertainties.
+#[pyfunction]
+fn ades_angular_covariance_numpy<'py>(
+    py: Python<'py>,
+    dec_deg: PyReadonlyArray1<'py, f64>,
+    rms_ra_cos_dec: PyReadonlyArray1<'py, f64>,
+    rms_dec: PyReadonlyArray1<'py, f64>,
+    rms_corr: PyReadonlyArray1<'py, f64>,
+) -> PyResult<Bound<'py, PyArray3<f64>>> {
+    let dec = scalars(&dec_deg, "dec")?;
+    let flat = ades_angular_covariance_flat(
+        &dec,
+        &scalars(&rms_ra_cos_dec, "rmsRACosDec")?,
+        &scalars(&rms_dec, "rmsDec")?,
+        &scalars(&rms_corr, "rmsCorr")?,
+    )
+    .map_err(|error| PyValueError::new_err(error.to_string()))?;
+    ndarray::Array3::from_shape_vec((dec.len(), 6, 6), flat)
+        .map(|array| array.into_pyarray(py))
+        .map_err(|error| PyValueError::new_err(error.to_string()))
+}
+
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(calculate_c3_numpy, m)?)?;
     m.add_function(wrap_pyfunction!(vinf_numpy, m)?)?;
@@ -760,5 +782,6 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     )?)?;
     m.add_function(wrap_pyfunction!(default_collision_condition_values, m)?)?;
     m.add_function(wrap_pyfunction!(sqrt_values_numpy, m)?)?;
+    m.add_function(wrap_pyfunction!(ades_angular_covariance_numpy, m)?)?;
     Ok(())
 }

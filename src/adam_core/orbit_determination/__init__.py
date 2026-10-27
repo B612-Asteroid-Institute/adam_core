@@ -1,20 +1,32 @@
-"""Rust-owned orbit determination public API for adam-core 0.7.
+"""Rust-owned orbit-determination configuration foundation for Core 0.7.
 
-The public workflow is intentionally small: callers provide one complete
-:class:`OdConfig` to :func:`run_iod`, :func:`refine`, :func:`run_od`, or
-:func:`evaluate_orbits`. Lower-level numerical kernels live in the
-``algorithms`` namespace and are not configuration/profile alternatives.
+The canonical batch ``run_iod``, ``run_od``, ``refine``, and
+``evaluate_orbits`` surface is intentionally not exported here until
+``personal-eack9`` implements Associations/FittedOrbitMembers grouping and
+typed per-group failures. Focused one-group workflows used for numerical
+qualification live under :mod:`adam_core.orbit_determination.algorithms` with
+an explicit ``_one_group`` suffix.
 """
 
 from . import algorithms as algorithms
 from .config import (
+    Cmc2003Refinement,
+    CorrectionConfig,
     EvaluationConfig,
     IodRunConfig,
+    IodSearchConfig,
     OdConfig,
+    OdConfigurationError,
+    OdResourceValidationError,
+    RangingConfig,
     RefinementRunConfig,
     ResourceBindings,
+    SpanSearchConfig,
+    TwoBodyFitConfig,
+    WhitenedFitConfig,
+    WorstResidualRefinement,
 )
-from .evaluate import OrbitDeterminationObservations, evaluate_orbits
+from .evaluate import OrbitDeterminationObservations
 from .fitted_orbits import (
     FittedOrbitMembers,
     FittedOrbits,
@@ -22,7 +34,6 @@ from .fitted_orbits import (
     OdProvenance,
     drop_duplicate_orbits,
 )
-from .iod import run_iod
 from .observation_pipeline import (
     Efcc18CatalogBiasCorrection,
     FillMissingAstrometricUncertainty,
@@ -32,34 +43,39 @@ from .observation_pipeline import (
     ResidualCovarianceOperation,
     StationBandResidualCovarianceAdjustment,
 )
-from .od_orchestration import refine, run_od
 from .profiles import ASTEROID_INSTITUTE_OD_V1, CORE_OD_V1, OdProfile
 
 __all__ = [
     "ASTEROID_INSTITUTE_OD_V1",
     "CORE_OD_V1",
+    "Cmc2003Refinement",
+    "CorrectionConfig",
     "Efcc18CatalogBiasCorrection",
     "EvaluationConfig",
     "FillMissingAstrometricUncertainty",
     "FittedOrbitMembers",
     "FittedOrbits",
     "IodRunConfig",
+    "IodSearchConfig",
     "NightlyBatchDeweighting",
     "ObservationAstrometry",
     "ObservationPipeline",
     "ObservationTransform",
     "OdConfig",
+    "OdConfigurationError",
+    "OdResourceValidationError",
     "OdProfile",
     "OdProvenance",
     "OrbitDeterminationObservations",
+    "RangingConfig",
     "RefinementRunConfig",
     "ResidualCovarianceOperation",
     "ResourceBindings",
+    "SpanSearchConfig",
     "StationBandResidualCovarianceAdjustment",
+    "TwoBodyFitConfig",
+    "WhitenedFitConfig",
+    "WorstResidualRefinement",
     "algorithms",
     "drop_duplicate_orbits",
-    "evaluate_orbits",
-    "refine",
-    "run_iod",
-    "run_od",
 ]

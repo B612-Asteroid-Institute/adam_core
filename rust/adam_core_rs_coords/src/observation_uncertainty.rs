@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 //! Observation uncertainty models for orbit determination.
 //!
 //! Rust-canonical port of `adam_core.orbit_determination.observation_uncertainty`:
@@ -53,7 +55,7 @@ const COV_LAT_LON: usize = 13;
 /// the observation epochs as UTC MJD (night batching) and TDB JD (EFCC18
 /// proper-motion term).
 #[derive(Debug, Clone, PartialEq)]
-pub struct OrbitDeterminationAstrometry {
+pub(crate) struct OrbitDeterminationAstrometry {
     pub lon: Vec<f64>,
     pub lat: Vec<f64>,
     pub covariance: Vec<f64>,
@@ -105,13 +107,13 @@ impl OrbitDeterminationAstrometry {
 /// Models that transform observation uncertainties (or, for EFCC18,
 /// positions) before orbit fitting. `apply` edits in place and returns
 /// whether any value changed.
-pub trait ObservationUncertaintyModel: Send + Sync {
+pub(crate) trait ObservationUncertaintyModel: Send + Sync {
     fn apply(&self, observations: &mut OrbitDeterminationAstrometry) -> Result<bool, String>;
 }
 
 /// No-op model: observations are returned unchanged (the naive baseline).
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-pub struct IdentityModel;
+pub(crate) struct IdentityModel;
 
 impl ObservationUncertaintyModel for IdentityModel {
     fn apply(&self, _observations: &mut OrbitDeterminationAstrometry) -> Result<bool, String> {
@@ -122,7 +124,7 @@ impl ObservationUncertaintyModel for IdentityModel {
 /// Float-valued bias-table columns cached per row for fast lookup. Null
 /// entries are carried as NaN, matching the Python interpreters.
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct BiasTableRow {
+pub(crate) struct BiasTableRow {
     pub bias_ra_arcsec: f64,
     pub bias_dec_arcsec: f64,
     pub resid_var_ra: f64,
@@ -136,7 +138,7 @@ pub struct BiasTableRow {
 /// falls back to the station rollup row (`band` null) when no band-specific
 /// row exists.
 #[derive(Debug, Clone, PartialEq)]
-pub struct BiasTable {
+pub(crate) struct BiasTable {
     rows: HashMap<(String, Option<String>), BiasTableRow>,
 }
 
@@ -245,7 +247,7 @@ fn same_value(a: f64, b: f64) -> bool {
 /// How [`EmpiricalCovarianceModel`] combines the measured residual covariance
 /// with the reported one.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum EmpiricalCovarianceMode {
+pub(crate) enum EmpiricalCovarianceMode {
     Add,
     Replace,
 }
@@ -282,7 +284,7 @@ impl EmpiricalCovarianceMode {
 /// Rows whose station lacks finite residual covariance values, or with
 /// degenerate cos(dec), pass through unchanged.
 #[derive(Debug, Clone, PartialEq)]
-pub struct EmpiricalCovarianceModel {
+pub(crate) struct EmpiricalCovarianceModel {
     pub table: BiasTable,
     pub mode: EmpiricalCovarianceMode,
     pub min_resid_cov_n: f64,
@@ -336,7 +338,7 @@ impl ObservationUncertaintyModel for EmpiricalCovarianceModel {
 /// `max(chi2_per_obs, 1)`. Frame-independent; stations with `chi2_per_obs <= 1`
 /// or non-finite pass through unchanged.
 #[derive(Debug, Clone, PartialEq)]
-pub struct PerformanceWeightedModel {
+pub(crate) struct PerformanceWeightedModel {
     pub table: BiasTable,
     pub min_resid_cov_n: f64,
 }
@@ -369,7 +371,7 @@ impl ObservationUncertaintyModel for PerformanceWeightedModel {
 /// applies. Axes with a non-finite baseline variance or bias pass through;
 /// the cross-term is left unchanged.
 #[derive(Debug, Clone, PartialEq)]
-pub struct SigmaFloorModel {
+pub(crate) struct SigmaFloorModel {
     pub table: BiasTable,
     pub min_resid_cov_n: f64,
 }
@@ -410,7 +412,7 @@ impl ObservationUncertaintyModel for SigmaFloorModel {
 /// covariance block scaled by `N / cap`, capping the effective statistical
 /// weight of the batch at ~`cap` independent observations.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct NightBatchDeweightingModel {
+pub(crate) struct NightBatchDeweightingModel {
     pub cap: usize,
 }
 
@@ -479,7 +481,7 @@ impl ObservationUncertaintyModel for NightBatchDeweightingModel {
 /// the position is non-finite or at a pole (where the RA correction is
 /// undefined). See [`crate::efcc18`].
 #[derive(Debug, Clone)]
-pub struct Efcc18DebiasModel {
+pub(crate) struct Efcc18DebiasModel {
     pub bias_table: Arc<Efcc18BiasTable>,
     pub exclude_astcats: Vec<String>,
 }
@@ -519,7 +521,7 @@ impl ObservationUncertaintyModel for Efcc18DebiasModel {
 /// Apply a sequence of models in order (left to right). Because the shipped
 /// models act multiplicatively or additively on the covariance block, order
 /// can matter.
-pub struct CompositeModel {
+pub(crate) struct CompositeModel {
     pub models: Vec<Box<dyn ObservationUncertaintyModel>>,
 }
 

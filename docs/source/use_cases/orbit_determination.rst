@@ -1,144 +1,144 @@
-.. meta::
-   :description: Explicit Rust-owned orbit-determination configuration, profiles, resources, and observation transforms in adam_core.
+Orbit-determination configuration foundation
+============================================
 
-Orbit determination
-===================
+.. important::
 
-Core 0.7 owns observation preparation, IOD, differential correction,
-rejection, covariance, configuration, and provenance.  A propagation provider
-supplies propagation only.  Every high-level call requires an explicit complete
-:class:`~adam_core.orbit_determination.OdConfig`; no scientific default is
-selected when ``config`` is omitted.
+   Core 0.7's canonical batch ``run_iod``, ``run_od``, ``refine``, and
+   ``evaluate_orbits`` API is **not implemented by this foundation**. Those
+   names are deliberately absent from ``adam_core.orbit_determination`` until
+   the Associations/FittedOrbitMembers grouping and typed-failure work lands.
+   The intended batch result is ``FittedOrbits``, ``FittedOrbitMembers``, and
+   ``OrbitDeterminationFailures``; no one-group three-value signature is being
+   frozen as the public API.
 
-The four canonical workflow names are ``run_iod``, ``run_od``, ``refine``, and
-``evaluate_orbits``.  A one-object call is a one-group use of the same staged
-contract. ``run_od`` prepares each group once and is exactly IOD followed by
-refinement on those already-prepared observations.
+What this foundation implements
+-------------------------------
 
-Choosing a complete configuration
----------------------------------
+Core Rust owns complete OD configuration, profile expansion, ordered
+observation transforms, resource validation/parsing, fitting and rejection
+settings, and path-free canonical configuration provenance. Python declares
+immutable values, binds explicit local paths, marshals tables, and assembles
+result tables. A propagation provider supplies only its negotiated native
+capsule.
 
-Named profiles are immutable, path-free Rust definitions mirrored from
-``adam_core_rs_coords::od::profiles`` into
-``adam_core.orbit_determination.profiles``.  Profiles never select a
-propagator, discover packages, download data, or fall back to another profile.
-Callers bind concrete local files to semantic resource slots explicitly::
+The complete configuration is ``OdConfig``. It contains:
 
-   from adam_core.orbit_determination import (
-       CORE_OD_V1,
-       ResourceBindings,
-       run_od,
-   )
+* ``IodRunConfig``: search, selection, velocity, acceptance, correction,
+  ranging, candidate-fit, solver, Jacobian, covariance, and two-body settings;
+* ``RefinementRunConfig``: either complete CMC2003 or worst-residual settings;
+* ``EvaluationConfig``;
+* one ordered ``ObservationPipeline``.
 
-   resources = ResourceBindings({
-       "efcc18_catalog_bias_table": bias_dat_path,
-   })
-   config = CORE_OD_V1.bind(resources)
-   fitted_orbits, fitted_members = run_od(
-       observations,
-       propagator,
-       config=config,
-   )
+Python exposes typed immutable declarations such as ``IodSearchConfig``,
+``SpanSearchConfig``, ``CorrectionConfig``, ``RangingConfig``,
+``WhitenedFitConfig``, ``TwoBodyFitConfig``, ``Cmc2003Refinement``, and
+``WorstResidualRefinement``. Their canonical JSON is parsed, validated, and
+re-emitted by Rust; Python does not maintain a second validation/default path.
+There is no implicit scientific ``Default`` at the high-level boundary.
 
-All required resources are read and validated before propagation or fitting.
-Failures are aggregated and identify each semantic slot. Validation checks the
-profile's product/version, schema/version, exact byte length, SHA-256, row
-count, and structural schema. Absolute paths are deployment details: they are
-never included in scientific identity or provenance.
+Observation pipelines
+---------------------
 
-``CORE_OD_V1``
-~~~~~~~~~~~~~~
+The closed transform set is:
 
-``CORE_OD_V1`` is the portable Core reference configuration. Its ordered
-observation pipeline is:
+* ``FillMissingAstrometricUncertainty``;
+* ``Efcc18CatalogBiasCorrection``;
+* ``StationBandResidualCovarianceAdjustment`` with explicit Add/Replace and a
+  minimum residual count;
+* ``NightlyBatchDeweighting``.
 
-#. :class:`~adam_core.orbit_determination.Efcc18CatalogBiasCorrection`, bound
-   to ``efcc18_catalog_bias_table``;
-#. :class:`~adam_core.orbit_determination.NightlyBatchDeweighting` with
-   ``effective_observation_cap=4``.
+Declaration order and repeated transforms are authoritative. Python callbacks,
+dynamic registration, model dictionaries, and external science plugin ABIs are
+not supported. Deliberate no-transform behavior is expressed only by
+``ObservationPipeline.as_supplied()`` and is recorded as ``transforms=[]``.
 
-It uses the Core-v1 bounded corrected-IOD policy, Core-v1 CMC2003 refinement,
-and six-dimensional covariance evaluation. Selection is always explicit;
-qualification work may recommend this profile but Core does not auto-select it.
-
-``ASTEROID_INSTITUTE_OD_V1``
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-``ASTEROID_INSTITUTE_OD_V1`` is a separately selected reference profile. Its
-ordered pipeline is:
-
-#. :class:`~adam_core.orbit_determination.FillMissingAstrometricUncertainty`,
-   bound to ``station_catalog_uncertainty_table``;
-#. :class:`~adam_core.orbit_determination.Efcc18CatalogBiasCorrection`, bound
-   to ``efcc18_catalog_bias_table``;
-#. :class:`~adam_core.orbit_determination.StationBandResidualCovarianceAdjustment`
-   in ``Add`` mode with ``minimum_residual_count=30``, bound to
-   ``station_band_residual_covariance_table``;
-#. :class:`~adam_core.orbit_determination.NightlyBatchDeweighting` with
-   ``effective_observation_cap=4``.
-
-The profile uses the same complete numerical stage policies as
-``CORE_OD_V1``. Its extra resources are supplied separately under their
-semantic slots. Core's public documentation intentionally does not prescribe a
-private distribution, repository, credential, or acquisition mechanism.
-Explicit Institute selection never falls back to ``CORE_OD_V1``.
-
-Manual configuration
---------------------
-
-Manual callers construct every stage explicitly.  Deliberate no-transform
-behavior is spelled :meth:`ObservationPipeline.as_supplied`; its provenance is
-``transforms=[]``::
-
-   from adam_core.orbit_determination import (
-       EvaluationConfig,
-       IodRunConfig,
-       OdConfig,
-       ObservationPipeline,
-       RefinementRunConfig,
-       ResourceBindings,
-   )
-
-   config = OdConfig.explicit(
-       observation_pipeline=ObservationPipeline.as_supplied(),
-       iod=IodRunConfig.core_v1(),
-       refinement=RefinementRunConfig.core_v1(),
-       evaluation=EvaluationConfig.six_dimensional(),
-       resources=ResourceBindings({}),
-   )
-
-For a transformed manual pipeline, use ``ObservationPipeline.ordered`` with
-Core-defined immutable transform values, then bind every referenced resource
-through ``ResourceBindings``. Declaration order and repeated transforms are
-scientifically meaningful and are never sorted, deduplicated, or combined.
-Python transform objects are declarative only; Rust validates, parses, and
-executes them once per group.
-
-Observation provenance
+Profiles and resources
 ----------------------
 
-``FittedOrbitMembers`` retains both the caller's original astrometry and the
-astrometry consumed by the numerical kernels. ``FittedOrbits.provenance``
-contains canonical expanded configuration JSON: profile identity and
-fingerprint, ordered transforms and their parameters, expected and actual
-resource identities, IOD/refinement/evaluation settings, and no absolute
-paths.
+``CORE_OD_V1`` and ``ASTEROID_INSTITUTE_OD_V1`` are immutable path-free Rust
+profile definitions. A caller binds every required semantic slot explicitly::
 
-Nightly deweighting groups by observatory and ``floor(UTC MJD)``. For ``N``
-rows and cap ``C``, it multiplies the complete RA/Dec covariance block by
-``max(N/C, 1)``; correlation is preserved. Metadata/resource covariance
-adjustments belong in the observation pipeline. Residual-adaptive weighting
-and rejection belong in refinement.
+   from adam_core.orbit_determination import (
+       ASTEROID_INSTITUTE_OD_V1,
+       ResourceBindings,
+   )
 
-Migration from Core 0.6
------------------------
+   config = ASTEROID_INSTITUTE_OD_V1.bind(
+       ResourceBindings(
+           {
+               "efcc18_catalog_bias_table": efcc18_path,
+               "station_catalog_uncertainty_table": station_sigma_path,
+               "station_band_residual_covariance_table": station_covariance_path,
+           }
+       )
+   )
 
-Core 0.7 removes the executable Python ``models=`` and
-``observatory_bias_model=`` paths, ``models="default"``,
-``ObservationUncertaintyModel``, ``CompositeModel``,
-``apply_observation_models``, ``initial_orbit_determination``, ``iod``,
-``differential_correction``, ``NativeOrbitFitter``, ``OrbitFitter``, and public
-linkage helpers. There are no aliases or silent translations. Useful expert
-numerical primitives are organized under
-``adam_core.orbit_determination.algorithms``; they are not alternate profile or
-high-level workflow APIs.
+The Institute profile applies those resources in this exact order: fill
+missing uncertainty, EFCC18 correction, station/band residual covariance Add
+with minimum count 30, then nightly deweighting with cap 4. ``CORE_OD_V1``
+applies EFCC18 correction and nightly deweighting only. It intentionally has no
+missing-uncertainty fallback while public-profile qualification remains open;
+inputs without finite positive astrometric variances fail rather than receiving
+an invented default.
+
+Validation checks semantic slot, product/version, schema/version, SHA-256, byte
+size, row count/structure, and table schema. Missing, corrupt, swapped, parse,
+and structural failures are typed and aggregated by slot before science work.
+Unused bindings fail. Absolute paths are never included in profile or bound
+configuration fingerprints.
+
+The profiles preserve the accepted d21 effective numerical constants:
+``lt_tol=1e-12``, ephemeris maximum iterations 1000, and light-time maximum
+iterations 10. Changing settings, transform order, resource bytes, or schemas
+requires a new version/fingerprint decision.
+
+Focused qualification algorithms
+--------------------------------
+
+Until the batch layer exists, expert/internal one-group qualification functions
+are available only under ``adam_core.orbit_determination.algorithms``:
+
+* ``run_iod_one_group``;
+* ``run_od_one_group``;
+* ``refine_one_group``;
+* ``evaluate_orbits_one_group``.
+
+The suffix is intentional. These functions are not compatibility aliases or
+the final batch API. They require ``config=`` and perform invocation-fatal
+identity/config/provider validation before pipeline execution. Empty groups are
+no-op empty results. Non-empty observation and orbit IDs must be unique and
+non-null. ``run_od_one_group`` prepares observations once and is bitwise the
+composition of focused IOD followed by focused refinement on those same rows.
+
+Standalone Rust exposes the corresponding predictor-level building blocks
+under ``adam_core_rs_coords::od::algorithms``:
+``prepare_observations``, ``run_iod_with_predictor``,
+``refine_with_predictor``, and ``run_od_with_predictors``. They consume the
+closed ``OdConfig`` path; the old executable ``dyn ObservationUncertaintyModel``
+route is not public.
+
+Provenance
+----------
+
+Configured focused results fail closed on unknown or dirty native build
+identity and populate, where applicable:
+
+* adam-core version and exact source commit;
+* ordered input/used-astrometry fingerprint and focused route;
+* native IOD/refinement provider identity and metadata;
+* IOD and refinement diagnostics;
+* complete canonical Rust configuration and its SHA-256;
+* ambiguity, rejection count, and rejected fraction;
+* original and used astrometry on member rows.
+
+Resource paths are excluded. Lower-level numerical kernels that do not run a
+complete configured workflow may legitimately leave runtime provenance fields
+null.
+
+Failure boundary
+----------------
+
+Malformed configuration, resources, IDs/member mappings, unsupported provider
+capabilities, and malformed provider responses are invocation-fatal and produce
+no partial output. The forthcoming batch layer will classify only safely
+isolated scientific no-solution/refinement failures per group.

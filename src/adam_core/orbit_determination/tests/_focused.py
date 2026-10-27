@@ -1,0 +1,126 @@
+"""Test-only builders for complete explicit focused-workflow configuration."""
+
+from dataclasses import fields, replace
+from typing import Any
+
+from ..algorithms.iod import run_iod_one_group
+from ..algorithms.workflows import run_od_one_group
+from ..config import (
+    EvaluationConfig,
+    IodRunConfig,
+    OdConfig,
+    RefinementRunConfig,
+    ResourceBindings,
+    WorstResidualRefinement,
+)
+from ..observation_pipeline import ObservationPipeline
+
+
+def explicit_config(**settings: Any) -> OdConfig:
+    """Build a complete config while varying fields under numerical test."""
+
+    iod = IodRunConfig.core_v1()
+    search = iod.search_correction_ranging
+    correction_settings = dict(settings.pop("correction_settings", {}) or {})
+    ranging_settings = dict(settings.pop("ranging_settings", {}) or {})
+    span_settings = dict(settings.pop("span_settings", {}) or {})
+    fit_settings = dict(settings.pop("fit_settings", {}) or {})
+    refinement_method = settings.pop("refinement_method", "cmc2003")
+
+    # Historical test spellings are translated only inside the test suite.
+    ranging_settings = {
+        (key.removeprefix("ranging_")): value for key, value in ranging_settings.items()
+    }
+    span_aliases = {
+        "span_max_triplets": "max_triplets",
+        "span_max_days": "max_span_days",
+        "span_min_days": "min_span_days",
+        "span_target_days": "target_span_days",
+    }
+    span_settings = {
+        span_aliases.get(key, key.removeprefix("span_")): value
+        for key, value in span_settings.items()
+    }
+    search_names = {item.name for item in fields(search)}
+    direct = {key: settings.pop(key) for key in list(settings) if key in search_names}
+    if settings:
+        raise TypeError(f"unknown test IOD settings: {sorted(settings)}")
+    if correction_settings:
+        search = replace(
+            search,
+            correction=replace(search.correction, **correction_settings),
+        )
+    if ranging_settings:
+        search = replace(search, ranging=replace(search.ranging, **ranging_settings))
+    if span_settings:
+        search = replace(search, spans=replace(search.spans, **span_settings))
+    if direct:
+        search = replace(search, **direct)
+    two_body_aliases = {
+        "prop_tol": "propagation_tol",
+        "prop_max_iter": "propagation_max_iter",
+        "eph_tol": "ephemeris_tol",
+        "eph_max_iter": "ephemeris_max_iter",
+        "lt_tol": "lt_tol",
+        "max_lt_iter": "max_lt_iter",
+    }
+    two_body_values = {
+        two_body_aliases.pop(key): fit_settings.pop(key)
+        for key in list(fit_settings)
+        if key in two_body_aliases
+    }
+    fit = iod.candidate_correction_fit
+    if two_body_values:
+        fit = replace(fit, two_body=replace(fit.two_body, **two_body_values))
+    if fit_settings:
+        fit = replace(fit, **fit_settings)
+    iod = IodRunConfig(search, fit)
+    refinement = RefinementRunConfig.core_v1()
+    if refinement_method == "worst_residual":
+        refinement = RefinementRunConfig(
+            WorstResidualRefinement(
+                method="worst_residual",
+                rchi2_threshold=10.0,
+                min_obs=6,
+                min_arc_length=1.0,
+                contamination_percentage=20.0,
+                fit=refinement.refinement.fit,
+            )
+        )
+    elif refinement_method != "cmc2003":
+        raise ValueError(f"unknown test refinement method {refinement_method!r}")
+    return OdConfig.explicit(
+        observation_pipeline=ObservationPipeline.as_supplied(),
+        iod=iod,
+        refinement=refinement,
+        evaluation=EvaluationConfig.six_dimensional(),
+        resources=ResourceBindings({}),
+    )
+
+
+def _instance(propagator):
+    return propagator() if isinstance(propagator, type) else propagator
+
+
+def run_iod_qualified(observations, propagator, **settings):
+    return run_iod_one_group(
+        observations,
+        _instance(propagator),
+        config=explicit_config(**settings),
+    )
+
+
+def run_prefit_iod_qualified(observations, propagator, **settings):
+    settings.setdefault("acceptance", "prefit")
+    settings.setdefault("velocity_method", "gibbs")
+    orbit, members, _ = run_iod_qualified(observations, propagator, **settings)
+    return orbit, members
+
+
+def run_od_qualified(observations, propagator, *, object_id=None, **settings):
+    return run_od_one_group(
+        observations,
+        _instance(propagator),
+        config=explicit_config(**settings),
+        object_id=object_id,
+    )

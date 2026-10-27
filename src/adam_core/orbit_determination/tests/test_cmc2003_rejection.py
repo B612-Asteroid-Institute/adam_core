@@ -26,7 +26,6 @@ from ..algorithms.rejection import (
     _apparitions,
     _cmc2003_select,
     _expected_residual_chi2,
-    cmc2003_fit,
     cmc2003_fit_detailed,
 )
 from ..fitted_orbits import FittedOrbits
@@ -36,6 +35,11 @@ from .test_differential_correction import (
     make_initial_guess,
     make_synthetic_observations,
 )
+
+
+def _cmc_tables(*args, **kwargs):
+    result = cmc2003_fit_detailed(*args, **kwargs)
+    return result.fitted_orbit, result.fitted_orbit_members
 
 
 def state_of(fitted: FittedOrbits) -> np.ndarray:
@@ -245,7 +249,7 @@ class TestTwoBodyIntegration:
         injected = {3: 8.0, 10: 10.0, 17: 15.0, 20: -12.0, 22: 9.0}
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            fitted, members = cmc2003_fit(
+            fitted, members = _cmc_tables(
                 make_initial_guess(), with_outliers(injected), TwoBodyPropagator()
             )
         rejected = [i for i, flag in enumerate(members.outlier.to_pylist()) if flag]
@@ -255,7 +259,7 @@ class TestTwoBodyIntegration:
     def test_composes_with_huber_loss(self) -> None:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            fitted, members = cmc2003_fit(
+            fitted, members = _cmc_tables(
                 make_initial_guess(),
                 with_outliers({10: 10.0}),
                 TwoBodyPropagator(),
@@ -266,7 +270,7 @@ class TestTwoBodyIntegration:
 
     def test_ignore_kwarg_is_rejected(self) -> None:
         with pytest.raises(ValueError, match="ignore"):
-            cmc2003_fit(
+            _cmc_tables(
                 make_initial_guess(),
                 make_synthetic_observations(n_obs=6),
                 TwoBodyPropagator(),
@@ -275,7 +279,7 @@ class TestTwoBodyIntegration:
 
     def test_empty_observations_raise(self) -> None:
         with pytest.raises(ValueError, match="at least one"):
-            cmc2003_fit(
+            _cmc_tables(
                 make_initial_guess(),
                 make_synthetic_observations(n_obs=6)[:0],
                 TwoBodyPropagator(),

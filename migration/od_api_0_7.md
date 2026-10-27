@@ -1,36 +1,47 @@
-# Orbit-determination API migration for Core 0.7
+# OD API migration for Core 0.7
 
-Core 0.7 replaces the executable Python observation-model surface with one
-complete, explicit Rust-owned configuration.
+## Foundation status
 
-## Required changes
+This change does **not** publish the final batch `run_iod`, `run_od`, `refine`,
+or `evaluate_orbits` functions. Those names are intentionally absent until the
+`personal-eack9` Associations/FittedOrbitMembers grouping and typed-failure
+contract is implemented. The future batch return is expected to be
+`FittedOrbits`, `FittedOrbitMembers`, and `OrbitDeterminationFailures`; the
+focused one-group IOD report is not a third top-level batch return.
 
-- Pass an `OdConfig` to each high-level `run_iod`, `run_od`, `refine`, or
-  `evaluate_orbits` call. No scientific configuration is selected when the
-  argument is omitted.
-- Bind a named profile explicitly:
+## Configuration migration
 
-  ```python
-  from adam_core.orbit_determination import ASTEROID_INSTITUTE_OD_V1, ResourceBindings
+Replace `models=`, `models="default"`, fitter objects, callback models, and
+free-form settings dictionaries with one explicit `OdConfig`. Use a bound
+native profile or construct complete typed `IodRunConfig`,
+`RefinementRunConfig`, and `EvaluationConfig` declarations plus an ordered
+`ObservationPipeline`. Rust is the sole parser, validator, and canonical
+provenance source.
 
-  config = ASTEROID_INSTITUTE_OD_V1.bind(ResourceBindings({
-      "station_catalog_uncertainty_table": sigma_path,
-      "efcc18_catalog_bias_table": efcc18_path,
-      "station_band_residual_covariance_table": residual_path,
-  }))
-  ```
+The old `ObservationUncertaintyModel`, `CompositeModel`,
+`apply_observation_models`, `initial_orbit_determination`, `iod`,
+`differential_correction`, `NativeOrbitFitter`, `OrbitFitter`, and Python model
+provenance modules have no aliases. Native `run_od_ipc(models=...)` and the open
+Rust transform trait-object route are also removed.
 
-- For astrometry that is already prepared, construct a complete manual config
-  with `ObservationPipeline.as_supplied()`. Its provenance records
-  `transforms=[]`.
-- For a manual transformed pipeline, use `ObservationPipeline.ordered(...)` and
-  bind every referenced semantic resource through `ResourceBindings`.
+Transform names are:
 
-## Removed without aliases
+- `FillMissingAstrometricUncertainty`
+- `Efcc18CatalogBiasCorrection(exclude_astcats=...)` (the exclusion list is
+  required explicitly)
+- `StationBandResidualCovarianceAdjustment(operation=..., minimum_residual_count=...)`
+- `NightlyBatchDeweighting(effective_observation_cap=...)`
 
-`models=`, `models="default"`, `observatory_bias_model=`,
-`ObservationUncertaintyModel`, `CompositeModel`, `apply_observation_models`,
-`initial_orbit_determination`, `iod`, `differential_correction`,
-`NativeOrbitFitter`, `OrbitFitter`, and the public linkage APIs are not part of
-Core 0.7. Python transform objects are immutable declarative values; transform
-validation, resource parsing, execution, and provenance are native Rust.
+Use `ObservationPipeline.as_supplied()` for deliberate no-transform behavior.
+An empty ordered list is rejected. Transform order and repetition are retained.
+
+Profiles bind explicit local paths by semantic slot. No package discovery,
+runtime acquisition, fallback profile, unused resource, or absolute-path
+provenance is permitted. `CORE_OD_V1` currently does not fill missing
+uncertainties; it fails closed on such inputs pending public-profile
+qualification.
+
+For numerical qualification only, focused functions with an explicit
+`_one_group` suffix live under `adam_core.orbit_determination.algorithms`.
+They are expert/internal building blocks and will not be retained as aliases
+for the forthcoming batch functions.

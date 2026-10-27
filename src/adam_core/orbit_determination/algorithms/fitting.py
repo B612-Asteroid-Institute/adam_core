@@ -33,13 +33,6 @@ _DELTA_CHI2_WINDOW = (0.1, 10.0)
 # weighted least squares (the cost is chi2); "huber" is Huber's M-estimator.
 LossType = Literal["linear", "huber"]
 
-# Huber transition point in units of whitened (1-sigma) residual components:
-# residuals within +/- f_scale are treated quadratically, larger residuals
-# linearly. 1.345 is the classical constant giving 95% asymptotic efficiency
-# for Gaussian errors (Huber 1981; Huber & Ronchetti 2009, sec. 4.5); the
-# value is Rust's ``HUBER_F_SCALE_DEFAULT``.
-HUBER_F_SCALE_DEFAULT = _rust_native.iod_defaults()["huber_f_scale"]
-
 #: The refinement defaults, read once from Rust's config types: ``fit``
 #: (`WhitenedFitConfig`), ``worst_residual`` (`IterativeFitConfig`),
 #: ``cmc2003`` (`Cmc2003FitConfig`, OrbFit's ``reject.def``) and
@@ -51,6 +44,10 @@ OD_DEFAULTS = MappingProxyType(
         for key, value in _rust_native.od_defaults().items()
     }
 )
+
+# Huber transition point in units of whitened residual components. The value
+# remains Rust-owned through the low-level fit defaults above.
+HUBER_F_SCALE_DEFAULT = OD_DEFAULTS["fit"]["f_scale"]
 
 # Rust Gauss-Newton solver keyword set used by lower-level algorithm helpers.
 _NATIVE_FIT_KWARGS = {"xtol", "ftol", "max_iterations"}

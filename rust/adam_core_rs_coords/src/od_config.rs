@@ -13,6 +13,7 @@ use std::sync::Arc;
 use arrow_array::{Array, Float64Array, LargeStringArray, RecordBatch};
 use arrow_schema::{DataType, Field, Schema};
 use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
+use serde::Deserialize;
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
@@ -21,9 +22,12 @@ use crate::observation_uncertainty::{
     BiasTable, BiasTableRow, Efcc18DebiasModel, EmpiricalCovarianceMode, EmpiricalCovarianceModel,
     NightBatchDeweightingModel, ObservationUncertaintyModel, OrbitDeterminationAstrometry,
 };
-use crate::propagation::IodConfig;
+use crate::propagation::{
+    CorrectionConfig, IodAcceptance, IodConfig, IterativeFitConfig, JacobianMethod,
+    ObservationSelectionMethod, PrefitScope, RangingConfig, SpanSearchConfig, VelocityMethod,
+};
 use crate::veres2017::{SigmaFillModel, VeresSigmaLookup, VeresSigmaRow};
-use crate::{Cmc2003FitConfig, RefinementConfig, WhitenedFitConfig};
+use crate::{Cmc2003FitConfig, LossType, RefinementConfig, TwoBodyModelConfig, WhitenedFitConfig};
 
 /// Stable semantic slots used by profiles.  Paths are deployment details and
 /// are deliberately absent from scientific identity and provenance.
@@ -180,6 +184,10 @@ impl ResourceBindings {
     pub fn get(&self, slot: ResourceSlot) -> Option<&Path> {
         self.paths.get(&slot).map(PathBuf::as_path)
     }
+
+    pub fn slots(&self) -> impl Iterator<Item = ResourceSlot> + '_ {
+        self.paths.keys().copied()
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -204,6 +212,59 @@ impl fmt::Display for ResourceValidationError {
 }
 
 impl std::error::Error for ResourceValidationError {}
+
+/// Typed failure while constructing or validating a complete OD configuration.
+/// Configuration defects are deliberately distinct from resource-slot defects.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum OdConfigError {
+    Configuration { problems: Vec<String> },
+    Resources(ResourceValidationError),
+}
+
+impl OdConfigError {
+    fn configuration(reason: impl Into<String>) -> Self {
+        Self::Configuration {
+            problems: vec![reason.into()],
+        }
+    }
+
+    pub fn configuration_problems(&self) -> &[String] {
+        match self {
+            Self::Configuration { problems } => problems,
+            Self::Resources(_) => &[],
+        }
+    }
+
+    pub fn resource_problems(&self) -> &[ResourceProblem] {
+        match self {
+            Self::Configuration { .. } => &[],
+            Self::Resources(error) => &error.problems,
+        }
+    }
+}
+
+impl From<ResourceValidationError> for OdConfigError {
+    fn from(value: ResourceValidationError) -> Self {
+        Self::Resources(value)
+    }
+}
+
+impl fmt::Display for OdConfigError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Configuration { problems } => {
+                writeln!(f, "OD configuration validation failed:")?;
+                for problem in problems {
+                    writeln!(f, "  {problem}")?;
+                }
+                Ok(())
+            }
+            Self::Resources(error) => error.fmt(f),
+        }
+    }
+}
+
+impl std::error::Error for OdConfigError {}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ValidatedResourceIdentity {
@@ -260,6 +321,35 @@ pub enum ObservationTransform {
 }
 
 impl ObservationTransform {
+    fn definition_value(&self) -> Value {
+        match self {
+            Self::FillMissingAstrometricUncertainty { .. } => {
+                json!({"kind": "fill_missing_astrometric_uncertainty"})
+            }
+            Self::Efcc18CatalogBiasCorrection {
+                exclude_astcats, ..
+            } => json!({
+                "kind": "efcc18_catalog_bias_correction",
+                "exclude_astcats": exclude_astcats,
+            }),
+            Self::StationBandResidualCovarianceAdjustment {
+                operation,
+                minimum_residual_count,
+                ..
+            } => json!({
+                "kind": "station_band_residual_covariance_adjustment",
+                "operation": operation.as_str(),
+                "minimum_residual_count": minimum_residual_count,
+            }),
+            Self::NightlyBatchDeweighting {
+                effective_observation_cap,
+            } => json!({
+                "kind": "nightly_batch_deweighting",
+                "effective_observation_cap": effective_observation_cap,
+            }),
+        }
+    }
+
     fn validate(&self) -> Result<(), String> {
         match self {
             Self::FillMissingAstrometricUncertainty { resource } => {
@@ -357,7 +447,10 @@ impl BoundObservationTransform {
     }
 
     #[doc(hidden)]
-    pub fn apply(&self, observations: &mut OrbitDeterminationAstrometry) -> Result<bool, String> {
+    pub(crate) fn apply(
+        &self,
+        observations: &mut OrbitDeterminationAstrometry,
+    ) -> Result<bool, String> {
         self.validate()?;
         match self {
             Self::FillMissingAstrometricUncertainty { lookup, .. } => SigmaFillModel {
@@ -471,58 +564,15 @@ impl ObservationPipeline {
 
     /// Execute exactly once in declaration order. Repeated variants are
     /// retained and executed; no sorting or deduplication occurs.
-    pub fn apply(&self, observations: &mut OrbitDeterminationAstrometry) -> Result<bool, String> {
+    pub(crate) fn apply(
+        &self,
+        observations: &mut OrbitDeterminationAstrometry,
+    ) -> Result<bool, String> {
         let mut changed = false;
         for transform in &self.transforms {
             changed |= transform.apply(observations)?;
         }
         Ok(changed)
-    }
-
-    #[doc(hidden)]
-    pub fn native_models(&self) -> Result<Vec<Box<dyn ObservationUncertaintyModel>>, String> {
-        self.transforms
-            .iter()
-            .map(
-                |transform| -> Result<Box<dyn ObservationUncertaintyModel>, String> {
-                    let model: Box<dyn ObservationUncertaintyModel> = match transform {
-                        BoundObservationTransform::FillMissingAstrometricUncertainty {
-                            lookup,
-                            ..
-                        } => Box::new(SigmaFillModel {
-                            lookup: lookup.clone(),
-                        }),
-                        BoundObservationTransform::Efcc18CatalogBiasCorrection {
-                            bias_table,
-                            exclude_astcats,
-                            ..
-                        } => Box::new(Efcc18DebiasModel {
-                            bias_table: Arc::clone(bias_table),
-                            exclude_astcats: exclude_astcats.clone(),
-                        }),
-                        BoundObservationTransform::StationBandResidualCovarianceAdjustment {
-                            table,
-                            operation,
-                            minimum_residual_count,
-                            ..
-                        } => Box::new(EmpiricalCovarianceModel {
-                            table: table.clone(),
-                            mode: match operation {
-                                ResidualCovarianceOperation::Add => EmpiricalCovarianceMode::Add,
-                                ResidualCovarianceOperation::Replace => {
-                                    EmpiricalCovarianceMode::Replace
-                                }
-                            },
-                            min_resid_cov_n: *minimum_residual_count as f64,
-                        }),
-                        BoundObservationTransform::NightlyBatchDeweighting {
-                            effective_observation_cap,
-                        } => Box::new(NightBatchDeweightingModel::new(*effective_observation_cap)?),
-                    };
-                    Ok(model)
-                },
-            )
-            .collect()
     }
 
     pub fn provenance_value(&self) -> Value {
@@ -541,24 +591,26 @@ impl ObservationPipeline {
     pub fn bind_explicit(
         definitions: Vec<ObservationTransform>,
         bindings: &ResourceBindings,
-    ) -> Result<Self, ResourceValidationError> {
+    ) -> Result<Self, OdConfigError> {
         if definitions.is_empty() {
-            return Err(ResourceValidationError {
-                problems: vec![ResourceProblem {
-                    slot: ResourceSlot::Efcc18CatalogBiasTable,
-                    reason: "an empty transform list is ambiguous; use as_supplied".to_string(),
-                }],
-            });
+            return Err(OdConfigError::configuration(
+                "an empty transform list is ambiguous; use ObservationPipeline::as_supplied()",
+            ));
         }
-        for definition in &definitions {
-            definition
-                .validate()
-                .map_err(|reason| ResourceValidationError {
-                    problems: vec![ResourceProblem {
-                        slot: ResourceSlot::Efcc18CatalogBiasTable,
-                        reason: format!("invalid observation pipeline: {reason}"),
-                    }],
-                })?;
+        let configuration_problems: Vec<String> = definitions
+            .iter()
+            .enumerate()
+            .filter_map(|(index, definition)| {
+                definition
+                    .validate()
+                    .err()
+                    .map(|reason| format!("transform[{index}]: {reason}"))
+            })
+            .collect();
+        if !configuration_problems.is_empty() {
+            return Err(OdConfigError::Configuration {
+                problems: configuration_problems,
+            });
         }
         let requirements: Vec<_> = definitions
             .iter()
@@ -573,18 +625,24 @@ impl ObservationPipeline {
             .collect();
         let validated = validate_resources(&requirements, bindings)?;
         let mut transforms = Vec::with_capacity(definitions.len());
+        let mut parse_problems = Vec::new();
         for definition in definitions {
-            let transform = match definition {
+            let result: Result<BoundObservationTransform, ResourceProblem> = match definition {
                 ObservationTransform::FillMissingAstrometricUncertainty { resource } => {
                     let bound = validated
                         .get(&resource.slot)
                         .expect("validated explicit resource");
-                    let lookup = parse_sigma_parquet(&bound.bytes, resource)
-                        .map_err(|error| one_resource_error(resource.slot, error))?;
-                    BoundObservationTransform::FillMissingAstrometricUncertainty {
-                        lookup,
-                        resource: bound.identity.clone(),
-                    }
+                    parse_sigma_parquet(&bound.bytes, resource)
+                        .map(|lookup| {
+                            BoundObservationTransform::FillMissingAstrometricUncertainty {
+                                lookup,
+                                resource: bound.identity.clone(),
+                            }
+                        })
+                        .map_err(|reason| ResourceProblem {
+                            slot: resource.slot,
+                            reason,
+                        })
                 }
                 ObservationTransform::Efcc18CatalogBiasCorrection {
                     resource,
@@ -593,16 +651,26 @@ impl ObservationPipeline {
                     let bound = validated
                         .get(&resource.slot)
                         .expect("validated explicit resource");
-                    let text = std::str::from_utf8(&bound.bytes).map_err(|error| {
-                        one_resource_error(resource.slot, format!("resource is not UTF-8: {error}"))
-                    })?;
-                    let table = Efcc18BiasTable::parse_bias_dat(text)
-                        .map_err(|error| one_resource_error(resource.slot, error))?;
-                    BoundObservationTransform::Efcc18CatalogBiasCorrection {
-                        bias_table: Arc::new(table),
-                        exclude_astcats,
-                        resource: bound.identity.clone(),
-                    }
+                    std::str::from_utf8(&bound.bytes)
+                        .map_err(|error| ResourceProblem {
+                            slot: resource.slot,
+                            reason: format!("resource is not UTF-8: {error}"),
+                        })
+                        .and_then(|text| {
+                            Efcc18BiasTable::parse_bias_dat(text).map_err(|reason| {
+                                ResourceProblem {
+                                    slot: resource.slot,
+                                    reason,
+                                }
+                            })
+                        })
+                        .map(
+                            |table| BoundObservationTransform::Efcc18CatalogBiasCorrection {
+                                bias_table: Arc::new(table),
+                                exclude_astcats,
+                                resource: bound.identity.clone(),
+                            },
+                        )
                 }
                 ObservationTransform::StationBandResidualCovarianceAdjustment {
                     resource,
@@ -612,38 +680,237 @@ impl ObservationPipeline {
                     let bound = validated
                         .get(&resource.slot)
                         .expect("validated explicit resource");
-                    let table = parse_bias_parquet(&bound.bytes, resource)
-                        .map_err(|error| one_resource_error(resource.slot, error))?;
-                    BoundObservationTransform::StationBandResidualCovarianceAdjustment {
-                        table,
-                        operation,
-                        minimum_residual_count,
-                        resource: bound.identity.clone(),
-                    }
+                    parse_bias_parquet(&bound.bytes, resource)
+                        .map(|table| {
+                            BoundObservationTransform::StationBandResidualCovarianceAdjustment {
+                                table,
+                                operation,
+                                minimum_residual_count,
+                                resource: bound.identity.clone(),
+                            }
+                        })
+                        .map_err(|reason| ResourceProblem {
+                            slot: resource.slot,
+                            reason,
+                        })
                 }
                 ObservationTransform::NightlyBatchDeweighting {
                     effective_observation_cap,
-                } => BoundObservationTransform::NightlyBatchDeweighting {
+                } => Ok(BoundObservationTransform::NightlyBatchDeweighting {
                     effective_observation_cap,
-                },
+                }),
             };
-            transform
-                .validate()
-                .map_err(|reason| ResourceValidationError {
-                    problems: vec![ResourceProblem {
-                        slot: ResourceSlot::Efcc18CatalogBiasTable,
-                        reason,
-                    }],
-                })?;
-            transforms.push(transform);
+            match result {
+                Ok(transform) => transforms.push(transform),
+                Err(problem) => parse_problems.push(problem),
+            }
         }
-        ObservationPipeline::ordered(transforms).map_err(|reason| ResourceValidationError {
-            problems: vec![ResourceProblem {
-                slot: ResourceSlot::Efcc18CatalogBiasTable,
-                reason,
-            }],
-        })
+        if !parse_problems.is_empty() {
+            return Err(ResourceValidationError {
+                problems: parse_problems,
+            }
+            .into());
+        }
+        ObservationPipeline::ordered(transforms).map_err(OdConfigError::configuration)
     }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct TwoBodyDeclaration {
+    propagation_max_iter: usize,
+    propagation_tol: f64,
+    lt_tol: f64,
+    ephemeris_max_iter: usize,
+    ephemeris_tol: f64,
+    max_lt_iter: usize,
+}
+
+impl From<TwoBodyDeclaration> for TwoBodyModelConfig {
+    fn from(value: TwoBodyDeclaration) -> Self {
+        Self {
+            propagation_max_iter: value.propagation_max_iter,
+            propagation_tol: value.propagation_tol,
+            lt_tol: value.lt_tol,
+            ephemeris_max_iter: value.ephemeris_max_iter,
+            ephemeris_tol: value.ephemeris_tol,
+            max_lt_iter: value.max_lt_iter,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct FitDeclaration {
+    loss: String,
+    f_scale: f64,
+    jacobian: String,
+    validate_covariance: bool,
+    xtol: f64,
+    ftol: f64,
+    gtol: f64,
+    max_iterations: usize,
+    max_nfev: Option<usize>,
+    two_body: TwoBodyDeclaration,
+}
+
+impl FitDeclaration {
+    fn into_config(self) -> Result<WhitenedFitConfig, String> {
+        let config = WhitenedFitConfig {
+            loss: LossType::parse(&self.loss)?,
+            f_scale: self.f_scale,
+            jacobian: JacobianMethod::parse(&self.jacobian)?,
+            validate_covariance: self.validate_covariance,
+            xtol: self.xtol,
+            ftol: self.ftol,
+            gtol: self.gtol,
+            max_iterations: self.max_iterations,
+            max_nfev: self.max_nfev,
+            two_body: self.two_body.into(),
+        };
+        config.validate()?;
+        Ok(config)
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SpanDeclaration {
+    target_span_days: f64,
+    min_span_days: f64,
+    max_span_days: f64,
+    dense_window_days: [f64; 2],
+    edge_window_days: f64,
+    max_triplets: usize,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct CorrectionDeclaration {
+    max_corrections: usize,
+    max_converged: usize,
+    growth: f64,
+    min_stage_obs: usize,
+    max_stages: usize,
+    stage_loss: String,
+    prefit_scope: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RangingDeclaration {
+    enabled: bool,
+    rho_min_au: f64,
+    rho_max_au: f64,
+    n_rho: usize,
+    n_rho_dot: usize,
+    max_corrections: usize,
+    chunk_size: usize,
+    max_arc_days: f64,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct IodDeclaration {
+    min_obs: usize,
+    min_arc_length: f64,
+    contamination_percentage: f64,
+    rchi2_threshold: f64,
+    observation_selection_method: String,
+    light_time: bool,
+    mu: f64,
+    speed_of_light: f64,
+    max_triplets: Option<usize>,
+    max_pair_visits: usize,
+    max_raw_pair_visits: usize,
+    max_middle_visits: usize,
+    velocity_method: String,
+    spans: SpanDeclaration,
+    acceptance: String,
+    correction: CorrectionDeclaration,
+    ranging: RangingDeclaration,
+}
+
+impl IodDeclaration {
+    fn into_config(self) -> Result<IodConfig, String> {
+        let config = IodConfig {
+            min_obs: self.min_obs,
+            min_arc_length: self.min_arc_length,
+            contamination_percentage: self.contamination_percentage,
+            rchi2_threshold: self.rchi2_threshold,
+            observation_selection_method: ObservationSelectionMethod::parse(
+                &self.observation_selection_method,
+            )?,
+            light_time: self.light_time,
+            mu: self.mu,
+            speed_of_light: self.speed_of_light,
+            max_triplets: self.max_triplets,
+            max_pair_visits: self.max_pair_visits,
+            max_raw_pair_visits: self.max_raw_pair_visits,
+            max_middle_visits: self.max_middle_visits,
+            velocity_method: VelocityMethod::parse(&self.velocity_method)?,
+            spans: SpanSearchConfig {
+                target_span_days: self.spans.target_span_days,
+                min_span_days: self.spans.min_span_days,
+                max_span_days: self.spans.max_span_days,
+                dense_window_days: self.spans.dense_window_days,
+                edge_window_days: self.spans.edge_window_days,
+                max_triplets: self.spans.max_triplets,
+            },
+            acceptance: IodAcceptance::parse(&self.acceptance)?,
+            correction: CorrectionConfig {
+                max_corrections: self.correction.max_corrections,
+                max_converged: self.correction.max_converged,
+                growth: self.correction.growth,
+                min_stage_obs: self.correction.min_stage_obs,
+                max_stages: self.correction.max_stages,
+                stage_loss: LossType::parse(&self.correction.stage_loss)?,
+                prefit_scope: PrefitScope::parse(&self.correction.prefit_scope)?,
+            },
+            ranging: RangingConfig {
+                enabled: self.ranging.enabled,
+                rho_min_au: self.ranging.rho_min_au,
+                rho_max_au: self.ranging.rho_max_au,
+                n_rho: self.ranging.n_rho,
+                n_rho_dot: self.ranging.n_rho_dot,
+                max_corrections: self.ranging.max_corrections,
+                chunk_size: self.ranging.chunk_size,
+                max_arc_days: self.ranging.max_arc_days,
+            },
+        };
+        config.validate()?;
+        Ok(config)
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct IodRunDeclaration {
+    search_correction_ranging: IodDeclaration,
+    candidate_correction_fit: FitDeclaration,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(tag = "method", rename_all = "snake_case", deny_unknown_fields)]
+enum RefinementDeclaration {
+    WorstResidual {
+        rchi2_threshold: f64,
+        min_obs: usize,
+        min_arc_length: f64,
+        contamination_percentage: f64,
+        fit: FitDeclaration,
+    },
+    Cmc2003 {
+        chi2_reject: f64,
+        chi2_recover: f64,
+        chi2_frac: f64,
+        max_iterations: usize,
+        max_rejected_fraction: f64,
+        apparition_gap_days: f64,
+        psd_floor_frac: f64,
+        min_kept: usize,
+        fit: FitDeclaration,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -745,7 +1012,31 @@ fn refinement_config_value(config: &RefinementConfig) -> Value {
     }
 }
 
+fn d21_fit_config() -> WhitenedFitConfig {
+    let mut config = WhitenedFitConfig::default();
+    // Preserve the accepted d21 effective defaults exactly. These values were
+    // supplied by EphemerisOptions::default() when no two-body keys existed.
+    config.two_body.lt_tol = 1.0e-12;
+    config.two_body.ephemeris_max_iter = 1_000;
+    config.two_body.max_lt_iter = 10;
+    config
+}
+
 impl IodRunConfig {
+    pub fn from_json(raw: &str) -> Result<Self, String> {
+        let declaration: IodRunDeclaration = serde_json::from_str(raw)
+            .map_err(|error| format!("invalid IOD run configuration: {error}"))?;
+        Self::new(
+            declaration.search_correction_ranging.into_config()?,
+            declaration.candidate_correction_fit.into_config()?,
+        )
+    }
+
+    pub fn canonical_json(&self) -> String {
+        serde_json::to_string(&self.canonical_value())
+            .expect("IOD run configuration is serializable")
+    }
+
     pub fn new(iod: IodConfig, correction_fit: WhitenedFitConfig) -> Result<Self, String> {
         let config = Self {
             iod,
@@ -756,8 +1047,7 @@ impl IodRunConfig {
     }
 
     pub fn core_v1() -> Self {
-        Self::new(IodConfig::default(), WhitenedFitConfig::default())
-            .expect("Core-v1 IOD settings are valid")
+        Self::new(IodConfig::default(), d21_fit_config()).expect("Core-v1 IOD settings are valid")
     }
 
     pub const fn iod(&self) -> &IodConfig {
@@ -788,6 +1078,53 @@ pub struct RefinementRunConfig {
 }
 
 impl RefinementRunConfig {
+    pub fn from_json(raw: &str) -> Result<Self, String> {
+        let declaration: RefinementDeclaration = serde_json::from_str(raw)
+            .map_err(|error| format!("invalid refinement run configuration: {error}"))?;
+        let refinement = match declaration {
+            RefinementDeclaration::WorstResidual {
+                rchi2_threshold,
+                min_obs,
+                min_arc_length,
+                contamination_percentage,
+                fit,
+            } => RefinementConfig::WorstResidual(IterativeFitConfig {
+                rchi2_threshold,
+                min_obs,
+                min_arc_length,
+                contamination_percentage,
+                fit: fit.into_config()?,
+            }),
+            RefinementDeclaration::Cmc2003 {
+                chi2_reject,
+                chi2_recover,
+                chi2_frac,
+                max_iterations,
+                max_rejected_fraction,
+                apparition_gap_days,
+                psd_floor_frac,
+                min_kept,
+                fit,
+            } => RefinementConfig::Cmc2003(Cmc2003FitConfig {
+                chi2_reject,
+                chi2_recover,
+                chi2_frac,
+                max_iterations,
+                max_rejected_fraction,
+                apparition_gap_days,
+                psd_floor_frac,
+                min_kept,
+                fit: fit.into_config()?,
+            }),
+        };
+        Self::new(refinement)
+    }
+
+    pub fn canonical_json(&self) -> String {
+        serde_json::to_string(&self.canonical_value())
+            .expect("refinement run configuration is serializable")
+    }
+
     pub fn new(refinement: RefinementConfig) -> Result<Self, String> {
         let config = Self { refinement };
         config.validate()?;
@@ -795,8 +1132,11 @@ impl RefinementRunConfig {
     }
 
     pub fn core_v1() -> Self {
-        Self::new(RefinementConfig::Cmc2003(Cmc2003FitConfig::default()))
-            .expect("Core-v1 refinement settings are valid")
+        let cmc = Cmc2003FitConfig {
+            fit: d21_fit_config(),
+            ..Cmc2003FitConfig::default()
+        };
+        Self::new(RefinementConfig::Cmc2003(cmc)).expect("Core-v1 refinement settings are valid")
     }
 
     pub const fn refinement(&self) -> &RefinementConfig {
@@ -870,7 +1210,7 @@ impl OdConfig {
         iod: IodRunConfig,
         refinement: RefinementRunConfig,
         evaluation: EvaluationConfig,
-    ) -> Result<Self, String> {
+    ) -> Result<Self, OdConfigError> {
         let config = Self {
             observation_pipeline,
             iod,
@@ -878,7 +1218,7 @@ impl OdConfig {
             evaluation,
             profile: None,
         };
-        config.validate()?;
+        config.validate().map_err(OdConfigError::configuration)?;
         Ok(config)
     }
 
@@ -912,8 +1252,8 @@ impl OdConfig {
         self.evaluation
     }
 
-    pub fn provenance_json(&self) -> String {
-        let value = json!({
+    fn canonical_value_without_fingerprint(&self) -> Value {
+        json!({
             "schema": "adam-core-od-config/v1",
             "profile": self.profile.map(|profile| json!({
                 "name": profile.name,
@@ -924,7 +1264,32 @@ impl OdConfig {
             "iod": self.iod.canonical_value(),
             "refinement": self.refinement.canonical_value(),
             "evaluation": {"covariance_dimension": self.evaluation.covariance_dimension},
-        });
+        })
+    }
+
+    /// SHA-256 of the complete, bound, path-free canonical configuration.
+    pub fn configuration_sha256(&self) -> String {
+        // Profile identity records how the configuration was selected; it is
+        // not a scientific setting. Equivalent explicit and profiled bound
+        // configurations therefore share one science fingerprint.
+        let mut value = self.canonical_value_without_fingerprint();
+        value
+            .as_object_mut()
+            .expect("configuration provenance is an object")
+            .remove("profile");
+        let canonical = serde_json::to_vec(&value).expect("OD configuration is serializable");
+        format!("{:x}", Sha256::digest(canonical))
+    }
+
+    pub fn provenance_json(&self) -> String {
+        let mut value = self.canonical_value_without_fingerprint();
+        value
+            .as_object_mut()
+            .expect("configuration provenance is an object")
+            .insert(
+                "configuration_sha256".to_string(),
+                Value::String(self.configuration_sha256()),
+            );
         serde_json::to_string(&value).expect("OD configuration provenance is serializable")
     }
 }
@@ -957,7 +1322,7 @@ pub const CORE_OD_V1: OdProfile = OdProfile {
     identity: ProfileIdentity {
         name: "CORE_OD_V1",
         version: 1,
-        definition_sha256: "b56612e00fb2b8a929dc075e330675d80a53d39916453b3acd3e9080dd058d4d",
+        definition_sha256: "fb921274a3daf4bb09885a4247a3f2598b141e355883dc2e2815cfbd5153810b",
     },
     kind: OdProfileKind::Core,
 };
@@ -968,25 +1333,43 @@ pub const ASTEROID_INSTITUTE_OD_V1: OdProfile = OdProfile {
     identity: ProfileIdentity {
         name: "ASTEROID_INSTITUTE_OD_V1",
         version: 1,
-        definition_sha256: "9f17db56d1322ce7d779d81a54807970fad69629941fe77e403714024f0221fe",
+        definition_sha256: "47cf72508a4c593cd69aefa6f37f1f5d65991a9c76f72975e182c7592bc08b8c",
     },
     kind: OdProfileKind::AsteroidInstitute,
 };
 
 impl OdProfile {
-    pub fn definition_value(self) -> Value {
-        let pipeline = match self.kind {
-            OdProfileKind::Core => vec![
-                json!({"kind": "efcc18_catalog_bias_correction", "exclude_astcats": Vec::<String>::new()}),
-                json!({"kind": "nightly_batch_deweighting", "effective_observation_cap": 4}),
-            ],
-            OdProfileKind::AsteroidInstitute => vec![
-                json!({"kind": "fill_missing_astrometric_uncertainty"}),
-                json!({"kind": "efcc18_catalog_bias_correction", "exclude_astcats": Vec::<String>::new()}),
-                json!({"kind": "station_band_residual_covariance_adjustment", "operation": "add", "minimum_residual_count": 30}),
-                json!({"kind": "nightly_batch_deweighting", "effective_observation_cap": 4}),
-            ],
+    fn definitions(self) -> Vec<ObservationTransform> {
+        let efcc = ObservationTransform::Efcc18CatalogBiasCorrection {
+            resource: EFCC18_BIAS_RESOURCE,
+            exclude_astcats: Vec::new(),
         };
+        let nightly = ObservationTransform::NightlyBatchDeweighting {
+            effective_observation_cap: 4,
+        };
+        match self.kind {
+            OdProfileKind::Core => vec![efcc, nightly],
+            OdProfileKind::AsteroidInstitute => vec![
+                ObservationTransform::FillMissingAstrometricUncertainty {
+                    resource: V2_SIGMA_FILL_RESOURCE,
+                },
+                efcc,
+                ObservationTransform::StationBandResidualCovarianceAdjustment {
+                    resource: V2_FULL_RESOURCE,
+                    operation: ResidualCovarianceOperation::Add,
+                    minimum_residual_count: 30,
+                },
+                nightly,
+            ],
+        }
+    }
+
+    pub fn definition_value(self) -> Value {
+        let pipeline = self
+            .definitions()
+            .iter()
+            .map(ObservationTransform::definition_value)
+            .collect::<Vec<_>>();
         json!({
             "schema": "adam-core-od-profile/v1",
             "name": self.identity.name,
@@ -1023,83 +1406,19 @@ impl OdProfile {
         }
     }
 
-    pub fn bind(self, bindings: &ResourceBindings) -> Result<OdConfig, ResourceValidationError> {
+    pub fn bind(self, bindings: &ResourceBindings) -> Result<OdConfig, OdConfigError> {
         self.verify_definition_fingerprint()
-            .map_err(|reason| ResourceValidationError {
-                problems: vec![ResourceProblem {
-                    slot: ResourceSlot::Efcc18CatalogBiasTable,
-                    reason,
-                }],
-            })?;
-        let validated = validate_resources(self.requirements(), bindings)?;
-        let get = |slot| {
-            validated
-                .get(&slot)
-                .expect("validated profile resource is present")
-        };
-
-        let efcc = get(ResourceSlot::Efcc18CatalogBiasTable);
-        let bias_text = std::str::from_utf8(&efcc.bytes).map_err(|error| {
-            one_resource_error(
-                ResourceSlot::Efcc18CatalogBiasTable,
-                format!("resource is not UTF-8: {error}"),
-            )
-        })?;
-        let efcc_table = Efcc18BiasTable::parse_bias_dat(bias_text)
-            .map_err(|error| one_resource_error(ResourceSlot::Efcc18CatalogBiasTable, error))?;
-
-        let mut transforms = Vec::new();
-        if self.kind == OdProfileKind::AsteroidInstitute {
-            let sigma = get(ResourceSlot::StationCatalogUncertaintyTable);
-            let lookup =
-                parse_sigma_parquet(&sigma.bytes, V2_SIGMA_FILL_RESOURCE).map_err(|error| {
-                    one_resource_error(ResourceSlot::StationCatalogUncertaintyTable, error)
-                })?;
-            transforms.push(
-                BoundObservationTransform::FillMissingAstrometricUncertainty {
-                    lookup,
-                    resource: sigma.identity.clone(),
-                },
-            );
-        }
-        transforms.push(BoundObservationTransform::Efcc18CatalogBiasCorrection {
-            bias_table: Arc::new(efcc_table),
-            exclude_astcats: Vec::new(),
-            resource: efcc.identity.clone(),
-        });
-        if self.kind == OdProfileKind::AsteroidInstitute {
-            let bias = get(ResourceSlot::StationBandResidualCovarianceTable);
-            let table = parse_bias_parquet(&bias.bytes, V2_FULL_RESOURCE).map_err(|error| {
-                one_resource_error(ResourceSlot::StationBandResidualCovarianceTable, error)
-            })?;
-            transforms.push(
-                BoundObservationTransform::StationBandResidualCovarianceAdjustment {
-                    table,
-                    operation: ResidualCovarianceOperation::Add,
-                    minimum_residual_count: 30,
-                    resource: bias.identity.clone(),
-                },
-            );
-        }
-        transforms.push(BoundObservationTransform::NightlyBatchDeweighting {
-            effective_observation_cap: 4,
-        });
-
-        let refinement = RefinementConfig::Cmc2003(Cmc2003FitConfig::default());
+            .map_err(OdConfigError::configuration)?;
+        let pipeline = ObservationPipeline::bind_explicit(self.definitions(), bindings)?;
         let config = OdConfig {
-            observation_pipeline: ObservationPipeline::ordered(transforms)
-                .expect("profile transform definitions are valid"),
+            observation_pipeline: pipeline,
             iod: IodRunConfig::core_v1(),
-            refinement: RefinementRunConfig::new(refinement)
-                .expect("profile refinement settings are valid"),
+            refinement: RefinementRunConfig::core_v1(),
             evaluation: EvaluationConfig::six_dimensional(),
             profile: Some(self.identity),
         };
-        config.validate().map_err(|error| ResourceValidationError {
-            problems: vec![ResourceProblem {
-                slot: ResourceSlot::Efcc18CatalogBiasTable,
-                reason: format!("profile definition is invalid: {error}"),
-            }],
+        config.validate().map_err(|reason| {
+            OdConfigError::configuration(format!("profile definition is invalid: {reason}"))
         })?;
         Ok(config)
     }
@@ -1111,19 +1430,33 @@ struct ValidatedResource {
     bytes: Vec<u8>,
 }
 
-fn one_resource_error(slot: ResourceSlot, reason: String) -> ResourceValidationError {
-    ResourceValidationError {
-        problems: vec![ResourceProblem { slot, reason }],
-    }
-}
-
 fn validate_resources(
     requirements: &[ResourceRequirement],
     bindings: &ResourceBindings,
 ) -> Result<BTreeMap<ResourceSlot, ValidatedResource>, ResourceValidationError> {
     let mut problems = Vec::new();
-    let mut validated = BTreeMap::new();
+    let mut required = BTreeMap::new();
     for &requirement in requirements {
+        if let Some(previous) = required.insert(requirement.slot, requirement) {
+            if previous != requirement {
+                problems.push(ResourceProblem {
+                    slot: requirement.slot,
+                    reason: "conflicting requirements for the same semantic slot".to_string(),
+                });
+            }
+        }
+    }
+    for slot in bindings.slots() {
+        if !required.contains_key(&slot) {
+            problems.push(ResourceProblem {
+                slot,
+                reason: "a path was bound but this configuration does not use the slot".to_string(),
+            });
+        }
+    }
+
+    let mut validated = BTreeMap::new();
+    for &requirement in required.values() {
         if let Err(reason) = requirement.validate() {
             problems.push(ResourceProblem {
                 slot: requirement.slot,
@@ -1310,7 +1643,7 @@ fn parse_sigma_parquet(
             });
         }
     }
-    VeresSigmaLookup::new(&rows, Some(0.75))
+    VeresSigmaLookup::new(&rows, None)
 }
 
 fn parse_bias_parquet(bytes: &[u8], requirement: ResourceRequirement) -> Result<BiasTable, String> {
@@ -1375,14 +1708,15 @@ mod tests {
         let error = ASTEROID_INSTITUTE_OD_V1
             .bind(&ResourceBindings::new())
             .unwrap_err();
-        assert_eq!(error.problems.len(), 3);
+        let problems = error.resource_problems();
+        assert_eq!(problems.len(), 3);
         assert_eq!(
-            error.problems[0].slot,
+            problems[0].slot,
             ResourceSlot::StationCatalogUncertaintyTable
         );
-        assert_eq!(error.problems[1].slot, ResourceSlot::Efcc18CatalogBiasTable);
+        assert_eq!(problems[1].slot, ResourceSlot::Efcc18CatalogBiasTable);
         assert_eq!(
-            error.problems[2].slot,
+            problems[2].slot,
             ResourceSlot::StationBandResidualCovarianceTable
         );
     }
@@ -1419,11 +1753,11 @@ mod tests {
             std::fs::write(path, b"not the required scientific resource").unwrap();
         }
         let error = ASTEROID_INSTITUTE_OD_V1.bind(&bindings).unwrap_err();
+        let problems = error.resource_problems();
         let slots: std::collections::BTreeSet<_> =
-            error.problems.iter().map(|problem| problem.slot).collect();
+            problems.iter().map(|problem| problem.slot).collect();
         assert_eq!(slots.len(), 3);
-        assert!(error
-            .problems
+        assert!(problems
             .iter()
             .all(|problem| problem.reason.contains("mismatch")));
         std::fs::remove_dir_all(root).unwrap();
@@ -1447,5 +1781,102 @@ mod tests {
             pipeline.transform_kinds(),
             vec!["nightly_batch_deweighting", "nightly_batch_deweighting"]
         );
+    }
+
+    #[test]
+    fn core_v1_preserves_d21_effective_two_body_constants_bitwise() {
+        let iod = IodRunConfig::core_v1();
+        let refinement = RefinementRunConfig::core_v1();
+        let refinement_fit = match refinement.refinement() {
+            RefinementConfig::WorstResidual(value) => value.fit,
+            RefinementConfig::Cmc2003(value) => value.fit,
+        };
+        for fit in [*iod.correction_fit(), refinement_fit] {
+            assert_eq!(fit.two_body.lt_tol.to_bits(), 1.0e-12_f64.to_bits());
+            assert_eq!(fit.two_body.ephemeris_max_iter, 1_000);
+            assert_eq!(fit.two_body.max_lt_iter, 10);
+        }
+    }
+
+    #[test]
+    fn stage_json_round_trips_strictly_and_rejects_unknown_or_missing_fields() {
+        let iod = IodRunConfig::core_v1();
+        let raw = iod.canonical_json();
+        let round_trip = IodRunConfig::from_json(&raw).unwrap();
+        assert_eq!(round_trip.canonical_json(), raw);
+        let mut value: Value = serde_json::from_str(&raw).unwrap();
+        value
+            .as_object_mut()
+            .unwrap()
+            .insert("bogus".to_string(), json!(1));
+        assert!(IodRunConfig::from_json(&value.to_string()).is_err());
+        let mut value: Value = serde_json::from_str(&raw).unwrap();
+        value
+            .get_mut("search_correction_ranging")
+            .unwrap()
+            .as_object_mut()
+            .unwrap()
+            .remove("min_obs");
+        assert!(IodRunConfig::from_json(&value.to_string()).is_err());
+
+        let refinement = RefinementRunConfig::core_v1();
+        let raw = refinement.canonical_json();
+        assert_eq!(
+            RefinementRunConfig::from_json(&raw)
+                .unwrap()
+                .canonical_json(),
+            raw
+        );
+    }
+
+    #[test]
+    fn invalid_transform_is_configuration_error_not_resource_error() {
+        let error = ObservationPipeline::bind_explicit(
+            vec![ObservationTransform::NightlyBatchDeweighting {
+                effective_observation_cap: 0,
+            }],
+            &ResourceBindings::new(),
+        )
+        .unwrap_err();
+        assert!(!error.configuration_problems().is_empty());
+        assert!(error.resource_problems().is_empty());
+    }
+
+    #[test]
+    fn unused_binding_is_a_slot_correct_resource_error() {
+        let bindings = ResourceBindings::new().bind(
+            ResourceSlot::Efcc18CatalogBiasTable,
+            "/path/that/must/not/be-read",
+        );
+        let error = ObservationPipeline::bind_explicit(
+            vec![ObservationTransform::NightlyBatchDeweighting {
+                effective_observation_cap: 4,
+            }],
+            &bindings,
+        )
+        .unwrap_err();
+        assert_eq!(error.resource_problems().len(), 1);
+        assert_eq!(
+            error.resource_problems()[0].slot,
+            ResourceSlot::Efcc18CatalogBiasTable
+        );
+        assert!(error.resource_problems()[0].reason.contains("does not use"));
+    }
+
+    #[test]
+    fn complete_config_fingerprint_is_deterministic_and_path_free() {
+        let first = OdConfig::explicit(
+            ObservationPipeline::as_supplied(),
+            IodRunConfig::core_v1(),
+            RefinementRunConfig::core_v1(),
+            EvaluationConfig::six_dimensional(),
+        )
+        .unwrap();
+        let second = first.clone();
+        assert_eq!(first.configuration_sha256(), second.configuration_sha256());
+        let provenance = first.provenance_json();
+        assert!(!provenance.contains("/Users/"));
+        assert!(!provenance.contains("/tmp/"));
+        assert!(provenance.contains(&first.configuration_sha256()));
     }
 }

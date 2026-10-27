@@ -23,6 +23,7 @@ adam_core_rs_orbit_determination = { version = "=0.7.0", path = "../adam_core_rs
 faer = "0.22"
 # JSON marshalling for the ObsContext render/parse boundary (bead
 # personal-cmy.26); preserve_order keeps Python dict insertion order.
+serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }
 statrs = "0.18"
 nalgebra = "0.33"

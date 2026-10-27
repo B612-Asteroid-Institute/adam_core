@@ -233,9 +233,9 @@ def _evaluate_residuals_2body_ipc_candidate(
     """Diagnostic Arrow-IPC candidate for the OD residual inner loop.
 
     Private per the bridge-naming policy (bead personal-cmy.13.1.4): the
-    canonical public surfaces are ``coordinates.residuals.Residuals.calculate``
-    and ``orbit_determination.evaluate_orbits``; this workflow is their fused
-    2-body transport experiment, kept for the parity/speed harness.
+    canonical public surface is
+    ``coordinates.residuals.Residuals.calculate``. This fused two-body
+    transport experiment is kept only for the parity and speed harness.
 
     ``orbits`` must already be at the observation times (1:1 with the observed
     astrometry and observers). Composes the same 2-body ephemeris + residual

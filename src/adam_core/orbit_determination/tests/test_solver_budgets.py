@@ -14,12 +14,17 @@ from adam_core.orbit_determination.algorithms.fitting import (
     fit_least_squares,
     iterative_fit,
 )
-from adam_core.orbit_determination.algorithms.rejection import cmc2003_fit
+from adam_core.orbit_determination.algorithms.rejection import cmc2003_fit_detailed
 from adam_core.orbit_determination.tests.test_differential_correction import (
     TwoBodyPropagator,
     make_initial_guess,
     make_synthetic_observations,
 )
+
+
+def _cmc_tables(*args, **kwargs):
+    result = cmc2003_fit_detailed(*args, **kwargs)
+    return result.fitted_orbit, result.fitted_orbit_members
 
 
 @pytest.fixture
@@ -126,7 +131,7 @@ def test_rejection_loops_forward_the_evaluation_budget(observations, algorithm):
             validate_covariance=False,
         )
     else:
-        fitted, _ = cmc2003_fit(
+        fitted, _ = _cmc_tables(
             make_initial_guess(),
             observations,
             TwoBodyPropagator(),
@@ -159,7 +164,7 @@ def test_rejection_loops_forward_the_evaluation_budget(observations, algorithm):
 def test_refinement_settings_are_validated_by_rust(
     observations, algorithm, kwargs, message
 ):
-    function = iterative_fit if algorithm == "worst_residual" else cmc2003_fit
+    function = iterative_fit if algorithm == "worst_residual" else _cmc_tables
     with pytest.raises(ValueError, match=message):
         function(
             make_initial_guess(),

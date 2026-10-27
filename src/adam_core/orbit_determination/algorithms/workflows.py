@@ -1,9 +1,8 @@
 """Canonical explicit-configuration one-group OD composition.
 
-The batch-native grouping and typed-failure layer is intentionally implemented
-by the separate Core 0.7 batch-workflow task.  This module establishes the
-one-group stage contract used by that layer: prepare once, IOD, then refine the
-same prepared observations.
+The canonical batch grouping and typed-failure layer is forthcoming. This
+module establishes its expert one-group stage contract: prepare once, run IOD,
+then refine the same prepared observations.
 """
 
 from __future__ import annotations
@@ -11,23 +10,22 @@ from __future__ import annotations
 import json
 
 import numpy as np
-import pyarrow as pa
+import pyarrow as pa  # type: ignore[import-untyped]
 
-from .. import _rust_native
-from ..orbits.orbits import Orbits
-from ..propagator.propagator import Propagator
-from ._pipeline import (
+from ... import _rust_native  # type: ignore[attr-defined]
+from ...orbits.orbits import Orbits
+from ...propagator.propagator import Propagator
+from .._pipeline import (
     apply_pipeline_once,
-    attach_configuration_provenance,
     attach_original_and_used,
     provenance_with_fields,
 )
-from .config import IodRunConfig, OdConfig, RefinementRunConfig
-from .evaluate import OrbitDeterminationObservations
-from .fitted_orbits import FittedOrbitMembers, FittedOrbits
+from ..config import IodRunConfig, OdConfig, RefinementRunConfig
+from ..evaluate import OrbitDeterminationObservations
+from ..fitted_orbits import FittedOrbitMembers, FittedOrbits
 from .iod import _run_iod_prepared
 
-__all__ = ["refine", "run_od"]
+__all__ = ["refine_one_group", "run_od_one_group"]
 
 
 def _stamp_object_id(fitted: FittedOrbits, object_id: str | None) -> FittedOrbits:
@@ -44,11 +42,13 @@ def _refine_prepared(
     observations: OrbitDeterminationObservations,
     propagator: Propagator,
     stage_config: RefinementRunConfig,
+    *,
+    native_backend: object | None = None,
 ) -> tuple[FittedOrbits, FittedOrbitMembers]:
     """Refine against observations whose configured pipeline already ran."""
 
-    from ._native_dispatch import native_propagator
-    from .algorithms.fitting import (
+    from .._native_dispatch import native_propagator
+    from .fitting import (
         _emit_native_warnings,
         _fitted_tables_from_native_output,
         _native_problem,
@@ -58,7 +58,7 @@ def _refine_prepared(
         raise TypeError("stage_config must be a RefinementRunConfig")
     seed = orbit.to_orbits() if isinstance(orbit, FittedOrbits) else orbit
     output = _rust_native.refine_config_ipc(
-        native_propagator(propagator),
+        native_propagator(propagator) if native_backend is None else native_backend,
         *_native_problem(seed, observations),
         stage_config._native,
     )
@@ -111,7 +111,7 @@ def _refine_prepared(
     return refined, members
 
 
-def refine(
+def refine_one_group(
     orbit: Orbits | FittedOrbits,
     observations: OrbitDeterminationObservations,
     propagator: Propagator,
@@ -120,16 +120,37 @@ def refine(
 ) -> tuple[FittedOrbits, FittedOrbitMembers]:
     """Refine one orbit group with an explicit complete configuration."""
 
+    from ._provenance import core_build_identity, stamp_complete_provenance
+    from ._validation import validate_observations, validate_seed_orbits
+
     if not isinstance(config, OdConfig):
         raise TypeError("config must be an OdConfig")
+    empty_observations = validate_observations(observations)
+    seed = orbit.to_orbits() if isinstance(orbit, FittedOrbits) else orbit
+    empty_seed = validate_seed_orbits(seed, exactly_one=True)
+    core_build_identity()
+    if empty_observations or empty_seed:
+        return FittedOrbits.empty(), FittedOrbitMembers.empty()
+    from .._native_dispatch import native_propagator
+
+    backend = native_propagator(propagator)
     stage_config = config.for_refinement()
     used, _pipeline_output = apply_pipeline_once(observations, config)
-    refined, members = _refine_prepared(orbit, used, propagator, stage_config)
-    refined = attach_configuration_provenance(refined, config)
-    return refined, attach_original_and_used(members, observations, used)
+    refined, members = _refine_prepared(
+        orbit, used, propagator, stage_config, native_backend=backend
+    )
+    members = attach_original_and_used(members, observations, used)
+    refined = stamp_complete_provenance(
+        refined,
+        members,
+        observations,
+        config,
+        route="algorithms.refine_one_group",
+    )
+    return refined, members
 
 
-def run_od(
+def run_od_one_group(
     observations: OrbitDeterminationObservations,
     propagator: Propagator,
     *,
@@ -143,18 +164,45 @@ def run_od(
     prepared table; refinement never reapplies transforms.
     """
 
+    from ._provenance import core_build_identity, stamp_complete_provenance
+    from ._validation import validate_observations
+
     if not isinstance(config, OdConfig):
         raise TypeError("config must be an OdConfig")
+    if object_id is not None and not isinstance(object_id, str):
+        raise TypeError("object_id must be a string or None")
+    empty = validate_observations(observations)
+    core_build_identity()
+    if empty:
+        return FittedOrbits.empty(), FittedOrbitMembers.empty()
+    from .._native_dispatch import native_propagator
+
+    backend = native_propagator(propagator)
     iod_config: IodRunConfig = config.for_iod()
     refinement_config: RefinementRunConfig = config.for_refinement()
     original = observations
     used, _pipeline_output = apply_pipeline_once(original, config)
-    iod_orbits, iod_members, _report = _run_iod_prepared(used, propagator, iod_config)
+    iod_orbits, iod_members, _report = _run_iod_prepared(
+        used, propagator, iod_config, native_backend=backend
+    )
     if len(iod_orbits) == 0:
         return FittedOrbits.empty(), attach_original_and_used(
             iod_members, original, used
         )
-    refined, members = _refine_prepared(iod_orbits, used, propagator, refinement_config)
+    refined, members = _refine_prepared(
+        iod_orbits,
+        used,
+        propagator,
+        refinement_config,
+        native_backend=backend,
+    )
     refined = _stamp_object_id(refined, object_id)
-    refined = attach_configuration_provenance(refined, config)
-    return refined, attach_original_and_used(members, original, used)
+    members = attach_original_and_used(members, original, used)
+    refined = stamp_complete_provenance(
+        refined,
+        members,
+        original,
+        config,
+        route="algorithms.run_od_one_group",
+    )
+    return refined, members

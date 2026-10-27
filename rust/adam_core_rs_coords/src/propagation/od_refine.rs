@@ -39,7 +39,7 @@ use crate::differential_correction::{
     whiten_residual_pairs, whitened_2body_jacobian, LossType, TwoBodyJacobianTerms,
     TwoBodyModelConfig, HUBER_F_SCALE_DEFAULT,
 };
-use crate::observation_uncertainty::{ObservationUncertaintyModel, OrbitDeterminationAstrometry};
+use crate::observation_uncertainty::OrbitDeterminationAstrometry;
 use crate::orbit_least_squares::inverse_6x6;
 use crate::translation::{
     deduplicated_origin_translation_vectors, normalize_coordinates_to, OriginTranslationProvider,
@@ -2395,11 +2395,13 @@ impl Default for RefinementConfig {
 /// Settings of the complete native orbit determination: Gauss IOD followed
 /// by differential correction with outlier treatment.
 #[derive(Debug, Clone, Copy, Default)]
-pub struct FullOdConfig {
+#[allow(dead_code)]
+pub(crate) struct FullOdConfig {
     pub iod: super::od::IodConfig,
     pub refinement: RefinementConfig,
 }
 
+#[allow(dead_code)]
 impl FullOdConfig {
     pub fn validate(&self) -> Result<(), String> {
         self.iod.validate()?;
@@ -2425,7 +2427,8 @@ pub struct RefinedOutput {
 /// and the refined orbit. Every member array keeps the input observation
 /// order.
 #[derive(Debug, Clone)]
-pub struct FullOdOutput {
+#[allow(dead_code)]
+pub(crate) struct FullOdOutput {
     /// The IOD stage: every scored candidate and the accepted one, whose
     /// exact epoch is the epoch of `refined` too.
     pub iod: super::od::IodResult,
@@ -3438,7 +3441,8 @@ pub fn refine_with<T: OriginTranslationProvider>(
 /// orbit against all observations on `propagator`. The two propagators are
 /// explicit; passing the same one twice is the single-backend case.
 #[allow(clippy::too_many_arguments)]
-pub fn full_od_barycentric<I, R, T>(
+#[allow(dead_code)]
+pub(crate) fn full_od_barycentric<I, R, T>(
     iod_propagator: &I,
     propagator: &R,
     observed: &CoordinateBatch,
@@ -3479,7 +3483,8 @@ where
 /// [`full_od_barycentric`] over any pair of [`SphericalPredictor`]s: IOD
 /// scores candidates on `iod_predictor`, refinement runs on `predictor`.
 #[allow(clippy::too_many_arguments)]
-pub fn full_od_with<T: OriginTranslationProvider>(
+#[allow(dead_code)]
+pub(crate) fn full_od_with<T: OriginTranslationProvider>(
     iod_predictor: &dyn SphericalPredictor,
     predictor: &dyn SphericalPredictor,
     observed: &CoordinateBatch,
@@ -3552,18 +3557,6 @@ impl AstrometrySnapshot {
         }
     }
 }
-
-/// Product of `run_od_barycentric`: the astrometry as supplied and as used by
-/// the fit, and the full OD run on the used observations.
-#[derive(Debug, Clone)]
-pub struct RunOdOutput {
-    pub original: AstrometrySnapshot,
-    pub used: AstrometrySnapshot,
-    /// Whether any model changed a value.
-    pub models_changed: bool,
-    pub full_od: FullOdOutput,
-}
-
 /// Rust-owned result of applying ordered observation models to original data.
 #[derive(Debug, Clone)]
 pub struct AppliedObservationModels {
@@ -3575,14 +3568,17 @@ pub struct AppliedObservationModels {
 
 /// Apply ordered observation models and materialize the complete coordinates
 /// consumed by OD. Both fused and composed routes call this implementation.
-pub fn apply_observation_models(
+fn apply_observation_transforms<F>(
     observed: &CoordinateBatch,
     obs_code: &[String],
     band: &[Option<String>],
     astcat: &[Option<String>],
-    models: Vec<Box<dyn ObservationUncertaintyModel>>,
     provider: &dyn TimeScaleProvider,
-) -> PropagationResultValue<AppliedObservationModels> {
+    apply: F,
+) -> PropagationResultValue<AppliedObservationModels>
+where
+    F: FnOnce(&mut OrbitDeterminationAstrometry) -> Result<bool, String>,
+{
     let n = observed.len();
     if obs_code.len() != n || band.len() != n || astcat.len() != n {
         return Err(PropagationError::InvalidRequest(
@@ -3623,14 +3619,7 @@ pub fn apply_observation_models(
         mjd_utc,
         jd_tdb,
     };
-    let models_changed = if models.is_empty() {
-        false
-    } else {
-        crate::observation_uncertainty::CompositeModel::new(models)
-            .map_err(PropagationError::InvalidRequest)?
-            .apply(&mut astrometry)
-            .map_err(PropagationError::InvalidRequest)?
-    };
+    let models_changed = apply(&mut astrometry).map_err(PropagationError::InvalidRequest)?;
     let used_snapshot =
         AstrometrySnapshot::from_columns(&astrometry.lon, &astrometry.lat, &astrometry.covariance);
 
@@ -3688,110 +3677,19 @@ pub fn apply_observation_models(
     })
 }
 
-/// One-crossing `run_od` for the native fitter: apply the observation models
-/// to the ORIGINAL observations in order, run the full orbit determination
-/// on the transformed ("used") observations, and return both astrometry
-/// snapshots for the members' provenance columns. `obs_code`, `band` and
-/// `astcat` are the per-observation station, photometric band and star
-/// catalog the models consult.
-///
-/// The models run before a covariance is required: observations without
-/// one (`None`) start as NaN-filled covariance rows, so that a
-/// `SigmaFillModel` among `models` can supply the missing sigmas exactly as
-/// it does on the composed Python route. After the models every observation
-/// must have finite, positive lon/lat variances, else `InvalidRequest`
-/// names that model as the remedy.
-#[allow(clippy::too_many_arguments)]
-pub fn run_od_barycentric<I, R, T>(
-    iod_propagator: &I,
-    propagator: &R,
+/// Apply the closed, validated Core observation pipeline.
+pub fn apply_configured_observation_pipeline(
     observed: &CoordinateBatch,
-    observers: &ObserverBatch,
     obs_code: &[String],
     band: &[Option<String>],
     astcat: &[Option<String>],
-    models: Vec<Box<dyn ObservationUncertaintyModel>>,
-    config: &FullOdConfig,
-    options: &EphemerisOptions,
+    pipeline: &crate::od_config::ObservationPipeline,
     provider: &dyn TimeScaleProvider,
-    translation_provider: &T,
-) -> PropagationResultValue<RunOdOutput>
-where
-    I: Propagator,
-    R: Propagator,
-    T: OriginTranslationProvider,
-{
-    let iod_predictor = PropagatorPredictor {
-        propagator: iod_propagator,
-        options,
-        provider,
-        translation_provider,
-    };
-    let predictor = PropagatorPredictor {
-        propagator,
-        options,
-        provider,
-        translation_provider,
-    };
-    run_od_with(
-        &iod_predictor,
-        &predictor,
-        observed,
-        observers,
-        obs_code,
-        band,
-        astcat,
-        models,
-        config,
-        provider,
-        translation_provider,
-    )
-}
-
-/// [`run_od_barycentric`] over any pair of [`SphericalPredictor`]s (IOD,
-/// refinement).
-#[allow(clippy::too_many_arguments)]
-pub fn run_od_with<T: OriginTranslationProvider>(
-    iod_predictor: &dyn SphericalPredictor,
-    predictor: &dyn SphericalPredictor,
-    observed: &CoordinateBatch,
-    observers: &ObserverBatch,
-    obs_code: &[String],
-    band: &[Option<String>],
-    astcat: &[Option<String>],
-    models: Vec<Box<dyn ObservationUncertaintyModel>>,
-    config: &FullOdConfig,
-    provider: &dyn TimeScaleProvider,
-    translation_provider: &T,
-) -> PropagationResultValue<RunOdOutput> {
-    config
-        .validate()
-        .map_err(PropagationError::InvalidRequest)?;
-    let n = observed.len();
-    if observers.len() != n || obs_code.len() != n || band.len() != n || astcat.len() != n {
-        return Err(PropagationError::InvalidRequest(
-            "observed, observers, obs_code, band and astcat must have equal length".to_string(),
-        ));
-    }
-    let applied = apply_observation_models(observed, obs_code, band, astcat, models, provider)?;
-
-    let full_od = full_od_with(
-        iod_predictor,
-        predictor,
-        &applied.observations,
-        observers,
-        config,
-        provider,
-        translation_provider,
-    )?;
-    Ok(RunOdOutput {
-        original: applied.original,
-        used: applied.used,
-        models_changed: applied.models_changed,
-        full_od,
+) -> PropagationResultValue<AppliedObservationModels> {
+    apply_observation_transforms(observed, obs_code, band, astcat, provider, |astrometry| {
+        pipeline.apply(astrometry)
     })
 }
-
 #[cfg(test)]
 #[allow(clippy::needless_range_loop)]
 mod tests {
@@ -8363,43 +8261,6 @@ mod tests {
             refinement_evidence
         );
         assert_eq!(full.refined.as_ref().unwrap().fit.state, refined.fit.state);
-
-        iod_predictor.reset();
-        refinement_predictor.reset();
-        let obs_code: Vec<String> = observers.code.iter().map(|code| code.0.clone()).collect();
-        let none = vec![None; observed.len()];
-        let run = run_od_with(
-            &iod_predictor,
-            &refinement_predictor,
-            &observed,
-            &observers,
-            &obs_code,
-            &none,
-            &none,
-            Vec::new(),
-            &config,
-            &NoopProvider,
-            &ZeroTranslationProvider,
-        )
-        .unwrap();
-        assert!(!run.models_changed);
-        assert!(run.full_od.refined.is_some());
-        assert_eq!(run.full_od.iod.triplets_tried, iod.triplets_tried);
-        assert_eq!(
-            (iod_predictor.calls.get(), iod_predictor.states.get()),
-            iod_evidence
-        );
-        assert_eq!(
-            (
-                refinement_predictor.calls.get(),
-                refinement_predictor.states.get(),
-            ),
-            refinement_evidence
-        );
-        assert_eq!(
-            run.full_od.refined.as_ref().unwrap().fit.state,
-            refined.fit.state
-        );
     }
 
     #[test]
@@ -8551,130 +8412,6 @@ mod tests {
             }
         }
         assert!(mahalanobis < 40.0, "{mahalanobis}");
-    }
-
-    #[test]
-    fn run_od_applies_models_and_records_provenance() {
-        let observed = synthetic_observations_spaced(1, None);
-        let obs_code: Vec<String> = (0..NUM_OBS).map(|_| "T00".to_string()).collect();
-        let band = vec![None; NUM_OBS];
-        let astcat = vec![None; NUM_OBS];
-        let models: Vec<Box<dyn ObservationUncertaintyModel>> = vec![Box::new(
-            crate::observation_uncertainty::NightBatchDeweightingModel::new(2).unwrap(),
-        )];
-        let output = run_od_barycentric(
-            &TwoBodyPropagator::default(),
-            &TwoBodyPropagator::default(),
-            &observed,
-            &observers_spaced(1),
-            &obs_code,
-            &band,
-            &astcat,
-            models,
-            &full_od_config(RefinementConfig::WorstResidual(
-                IterativeFitConfig::default(),
-            )),
-            &ephemeris_options(),
-            &NoopProvider,
-            &ZeroTranslationProvider,
-        )
-        .unwrap();
-        // Positions never move; every same-night batch here is one observation
-        // per night, so the deweighting is a no-op and the used sigmas equal
-        // the originals.
-        assert_eq!(output.original.lon, output.used.lon);
-        assert_eq!(output.original.sigma_lon.len(), NUM_OBS);
-        assert!(output
-            .original
-            .sigma_lon
-            .iter()
-            .all(|s| (s - SIGMA_DEG).abs() < 1e-15));
-        assert!(!output.models_changed);
-        let refined = output.full_od.refined.expect("refined orbit");
-        assert!(refined.fit.converged);
-        assert_eq!(refined.passes, 1);
-    }
-
-    /// `synthetic_observations_spaced(1, None)` without any covariance.
-    fn observations_without_covariance() -> CoordinateBatch {
-        let observed = synthetic_observations_spaced(1, None);
-        CoordinateBatch::new(
-            observed.values.clone(),
-            observed.frame,
-            observed.origins.clone(),
-            observed.times.clone(),
-            None,
-        )
-        .unwrap()
-    }
-
-    fn run_od_without_covariance(
-        models: Vec<Box<dyn ObservationUncertaintyModel>>,
-    ) -> PropagationResultValue<RunOdOutput> {
-        let obs_code: Vec<String> = (0..NUM_OBS).map(|_| "T00".to_string()).collect();
-        run_od_barycentric(
-            &TwoBodyPropagator::default(),
-            &TwoBodyPropagator::default(),
-            &observations_without_covariance(),
-            &observers_spaced(1),
-            &obs_code,
-            &vec![None; NUM_OBS],
-            &vec![None; NUM_OBS],
-            models,
-            &full_od_config(RefinementConfig::Cmc2003(Cmc2003FitConfig::default())),
-            &ephemeris_options(),
-            &NoopProvider,
-            &ZeroTranslationProvider,
-        )
-    }
-
-    #[test]
-    fn run_od_lets_a_sigma_model_fill_a_missing_covariance() {
-        let lookup = crate::veres2017::VeresSigmaLookup::new(
-            &[crate::veres2017::VeresSigmaRow {
-                obs_code: None,
-                astcat: None,
-                sigma_ra_arcsec: SIGMA_DEG * 3600.0,
-                sigma_dec_arcsec: SIGMA_DEG * 3600.0,
-            }],
-            None,
-        )
-        .unwrap();
-        let output =
-            run_od_without_covariance(vec![Box::new(crate::veres2017::SigmaFillModel { lookup })])
-                .unwrap();
-        assert!(output.models_changed);
-        assert!(output.original.sigma_lon.iter().all(|s| s.is_nan()));
-        assert!(output.original.sigma_lat.iter().all(|s| s.is_nan()));
-        assert!(output
-            .used
-            .sigma_lat
-            .iter()
-            .all(|s| (s - SIGMA_DEG).abs() < 1e-15));
-        assert!(output.used.sigma_lon.iter().all(|s| s.is_finite()));
-        assert!(output.full_od.iod.found());
-        let refined = output.full_od.refined.expect("refined orbit");
-        assert!(refined.fit.converged);
-        assert_eq!(refined.n_rejected, 0);
-    }
-
-    #[test]
-    fn run_od_without_covariance_or_a_filling_model_is_refused() {
-        match run_od_without_covariance(Vec::new()) {
-            Err(PropagationError::InvalidRequest(message)) => {
-                assert!(message.contains("SigmaFillModel"), "{message}");
-                assert!(message.contains("12 of 12"), "{message}");
-            }
-            other => panic!("expected InvalidRequest, got {other:?}"),
-        }
-        // A model that does not touch the covariance does not help either.
-        let models: Vec<Box<dyn ObservationUncertaintyModel>> = vec![Box::new(
-            crate::observation_uncertainty::NightBatchDeweightingModel::new(2).unwrap(),
-        )];
-        assert!(matches!(
-            run_od_without_covariance(models),
-            Err(PropagationError::InvalidRequest(_))
-        ));
     }
 
     #[test]

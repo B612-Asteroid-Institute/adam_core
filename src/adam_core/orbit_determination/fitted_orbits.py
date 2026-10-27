@@ -110,26 +110,26 @@ def drop_duplicate_orbits(
 
 
 class OdProvenance(qv.Table):
-    """
-    Compact provenance of one fitted orbit: what produced it and how.
+    """Runtime provenance for a fitted orbit.
 
-    Written by `~adam_core.orbit_determination.run_od` (every field) and by
-    the IOD stage (``iod_*``); null for orbits produced by other entry points.
-    The expanded native configuration is canonical JSON; bound scientific
-    resources are identified by content identity and are never copied.
+    Focused ``algorithms.*_one_group`` workflows populate clean adam-core
+    identity, ordered-input fingerprint, route, native provider metadata,
+    stage diagnostics, complete canonical Rust configuration, and rejection
+    counts. Rows produced by lower-level numerical kernels may leave fields
+    null. Resource paths are never recorded.
     """
 
     #: adam-core version that produced the orbit.
     adam_core_version = qv.LargeStringColumn(nullable=True)
-    #: Exact clean source commit embedded by the native build. ``run_od``
-    #: refuses dirty or unknown build identities before fitting.
+    #: Exact clean source commit embedded by the native build. Focused
+    #: configured workflows refuse dirty or unknown identities before work.
     adam_core_build = qv.LargeStringColumn(nullable=True)
     #: SHA-256 of the ordered caller table plus exact used-astrometry rows.
     input_fingerprint = qv.LargeStringColumn(nullable=True)
-    #: ``"fused"`` (one native ``run_od`` crossing) or ``"composed"``.
+    #: Exact focused algorithm route, for example
+    #: ``"algorithms.run_od_one_group"``.
     route = qv.LargeStringColumn(nullable=True)
-    #: Historical producer label; canonical Core 0.7 workflows leave this null
-    #: because execution is selected by the typed native configuration.
+    #: Historical producer label; configured workflows leave this null.
     fitter = qv.LargeStringColumn(nullable=True)
     #: Backend of the IOD stage and of the refinement (``name version``; a
     #: propagator without a `NativeBackend` is ``python:module.qualname``).
@@ -143,8 +143,7 @@ class OdProvenance(qv.Table):
     #: refinement pass/rejection/recovery/CMC flags.
     iod_diagnostics = qv.LargeStringColumn(nullable=True)
     refinement_diagnostics = qv.LargeStringColumn(nullable=True)
-    #: Historical settings field; canonical Core 0.7 workflows leave this null
-    #: and record the complete settings in ``configuration``.
+    #: Historical settings field; configured workflows use ``configuration``.
     settings = qv.LargeStringColumn(nullable=True)
     #: Expanded complete OD configuration (canonical JSON): profile identity,
     #: ordered transforms/resources, stage settings, and evaluation policy.
@@ -176,7 +175,7 @@ class FittedOrbits(qv.Table):
     optimizer_iterations = qv.Int64Column(nullable=True)
     success = qv.BooleanColumn(nullable=True)
     status_code = qv.Int64Column(nullable=True)
-    #: Compact provenance (`OdProvenance`); null outside `run_od` and IOD.
+    #: Compact provenance; fields may be null for lower-level kernels.
     provenance = OdProvenance.as_column(nullable=True)
 
     def to_orbits(self) -> Orbits:
@@ -207,7 +206,7 @@ class ObservationAstrometry(qv.Table):
     the astrometry actually USED by the fitter (``used_astrometry``) after any
     observation models (star-catalog debiasing, uncertainty inflation,
     deweighting) were applied at fit time by
-    `~adam_core.orbit_determination.run_od`. Values are embedded directly so
+    `~adam_core.orbit_determination.algorithms.run_od_one_group`. Values are embedded directly so
     that fitted orbit members are self-contained provenance: the observations
     the fit was based on can be inspected (and the model's effect audited)
     without re-joining to the input observations or re-running the models.
@@ -301,7 +300,7 @@ class FittedOrbitMembers(qv.Table):
     used_astrometry : `ObservationAstrometry`, nullable
         Position and uncertainty actually USED by the fitter, i.e. after the
         observation models applied at fit time by
-        `~adam_core.orbit_determination.run_od`. Equal to
+        `~adam_core.orbit_determination.algorithms.run_od_one_group`. Equal to
         ``original_astrometry`` when no model changed the observation.
     astcat : str, nullable
         Star catalog the observation was reduced against (see

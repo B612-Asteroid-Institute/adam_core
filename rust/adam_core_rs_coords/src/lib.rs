@@ -38,14 +38,25 @@ pub use efcc18::{
 
 mod observation_uncertainty;
 mod od_config;
+mod od_workflows;
 
 /// Rust-owned Core 0.7 orbit-determination configuration boundary.
 pub mod od {
     pub use crate::od_config::{
         EvaluationConfig, IodRunConfig, ObservationPipeline, ObservationTransform, OdConfig,
-        RefinementRunConfig, ResidualCovarianceOperation, ResourceBindings, ResourceProblem,
-        ResourceRequirement, ResourceSlot, ResourceValidationError, ValidatedResourceIdentity,
+        OdConfigError, RefinementRunConfig, ResidualCovarianceOperation, ResourceBindings,
+        ResourceProblem, ResourceRequirement, ResourceSlot, ResourceValidationError,
+        ValidatedResourceIdentity,
     };
+    pub use crate::propagation::apply_configured_observation_pipeline;
+
+    /// Focused predictor-level building blocks for the forthcoming batch API.
+    pub mod algorithms {
+        pub use crate::od_workflows::{
+            prepare_observations, refine_with_predictor, run_iod_with_predictor,
+            run_od_with_predictors, ConfiguredRunOdOutput, PreparedObservations,
+        };
+    }
 
     /// Immutable predefined complete configurations.
     pub mod profiles {
@@ -57,30 +68,14 @@ pub mod od {
 }
 
 pub use od_config::{
-    EvaluationConfig, IodRunConfig, ObservationPipeline, ObservationTransform, OdConfig, OdProfile,
-    ProfileIdentity, RefinementRunConfig, ResidualCovarianceOperation, ResourceBindings,
-    ResourceProblem, ResourceRequirement, ResourceSlot, ResourceValidationError,
+    EvaluationConfig, IodRunConfig, ObservationPipeline, ObservationTransform, OdConfig,
+    OdConfigError, OdProfile, ProfileIdentity, RefinementRunConfig, ResidualCovarianceOperation,
+    ResourceBindings, ResourceProblem, ResourceRequirement, ResourceSlot, ResourceValidationError,
     ValidatedResourceIdentity, ASTEROID_INSTITUTE_OD_V1, CORE_OD_V1, EFCC18_BIAS_RESOURCE,
     V2_FULL_RESOURCE, V2_SIGMA_FILL_RESOURCE,
 };
 
 mod veres2017;
-
-/// Hidden implementation exports used only by lower-level extension bindings.
-/// Canonical Core 0.7 workflows use the closed `od` configuration boundary.
-#[doc(hidden)]
-pub mod _od_internal {
-    pub use crate::observation_uncertainty::{
-        assert_positions_unchanged, BiasTable, BiasTableRow, Efcc18DebiasModel,
-        EmpiricalCovarianceMode, EmpiricalCovarianceModel, IdentityModel,
-        NightBatchDeweightingModel, ObservationUncertaintyModel, OrbitDeterminationAstrometry,
-        PerformanceWeightedModel, SigmaFloorModel,
-    };
-    pub use crate::veres2017::{
-        SigmaFillModel, VeresFloorModel, VeresReplaceModel, VeresSigmaLookup, VeresSigmaRow,
-        VERES2017_FALLBACK_SIGMA_ARCSEC,
-    };
-}
 
 pub mod cmc2003;
 pub use cmc2003::{
@@ -153,11 +148,10 @@ pub mod propagate;
 pub mod propagation;
 pub use propagation::{
     candidate_orbit_batch, cmc2003_fit_barycentric, evaluate_orbit, fit_orbit_whitened_barycentric,
-    full_od_barycentric, iod_fit, iterative_fit_barycentric, max_outliers, run_od_barycentric,
-    symmetric_eigen_6x6, AstrometrySnapshot, Cmc2003FitConfig, Cmc2003FitOutput,
-    CovarianceValidation, FullOdConfig, FullOdOutput, IodCandidateFailure, IterativeFitConfig,
-    IterativeFitOutput, JacobianMethod, OrbitGeometry, RefinedOutput, RefinementConfig,
-    RunOdOutput, WhitenedFitConfig, WhitenedFitOutput, DELTA_CHI2_WINDOW,
+    iod_fit, iterative_fit_barycentric, max_outliers, symmetric_eigen_6x6, AstrometrySnapshot,
+    Cmc2003FitConfig, Cmc2003FitOutput, CovarianceValidation, IodCandidateFailure,
+    IterativeFitConfig, IterativeFitOutput, JacobianMethod, OrbitGeometry, RefinedOutput,
+    RefinementConfig, WhitenedFitConfig, WhitenedFitOutput, DELTA_CHI2_WINDOW,
 };
 pub use propagation::{
     generate_ephemeris, generate_ephemeris_barycentric, generate_ephemeris_translated,

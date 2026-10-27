@@ -15,6 +15,7 @@ from adam_core.orbits.orbits import Orbits
 from adam_core.time.time import Timestamp
 from adam_core.utils.helpers.orbits import make_real_orbits
 
+from ..algorithms.evaluation import evaluate_orbits_one_group
 from ..config import (
     EvaluationConfig,
     IodRunConfig,
@@ -22,7 +23,7 @@ from ..config import (
     RefinementRunConfig,
     ResourceBindings,
 )
-from ..evaluate import OrbitDeterminationObservations, evaluate_orbits
+from ..evaluate import OrbitDeterminationObservations, _evaluate_orbits_prepared
 from ..observation_pipeline import ObservationPipeline
 
 
@@ -139,11 +140,12 @@ def test_evaluate_orbits_vectorized_statistics() -> None:
     orbits, observations, propagator = make_evaluate_case(num_orbits, num_observations)
     ignore: list[str] = []
 
-    fitted_orbits, fitted_orbit_members = evaluate_orbits(
+    fitted_orbits, fitted_orbit_members = _evaluate_orbits_prepared(
         orbits,
         observations,
         propagator,
-        config=_config(),
+        parameters=6,
+        ignore=None,
     )
 
     include_mask = np.array(
@@ -186,8 +188,8 @@ def test_evaluate_orbits_frozen_reference_parity() -> None:
     )
     expected = json.loads(fixture_path.read_text())["normal"]
     orbits, observations, propagator = make_evaluate_case(4, 8)
-    fitted, members = evaluate_orbits(
-        orbits, observations, propagator, config=_config()
+    fitted, members = _evaluate_orbits_prepared(
+        orbits, observations, propagator, parameters=6, ignore=None
     )
 
     assert fitted.orbit_id.to_pylist() == expected["orbit_ids"]
@@ -213,10 +215,13 @@ def test_evaluate_orbits_frozen_reference_parity() -> None:
     )
 
 
-def test_evaluate_orbits_empty_error() -> None:
+def test_evaluate_orbits_empty_is_a_noop() -> None:
     orbits, observations, propagator = make_evaluate_case(1, 0)
-    with pytest.raises(ValueError, match="requires observation times"):
-        evaluate_orbits(orbits, observations, propagator, config=_config())
+    fitted, members = evaluate_orbits_one_group(
+        orbits, observations, propagator, config=_config()
+    )
+    assert len(fitted) == 0
+    assert len(members) == 0
 
 
 def test_evaluate_orbits_rust_native_timing() -> None:
@@ -264,4 +269,6 @@ def test_evaluate_orbits_requires_grouped_ephemeris_order(indices) -> None:
     orbits, observations, propagator = make_evaluate_case(2, 3)
     propagator.ephemeris = propagator.ephemeris.take(indices)
     with pytest.raises(ValueError, match="Ephemeris rows must be grouped"):
-        evaluate_orbits(orbits, observations, propagator, config=_config())
+        _evaluate_orbits_prepared(
+            orbits, observations, propagator, parameters=6, ignore=None
+        )

@@ -1,29 +1,30 @@
+import json
 import logging
 import uuid
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Optional, Tuple, cast
+from typing import TYPE_CHECKING, Any, Optional, Tuple
 
 import numpy as np
 
-from .. import _rust_native
-from ..coordinates import CartesianCoordinates
-from ..coordinates.origin import Origin
-from ..coordinates.residuals import Residuals
-from ..orbits.orbits import Orbits
-from ..orbits.variants import VariantOrbits
-from ..propagator import Propagator
-from ..time import Timestamp
-from ._native_dispatch import native_propagator
-from .evaluate import OrbitDeterminationObservations
+from ... import _rust_native  # type: ignore[attr-defined]
+from ...coordinates.cartesian import CartesianCoordinates
+from ...coordinates.origin import Origin
+from ...coordinates.residuals import Residuals
+from ...orbits.orbits import Orbits
+from ...orbits.variants import VariantOrbits
+from ...propagator import Propagator
+from ...time import Timestamp
+from .._native_dispatch import native_propagator
+from ..evaluate import OrbitDeterminationObservations
 
 if TYPE_CHECKING:
-    from .config import IodRunConfig, OdConfig
+    from ..config import IodRunConfig, OdConfig
 
-from .fitted_orbits import FittedOrbitMembers, FittedOrbits
+from ..fitted_orbits import FittedOrbitMembers, FittedOrbits
 
 logger = logging.getLogger(__name__)
 
-__all__ = ["IodCandidate", "IodCandidateFailure", "IodReport", "run_iod"]
+__all__ = ["IodCandidate", "IodCandidateFailure", "IodReport", "run_iod_one_group"]
 
 
 @dataclass(frozen=True)
@@ -94,7 +95,7 @@ class RangingSample:
     cell width.
     """
 
-    attributable: dict
+    attributable: dict[str, Any]
     states: np.ndarray
     rho_au: np.ndarray
     rho_dot_au_per_day: np.ndarray
@@ -136,7 +137,7 @@ class RangingSample:
         )
 
 
-def _ranging_from_output(ranging: Optional[dict]) -> Optional[RangingSample]:
+def _ranging_from_output(ranging: Optional[dict[str, Any]]) -> Optional[RangingSample]:
     if ranging is None:
         return None
     return RangingSample(
@@ -166,7 +167,7 @@ class IodCandidateFailure:
 @dataclass(frozen=True)
 class IodReport:
     """
-    What `run_iod` searched: every scored candidate (`IodCandidate`), which
+    What focused IOD searched: every scored candidate (`IodCandidate`), which
     one was accepted, the search counters and the reason when none was.
     A dataclass rather than a table: candidates are few and their rows
     reference the observations by index.
@@ -213,7 +214,7 @@ def _state6(values: Any) -> tuple[float, float, float, float, float, float]:
     state = tuple(float(value) for value in values)
     if len(state) != 6:
         raise ValueError(f"native IOD state must contain 6 values, got {len(state)}")
-    return cast(tuple[float, float, float, float, float, float], state)
+    return state
 
 
 def _triplet3(values: Any) -> tuple[int, int, int]:
@@ -222,10 +223,10 @@ def _triplet3(values: Any) -> tuple[int, int, int]:
         raise ValueError(
             f"native IOD observation triplet must contain 3 rows, got {len(triplet)}"
         )
-    return cast(tuple[int, int, int], triplet)
+    return triplet
 
 
-def report_from_iod_output(output: dict) -> IodReport:
+def _report_from_iod_output(output: dict[str, Any]) -> IodReport:
     """The `IodReport` of a Rust IOD dict (`run_iod_ipc` or the ``iod`` entry
     of an adam-core ``full_od`` / ``run_od`` output)."""
     candidates = tuple(
@@ -295,6 +296,8 @@ def _run_iod_prepared(
     observations: OrbitDeterminationObservations,
     propagator: Propagator,
     stage_config: "IodRunConfig",
+    *,
+    native_backend: object | None = None,
 ) -> Tuple[FittedOrbits, FittedOrbitMembers, IodReport]:
     """Run the Rust IOD kernel on astrometry prepared by the caller."""
     if len(observations) == 0:
@@ -304,26 +307,56 @@ def _run_iod_prepared(
             _empty_report("no observations"),
         )
     orbit_id = uuid.uuid4().hex
-    from .algorithms.fitting import _native_problem
+    from .fitting import _native_problem
 
     _, observed_ipc, observers_ipc = _native_problem(
         _placeholder_orbit(observations), observations
     )
-    from .config import IodRunConfig
+    from ..config import IodRunConfig
 
     if not isinstance(stage_config, IodRunConfig):
         raise TypeError("stage_config must be an IodRunConfig")
     output = _rust_native.run_iod_config_ipc(
-        native_propagator(propagator),
+        native_propagator(propagator) if native_backend is None else native_backend,
         observed_ipc,
         observers_ipc,
         stage_config._native,
     )
-    orbit, members = tables_from_iod_output(orbit_id, observations, output)
-    return orbit, members, report_from_iod_output(output)
+    orbit, members = _tables_from_iod_output(orbit_id, observations, output)
+    report = _report_from_iod_output(output)
+    if len(orbit):
+        from .._pipeline import provenance_with_fields
+
+        diagnostics = json.dumps(
+            {
+                "triplets_tried": report.triplets_tried,
+                "candidates_evaluated": report.candidates_evaluated,
+                "candidates_failed": report.candidates_failed,
+                "corrections_run": report.corrections_run,
+                "pair_visits": report.pair_visits,
+                "raw_pair_visits": report.raw_pair_visits,
+                "middle_visits": report.middle_visits,
+                "search_cap_exhausted": report.search_cap_exhausted,
+                "not_found_reason": report.not_found_reason,
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        provider = json.dumps(
+            output["iod_provider"], sort_keys=True, separators=(",", ":")
+        )
+        orbit = orbit.set_column(
+            "provenance",
+            provenance_with_fields(
+                orbit.provenance,
+                iod_provider=[provider] * len(orbit),
+                iod_diagnostics=[diagnostics] * len(orbit),
+            ),
+        )
+    return orbit, members, report
 
 
-def run_iod(
+def run_iod_one_group(
     observations: OrbitDeterminationObservations,
     propagator: Propagator,
     *,
@@ -334,22 +367,34 @@ def run_iod(
     The configured :class:`ObservationPipeline` is executed in Rust exactly
     once before IOD.  There is no omitted scientific configuration and no
     Python observation-model callback path. Batch grouping is added by the
-    separate Core 0.7 batch-workflow task.
+    forthcoming canonical Core 0.7 batch layer.
     """
-    from ._pipeline import (
-        apply_pipeline_once,
-        attach_configuration_provenance,
-        attach_original_and_used,
-    )
-    from .config import OdConfig
+    from .._native_dispatch import native_propagator
+    from .._pipeline import apply_pipeline_once, attach_original_and_used
+    from ..config import OdConfig
+    from ._provenance import core_build_identity, stamp_complete_provenance
+    from ._validation import validate_observations
 
     if not isinstance(config, OdConfig):
         raise TypeError("config must be an OdConfig")
+    empty = validate_observations(observations)
+    core_build_identity()
     stage_config = config.for_iod()
+    if empty:
+        return _run_iod_prepared(observations, propagator, stage_config)
+    backend = native_propagator(propagator)
     used, _pipeline_output = apply_pipeline_once(observations, config)
-    orbit, members, report = _run_iod_prepared(used, propagator, stage_config)
-    orbit = attach_configuration_provenance(orbit, config)
+    orbit, members, report = _run_iod_prepared(
+        used, propagator, stage_config, native_backend=backend
+    )
     members = attach_original_and_used(members, observations, used)
+    orbit = stamp_complete_provenance(
+        orbit,
+        members,
+        observations,
+        config,
+        route="algorithms.run_iod_one_group",
+    )
     return orbit, members, report
 
 
@@ -371,14 +416,13 @@ def _placeholder_orbit(observations: OrbitDeterminationObservations) -> Orbits:
     )
 
 
-def tables_from_iod_output(
+def _tables_from_iod_output(
     orbit_id: str,
     observations: OrbitDeterminationObservations,
-    output: dict,
+    output: dict[str, Any],
 ) -> Tuple[FittedOrbits, FittedOrbitMembers]:
     """
-    Wrap the dict of a Rust IOD decision (`iod_fit_ipc`, or the ``iod`` entry
-    of a fused ``full_od`` output) into `FittedOrbits` / `FittedOrbitMembers`
+    Wrap a Rust typed-IOD decision into `FittedOrbits` / `FittedOrbitMembers`
     in the observations' order; empty tables when no orbit was accepted, in
     which case the search counters and the reason are logged at debug level.
     """
@@ -435,7 +479,7 @@ def tables_from_iod_output(
     )
     ambiguous = output.get("ambiguous_with")
     if ambiguous is not None:
-        from ._pipeline import provenance_with_fields
+        from .._pipeline import provenance_with_fields
 
         alternatives = len(ambiguous)
         orbit = orbit.set_column(

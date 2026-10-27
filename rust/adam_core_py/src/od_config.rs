@@ -3,17 +3,27 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use adam_core_rs_coords::{
-    EvaluationConfig, IodRunConfig, ObservationPipeline, ObservationTransform, OdConfig, OdProfile,
-    RefinementRunConfig, ResidualCovarianceOperation, ResourceBindings, ResourceRequirement,
-    ResourceSlot, ASTEROID_INSTITUTE_OD_V1, CORE_OD_V1, EFCC18_BIAS_RESOURCE, V2_FULL_RESOURCE,
-    V2_SIGMA_FILL_RESOURCE,
+    EvaluationConfig, IodRunConfig, ObservationPipeline, ObservationTransform, OdConfig,
+    OdConfigError, OdProfile, RefinementRunConfig, ResidualCovarianceOperation, ResourceBindings,
+    ResourceRequirement, ResourceSlot, ASTEROID_INSTITUTE_OD_V1, CORE_OD_V1, EFCC18_BIAS_RESOURCE,
+    V2_FULL_RESOURCE, V2_SIGMA_FILL_RESOURCE,
 };
 use pyo3::exceptions::{PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use serde_json::Value;
 
+pyo3::create_exception!(_rust_native, OdConfigurationError, PyValueError);
+pyo3::create_exception!(_rust_native, OdResourceValidationError, PyValueError);
+
 fn value_error(error: impl ToString) -> PyErr {
     PyValueError::new_err(error.to_string())
+}
+
+fn od_config_error(error: OdConfigError) -> PyErr {
+    match error {
+        OdConfigError::Configuration { .. } => OdConfigurationError::new_err(error.to_string()),
+        OdConfigError::Resources(_) => OdResourceValidationError::new_err(error.to_string()),
+    }
 }
 
 fn profile(name: &str) -> PyResult<OdProfile> {
@@ -117,6 +127,11 @@ impl PyIodRunConfig {
         }
     }
 
+    #[getter]
+    fn canonical_json(&self) -> String {
+        self.inner.canonical_json()
+    }
+
     fn validate(&self) -> PyResult<()> {
         self.inner.validate().map_err(value_error)
     }
@@ -135,6 +150,11 @@ impl PyRefinementRunConfig {
         Self {
             inner: RefinementRunConfig::core_v1(),
         }
+    }
+
+    #[getter]
+    fn canonical_json(&self) -> String {
+        self.inner.canonical_json()
     }
 
     fn validate(&self) -> PyResult<()> {
@@ -200,7 +220,7 @@ fn bind_od_profile(
     let profile = profile(profile_name)?;
     let config = profile
         .bind(&bindings(resource_paths)?)
-        .map_err(value_error)?;
+        .map_err(od_config_error)?;
     Ok(PyOdConfig {
         inner: Arc::new(config),
     })
@@ -215,6 +235,22 @@ fn requirement_for_kind(kind: &str) -> PyResult<ResourceRequirement> {
             "transform {kind:?} does not have a resource"
         ))),
     }
+}
+
+fn require_exact_keys(value: &Value, expected: &[&str]) -> PyResult<()> {
+    let object = value
+        .as_object()
+        .ok_or_else(|| PyTypeError::new_err("transform declaration must be an object"))?;
+    let mut actual: Vec<&str> = object.keys().map(String::as_str).collect();
+    actual.sort_unstable();
+    let mut expected = expected.to_vec();
+    expected.sort_unstable();
+    if actual != expected {
+        return Err(value_error(format!(
+            "transform fields must be exactly {expected:?}; got {actual:?}"
+        )));
+    }
+    Ok(())
 }
 
 fn usize_field(value: &Value, name: &str) -> PyResult<usize> {
@@ -242,11 +278,13 @@ fn parse_definitions(raw: &str) -> PyResult<Vec<ObservationTransform>> {
                 .ok_or_else(|| PyTypeError::new_err("transform kind must be a string"))?;
             match kind {
                 "fill_missing_astrometric_uncertainty" => {
+                    require_exact_keys(&value, &["kind"])?;
                     Ok(ObservationTransform::FillMissingAstrometricUncertainty {
                         resource: requirement_for_kind(kind)?,
                     })
                 }
                 "efcc18_catalog_bias_correction" => {
+                    require_exact_keys(&value, &["exclude_astcats", "kind"])?;
                     let exclude_astcats = value
                         .get("exclude_astcats")
                         .and_then(Value::as_array)
@@ -263,13 +301,14 @@ fn parse_definitions(raw: &str) -> PyResult<Vec<ObservationTransform>> {
                                 .collect::<PyResult<Vec<_>>>()
                         })
                         .transpose()?
-                        .unwrap_or_default();
+                        .ok_or_else(|| value_error("exclude_astcats is required"))?;
                     Ok(ObservationTransform::Efcc18CatalogBiasCorrection {
                         resource: requirement_for_kind(kind)?,
                         exclude_astcats,
                     })
                 }
                 "station_band_residual_covariance_adjustment" => {
+                    require_exact_keys(&value, &["kind", "minimum_residual_count", "operation"])?;
                     let operation = match value.get("operation").and_then(Value::as_str) {
                         Some("add") => ResidualCovarianceOperation::Add,
                         Some("replace") => ResidualCovarianceOperation::Replace,
@@ -283,9 +322,15 @@ fn parse_definitions(raw: &str) -> PyResult<Vec<ObservationTransform>> {
                         },
                     )
                 }
-                "nightly_batch_deweighting" => Ok(ObservationTransform::NightlyBatchDeweighting {
-                    effective_observation_cap: usize_field(&value, "effective_observation_cap")?,
-                }),
+                "nightly_batch_deweighting" => {
+                    require_exact_keys(&value, &["effective_observation_cap", "kind"])?;
+                    Ok(ObservationTransform::NightlyBatchDeweighting {
+                        effective_observation_cap: usize_field(
+                            &value,
+                            "effective_observation_cap",
+                        )?,
+                    })
+                }
                 _ => Err(value_error(format!(
                     "unknown observation transform {kind:?}"
                 ))),
@@ -303,11 +348,19 @@ fn explicit_od_config(
     refinement: PyRef<'_, PyRefinementRunConfig>,
     evaluation: PyRef<'_, PyEvaluationConfig>,
 ) -> PyResult<PyOdConfig> {
+    let resource_bindings = bindings(resource_paths)?;
     let pipeline = match transforms_json {
-        None => ObservationPipeline::as_supplied(),
+        None => {
+            if resource_bindings.slots().next().is_some() {
+                return Err(OdResourceValidationError::new_err(
+                    "as-supplied pipeline does not use resource bindings",
+                ));
+            }
+            ObservationPipeline::as_supplied()
+        }
         Some(raw) => {
-            ObservationPipeline::bind_explicit(parse_definitions(raw)?, &bindings(resource_paths)?)
-                .map_err(value_error)?
+            ObservationPipeline::bind_explicit(parse_definitions(raw)?, &resource_bindings)
+                .map_err(od_config_error)?
         }
     };
     let config = OdConfig::explicit(
@@ -316,9 +369,31 @@ fn explicit_od_config(
         refinement.inner,
         evaluation.inner,
     )
-    .map_err(value_error)?;
+    .map_err(od_config_error)?;
     Ok(PyOdConfig {
         inner: Arc::new(config),
+    })
+}
+
+#[pyfunction]
+fn iod_run_config_from_json(raw: &str) -> PyResult<PyIodRunConfig> {
+    Ok(PyIodRunConfig {
+        inner: IodRunConfig::from_json(raw).map_err(OdConfigurationError::new_err)?,
+    })
+}
+
+#[pyfunction]
+fn refinement_run_config_from_json(raw: &str) -> PyResult<PyRefinementRunConfig> {
+    Ok(PyRefinementRunConfig {
+        inner: RefinementRunConfig::from_json(raw).map_err(OdConfigurationError::new_err)?,
+    })
+}
+
+#[pyfunction]
+fn evaluation_config(covariance_dimension: usize) -> PyResult<PyEvaluationConfig> {
+    Ok(PyEvaluationConfig {
+        inner: EvaluationConfig::new(covariance_dimension)
+            .map_err(OdConfigurationError::new_err)?,
     })
 }
 
@@ -331,5 +406,16 @@ pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(od_profile_requirements, m)?)?;
     m.add_function(wrap_pyfunction!(bind_od_profile, m)?)?;
     m.add_function(wrap_pyfunction!(explicit_od_config, m)?)?;
+    m.add_function(wrap_pyfunction!(iod_run_config_from_json, m)?)?;
+    m.add_function(wrap_pyfunction!(refinement_run_config_from_json, m)?)?;
+    m.add_function(wrap_pyfunction!(evaluation_config, m)?)?;
+    m.add(
+        "OdConfigurationError",
+        m.py().get_type::<OdConfigurationError>(),
+    )?;
+    m.add(
+        "OdResourceValidationError",
+        m.py().get_type::<OdResourceValidationError>(),
+    )?;
     Ok(())
 }

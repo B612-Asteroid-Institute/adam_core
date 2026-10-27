@@ -157,43 +157,37 @@ Current Migrated APIs
     units. Only ``xtol``, ``ftol``, ``gtol`` and ``max_nfev`` are accepted;
     any other solver keyword raises ``ValueError`` (there is no scipy path).
 
-- ``orbit_determination.run_iod`` / ``run_od`` / ``refine`` /
-  ``evaluate_orbits`` (Core-owned orchestration)
+- OD configuration foundation and focused one-group algorithms
+  - Status: canonical batch ``run_iod`` / ``run_od`` / ``refine`` /
+    ``evaluate_orbits`` are forthcoming and are not exported by this
+    foundation. Qualification functions have explicit ``*_one_group`` names
+    under ``adam_core.orbit_determination.algorithms``.
   - Boundary: nested Arrow IPC plus an explicit native ``OdConfig``. Python
-    binds semantic resource slots to paths and marshals tables; Rust validates
-    exact resource identity, parses tables, executes the ordered observation
-    pipeline, and owns every numerical loop. There are no model callback or
-    native-spec dictionaries.
-  - Authoritative configuration types live under
-    ``adam_core_rs_coords::od``; immutable profiles live under
-    ``adam_core_rs_coords::od::profiles``. ``run_od`` applies the pipeline
-    once, then uses the same prepared rows for IOD and refinement.
-  - Rust entrypoints remain generic over the ``Propagator`` trait, including
+    binds semantic resource slots and marshals tables; Rust validates exact
+    resource identity, parses tables, executes the ordered observation
+    pipeline, and owns numerical loops. There are no model callback/native-spec
+    dictionaries.
+  - Rust configuration types live under ``adam_core_rs_coords::od``; profiles
+    live under ``od::profiles``. Implemented focused Rust composition functions
+    under ``od::algorithms`` are ``prepare_observations``,
     ``run_iod_with_predictor``, ``refine_with_predictor``, and
-    ``run_od_with_predictors``. The provider boundary supplies propagation
-    and optional capability-negotiated derivatives only.
-  - External native propagators expose a propagation-only C-ABI table in a
-    capsule named ``adam_core.propagator.v2``. The table and request carry ABI
-    version, structure size, identity and capabilities. The mandatory callback
-    is thread-safe batched propagation over complete state, epoch, frame,
-    origin, target-time, physical-parameter and optional nongravitational
-    arrays. Core retains the capsule, validates identity, releases the GIL, and
-    performs no Python call per prediction.
-  - Providers never select transforms, profiles, grouping, fitting, rejection,
-    covariance, or OD algorithms. Unsupported Python-only propagators fail
-    explicitly.
-  - Error behavior: driver errors raise ``ValueError`` for invalid inputs and
-    ``RuntimeError`` for backend failures; a propagator without a native
-    backend raises ``TypeError``.
-  - CMC2003 finalization uses one central-difference Jacobian through the
-    full predictor for all observations. Selected rows form the covariance;
-    all rows supply rejection/recovery projections. The solver Jacobian
-    setting affects optimizer steps only. The twelve finalization candidate
-    predictions are outside ``max_nfev``; ``validate_covariance`` controls
-    the additional weak-direction probe. Huber plus CMC2003 remains a
+    ``run_od_with_predictors``. The last applies the pipeline once and gives
+    both stages the same prepared coordinates.
+  - External native propagators expose the propagation-only
+    ``adam_core.propagator.v2`` capsule. Core validates provider identity and
+    capabilities before pipeline work. Providers never select transforms,
+    profiles, grouping, fitting, rejection, covariance, or OD algorithms.
+  - Configured focused workflows reject dirty/unknown Core identity, invalid
+    IDs, malformed resources/config/provider contracts atomically. Empty
+    one-group qualification inputs return empty results before provider or
+    pipeline work. The future batch layer will classify only safely isolated
+    scientific failures per group.
+  - CMC2003 finalization uses one central-difference Jacobian through the full
+    predictor for all observations. Selected rows form the covariance; all
+    rows supply rejection/recovery projections. Huber plus CMC2003 remains a
     heuristic combination without calibrated rejection statistics.
 
-- ``orbit_determination.cmc2003_fit`` / ``cmc2003_fit_detailed``
+- ``orbit_determination.algorithms.cmc2003_fit_detailed``
   - Boundary: the whole loop is the adam-core ``cmc2003_fit_ipc`` driver
     above over the selected propagation capsule; the decision kernels below
     remain callable on their own for diagnostics.
@@ -221,11 +215,9 @@ Current Migrated APIs
 - ``observations.efcc18`` (star-catalog debiasing)
   - Boundary: NumPy ``float64`` RA/Dec/JD arrays and Python catalog lists; the
     ``(49152, 26, 4)`` float32 table crosses as a contiguous NumPy array.
-  - Rust entrypoints: ``adam_core._rust_native.efcc18_ra_dec_to_healpix_numpy``
-    (``N_side = 64`` RING, the healpix_cxx ``ang2pix`` port),
-    ``efcc18_parse_bias_dat``, ``efcc18_read_bias_version``,
-    ``efcc18_catalog_columns_numpy``, ``efcc18_corrections_numpy``,
-    ``healpix_ang2pix_lonlat_numpy``.
+  - Rust implementation: profile binding parses ``bias.dat`` internally and
+    the closed pipeline applies catalog corrections. No public native model
+    dictionary or in-memory bias-table bypass is exposed.
   - Contract: row ``k`` of ``bias.dat`` is HEALPix ring pixel ``k``; the Rust
     test suite pins the 8 published ``tiles.dat`` anchors and, when
     ``ADAM_CORE_EFCC18_TILES_DAT`` names a local copy, all 49152 tile centres.

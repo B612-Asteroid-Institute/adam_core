@@ -1,53 +1,42 @@
-//! PyO3 surface of the backend-generic Rust OD drivers: the one-crossing
-//! work units (`fit_least_squares`, `iterative_fit`, `cmc2003_fit`, `iod`,
-//! `full_od`, `run_od`, the covariance probe) over a capsule-backed native
-//! propagator, or adam-core's Rust two-body propagator (`propagator=None`).
+//! PyO3 surface of backend-generic Rust OD stages: low-level fit and rejection
+//! kernels plus complete typed IOD/refinement/configured-pipeline routes over a
+//! capsule-backed native propagator or adam-core's Rust two-body propagator.
 //! Python objects are never called for predictions: a separately built
 //! backend supplies only the propagation ABI and adam-core owns every OD
 //! loop and public operation.
 //!
-//! Inputs cross as nested Arrow IPC (the `arrow_bridge` helpers) plus dicts of
-//! settings (`fit_settings`, `iod_settings`, `refinement`) and the models' declarative native-spec dictionaries; outputs are plain dicts of scalars, lists and
-//! NumPy arrays that the facade wraps into `FittedOrbits` /
+//! Inputs cross as nested Arrow IPC (the `arrow_bridge` helpers), complete
+//! typed stage configurations for configured workflows, and dictionaries only
+//! for retained expert numerical kernels. Outputs are plain dictionaries of
+//! scalars, lists, and NumPy arrays that the facade wraps into `FittedOrbits` /
 //! `FittedOrbitMembers` without further computation. Driver errors map to
 //! `ValueError` (invalid input) or `RuntimeError` (backend failure).
 
 use crate::coordinates::{read_orbit_ipc, write_orbit_ipc, ErfaTimeProvider};
-use crate::observation_uncertainty::{bias_table, efcc18_table, veres_lookup};
 use crate::od_config::{PyIodRunConfig, PyOdConfig, PyRefinementRunConfig};
 use crate::od_support::{od_error, LockingSpiceTranslation};
-use adam_core_rs_coords::_od_internal::{
-    Efcc18DebiasModel, EmpiricalCovarianceMode, EmpiricalCovarianceModel, IdentityModel,
-    NightBatchDeweightingModel, ObservationUncertaintyModel, PerformanceWeightedModel,
-    SigmaFloorModel,
-};
-use adam_core_rs_coords::_od_internal::{SigmaFillModel, VeresFloorModel, VeresReplaceModel};
 use adam_core_rs_coords::propagation::adapter::{
-    apply_observation_models, cmc2003_fit_with, fit_orbit_whitened_with, full_od_with,
-    iterative_fit_with, refine_with, run_iod_linkages_with, run_iod_with, run_od_with,
+    cmc2003_fit_with, fit_orbit_whitened_with, iterative_fit_with, refine_with, run_iod_with,
     validate_fit_covariance_with, PropagatorPredictor, SphericalPredictor,
 };
 use adam_core_rs_coords::propagation::{
-    AstrometrySnapshot, BackendIdentity, Cmc2003FitConfig, CorrectionConfig, CovariancePropagation,
-    EphemerisOptions, EpochPolicy, ExternalPropagator, ExternalPropagatorV2, FullOdConfig,
-    FullOdOutput, IodAcceptance, IodCandidate, IodCandidateFailure, IodConfig, IodResult,
-    IterativeFitConfig, JacobianMethod, ObservationSelectionMethod, PrefitScope,
-    PropagationOptions, PropagationResultValue, Propagator, RangingConfig, RangingResult,
-    RangingSample, RefinementConfig, SpanSearchConfig, TwoBodyPropagator, TwoBodyPropagatorConfig,
-    VelocityMethod, WhitenedFitConfig, WhitenedFitOutput, EXTERNAL_PROPAGATOR_CAPSULE,
+    AstrometrySnapshot, BackendIdentity, Cmc2003FitConfig, CovariancePropagation, EphemerisOptions,
+    EpochPolicy, ExternalPropagator, ExternalPropagatorV2, IodCandidate, IodCandidateFailure,
+    IodResult, IterativeFitConfig, JacobianMethod, PropagationOptions, PropagationResultValue,
+    Propagator, RangingResult, RangingSample, RefinementConfig, TwoBodyPropagator,
+    TwoBodyPropagatorConfig, WhitenedFitConfig, WhitenedFitOutput, EXTERNAL_PROPAGATOR_CAPSULE,
 };
 use adam_core_rs_coords::{
-    validate_loss, CoordinateBatch as DataCoordinateBatch, IntoNestedRecordBatch, LossType,
+    validate_loss, CoordinateBatch as DataCoordinateBatch, IntoNestedRecordBatch,
     ObserverBatch as DataObserverBatch, OrbitBatch as DataOrbitBatch, TimeScale,
     TryFromNestedRecordBatch, TwoBodyModelConfig, CMC2003_APPARITION_GAP_DAYS, CMC2003_CHI2_FRAC,
     CMC2003_CHI2_RECOVER, CMC2003_CHI2_REJECT, CMC2003_MAX_ITERATIONS,
-    CMC2003_MAX_REJECTED_FRACTION, CMC2003_PSD_FLOOR_FRAC, HUBER_F_SCALE_DEFAULT,
+    CMC2003_MAX_REJECTED_FRACTION, CMC2003_PSD_FLOOR_FRAC,
 };
-use numpy::{IntoPyArray, PyReadonlyArray1, PyReadonlyArray2, PyReadonlyArray3};
+use numpy::{IntoPyArray, PyReadonlyArray2};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::{PyBytes, PyCapsule, PyDict, PyList, PyTuple};
-use std::sync::Arc;
 
 fn value_error(message: impl Into<String>) -> PyErr {
     PyValueError::new_err(message.into())
@@ -212,102 +201,6 @@ fn fit_settings_from_config(config: WhitenedFitConfig) -> PyResult<FitSettings> 
     Ok(settings)
 }
 
-/// `IodConfig` from the ``iod_settings`` dict over `IodConfig::default()`.
-fn parse_iod_settings(settings: Option<&Bound<'_, PyDict>>) -> PyResult<IodConfig> {
-    parse_iod_settings_over(settings, IodConfig::default())
-}
-
-#[pyfunction]
-#[pyo3(signature = (iod_settings=None, fit_settings=None))]
-fn validate_iod_settings(
-    iod_settings: Option<&Bound<'_, PyDict>>,
-    fit_settings: Option<&Bound<'_, PyDict>>,
-) -> PyResult<()> {
-    parse_fit_settings(fit_settings)?;
-    parse_iod_settings(iod_settings)?
-        .validate()
-        .map_err(value_error)
-}
-
-/// Eagerly validate fused/composed OD settings before data-dependent exits.
-#[pyfunction]
-#[pyo3(signature = (iod_settings=None, refinement=None, fit_settings=None))]
-fn validate_full_od_settings(
-    iod_settings: Option<&Bound<'_, PyDict>>,
-    refinement: Option<&Bound<'_, PyDict>>,
-    fit_settings: Option<&Bound<'_, PyDict>>,
-) -> PyResult<()> {
-    let fit = parse_fit_settings(fit_settings)?;
-    FullOdConfig {
-        iod: parse_iod_settings(iod_settings)?,
-        refinement: parse_refinement(refinement, fit.config)?,
-    }
-    .validate()
-    .map_err(value_error)
-}
-
-/// The pre-a6w.4 IOD defaults (combination triplets, prefit acceptance) of
-/// the deprecated `iod_fit_ipc`.
-fn legacy_iod_defaults() -> IodConfig {
-    IodConfig {
-        observation_selection_method: ObservationSelectionMethod::Combinations,
-        acceptance: IodAcceptance::Prefit,
-        velocity_method: VelocityMethod::Gibbs,
-        ..IodConfig::default()
-    }
-}
-
-/// `IodConfig::default()` (with `HUBER_F_SCALE_DEFAULT` as
-/// ``huber_f_scale``) under the keys of the ``iod_settings``,
-/// ``span_settings`` and ``correction_settings`` dicts: the one source of the
-/// Python signature defaults of `run_iod` and `NativeOrbitFitter`.
-#[pyfunction]
-pub fn iod_defaults(py: Python<'_>) -> PyResult<Bound<'_, PyDict>> {
-    let config = IodConfig::default();
-    let out = PyDict::new(py);
-    out.set_item("min_obs", config.min_obs)?;
-    out.set_item("min_arc_length", config.min_arc_length)?;
-    out.set_item("contamination_percentage", config.contamination_percentage)?;
-    out.set_item("rchi2_threshold", config.rchi2_threshold)?;
-    out.set_item(
-        "observation_selection_method",
-        config.observation_selection_method.as_str(),
-    )?;
-    out.set_item("light_time", config.light_time)?;
-    out.set_item("max_triplets", config.max_triplets)?;
-    out.set_item("max_pair_visits", config.max_pair_visits)?;
-    out.set_item("max_raw_pair_visits", config.max_raw_pair_visits)?;
-    out.set_item("max_middle_visits", config.max_middle_visits)?;
-    out.set_item("velocity_method", config.velocity_method.as_str())?;
-    out.set_item("acceptance", config.acceptance.as_str())?;
-    out.set_item("span_target_days", config.spans.target_span_days)?;
-    out.set_item("span_min_days", config.spans.min_span_days)?;
-    out.set_item("span_max_days", config.spans.max_span_days)?;
-    out.set_item(
-        "span_dense_window_days",
-        config.spans.dense_window_days.to_vec(),
-    )?;
-    out.set_item("span_edge_window_days", config.spans.edge_window_days)?;
-    out.set_item("span_max_triplets", config.spans.max_triplets)?;
-    out.set_item("max_corrections", config.correction.max_corrections)?;
-    out.set_item("max_converged", config.correction.max_converged)?;
-    out.set_item("correction_growth", config.correction.growth)?;
-    out.set_item("min_stage_obs", config.correction.min_stage_obs)?;
-    out.set_item("max_stages", config.correction.max_stages)?;
-    out.set_item("stage_loss", config.correction.stage_loss.as_str())?;
-    out.set_item("prefit_scope", config.correction.prefit_scope.as_str())?;
-    out.set_item("ranging_enabled", config.ranging.enabled)?;
-    out.set_item("ranging_rho_min_au", config.ranging.rho_min_au)?;
-    out.set_item("ranging_rho_max_au", config.ranging.rho_max_au)?;
-    out.set_item("ranging_n_rho", config.ranging.n_rho)?;
-    out.set_item("ranging_n_rho_dot", config.ranging.n_rho_dot)?;
-    out.set_item("ranging_max_corrections", config.ranging.max_corrections)?;
-    out.set_item("ranging_chunk_size", config.ranging.chunk_size)?;
-    out.set_item("ranging_max_arc_days", config.ranging.max_arc_days)?;
-    out.set_item("huber_f_scale", HUBER_F_SCALE_DEFAULT)?;
-    Ok(out)
-}
-
 /// The refinement defaults of the Rust config types: ``fit``
 /// (`WhitenedFitConfig::default()`), ``worst_residual`` (the loop settings of
 /// `IterativeFitConfig::default()`), ``cmc2003`` (the loop settings of
@@ -357,254 +250,6 @@ pub fn od_defaults(py: Python<'_>) -> PyResult<Bound<'_, PyDict>> {
         },
     )?;
     Ok(out)
-}
-
-/// `IodConfig` from the ``iod_settings`` dict over `defaults`.
-fn parse_iod_settings_over(
-    settings: Option<&Bound<'_, PyDict>>,
-    defaults: IodConfig,
-) -> PyResult<IodConfig> {
-    let observation_selection_method =
-        match setting::<Option<String>>(settings, "observation_selection_method", None)? {
-            Some(method) => ObservationSelectionMethod::parse(&method).map_err(value_error)?,
-            None => defaults.observation_selection_method,
-        };
-    let config = IodConfig {
-        min_obs: setting(settings, "min_obs", defaults.min_obs)?,
-        min_arc_length: setting(settings, "min_arc_length", defaults.min_arc_length)?,
-        contamination_percentage: setting(
-            settings,
-            "contamination_percentage",
-            defaults.contamination_percentage,
-        )?,
-        rchi2_threshold: setting(settings, "rchi2_threshold", defaults.rchi2_threshold)?,
-        observation_selection_method,
-        light_time: setting(settings, "light_time", defaults.light_time)?,
-        mu: setting(settings, "mu", defaults.mu)?,
-        speed_of_light: setting(settings, "speed_of_light", defaults.speed_of_light)?,
-        max_triplets: setting(settings, "max_triplets", defaults.max_triplets)?,
-        max_pair_visits: setting(settings, "max_pair_visits", defaults.max_pair_visits)?,
-        max_raw_pair_visits: setting(
-            settings,
-            "max_raw_pair_visits",
-            defaults.max_raw_pair_visits,
-        )?,
-        max_middle_visits: setting(settings, "max_middle_visits", defaults.max_middle_visits)?,
-        velocity_method: match setting::<Option<String>>(settings, "velocity_method", None)? {
-            Some(method) => VelocityMethod::parse(&method).map_err(value_error)?,
-            None => defaults.velocity_method,
-        },
-        spans: SpanSearchConfig {
-            target_span_days: setting(
-                settings,
-                "span_target_days",
-                defaults.spans.target_span_days,
-            )?,
-            min_span_days: setting(settings, "span_min_days", defaults.spans.min_span_days)?,
-            max_span_days: setting(settings, "span_max_days", defaults.spans.max_span_days)?,
-            dense_window_days: setting(
-                settings,
-                "span_dense_window_days",
-                defaults.spans.dense_window_days,
-            )?,
-            edge_window_days: setting(
-                settings,
-                "span_edge_window_days",
-                defaults.spans.edge_window_days,
-            )?,
-            max_triplets: setting(settings, "span_max_triplets", defaults.spans.max_triplets)?,
-        },
-        acceptance: match setting::<Option<String>>(settings, "acceptance", None)? {
-            Some(value) => IodAcceptance::parse(&value).map_err(value_error)?,
-            None => defaults.acceptance,
-        },
-        correction: CorrectionConfig {
-            max_corrections: setting(
-                settings,
-                "max_corrections",
-                defaults.correction.max_corrections,
-            )?,
-            max_converged: setting(settings, "max_converged", defaults.correction.max_converged)?,
-            growth: setting(settings, "correction_growth", defaults.correction.growth)?,
-            min_stage_obs: setting(settings, "min_stage_obs", defaults.correction.min_stage_obs)?,
-            max_stages: setting(settings, "max_stages", defaults.correction.max_stages)?,
-            stage_loss: match setting::<Option<String>>(settings, "stage_loss", None)? {
-                Some(value) => LossType::parse(&value).map_err(value_error)?,
-                None => defaults.correction.stage_loss,
-            },
-            prefit_scope: match setting::<Option<String>>(settings, "prefit_scope", None)? {
-                Some(value) => PrefitScope::parse(&value).map_err(value_error)?,
-                None => defaults.correction.prefit_scope,
-            },
-        },
-        ranging: RangingConfig {
-            enabled: setting(settings, "ranging_enabled", defaults.ranging.enabled)?,
-            rho_min_au: setting(settings, "ranging_rho_min_au", defaults.ranging.rho_min_au)?,
-            rho_max_au: setting(settings, "ranging_rho_max_au", defaults.ranging.rho_max_au)?,
-            n_rho: setting(settings, "ranging_n_rho", defaults.ranging.n_rho)?,
-            n_rho_dot: setting(settings, "ranging_n_rho_dot", defaults.ranging.n_rho_dot)?,
-            max_corrections: setting(
-                settings,
-                "ranging_max_corrections",
-                defaults.ranging.max_corrections,
-            )?,
-            chunk_size: setting(settings, "ranging_chunk_size", defaults.ranging.chunk_size)?,
-            max_arc_days: setting(
-                settings,
-                "ranging_max_arc_days",
-                defaults.ranging.max_arc_days,
-            )?,
-        },
-    };
-    config.validate().map_err(value_error)?;
-    Ok(config)
-}
-
-/// `RefinementConfig` from the ``refinement`` dict: ``method`` is
-/// ``"cmc2003"`` (the `RefinementConfig::default()` loop) or
-/// ``"worst_residual"``, each over that loop's `Default` settings.
-fn parse_refinement(
-    settings: Option<&Bound<'_, PyDict>>,
-    fit: WhitenedFitConfig,
-) -> PyResult<RefinementConfig> {
-    let method: String = setting(settings, "method", "cmc2003".to_string())?;
-    let config = match method.as_str() {
-        "cmc2003" => {
-            let defaults = Cmc2003FitConfig::default();
-            Ok(RefinementConfig::Cmc2003(Cmc2003FitConfig {
-                chi2_reject: setting(settings, "chi2_reject", defaults.chi2_reject)?,
-                chi2_recover: setting(settings, "chi2_recover", defaults.chi2_recover)?,
-                chi2_frac: setting(settings, "chi2_frac", defaults.chi2_frac)?,
-                max_iterations: setting(settings, "max_iterations", defaults.max_iterations)?,
-                max_rejected_fraction: setting(
-                    settings,
-                    "max_rejected_fraction",
-                    defaults.max_rejected_fraction,
-                )?,
-                apparition_gap_days: setting(
-                    settings,
-                    "apparition_gap_days",
-                    defaults.apparition_gap_days,
-                )?,
-                psd_floor_frac: setting(settings, "psd_floor_frac", defaults.psd_floor_frac)?,
-                min_kept: defaults.min_kept,
-                fit,
-            }))
-        }
-        "worst_residual" => {
-            let defaults = IterativeFitConfig::default();
-            Ok(RefinementConfig::WorstResidual(IterativeFitConfig {
-                rchi2_threshold: setting(settings, "rchi2_threshold", defaults.rchi2_threshold)?,
-                min_obs: setting(settings, "min_obs", defaults.min_obs)?,
-                min_arc_length: setting(settings, "min_arc_length", defaults.min_arc_length)?,
-                contamination_percentage: setting(
-                    settings,
-                    "contamination_percentage",
-                    defaults.contamination_percentage,
-                )?,
-                fit,
-            }))
-        }
-        other => Err(value_error(format!(
-            "refinement method must be 'cmc2003' or 'worst_residual'; got {other:?}"
-        ))),
-    }?;
-    config.validate().map_err(value_error)?;
-    Ok(config)
-}
-
-fn required<'py, T: FromPyObject<'py>>(spec: &Bound<'py, PyDict>, key: &str) -> PyResult<T> {
-    spec.get_item(key)?
-        .ok_or_else(|| value_error(format!("model spec is missing {key:?}")))?
-        .extract::<T>()
-}
-
-/// One observation model from its ``_native_spec()`` dict.
-fn model_from_spec(spec: &Bound<'_, PyDict>) -> PyResult<Box<dyn ObservationUncertaintyModel>> {
-    let model: String = required(spec, "model")?;
-    match model.as_str() {
-        "identity" => Ok(Box::new(IdentityModel)),
-        "empirical_covariance" | "performance_weighted" | "sigma_floor" => {
-            let table = bias_table(
-                required(spec, "table_obs_code")?,
-                required(spec, "table_band")?,
-                required::<PyReadonlyArray1<'_, f64>>(spec, "bias_ra_arcsec")?,
-                required::<PyReadonlyArray1<'_, f64>>(spec, "bias_dec_arcsec")?,
-                required::<PyReadonlyArray1<'_, f64>>(spec, "resid_var_ra")?,
-                required::<PyReadonlyArray1<'_, f64>>(spec, "resid_var_dec")?,
-                required::<PyReadonlyArray1<'_, f64>>(spec, "resid_cov_ra_dec")?,
-                required::<PyReadonlyArray1<'_, f64>>(spec, "resid_cov_n")?,
-                required::<PyReadonlyArray1<'_, f64>>(spec, "chi2_per_obs")?,
-            )?;
-            let min_resid_cov_n: f64 = required(spec, "min_resid_cov_n")?;
-            Ok(match model.as_str() {
-                "empirical_covariance" => {
-                    let mode: String = required(spec, "mode")?;
-                    Box::new(EmpiricalCovarianceModel {
-                        table,
-                        mode: EmpiricalCovarianceMode::parse(&mode).map_err(value_error)?,
-                        min_resid_cov_n,
-                    })
-                }
-                "performance_weighted" => Box::new(PerformanceWeightedModel {
-                    table,
-                    min_resid_cov_n,
-                }),
-                _ => Box::new(SigmaFloorModel {
-                    table,
-                    min_resid_cov_n,
-                }),
-            })
-        }
-        "night_batch" => Ok(Box::new(
-            NightBatchDeweightingModel::new(required(spec, "cap")?).map_err(value_error)?,
-        )),
-        "efcc18" => Ok(Box::new(Efcc18DebiasModel {
-            bias_table: Arc::new(efcc18_table(&required::<PyReadonlyArray3<'_, f32>>(
-                spec,
-                "bias_table",
-            )?)?),
-            exclude_astcats: required(spec, "exclude_astcats")?,
-        })),
-        "veres" => {
-            let lookup = veres_lookup(
-                required(spec, "table_obs_code")?,
-                required(spec, "table_astcat")?,
-                &required::<PyReadonlyArray1<'_, f64>>(spec, "sigma_ra_arcsec")?,
-                &required::<PyReadonlyArray1<'_, f64>>(spec, "sigma_dec_arcsec")?,
-                required(spec, "fallback_sigma_arcsec")?,
-            )?;
-            let kind: String = required(spec, "kind")?;
-            Ok(match kind.as_str() {
-                "floor" => Box::new(VeresFloorModel {
-                    lookup,
-                    fill_missing: required(spec, "fill_missing")?,
-                }),
-                "replace" => Box::new(VeresReplaceModel { lookup }),
-                "fill" => Box::new(SigmaFillModel { lookup }),
-                other => {
-                    return Err(value_error(format!(
-                        "veres model kind must be 'floor', 'replace' or 'fill'; got {other:?}"
-                    )))
-                }
-            })
-        }
-        other => Err(value_error(format!(
-            "unknown observation model spec {other:?}"
-        ))),
-    }
-}
-
-fn models_from_specs(
-    specs: Option<&Bound<'_, PyList>>,
-) -> PyResult<Vec<Box<dyn ObservationUncertaintyModel>>> {
-    match specs {
-        None => Ok(Vec::new()),
-        Some(list) => list
-            .iter()
-            .map(|item| model_from_spec(item.downcast::<PyDict>()?))
-            .collect(),
-    }
 }
 
 fn covariance_36(covariance: &PyReadonlyArray2<'_, f64>) -> PyResult<[f64; 36]> {
@@ -874,55 +519,6 @@ fn run_with_predictor<R: Send>(
         .map_err(od_error)?;
     Ok((output, metadata))
 }
-
-/// Two-stage native driver.  `iod_propagator` and `propagator` are capsules;
-/// either `None` selects adam-core's two-body propagator, and an omitted IOD
-/// capsule alone reuses the refinement backend.
-fn run_with_predictors<R: Send>(
-    py: Python<'_>,
-    iod_propagator: Option<&Bound<'_, PyAny>>,
-    propagator: Option<&Bound<'_, PyAny>>,
-    settings: &FitSettings,
-    driver: impl for<'p> FnOnce(
-            &'p dyn SphericalPredictor,
-            &'p dyn SphericalPredictor,
-        ) -> PropagationResultValue<R>
-        + Send,
-) -> PyResult<(R, ProviderMetadata, ProviderMetadata)> {
-    let iod_source = iod_propagator.map(PySource::new).transpose()?;
-    let refine_source = propagator.map(PySource::new).transpose()?;
-    let refine_metadata = refine_source.as_ref().map_or_else(
-        || ProviderMetadata::two_body(settings),
-        |source| ProviderMetadata::external(&source.propagator),
-    );
-    let iod_metadata = iod_source.as_ref().map_or_else(
-        || refine_metadata.clone(),
-        |source| ProviderMetadata::external(&source.propagator),
-    );
-    let output = py
-        .allow_threads(|| {
-            let two_body = PropagatorPredictor {
-                propagator: &settings.propagator,
-                options: &settings.options,
-                provider: &ErfaTimeProvider,
-                translation_provider: &LockingSpiceTranslation,
-            };
-            let refine_external = refine_source
-                .as_ref()
-                .map(|source| external_predictor(&source.propagator, settings));
-            let iod_external = iod_source
-                .as_ref()
-                .map(|source| external_predictor(&source.propagator, settings));
-            let refine: &dyn SphericalPredictor = refine_external
-                .as_ref()
-                .map_or(&two_body as &dyn SphericalPredictor, |value| value);
-            let iod: &dyn SphericalPredictor = iod_external.as_ref().map_or(refine, |value| value);
-            driver(iod, refine)
-        })
-        .map_err(od_error)?;
-    Ok((output, iod_metadata, refine_metadata))
-}
-
 // ---------------------------------------------------------------------------
 // Output dicts
 // ---------------------------------------------------------------------------
@@ -1124,31 +720,6 @@ fn iod_dict<'py>(py: Python<'py>, result: IodResult, n: usize) -> PyResult<Bound
     out.set_item("candidates", candidates)?;
     Ok(out)
 }
-
-/// The dict contract of a fused full OD: ``found``, the ``iod`` decision
-/// and, when found, the refined ``fit`` dict with the loop diagnostics.
-fn full_od_dict<'py>(
-    py: Python<'py>,
-    output: FullOdOutput,
-    n: usize,
-) -> PyResult<Bound<'py, PyDict>> {
-    let out = PyDict::new(py);
-    out.set_item("found", output.iod.found())?;
-    out.set_item("iod", iod_dict(py, output.iod, n)?)?;
-    match output.refined {
-        Some(refined) => {
-            let fit = fit_output_dict(py, refined.fit, n)?;
-            fit.set_item("passes", refined.passes)?;
-            fit.set_item("n_rejected", refined.n_rejected)?;
-            fit.set_item("n_recovered", refined.n_recovered)?;
-            fit.set_item("flags", refined.flags)?;
-            out.set_item("fit", fit)?;
-        }
-        None => out.set_item("fit", py.None())?,
-    }
-    Ok(out)
-}
-
 fn snapshot_dict<'py>(
     py: Python<'py>,
     snapshot: AstrometrySnapshot,
@@ -1551,32 +1122,6 @@ fn cmc2003_fit_2body_ipc<'py>(
         fit_settings,
     )
 }
-
-/// One-crossing IOD stage (`run_iod`): triplet selection, Gauss candidates,
-/// acceptance against ``rchi2_threshold`` with outlier trials, returning the
-/// typed candidate set (see `iod_dict`). ``iod_propagator`` scores the
-/// candidates (None = adam_core's two-body propagator). ``fit_settings``
-/// carries only the ephemeris / two-body options here.
-#[pyfunction]
-#[pyo3(signature = (iod_propagator, observed_ipc, observers_ipc, iod_settings=None, fit_settings=None))]
-fn run_iod_ipc<'py>(
-    py: Python<'py>,
-    iod_propagator: Option<&Bound<'py, PyAny>>,
-    observed_ipc: &Bound<'py, PyBytes>,
-    observers_ipc: &Bound<'py, PyBytes>,
-    iod_settings: Option<&Bound<'py, PyDict>>,
-    fit_settings: Option<&Bound<'py, PyDict>>,
-) -> PyResult<Bound<'py, PyDict>> {
-    run_iod_impl(
-        py,
-        iod_propagator,
-        observed_ipc,
-        observers_ipc,
-        parse_iod_settings(iod_settings)?,
-        fit_settings,
-    )
-}
-
 /// Canonical IOD entry point. Search, correction, ranging and correction-fit
 /// settings come only from the Rust-owned typed stage configuration.
 #[pyfunction]
@@ -1610,187 +1155,6 @@ fn run_iod_config_ipc<'py>(
     Ok(out)
 }
 
-/// One-crossing IOD stage over multiple adam-core-owned linkage selections.
-#[pyfunction]
-#[pyo3(signature = (iod_propagator, observed_ipc, observers_ipc, linkage_rows, iod_settings=None, fit_settings=None))]
-fn run_iod_linkages_ipc<'py>(
-    py: Python<'py>,
-    iod_propagator: Option<&Bound<'py, PyAny>>,
-    observed_ipc: &Bound<'py, PyBytes>,
-    observers_ipc: &Bound<'py, PyBytes>,
-    linkage_rows: Vec<Vec<usize>>,
-    iod_settings: Option<&Bound<'py, PyDict>>,
-    fit_settings: Option<&Bound<'py, PyDict>>,
-) -> PyResult<Bound<'py, PyList>> {
-    let problem = decode_observations(observed_ipc, observers_ipc)?;
-    let config = parse_iod_settings(iod_settings)?;
-    let settings = parse_fit_settings(fit_settings)?;
-    let row_counts: Vec<usize> = linkage_rows.iter().map(Vec::len).collect();
-    let (results, provider) = run_with_predictor(py, iod_propagator, &settings, |predictor| {
-        run_iod_linkages_with(
-            predictor,
-            &problem.observed,
-            &problem.observers,
-            &linkage_rows,
-            &config,
-            &settings.config,
-            &ErfaTimeProvider,
-            &LockingSpiceTranslation,
-        )
-    })?;
-    let output = PyList::empty(py);
-    for (result, row_count) in results.into_iter().zip(row_counts) {
-        let item = iod_dict(py, result, row_count)?;
-        item.set_item("iod_provider", provider_metadata_dict(py, &provider)?)?;
-        output.append(item)?;
-    }
-    Ok(output)
-}
-
-fn run_iod_impl<'py>(
-    py: Python<'py>,
-    iod_propagator: Option<&Bound<'py, PyAny>>,
-    observed_ipc: &Bound<'py, PyBytes>,
-    observers_ipc: &Bound<'py, PyBytes>,
-    config: IodConfig,
-    fit_settings: Option<&Bound<'py, PyDict>>,
-) -> PyResult<Bound<'py, PyDict>> {
-    let problem = decode_observations(observed_ipc, observers_ipc)?;
-    let settings = parse_fit_settings(fit_settings)?;
-    let n = problem.observed.len();
-    let (result, provider) = run_with_predictor(py, iod_propagator, &settings, |predictor| {
-        run_iod_with(
-            predictor,
-            &problem.observed,
-            &problem.observers,
-            &config,
-            &settings.config,
-            &ErfaTimeProvider,
-            &LockingSpiceTranslation,
-        )
-    })?;
-    let out = iod_dict(py, result, n)?;
-    out.set_item("iod_provider", provider_metadata_dict(py, &provider)?)?;
-    Ok(out)
-}
-
-/// `run_iod_ipc` over adam_core's two-body propagator.
-#[pyfunction]
-#[pyo3(signature = (observed_ipc, observers_ipc, iod_settings=None, fit_settings=None))]
-fn run_iod_2body_ipc<'py>(
-    py: Python<'py>,
-    observed_ipc: &Bound<'py, PyBytes>,
-    observers_ipc: &Bound<'py, PyBytes>,
-    iod_settings: Option<&Bound<'py, PyDict>>,
-    fit_settings: Option<&Bound<'py, PyDict>>,
-) -> PyResult<Bound<'py, PyDict>> {
-    run_iod_ipc(
-        py,
-        None,
-        observed_ipc,
-        observers_ipc,
-        iod_settings,
-        fit_settings,
-    )
-}
-
-/// The pre-candidate-set name of `run_iod_ipc`; same dict, but settings
-/// default to the legacy search (combination triplets, prefit acceptance)
-/// (deprecated).
-#[pyfunction]
-#[pyo3(signature = (propagator, observed_ipc, observers_ipc, iod_settings=None, fit_settings=None))]
-fn iod_fit_ipc<'py>(
-    py: Python<'py>,
-    propagator: Option<&Bound<'py, PyAny>>,
-    observed_ipc: &Bound<'py, PyBytes>,
-    observers_ipc: &Bound<'py, PyBytes>,
-    iod_settings: Option<&Bound<'py, PyDict>>,
-    fit_settings: Option<&Bound<'py, PyDict>>,
-) -> PyResult<Bound<'py, PyDict>> {
-    run_iod_impl(
-        py,
-        propagator,
-        observed_ipc,
-        observers_ipc,
-        parse_iod_settings_over(iod_settings, legacy_iod_defaults())?,
-        fit_settings,
-    )
-}
-
-/// One-crossing `NativeOrbitFitter.full_od`: Gauss IOD (``iod_settings``)
-/// on ``iod_propagator`` (None = ``propagator``) followed by the
-/// ``refinement`` loop with ``fit_settings`` on ``propagator``.
-#[pyfunction]
-#[pyo3(signature = (propagator, observed_ipc, observers_ipc, iod_settings=None, refinement=None, fit_settings=None, iod_propagator=None))]
-#[allow(clippy::too_many_arguments)]
-fn full_od_ipc<'py>(
-    py: Python<'py>,
-    propagator: Option<&Bound<'py, PyAny>>,
-    observed_ipc: &Bound<'py, PyBytes>,
-    observers_ipc: &Bound<'py, PyBytes>,
-    iod_settings: Option<&Bound<'py, PyDict>>,
-    refinement: Option<&Bound<'py, PyDict>>,
-    fit_settings: Option<&Bound<'py, PyDict>>,
-    iod_propagator: Option<&Bound<'py, PyAny>>,
-) -> PyResult<Bound<'py, PyDict>> {
-    let problem = decode_observations(observed_ipc, observers_ipc)?;
-    let settings = parse_fit_settings(fit_settings)?;
-    let config = FullOdConfig {
-        iod: parse_iod_settings(iod_settings)?,
-        refinement: parse_refinement(refinement, settings.config)?,
-    };
-    let n = problem.observed.len();
-    let (output, iod_provider, refinement_provider) = run_with_predictors(
-        py,
-        iod_propagator,
-        propagator,
-        &settings,
-        |iod_predictor, predictor| {
-            full_od_with(
-                iod_predictor,
-                predictor,
-                &problem.observed,
-                &problem.observers,
-                &config,
-                &ErfaTimeProvider,
-                &LockingSpiceTranslation,
-            )
-        },
-    )?;
-    let out = full_od_dict(py, output, n)?;
-    out.set_item("iod_provider", provider_metadata_dict(py, &iod_provider)?)?;
-    out.set_item(
-        "refinement_provider",
-        provider_metadata_dict(py, &refinement_provider)?,
-    )?;
-    Ok(out)
-}
-
-/// `full_od_ipc` over adam_core's two-body propagator. ``iod_propagator`` may
-/// independently hold a native propagation-capsule descriptor for IOD.
-#[pyfunction]
-#[pyo3(signature = (observed_ipc, observers_ipc, iod_settings=None, refinement=None, fit_settings=None, iod_propagator=None))]
-fn full_od_2body_ipc<'py>(
-    py: Python<'py>,
-    observed_ipc: &Bound<'py, PyBytes>,
-    observers_ipc: &Bound<'py, PyBytes>,
-    iod_settings: Option<&Bound<'py, PyDict>>,
-    refinement: Option<&Bound<'py, PyDict>>,
-    fit_settings: Option<&Bound<'py, PyDict>>,
-    iod_propagator: Option<&Bound<'py, PyAny>>,
-) -> PyResult<Bound<'py, PyDict>> {
-    full_od_ipc(
-        py,
-        None,
-        observed_ipc,
-        observers_ipc,
-        iod_settings,
-        refinement,
-        fit_settings,
-        iod_propagator,
-    )
-}
-
 /// Apply schema-validated observation-model specs in Core Rust and return
 /// the complete transformed coordinate batch for a composed fitter route.
 #[pyfunction]
@@ -1807,17 +1171,12 @@ fn apply_observation_pipeline_ipc<'py>(
         observed_ipc.as_bytes(),
     )?)
     .map_err(|err| value_error(format!("failed to decode observed coordinates: {err}")))?;
-    let models = config
-        .inner
-        .observation_pipeline()
-        .native_models()
-        .map_err(value_error)?;
-    let output = apply_observation_models(
+    let output = adam_core_rs_coords::od::apply_configured_observation_pipeline(
         &observed,
         &obs_code,
         &band,
         &astcat,
-        models,
+        config.inner.observation_pipeline(),
         &ErfaTimeProvider,
     )
     .map_err(od_error)?;
@@ -1835,124 +1194,6 @@ fn apply_observation_pipeline_ipc<'py>(
     out.set_item("pipeline_changed", output.models_changed)?;
     out.set_item("configuration_provenance", config.inner.provenance_json())?;
     Ok(out)
-}
-
-/// One-crossing `run_od`: the observation models (``models`` = list of
-/// declarative native-spec dicts, applied in order) on the original observations,
-/// the full OD on the used observations, and the original / used astrometry
-/// snapshots for the members' provenance.
-#[pyfunction]
-#[pyo3(signature = (
-    propagator,
-    observed_ipc,
-    observers_ipc,
-    obs_code,
-    band,
-    astcat,
-    models=None,
-    iod_settings=None,
-    refinement=None,
-    fit_settings=None,
-    iod_propagator=None
-))]
-#[allow(clippy::too_many_arguments)]
-fn run_od_ipc<'py>(
-    py: Python<'py>,
-    propagator: Option<&Bound<'py, PyAny>>,
-    observed_ipc: &Bound<'py, PyBytes>,
-    observers_ipc: &Bound<'py, PyBytes>,
-    obs_code: Vec<String>,
-    band: Vec<Option<String>>,
-    astcat: Vec<Option<String>>,
-    models: Option<&Bound<'py, PyList>>,
-    iod_settings: Option<&Bound<'py, PyDict>>,
-    refinement: Option<&Bound<'py, PyDict>>,
-    fit_settings: Option<&Bound<'py, PyDict>>,
-    iod_propagator: Option<&Bound<'py, PyAny>>,
-) -> PyResult<Bound<'py, PyDict>> {
-    let problem = decode_observations(observed_ipc, observers_ipc)?;
-    let settings = parse_fit_settings(fit_settings)?;
-    let config = FullOdConfig {
-        iod: parse_iod_settings(iod_settings)?,
-        refinement: parse_refinement(refinement, settings.config)?,
-    };
-    let models = models_from_specs(models)?;
-    let n = problem.observed.len();
-    let (output, iod_provider, refinement_provider) = run_with_predictors(
-        py,
-        iod_propagator,
-        propagator,
-        &settings,
-        move |iod_predictor, predictor| {
-            run_od_with(
-                iod_predictor,
-                predictor,
-                &problem.observed,
-                &problem.observers,
-                &obs_code,
-                &band,
-                &astcat,
-                models,
-                &config,
-                &ErfaTimeProvider,
-                &LockingSpiceTranslation,
-            )
-        },
-    )?;
-    let out = full_od_dict(py, output.full_od, n)?;
-    out.set_item("original_astrometry", snapshot_dict(py, output.original)?)?;
-    out.set_item("used_astrometry", snapshot_dict(py, output.used)?)?;
-    out.set_item("models_changed", output.models_changed)?;
-    out.set_item("iod_provider", provider_metadata_dict(py, &iod_provider)?)?;
-    out.set_item(
-        "refinement_provider",
-        provider_metadata_dict(py, &refinement_provider)?,
-    )?;
-    Ok(out)
-}
-
-/// `run_od_ipc` over adam_core's two-body propagator.
-#[pyfunction]
-#[pyo3(signature = (
-    observed_ipc,
-    observers_ipc,
-    obs_code,
-    band,
-    astcat,
-    models=None,
-    iod_settings=None,
-    refinement=None,
-    fit_settings=None,
-    iod_propagator=None
-))]
-#[allow(clippy::too_many_arguments)]
-fn run_od_2body_ipc<'py>(
-    py: Python<'py>,
-    observed_ipc: &Bound<'py, PyBytes>,
-    observers_ipc: &Bound<'py, PyBytes>,
-    obs_code: Vec<String>,
-    band: Vec<Option<String>>,
-    astcat: Vec<Option<String>>,
-    models: Option<&Bound<'py, PyList>>,
-    iod_settings: Option<&Bound<'py, PyDict>>,
-    refinement: Option<&Bound<'py, PyDict>>,
-    fit_settings: Option<&Bound<'py, PyDict>>,
-    iod_propagator: Option<&Bound<'py, PyAny>>,
-) -> PyResult<Bound<'py, PyDict>> {
-    run_od_ipc(
-        py,
-        None,
-        observed_ipc,
-        observers_ipc,
-        obs_code,
-        band,
-        astcat,
-        models,
-        iod_settings,
-        refinement,
-        fit_settings,
-        iod_propagator,
-    )
 }
 
 /// Canonical Cargo SemVer embedded in adam-core's native two-body provider.
@@ -1988,21 +1229,10 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(cmc2003_fit_ipc, m)?)?;
     m.add_function(wrap_pyfunction!(cmc2003_fit_2body_ipc, m)?)?;
     m.add_function(wrap_pyfunction!(refine_config_ipc, m)?)?;
-    m.add_function(wrap_pyfunction!(iod_fit_ipc, m)?)?;
-    m.add_function(wrap_pyfunction!(run_iod_ipc, m)?)?;
     m.add_function(wrap_pyfunction!(run_iod_config_ipc, m)?)?;
-    m.add_function(wrap_pyfunction!(run_iod_linkages_ipc, m)?)?;
-    m.add_function(wrap_pyfunction!(iod_defaults, m)?)?;
-    m.add_function(wrap_pyfunction!(validate_iod_settings, m)?)?;
-    m.add_function(wrap_pyfunction!(validate_full_od_settings, m)?)?;
     m.add_function(wrap_pyfunction!(native_provider_metadata, m)?)?;
     m.add_function(wrap_pyfunction!(od_defaults, m)?)?;
-    m.add_function(wrap_pyfunction!(run_iod_2body_ipc, m)?)?;
-    m.add_function(wrap_pyfunction!(full_od_ipc, m)?)?;
-    m.add_function(wrap_pyfunction!(full_od_2body_ipc, m)?)?;
     m.add_function(wrap_pyfunction!(apply_observation_pipeline_ipc, m)?)?;
-    m.add_function(wrap_pyfunction!(run_od_ipc, m)?)?;
-    m.add_function(wrap_pyfunction!(run_od_2body_ipc, m)?)?;
     Ok(())
 }
 

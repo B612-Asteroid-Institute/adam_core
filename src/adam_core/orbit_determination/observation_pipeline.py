@@ -35,7 +35,7 @@ class FillMissingAstrometricUncertainty:
 class Efcc18CatalogBiasCorrection:
     """Apply the EFCC18 catalog-dependent astrometric bias correction."""
 
-    exclude_astcats: tuple[str, ...] = ()
+    exclude_astcats: tuple[str, ...]
     kind: Final[str] = field(
         default="efcc18_catalog_bias_correction", init=False, repr=False
     )
@@ -160,6 +160,46 @@ class ObservationPipeline:
         if self._uses_as_supplied:
             return None
         return [transform._descriptor() for transform in self.transforms]
+
+    @classmethod
+    def _from_descriptors(
+        cls, descriptors: Iterable[dict[str, object]]
+    ) -> ObservationPipeline:
+        transforms: list[ObservationTransform] = []
+        for descriptor in descriptors:
+            kind = descriptor.get("kind")
+            if kind == "fill_missing_astrometric_uncertainty":
+                transforms.append(FillMissingAstrometricUncertainty())
+            elif kind == "efcc18_catalog_bias_correction":
+                values = descriptor.get("exclude_astcats")
+                if not isinstance(values, list) or any(
+                    not isinstance(value, str) for value in values
+                ):
+                    raise RuntimeError("native EFCC18 declaration is malformed")
+                transforms.append(
+                    Efcc18CatalogBiasCorrection(exclude_astcats=tuple(values))
+                )
+            elif kind == "station_band_residual_covariance_adjustment":
+                operation = descriptor.get("operation")
+                count = descriptor.get("minimum_residual_count")
+                if not isinstance(operation, str) or not isinstance(count, int):
+                    raise RuntimeError(
+                        "native residual covariance declaration is malformed"
+                    )
+                transforms.append(
+                    StationBandResidualCovarianceAdjustment(
+                        operation=ResidualCovarianceOperation(operation),
+                        minimum_residual_count=count,
+                    )
+                )
+            elif kind == "nightly_batch_deweighting":
+                cap = descriptor.get("effective_observation_cap")
+                if not isinstance(cap, int):
+                    raise RuntimeError("native nightly declaration is malformed")
+                transforms.append(NightlyBatchDeweighting(cap))
+            else:  # pragma: no cover - native/Python version skew guard
+                raise RuntimeError(f"unsupported native transform {kind!r}")
+        return cls.as_supplied() if not transforms else cls.ordered(transforms)
 
 
 __all__ = [

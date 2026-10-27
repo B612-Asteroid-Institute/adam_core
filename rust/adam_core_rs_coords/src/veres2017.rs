@@ -39,6 +39,7 @@ use crate::observation_uncertainty::{
 use std::collections::HashMap;
 
 /// Global fallback when neither a (station, catalog) nor a catalog row exists.
+#[allow(dead_code)]
 pub const VERES2017_FALLBACK_SIGMA_ARCSEC: f64 = 0.75;
 
 /// One row of a station/catalog sigma table: a (station, catalog) row, a
