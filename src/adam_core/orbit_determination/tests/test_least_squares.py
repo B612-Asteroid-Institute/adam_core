@@ -10,26 +10,8 @@ from ...coordinates.residuals import Residuals, calculate_reduced_chi2
 from ...observers import Observers
 from ...orbits import Orbits
 from ...time import Timestamp
-from ..algorithms.workflows import refine_one_group
-from ..config import (
-    EvaluationConfig,
-    IodRunConfig,
-    OdConfig,
-    RefinementRunConfig,
-    ResourceBindings,
-)
 from ..evaluate import OrbitDeterminationObservations
-from ..observation_pipeline import ObservationPipeline
-
-
-def explicit_config() -> OdConfig:
-    return OdConfig.explicit(
-        observation_pipeline=ObservationPipeline.as_supplied(),
-        iod=IodRunConfig.core_v1(),
-        refinement=RefinementRunConfig.core_v1(),
-        evaluation=EvaluationConfig.six_dimensional(),
-        resources=ResourceBindings({}),
-    )
+from ._focused import refine_qualified
 
 
 @pytest.fixture
@@ -108,9 +90,7 @@ def test_refinement_adjusts_and_improves_chi2(real_data) -> None:
         "coordinates",
         cometary.set_column("i", pc.multiply(cometary.i, 0.99)).to_cartesian(),
     )
-    fitted, members = refine_one_group(
-        guess, observations, propagator, config=explicit_config()
-    )
+    fitted, members = refine_qualified(guess, observations, propagator)
     assert len(fitted) == 1
     assert len(members) == len(observations)
     assert _rchi2(fitted.to_orbits(), observations, propagator) < _rchi2(
@@ -130,9 +110,7 @@ def test_refinement_handles_zero_state_component(real_data) -> None:
         observers=observers,
     )
     zeroed = orbit.set_column("coordinates", orbit.coordinates.set_column("vz", [0.0]))
-    fitted, _ = refine_one_group(
-        zeroed, observations, propagator, config=explicit_config()
-    )
+    fitted, _ = refine_qualified(zeroed, observations, propagator)
     assert len(fitted) == 1
     assert np.all(np.isfinite(fitted.coordinates.values))
     assert _rchi2(fitted.to_orbits(), observations, propagator) < _rchi2(

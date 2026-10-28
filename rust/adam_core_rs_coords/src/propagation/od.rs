@@ -3670,8 +3670,8 @@ pub(super) fn spherical_flat(
 /// remedy for observations without reported uncertainties.
 pub(super) const MISSING_COVARIANCE_REMEDY: &str = "orbit determination requires an \
 observed covariance with finite, positive lon/lat variances; observations without \
-reported uncertainties need a SigmaFillModel among the run_od observation models to \
-supply them";
+reported uncertainties require FillMissingAstrometricUncertainty in the explicit \
+ObservationPipeline with its station_catalog_uncertainty_table resource bound";
 
 pub(super) fn distinct_observation_epochs(
     observed: &CoordinateBatch,

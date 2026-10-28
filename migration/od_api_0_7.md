@@ -41,7 +41,10 @@ provenance is permitted. `CORE_OD_V1` currently does not fill missing
 uncertainties; it fails closed on such inputs pending public-profile
 qualification.
 
-For numerical qualification only, focused functions with an explicit
-`_one_group` suffix live under `adam_core.orbit_determination.algorithms`.
-They are expert/internal building blocks and will not be retained as aliases
-for the forthcoming batch functions.
+The foundation deliberately exports no interim Python `_one_group` workflows:
+configured composition and provenance remain Rust-owned until the canonical
+batch functions land. Expert numerical kernels remain under
+`adam_core.orbit_determination.algorithms`; standalone Rust predictor-level
+configured composition lives under `adam_core_rs_coords::od::algorithms`. The
+disposition of every Python OD test function removed since the accepted
+numerical baseline is recorded in `od_test_migration_0_7.md`.

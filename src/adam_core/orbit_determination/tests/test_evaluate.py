@@ -15,26 +15,7 @@ from adam_core.orbits.orbits import Orbits
 from adam_core.time.time import Timestamp
 from adam_core.utils.helpers.orbits import make_real_orbits
 
-from ..algorithms.evaluation import evaluate_orbits_one_group
-from ..config import (
-    EvaluationConfig,
-    IodRunConfig,
-    OdConfig,
-    RefinementRunConfig,
-    ResourceBindings,
-)
 from ..evaluate import OrbitDeterminationObservations, _evaluate_orbits_prepared
-from ..observation_pipeline import ObservationPipeline
-
-
-def _config() -> OdConfig:
-    return OdConfig.explicit(
-        observation_pipeline=ObservationPipeline.as_supplied(),
-        iod=IodRunConfig.core_v1(),
-        refinement=RefinementRunConfig.core_v1(),
-        evaluation=EvaluationConfig.six_dimensional(),
-        resources=ResourceBindings({}),
-    )
 
 
 class FixedEphemerisPropagator:
@@ -213,15 +194,6 @@ def test_evaluate_orbits_frozen_reference_parity() -> None:
         expected["residual_probability"],
         rtol=1e-14,
     )
-
-
-def test_evaluate_orbits_empty_is_a_noop() -> None:
-    orbits, observations, propagator = make_evaluate_case(1, 0)
-    fitted, members = evaluate_orbits_one_group(
-        orbits, observations, propagator, config=_config()
-    )
-    assert len(fitted) == 0
-    assert len(members) == 0
 
 
 def test_evaluate_orbits_rust_native_timing() -> None:

@@ -112,22 +112,21 @@ def drop_duplicate_orbits(
 class OdProvenance(qv.Table):
     """Runtime provenance for a fitted orbit.
 
-    Focused ``algorithms.*_one_group`` workflows populate clean adam-core
-    identity, ordered-input fingerprint, route, native provider metadata,
-    stage diagnostics, complete canonical Rust configuration, and rejection
-    counts. Rows produced by lower-level numerical kernels may leave fields
-    null. Resource paths are never recorded.
+    Canonical batch workflows populate clean adam-core identity,
+    ordered-input fingerprint, route, native provider metadata, stage
+    diagnostics, complete canonical Rust configuration, and rejection counts.
+    Rows produced by lower-level numerical kernels may leave fields null.
+    Resource paths are never recorded.
     """
 
     #: adam-core version that produced the orbit.
     adam_core_version = qv.LargeStringColumn(nullable=True)
-    #: Exact clean source commit embedded by the native build. Focused
-    #: configured workflows refuse dirty or unknown identities before work.
+    #: Exact clean source commit embedded by the native build. Configured
+    #: workflows refuse dirty or unknown identities before work.
     adam_core_build = qv.LargeStringColumn(nullable=True)
     #: SHA-256 of the ordered caller table plus exact used-astrometry rows.
     input_fingerprint = qv.LargeStringColumn(nullable=True)
-    #: Exact focused algorithm route, for example
-    #: ``"algorithms.run_od_one_group"``.
+    #: Exact canonical workflow route.
     route = qv.LargeStringColumn(nullable=True)
     #: Historical producer label; configured workflows leave this null.
     fitter = qv.LargeStringColumn(nullable=True)
@@ -204,9 +203,9 @@ class ObservationAstrometry(qv.Table):
     `FittedOrbitMembers` embeds two of these per observation: the astrometry as
     ORIGINALLY supplied to orbit determination (``original_astrometry``) and
     the astrometry actually USED by the fitter (``used_astrometry``) after any
-    observation models (star-catalog debiasing, uncertainty inflation,
-    deweighting) were applied at fit time by
-    `~adam_core.orbit_determination.algorithms.run_od_one_group`. Values are embedded directly so
+    configured observation transforms (catalog correction, uncertainty fill,
+    covariance adjustment, deweighting) were applied at fit time. Values are
+    embedded directly so
     that fitted orbit members are self-contained provenance: the observations
     the fit was based on can be inspected (and the model's effect audited)
     without re-joining to the input observations or re-running the models.
@@ -299,8 +298,7 @@ class FittedOrbitMembers(qv.Table):
         Position and uncertainty of the observation as ORIGINALLY supplied.
     used_astrometry : `ObservationAstrometry`, nullable
         Position and uncertainty actually USED by the fitter, i.e. after the
-        observation models applied at fit time by
-        `~adam_core.orbit_determination.algorithms.run_od_one_group`. Equal to
+        configured observation pipeline applied at fit time. Equal to
         ``original_astrometry`` when no model changed the observation.
     astcat : str, nullable
         Star catalog the observation was reduced against (see

@@ -157,11 +157,11 @@ Current Migrated APIs
     units. Only ``xtol``, ``ftol``, ``gtol`` and ``max_nfev`` are accepted;
     any other solver keyword raises ``ValueError`` (there is no scipy path).
 
-- OD configuration foundation and focused one-group algorithms
+- OD configuration and Rust workflow foundation
   - Status: canonical batch ``run_iod`` / ``run_od`` / ``refine`` /
     ``evaluate_orbits`` are forthcoming and are not exported by this
-    foundation. Qualification functions have explicit ``*_one_group`` names
-    under ``adam_core.orbit_determination.algorithms``.
+    foundation. No interim Python configured workflow is exposed; expert
+    numerical kernels remain under ``adam_core.orbit_determination.algorithms``.
   - Boundary: nested Arrow IPC plus an explicit native ``OdConfig``. Python
     binds semantic resource slots and marshals tables; Rust validates exact
     resource identity, parses tables, executes the ordered observation
@@ -177,9 +177,9 @@ Current Migrated APIs
     ``adam_core.propagator.v2`` capsule. Core validates provider identity and
     capabilities before pipeline work. Providers never select transforms,
     profiles, grouping, fitting, rejection, covariance, or OD algorithms.
-  - Configured focused workflows reject dirty/unknown Core identity, invalid
+  - Canonical configured workflows reject dirty/unknown Core identity, invalid
     IDs, malformed resources/config/provider contracts atomically. Empty
-    one-group qualification inputs return empty results before provider or
+    groups return empty results before provider or
     pipeline work. The future batch layer will classify only safely isolated
     scientific failures per group.
   - CMC2003 finalization uses one central-difference Jacobian through the full

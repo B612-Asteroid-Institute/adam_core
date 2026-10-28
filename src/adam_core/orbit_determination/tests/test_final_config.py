@@ -1,24 +1,15 @@
 from __future__ import annotations
 
 import dataclasses
-import inspect
 import json
 from pathlib import Path
 
 import numpy as np
-import pyarrow as pa
 import pytest
 
 import adam_core.orbit_determination as od
 from adam_core import _rust_native
 from adam_core.orbit_determination import algorithms
-from adam_core.orbit_determination.algorithms import _provenance
-from adam_core.orbit_determination.algorithms.workflows import run_od_one_group
-from adam_core.orbit_determination.tests.test_differential_correction import (
-    TwoBodyPropagator,
-    make_synthetic_observations,
-)
-from adam_core.propagator import Propagator
 
 
 def _as_supplied() -> od.OdConfig:
@@ -35,10 +26,14 @@ def test_primary_batch_names_are_intentionally_not_exported() -> None:
     for name in ("run_iod", "run_od", "refine", "evaluate_orbits"):
         assert name not in od.__all__
         assert not hasattr(od, name)
-    assert hasattr(algorithms, "run_iod_one_group")
-    assert hasattr(algorithms, "run_od_one_group")
-    assert hasattr(algorithms, "refine_one_group")
-    assert hasattr(algorithms, "evaluate_orbits_one_group")
+    for name in (
+        "run_iod_one_group",
+        "run_od_one_group",
+        "refine_one_group",
+        "evaluate_orbits_one_group",
+    ):
+        assert name not in algorithms.__all__
+        assert not hasattr(algorithms, name)
 
 
 def test_removed_legacy_modules_and_native_routes_have_no_aliases() -> None:
@@ -213,147 +208,3 @@ def test_native_transform_json_is_strict() -> None:
             refinement,
             evaluation,
         )
-
-
-def test_duplicate_ids_fail_before_provider_or_pipeline(monkeypatch) -> None:
-    observations = make_synthetic_observations(n_obs=12, seed=10).set_column(
-        "id", pa.array(["same"] * 12, type=pa.large_string())
-    )
-    calls: list[str] = []
-    monkeypatch.setattr(_provenance, "core_build_identity", lambda: ("0.7.0", "a" * 40))
-    monkeypatch.setattr(
-        "adam_core.orbit_determination.algorithms.workflows.apply_pipeline_once",
-        lambda *_: calls.append("pipeline"),
-    )
-    with pytest.raises(ValueError, match="observation IDs must be unique"):
-        run_od_one_group(observations, object(), config=_as_supplied())  # type: ignore[arg-type]
-    assert calls == []
-
-
-def test_empty_group_is_noop_before_provider_and_pipeline(monkeypatch) -> None:
-    observations = make_synthetic_observations(n_obs=12, seed=10)[0:0]
-    monkeypatch.setattr(_provenance, "core_build_identity", lambda: ("0.7.0", "a" * 40))
-    monkeypatch.setattr(
-        "adam_core.orbit_determination.algorithms.workflows.apply_pipeline_once",
-        lambda *_: (_ for _ in ()).throw(AssertionError("pipeline called")),
-    )
-    fitted, members = run_od_one_group(observations, object(), config=_as_supplied())  # type: ignore[arg-type]
-    assert len(fitted) == len(members) == 0
-
-
-def test_provider_is_rejected_before_pipeline(monkeypatch) -> None:
-    observations = make_synthetic_observations(n_obs=12, seed=10)
-    calls: list[str] = []
-    monkeypatch.setattr(_provenance, "core_build_identity", lambda: ("0.7.0", "a" * 40))
-    monkeypatch.setattr(
-        "adam_core.orbit_determination.algorithms.workflows.apply_pipeline_once",
-        lambda *_: calls.append("pipeline"),
-    )
-
-    class PyOnly(Propagator):
-        def propagate_orbits(self, *args, **kwargs):
-            raise AssertionError("Python propagation must not run")
-
-        def generate_ephemeris(self, *args, **kwargs):
-            raise AssertionError("Python ephemeris must not run")
-
-    with pytest.raises(TypeError, match="native"):
-        run_od_one_group(observations, PyOnly(), config=_as_supplied())
-    assert calls == []
-
-
-def test_focused_run_od_is_bitwise_explicit_composition(monkeypatch) -> None:
-    observations = make_synthetic_observations(n_obs=12, seed=10)
-    config = _as_supplied()
-    propagator = TwoBodyPropagator()
-    monkeypatch.setattr(_provenance, "core_build_identity", lambda: ("0.7.0", "a" * 40))
-    iod_orbits, _, report = algorithms.run_iod_one_group(
-        observations, propagator, config=config
-    )
-    assert report.found
-    composed, _ = algorithms.refine_one_group(
-        iod_orbits, observations, propagator, config=config
-    )
-    direct, members = algorithms.run_od_one_group(
-        observations, propagator, config=config, object_id="synthetic"
-    )
-    assert np.array_equal(direct.coordinates.values, composed.coordinates.values)
-    assert np.array_equal(
-        direct.coordinates.covariance.to_matrix(),
-        composed.coordinates.covariance.to_matrix(),
-        equal_nan=True,
-    )
-    provenance = direct.provenance
-    values = {
-        field: provenance.table.column(field)[0].as_py()
-        for field in provenance.schema.names
-    }
-    assert values["adam_core_version"] == "0.7.0"
-    assert values["adam_core_build"] == "a" * 40
-    assert values["input_fingerprint"] == _provenance.input_fingerprint(
-        observations, members
-    )
-    assert values["route"] == "algorithms.run_od_one_group"
-    assert values["fitter"] is None
-    assert values["settings"] is None
-
-    iod_provider = json.loads(values["iod_provider"])
-    refinement_provider = json.loads(values["refinement_provider"])
-    provider_fields = {
-        "name",
-        "version",
-        "abi_version",
-        "identity_validated_by_capsule",
-        "capabilities",
-        "known_capabilities",
-        "integration_time_scale",
-        "two_body_dynamics",
-        "configuration_fingerprint",
-        "data_fingerprint",
-    }
-    assert set(iod_provider) == provider_fields
-    assert set(refinement_provider) == provider_fields
-    assert values["iod_backend"] == _provenance._backend(values["iod_provider"])
-    assert values["refinement_backend"] == _provenance._backend(
-        values["refinement_provider"]
-    )
-
-    iod_diagnostics = json.loads(values["iod_diagnostics"])
-    assert iod_diagnostics == {
-        "triplets_tried": report.triplets_tried,
-        "candidates_evaluated": report.candidates_evaluated,
-        "candidates_failed": report.candidates_failed,
-        "corrections_run": report.corrections_run,
-        "pair_visits": report.pair_visits,
-        "raw_pair_visits": report.raw_pair_visits,
-        "middle_visits": report.middle_visits,
-        "search_cap_exhausted": report.search_cap_exhausted,
-        "not_found_reason": report.not_found_reason,
-    }
-    refinement_diagnostics = json.loads(values["refinement_diagnostics"])
-    assert set(refinement_diagnostics) == {
-        "passes",
-        "n_rejected",
-        "n_recovered",
-        "flags",
-    }
-    rejected = sum(members.outlier.to_pylist())
-    assert refinement_diagnostics["n_rejected"] == rejected
-    assert json.loads(values["configuration"]) == dict(config.provenance)
-    assert values["iod_ambiguous"] is report.ambiguous
-    assert values["iod_alternatives"] == len(report.ambiguous_with)
-    assert values["num_rejected"] == rejected
-    assert values["rejected_fraction"] == rejected / len(members)
-    assert len(members) == len(observations)
-
-
-def test_focused_signatures_require_complete_config() -> None:
-    for function in (
-        algorithms.run_iod_one_group,
-        algorithms.run_od_one_group,
-        algorithms.refine_one_group,
-        algorithms.evaluate_orbits_one_group,
-    ):
-        parameter = inspect.signature(function).parameters["config"]
-        assert parameter.default is inspect.Signature.empty
-        assert parameter.kind is inspect.Parameter.KEYWORD_ONLY

@@ -162,8 +162,8 @@ def _generate_api_reference(_: object) -> None:
 =======================================
 
 The package exports immutable configuration/profile values and OD result
-schemas. Focused one-group workflows live in the expert ``algorithms``
-namespace; they are not the canonical high-level batch workflows.
+schemas. It deliberately exposes no interim Python configured workflow; expert
+numerical kernels live in the ``algorithms`` namespace.
 
 Subpackages
 -----------

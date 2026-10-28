@@ -92,26 +92,17 @@ The profiles preserve the accepted d21 effective numerical constants:
 iterations 10. Changing settings, transform order, resource bytes, or schemas
 requires a new version/fingerprint decision.
 
-Focused qualification algorithms
---------------------------------
+Configured workflow foundation
+------------------------------
 
-Until the batch layer exists, expert/internal one-group qualification functions
-are available only under ``adam_core.orbit_determination.algorithms``:
+This foundation does not expose interim Python one-group workflow functions.
+Doing so would put orchestration and provenance behavior in Python or freeze a
+signature that conflicts with the forthcoming batch contract. Expert numerical
+kernels remain under ``adam_core.orbit_determination.algorithms``; they are not
+complete configured workflows.
 
-* ``run_iod_one_group``;
-* ``run_od_one_group``;
-* ``refine_one_group``;
-* ``evaluate_orbits_one_group``.
-
-The suffix is intentional. These functions are not compatibility aliases or
-the final batch API. They require ``config=`` and perform invocation-fatal
-identity/config/provider validation before pipeline execution. Empty groups are
-no-op empty results. Non-empty observation and orbit IDs must be unique and
-non-null. ``run_od_one_group`` prepares observations once and is bitwise the
-composition of focused IOD followed by focused refinement on those same rows.
-
-Standalone Rust exposes the corresponding predictor-level building blocks
-under ``adam_core_rs_coords::od::algorithms``:
+Standalone Rust exposes predictor-level configured building blocks under
+``adam_core_rs_coords::od::algorithms``:
 ``prepare_observations``, ``run_iod_with_predictor``,
 ``refine_with_predictor``, and ``run_od_with_predictors``. They consume the
 closed ``OdConfig`` path; the old executable ``dyn ObservationUncertaintyModel``
@@ -120,8 +111,8 @@ route is not public.
 Provenance
 ----------
 
-Configured focused results fail closed on unknown or dirty native build
-identity and populate, where applicable:
+The forthcoming canonical batch results fail closed on unknown or dirty native
+build identity and populate, where applicable:
 
 * adam-core version and exact source commit;
 * ordered input/used-astrometry fingerprint and focused route;

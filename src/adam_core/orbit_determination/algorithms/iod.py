@@ -1,4 +1,3 @@
-import json
 import logging
 import uuid
 from dataclasses import dataclass
@@ -18,13 +17,13 @@ from .._native_dispatch import native_propagator
 from ..evaluate import OrbitDeterminationObservations
 
 if TYPE_CHECKING:
-    from ..config import IodRunConfig, OdConfig
+    from ..config import IodRunConfig
 
 from ..fitted_orbits import FittedOrbitMembers, FittedOrbits
 
 logger = logging.getLogger(__name__)
 
-__all__ = ["IodCandidate", "IodCandidateFailure", "IodReport", "run_iod_one_group"]
+__all__ = ["IodCandidate", "IodCandidateFailure", "IodReport"]
 
 
 @dataclass(frozen=True)
@@ -323,79 +322,10 @@ def _run_iod_prepared(
         stage_config._native,
     )
     orbit, members = _tables_from_iod_output(orbit_id, observations, output)
-    report = _report_from_iod_output(output)
-    if len(orbit):
-        from .._pipeline import provenance_with_fields
-
-        diagnostics = json.dumps(
-            {
-                "triplets_tried": report.triplets_tried,
-                "candidates_evaluated": report.candidates_evaluated,
-                "candidates_failed": report.candidates_failed,
-                "corrections_run": report.corrections_run,
-                "pair_visits": report.pair_visits,
-                "raw_pair_visits": report.raw_pair_visits,
-                "middle_visits": report.middle_visits,
-                "search_cap_exhausted": report.search_cap_exhausted,
-                "not_found_reason": report.not_found_reason,
-            },
-            sort_keys=True,
-            separators=(",", ":"),
-        )
-        provider = json.dumps(
-            output["iod_provider"], sort_keys=True, separators=(",", ":")
-        )
-        orbit = orbit.set_column(
-            "provenance",
-            provenance_with_fields(
-                orbit.provenance,
-                iod_provider=[provider] * len(orbit),
-                iod_diagnostics=[diagnostics] * len(orbit),
-            ),
-        )
-    return orbit, members, report
-
-
-def run_iod_one_group(
-    observations: OrbitDeterminationObservations,
-    propagator: Propagator,
-    *,
-    config: "OdConfig",
-) -> Tuple[FittedOrbits, FittedOrbitMembers, IodReport]:
-    """Run one-group initial orbit determination with explicit configuration.
-
-    The configured :class:`ObservationPipeline` is executed in Rust exactly
-    once before IOD.  There is no omitted scientific configuration and no
-    Python observation-model callback path. Batch grouping is added by the
-    forthcoming canonical Core 0.7 batch layer.
-    """
-    from .._native_dispatch import native_propagator
-    from .._pipeline import apply_pipeline_once, attach_original_and_used
-    from ..config import OdConfig
-    from ._provenance import core_build_identity, stamp_complete_provenance
-    from ._validation import validate_observations
-
-    if not isinstance(config, OdConfig):
-        raise TypeError("config must be an OdConfig")
-    empty = validate_observations(observations)
-    core_build_identity()
-    stage_config = config.for_iod()
-    if empty:
-        return _run_iod_prepared(observations, propagator, stage_config)
-    backend = native_propagator(propagator)
-    used, _pipeline_output = apply_pipeline_once(observations, config)
-    orbit, members, report = _run_iod_prepared(
-        used, propagator, stage_config, native_backend=backend
-    )
-    members = attach_original_and_used(members, observations, used)
-    orbit = stamp_complete_provenance(
-        orbit,
-        members,
-        observations,
-        config,
-        route="algorithms.run_iod_one_group",
-    )
-    return orbit, members, report
+    # Canonical provider identity and diagnostics belong to the Rust-owned batch
+    # workflow. This focused algorithm returns a typed report and leaves
+    # canonical provenance unset.
+    return orbit, members, _report_from_iod_output(output)
 
 
 def _placeholder_orbit(observations: OrbitDeterminationObservations) -> Orbits:
@@ -477,17 +407,4 @@ def _tables_from_iod_output(
         solution=output["solution"],
         outlier=output["outlier"],
     )
-    ambiguous = output.get("ambiguous_with")
-    if ambiguous is not None:
-        from .._pipeline import provenance_with_fields
-
-        alternatives = len(ambiguous)
-        orbit = orbit.set_column(
-            "provenance",
-            provenance_with_fields(
-                orbit.provenance,
-                iod_ambiguous=[alternatives > 0],
-                iod_alternatives=[alternatives],
-            ),
-        )
     return orbit, members

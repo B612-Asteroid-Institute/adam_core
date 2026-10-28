@@ -3,8 +3,18 @@
 from dataclasses import fields, replace
 from typing import Any
 
-from ..algorithms.iod import run_iod_one_group
-from ..algorithms.workflows import run_od_one_group
+import numpy as np
+import pyarrow as pa
+
+from adam_core import _rust_native
+
+from .._native_dispatch import native_propagator
+from ..algorithms.fitting import (
+    _emit_native_warnings,
+    _fitted_tables_from_native_output,
+    _native_problem,
+)
+from ..algorithms.iod import _run_iod_prepared
 from ..config import (
     EvaluationConfig,
     IodRunConfig,
@@ -103,11 +113,10 @@ def _instance(propagator):
 
 
 def run_iod_qualified(observations, propagator, **settings):
-    return run_iod_one_group(
-        observations,
-        _instance(propagator),
-        config=explicit_config(**settings),
-    )
+    """Test-only numerical bridge; not a production configured workflow."""
+    propagator = _instance(propagator)
+    config = explicit_config(**settings)
+    return _run_iod_prepared(observations, propagator, config.for_iod())
 
 
 def run_prefit_iod_qualified(observations, propagator, **settings):
@@ -117,10 +126,43 @@ def run_prefit_iod_qualified(observations, propagator, **settings):
     return orbit, members
 
 
-def run_od_qualified(observations, propagator, *, object_id=None, **settings):
-    return run_od_one_group(
-        observations,
-        _instance(propagator),
-        config=explicit_config(**settings),
-        object_id=object_id,
+def refine_qualified(orbit, observations, propagator, **settings):
+    """Test-only native refinement bridge without workflow provenance."""
+    propagator = _instance(propagator)
+    config = explicit_config(**settings)
+    seed = orbit.to_orbits() if hasattr(orbit, "to_orbits") else orbit
+    output = _rust_native.refine_config_ipc(
+        native_propagator(propagator),
+        *_native_problem(seed, observations),
+        config.for_refinement()._native,
     )
+    _emit_native_warnings(output)
+    return _fitted_tables_from_native_output(
+        seed,
+        observations,
+        output,
+        np.asarray(output["weights"], dtype=np.float64),
+    )
+
+
+def run_od_qualified(observations, propagator, *, object_id=None, **settings):
+    """Test-only IOD then refinement composition over as-supplied rows."""
+    propagator = _instance(propagator)
+    config = explicit_config(**settings)
+    seed, _, _ = _run_iod_prepared(observations, propagator, config.for_iod())
+    if len(seed) == 0:
+        from ..fitted_orbits import FittedOrbitMembers, FittedOrbits
+
+        return FittedOrbits.empty(), FittedOrbitMembers.empty()
+    fitted, members = refine_qualified(
+        seed,
+        observations,
+        propagator,
+        refinement_method=settings.get("refinement_method", "cmc2003"),
+    )
+    if object_id is not None and len(fitted):
+        fitted = fitted.set_column(
+            "object_id",
+            pa.array([object_id] * len(fitted), type=pa.large_string()),
+        )
+    return fitted, members

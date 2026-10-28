@@ -2,21 +2,18 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
-import pyarrow as pa
-import pyarrow.compute as pc
+import pyarrow as pa  # type: ignore[import-untyped]
+import pyarrow.compute as pc  # type: ignore[import-untyped]
 
-from adam_core import _rust_native as _rust
-from adam_core.coordinates import SphericalCoordinates
+from adam_core import _rust_native as _rust  # type: ignore[attr-defined]
+from adam_core.coordinates.spherical import SphericalCoordinates
 from adam_core.orbits.arrow_bridge import coordinates_from_ipc, coordinates_to_ipc
 
 from .config import OdConfig
 from .evaluate import OrbitDeterminationObservations
-from .fitted_orbits import FittedOrbitMembers, ObservationAstrometry, OdProvenance
-
-if TYPE_CHECKING:
-    from .fitted_orbits import FittedOrbits
+from .fitted_orbits import FittedOrbitMembers, ObservationAstrometry
 
 
 def apply_pipeline_once(
@@ -78,30 +75,4 @@ def attach_original_and_used(
             ObservationAstrometry.from_spherical(used_rows.coordinates),
         )
         .set_column("astcat", original_rows.astcat)
-    )
-
-
-def provenance_with_fields(current: OdProvenance, **updates: Any) -> OdProvenance:
-    """Replace named provenance fields without importing legacy attestation."""
-    fields = {name: current.table.column(name) for name in OdProvenance.schema.names}
-    fields.update(updates)
-    return OdProvenance.from_kwargs(**fields)
-
-
-def attach_configuration_provenance(
-    fitted: "FittedOrbits", config: OdConfig
-) -> "FittedOrbits":
-    """Record the immutable native expanded configuration on every orbit."""
-    if len(fitted) == 0:
-        return fitted
-    from .fitted_orbits import FittedOrbits
-
-    if not isinstance(fitted, FittedOrbits):
-        raise TypeError("fitted must be FittedOrbits")
-    return fitted.set_column(
-        "provenance",
-        provenance_with_fields(
-            fitted.provenance,
-            configuration=[config._native.provenance_json] * len(fitted),
-        ),
     )

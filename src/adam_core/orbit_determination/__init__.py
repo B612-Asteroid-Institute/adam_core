@@ -3,9 +3,9 @@
 The canonical batch ``run_iod``, ``run_od``, ``refine``, and
 ``evaluate_orbits`` surface is intentionally not exported here until
 ``personal-eack9`` implements Associations/FittedOrbitMembers grouping and
-typed per-group failures. Focused one-group workflows used for numerical
-qualification live under :mod:`adam_core.orbit_determination.algorithms` with
-an explicit ``_one_group`` suffix.
+typed per-group failures. This foundation deliberately exposes no interim
+Python workflow or provenance implementation; predictor-level configured
+composition lives in Rust under ``adam_core_rs_coords::od::algorithms``.
 """
 
 from . import algorithms as algorithms
