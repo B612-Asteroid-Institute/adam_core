@@ -1,6 +1,9 @@
 """Canonical batch ordering, atomicity, provider, and identity contracts."""
 
+import hashlib
 import json
+import re
+import struct
 import subprocess
 
 import pyarrow as pa
@@ -13,6 +16,7 @@ from .. import evaluate_orbits, refine, run_iod, run_od
 from .test_batch_workflows import (
     _assert_exact_results,
     _config,
+    _non_roundtripping_float_config,
     _not_converging_config,
     _two_body_source,
 )
@@ -21,6 +25,60 @@ from .test_differential_correction import TwoBodyPropagator
 
 class _Counter:
     calls = 0
+
+
+def _put_digest_string(digest: "hashlib._Hash", value: str) -> None:
+    encoded = value.encode("utf-8")
+    digest.update(len(encoded).to_bytes(8, "little"))
+    digest.update(encoded)
+
+
+def _put_optional_digest_string(digest: "hashlib._Hash", value: str | None) -> None:
+    if value is None:
+        digest.update(b"\x00")
+    else:
+        digest.update(b"\x01")
+        _put_digest_string(digest, value)
+
+
+def _public_v2_consistency_digest(
+    orbit,
+    *,
+    configuration: str,
+) -> str:
+    """Reproduce the documented unkeyed consistency digest for attack tests."""
+
+    complete_sha256 = hashlib.sha256(
+        json.dumps(
+            json.loads(configuration),
+            separators=(",", ":"),
+            ensure_ascii=False,
+        ).encode("utf-8")
+    ).hexdigest()
+    digest = hashlib.sha256()
+    digest.update(b"adam-core-od-provenance-consistency/v2\0")
+    for value in (
+        orbit.provenance.route[0].as_py(),
+        json.loads(configuration)["configuration_sha256"],
+        complete_sha256,
+        orbit.provenance.input_fingerprint[0].as_py(),
+    ):
+        _put_digest_string(digest, value)
+    for column in (
+        orbit.provenance.iod_backend,
+        orbit.provenance.iod_provider,
+        orbit.provenance.iod_diagnostics,
+    ):
+        _put_optional_digest_string(digest, column[0].as_py())
+    ambiguous = orbit.provenance.iod_ambiguous[0].as_py()
+    alternatives = orbit.provenance.iod_alternatives[0].as_py()
+    digest.update(b"\x00" if ambiguous is None else bytes((1, int(ambiguous))))
+    if alternatives is None:
+        digest.update(b"\x00")
+    else:
+        digest.update(b"\x01")
+        digest.update(struct.pack("<Q", alternatives))
+    return digest.hexdigest()
 
 
 @pytest.fixture
@@ -419,6 +477,113 @@ def test_composed_seed_fields_have_a_validated_consistency_digest(
             config.for_refinement(),
         )
     assert provider_counter.calls == 0
+
+
+@pytest.mark.parametrize("route", ["refine", "evaluate"])
+def test_seed_configuration_content_must_match_its_science_sha_before_provider(
+    pure_iod_orbit, provider_counter, route
+) -> None:
+    """A recomputed public digest cannot bless stale configuration_sha256."""
+
+    source, ids = _source_and_ids(pure_iod_orbit)
+    associations = Associations.from_kwargs(
+        detection_id=ids, object_id=["g"] * len(ids)
+    )
+    config = _config()
+    orbits, members, failures = run_iod(source, associations, None, config.for_iod())
+    assert len(failures) == 0
+
+    changed = json.loads(orbits.provenance.configuration[0].as_py())
+    changed["evaluation"]["covariance_dimension"] = 5
+    # Keep the stale science hash deliberately, then recompute the public,
+    # unkeyed v2 consistency digest over the altered complete configuration.
+    assert (
+        changed["configuration_sha256"]
+        == json.loads(orbits.provenance.configuration[0].as_py())[
+            "configuration_sha256"
+        ]
+    )
+    changed_json = json.dumps(changed, separators=(",", ":"))
+    forged = orbits.set_column(
+        "provenance.configuration",
+        pa.array([changed_json], type=pa.large_string()),
+    ).set_column(
+        "provenance.provenance_fingerprint",
+        pa.array(
+            [_public_v2_consistency_digest(orbits, configuration=changed_json)],
+            type=pa.large_string(),
+        ),
+    )
+
+    if route == "refine":
+
+        def call():
+            return refine(
+                forged,
+                members,
+                source,
+                TwoBodyPropagator(),
+                config.for_refinement(),
+            )
+
+    else:
+
+        def call():
+            return evaluate_orbits(
+                forged,
+                members,
+                source,
+                TwoBodyPropagator(),
+                config.for_evaluation(),
+            )
+
+    with pytest.raises(ValueError, match="configuration_sha256"):
+        call()
+    assert provider_counter.calls == 0
+
+
+def test_equivalent_seed_json_is_canonicalized_before_composed_provenance(
+    pure_iod_orbit,
+) -> None:
+    source, ids = _source_and_ids(pure_iod_orbit)
+    associations = Associations.from_kwargs(
+        detection_id=ids, object_id=["g"] * len(ids)
+    )
+    config = _non_roundtripping_float_config()
+    iod = run_iod(source, associations, None, config.for_iod())
+    raw = iod[0].provenance.configuration[0].as_py()
+    value = json.loads(raw)
+    rho = value["iod"]["search_correction_ranging"]["ranging"]["rho_min_au"]
+    canonical_spelling = json.dumps(rho)
+    equivalent_spelling = format(rho, ".30f").rstrip("0").rstrip(".")
+    assert float(equivalent_spelling).hex() == rho.hex()
+    assert equivalent_spelling != canonical_spelling
+    altered = re.sub(
+        r'("rho_min_au":)[^,}]+',
+        rf"\g<1>{equivalent_spelling}",
+        raw,
+        count=1,
+    )
+    altered = "\n  " + altered + "\n"
+    assert equivalent_spelling in altered
+    assert altered != raw and json.loads(altered) == value
+    altered_orbits = iod[0].set_column(
+        "provenance.configuration",
+        pa.array([altered], type=pa.large_string()),
+    )
+
+    composed = refine(
+        altered_orbits,
+        iod[1],
+        source,
+        None,
+        config.for_refinement(),
+    )
+    fused = run_od(source, associations, None, config)
+    _assert_exact_results(fused, composed)
+    emitted = composed[0].provenance.configuration[0].as_py()
+    assert emitted == raw
+    assert emitted == json.dumps(json.loads(emitted), separators=(",", ":"))
 
 
 def test_nonconverged_failure_carries_output_and_input_orbit_identity(

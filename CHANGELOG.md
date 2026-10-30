@@ -72,7 +72,9 @@ This file contains notable changes in adam-core
   validation. Configuration identity is validated before observation-pipeline
   or provider work, and composed results validate the complete seed
   configuration/profile and every propagated IOD metadata field through an
-  unkeyed consistency digest.
+  unkeyed consistency digest. Validated seed configuration JSON is re-emitted
+  canonically before composed provenance, so equivalent whitespace and finite
+  float spellings are representation-only.
 - A sliced Quivr table (for example ``orbits[i:i+1]`` with a nonzero Arrow
   offset) handed to a typed Rust record-batch crossing could be read from the
   parent table's first rows. The Python bridge now materializes offset arrays

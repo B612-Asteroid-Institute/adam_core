@@ -19,6 +19,7 @@ from .. import (
     NightlyBatchDeweighting,
     ObservationPipeline,
     OdConfig,
+    OrbitDeterminationFailures,
     RefinementRunConfig,
     ResourceBindings,
     WorstResidualRefinement,
@@ -89,6 +90,26 @@ def _canonical_ipc(table) -> bytes:
 def _assert_exact_results(left, right) -> None:
     for left_table, right_table in zip(left, right, strict=True):
         assert _canonical_ipc(left_table) == _canonical_ipc(right_table)
+
+
+def _concat_failures(*failures) -> OrbitDeterminationFailures:
+    tables = [value.table for value in failures if len(value)]
+    if not tables:
+        return OrbitDeterminationFailures.empty()
+    return OrbitDeterminationFailures.from_pyarrow(
+        pa.concat_tables(tables).combine_chunks()
+    )
+
+
+def _sorted_failure_ipc(failures: OrbitDeterminationFailures) -> bytes:
+    group_ids = failures.group_id.to_pylist()
+    stages = failures.stage.to_pylist()
+    codes = failures.code.to_pylist()
+    order = sorted(
+        range(len(failures)),
+        key=lambda row: (group_ids[row], stages[row], codes[row]),
+    )
+    return _canonical_ipc(failures.take(pa.array(order, type=pa.int64())))
 
 
 def _not_converging_config() -> OdConfig:
@@ -313,6 +334,124 @@ def test_profile_shaped_deweighting_is_exact_across_fused_and_composed_routes(
     if force_failure:
         assert fused[0].success.to_pylist() == [False]
         assert fused[2].best_state_retained.to_pylist() == [True]
+
+
+@pytest.mark.parametrize("force_failure", [False, True])
+def test_overlapping_multigroup_ordered_pipeline_exact_composition_and_evaluation(
+    pure_iod_orbit, force_failure
+) -> None:
+    """Pin shared-row, multi-hypothesis composition and both former mutants."""
+
+    base_source = _two_body_source(pure_iod_orbit)
+    source = SourceCatalog.from_pyarrow(
+        pa.concat_tables([base_source.table] * 3).combine_chunks()
+    )
+    source = source.set_column(
+        "id",
+        pa.array(
+            [
+                f"{obs_id}-multi-{repeat}"
+                for repeat in range(3)
+                for obs_id in base_source.id.to_pylist()
+            ],
+            type=pa.large_string(),
+        ),
+    )
+    rng = np.random.default_rng(217)
+    source = (
+        source.set_column("ra_sigma", pa.array(0.2 + 0.3 * rng.random(len(source))))
+        .set_column("dec_sigma", pa.array(0.25 + 0.35 * rng.random(len(source))))
+        .set_column("radec_corr", pa.array(np.linspace(-0.45, 0.45, len(source))))
+    )
+    covariance = source.coordinates().covariance.to_matrix()
+    assert np.all(np.isfinite(covariance[:, 1, 2]))
+    assert np.any(covariance[:, 1, 2] != 0.0)
+
+    ids = source.id.to_pylist()
+    group_a = list(reversed(ids))
+    group_b_indices = [3, 0, 4, 1, 5, 2] + list(range(6, 14))
+    group_b = [ids[index] for index in group_b_indices]
+    group_c = ids[-3:]
+    associations = Associations.from_kwargs(
+        detection_id=group_a + group_b + group_c,
+        object_id=(
+            ["group-a"] * len(group_a)
+            + ["group-b"] * len(group_b)
+            + ["group-c-too-small"] * len(group_c)
+        ),
+    )
+    base = _not_converging_config() if force_failure else _config()
+    config = OdConfig.explicit(
+        observation_pipeline=ObservationPipeline.ordered(
+            (NightlyBatchDeweighting(4), NightlyBatchDeweighting(2))
+        ),
+        iod=base.for_iod(),
+        refinement=base.for_refinement(),
+        evaluation=base.for_evaluation(),
+        resources=ResourceBindings({}),
+    )
+
+    iod = run_iod(source, associations, None, config.for_iod())
+    composed = refine(iod[0], iod[1], source, None, config.for_refinement())
+    fused = run_od(source, associations, None, config)
+    expected = (composed[0], composed[1], _concat_failures(iod[2], composed[2]))
+
+    assert _canonical_ipc(fused[0]) == _canonical_ipc(expected[0])
+    assert _canonical_ipc(fused[1]) == _canonical_ipc(expected[1])
+    # Stage concatenation and fused group traversal need not encounter the
+    # small IOD failure in the same row position; failure rows themselves are
+    # bit-exact after deterministic group/stage ordering.
+    assert _sorted_failure_ipc(fused[2]) == _sorted_failure_ipc(expected[2])
+    assert iod[0].object_id.to_pylist() == ["group-a", "group-b"]
+    assert iod[2].group_id.to_pylist() == ["group-c-too-small"]
+    assert iod[2].code.to_pylist() == ["no_solution"]
+
+    by_group: dict[str, list[str]] = {}
+    orbit_to_group = dict(
+        zip(iod[0].orbit_id.to_pylist(), iod[0].object_id.to_pylist(), strict=True)
+    )
+    for orbit_id, obs_id in zip(
+        iod[1].orbit_id.to_pylist(), iod[1].obs_id.to_pylist(), strict=True
+    ):
+        by_group.setdefault(orbit_to_group[orbit_id], []).append(obs_id)
+    assert by_group["group-a"] == ids
+    assert by_group["group-b"] == ids[:14]
+
+    shared = ids[0]
+    used_variance_by_group = {}
+    for orbit_id, obs_id, variance in zip(
+        iod[1].orbit_id.to_pylist(),
+        iod[1].obs_id.to_pylist(),
+        iod[1].used_astrometry.variance_lon.to_pylist(),
+        strict=True,
+    ):
+        if obs_id == shared:
+            used_variance_by_group[orbit_to_group[orbit_id]] = variance
+    assert used_variance_by_group["group-a"] != used_variance_by_group["group-b"]
+    provenance = json.loads(iod[0].provenance.configuration[0].as_py())
+    assert [
+        transform["effective_observation_cap"] for transform in provenance["transforms"]
+    ] == [4, 2]
+
+    evaluated_fused = evaluate_orbits(
+        fused[0], fused[1], source, None, config.for_evaluation()
+    )
+    evaluated_composed = evaluate_orbits(
+        composed[0], composed[1], source, None, config.for_evaluation()
+    )
+    _assert_exact_results(evaluated_fused, evaluated_composed)
+    assert evaluated_fused[0].object_id.to_pylist() == ["group-a", "group-b"]
+
+    if force_failure:
+        assert fused[0].success.to_pylist() == [False, False]
+        assert set(fused[2].group_id.to_pylist()) == {
+            "group-a",
+            "group-b",
+            "group-c-too-small",
+        }
+    else:
+        assert fused[0].success.to_pylist() == [True, True]
+        assert fused[2].group_id.to_pylist() == ["group-c-too-small"]
 
 
 def test_run_od_failure_is_exact_run_iod_then_refine(pure_iod_orbit) -> None:

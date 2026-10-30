@@ -1944,6 +1944,8 @@ fn parse_orbit_provenance(
             let configuration_identity = configuration_identity(configuration).map_err(|error| {
                 value_error(format!("orbit configuration at row {row} is invalid: {error}"))
             })?;
+            let canonical_configuration = serde_json::to_string(&configuration_value)
+                .map_err(|error| value_error(format!("orbit configuration at row {row} is not serializable: {error}")))?;
             let declared_provenance_fingerprint = provenance
                 .provenance_fingerprint
                 .as_deref()
@@ -2010,7 +2012,7 @@ fn parse_orbit_provenance(
                 iod_backend,
                 iod_provider: iod_provider.to_string(),
                 iod_diagnostics,
-                configuration: configuration.to_string(),
+                configuration: canonical_configuration,
                 iod_ambiguous: provenance.iod_ambiguous.ok_or_else(|| value_error(format!("seed IOD provenance at row {row} has no ambiguity flag")))?,
                 iod_alternatives: provenance.iod_alternatives.ok_or_else(|| value_error(format!("seed IOD provenance at row {row} has no alternative count")))?,
             }))
