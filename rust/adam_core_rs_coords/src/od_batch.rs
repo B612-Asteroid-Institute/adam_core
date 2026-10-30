@@ -50,7 +50,10 @@ pub fn plan_associations(
     associations.validate().map_err(|error| error.to_string())?;
     let source_rows = unique_source_rows(source_ids)?;
     let mut order = Vec::<String>::new();
-    let mut members = HashMap::<String, HashSet<usize>>::new();
+    // Collect each declared member exactly once, then sort only that group's
+    // rows. Never rescan the complete source table for every group: survey
+    // batches may contain hundreds of thousands of hypotheses.
+    let mut members = HashMap::<String, Vec<usize>>::new();
     let mut pairs = HashSet::<(String, usize)>::new();
 
     for row in 0..associations.len() {
@@ -69,7 +72,7 @@ pub fn plan_associations(
         }
         if !members.contains_key(group_id) {
             order.push(group_id.clone());
-            members.insert(group_id.clone(), HashSet::new());
+            members.insert(group_id.clone(), Vec::new());
         }
         if !pairs.insert((group_id.clone(), source_index)) {
             return Err(format!(
@@ -79,18 +82,19 @@ pub fn plan_associations(
         members
             .get_mut(group_id)
             .expect("group inserted above")
-            .insert(source_index);
+            .push(source_index);
     }
 
     Ok(order
         .into_iter()
         .map(|group_id| {
-            let selected = &members[&group_id];
+            let mut source_indices = members
+                .remove(&group_id)
+                .expect("ordered association group was collected");
+            source_indices.sort_unstable();
             AssociationGroup {
                 group_id,
-                source_indices: (0..source_ids.len())
-                    .filter(|row| selected.contains(row))
-                    .collect(),
+                source_indices,
             }
         })
         .collect())
@@ -125,7 +129,7 @@ pub fn plan_orbit_members(
     }
 
     let mut order = Vec::<String>::new();
-    let mut by_orbit = HashMap::<String, HashMap<usize, usize>>::new();
+    let mut by_orbit = HashMap::<String, Vec<(usize, usize)>>::new();
     let mut pairs = HashSet::<(String, usize)>::new();
     for row in 0..member_orbit_ids.len() {
         let orbit_id = &member_orbit_ids[row];
@@ -140,7 +144,7 @@ pub fn plan_orbit_members(
         })?;
         if !by_orbit.contains_key(orbit_id) {
             order.push(orbit_id.clone());
-            by_orbit.insert(orbit_id.clone(), HashMap::new());
+            by_orbit.insert(orbit_id.clone(), Vec::new());
         }
         if !pairs.insert((orbit_id.clone(), source_index)) {
             return Err(format!(
@@ -150,7 +154,7 @@ pub fn plan_orbit_members(
         by_orbit
             .get_mut(orbit_id)
             .expect("orbit group inserted above")
-            .insert(source_index, row);
+            .push((source_index, row));
     }
     if order.len() != orbits.len() {
         let referenced: HashSet<&str> = order.iter().map(String::as_str).collect();
@@ -168,14 +172,11 @@ pub fn plan_orbit_members(
     Ok(order
         .into_iter()
         .map(|orbit_id| {
-            let selected = &by_orbit[&orbit_id];
-            let source_indices = (0..source_ids.len())
-                .filter(|row| selected.contains_key(row))
-                .collect::<Vec<_>>();
-            let member_indices = source_indices
-                .iter()
-                .map(|row| selected[row])
-                .collect::<Vec<_>>();
+            let mut selected = by_orbit
+                .remove(&orbit_id)
+                .expect("ordered orbit-member group was collected");
+            selected.sort_unstable_by_key(|&(source_row, _)| source_row);
+            let (source_indices, member_indices) = selected.into_iter().unzip();
             OrbitMemberGroup {
                 orbit_index: orbit_rows[orbit_id.as_str()],
                 orbit_id,
@@ -295,6 +296,38 @@ mod tests {
         assert_eq!(groups[0].source_indices, vec![1, 2]);
         assert_eq!(groups[0].member_indices, vec![3, 0]);
         assert_eq!(groups[1].source_indices, vec![0, 2]);
+    }
+
+    #[test]
+    fn association_planning_scales_with_declared_members_not_group_source_product() {
+        // This shape performs 320 million full-source membership probes under
+        // the former O(groups * source_rows) implementation. The production
+        // planner now collects 40,000 declared rows once and sorts five rows
+        // per group. Keep the generous bound as a regression guard, not a
+        // microbenchmark.
+        let n_rows = 40_000usize;
+        let per_group = 5usize;
+        let source_ids = (0..n_rows).map(|row| format!("d{row}")).collect::<Vec<_>>();
+        let associations = AssociationBatch {
+            detection_id: (0..n_rows).rev().map(|row| format!("d{row}")).collect(),
+            object_id: (0..n_rows)
+                .rev()
+                .map(|row| Some(format!("g{}", row / per_group)))
+                .collect(),
+        };
+        let started = std::time::Instant::now();
+        let groups = plan_associations(&source_ids, &associations).unwrap();
+        let elapsed = started.elapsed();
+        assert_eq!(groups.len(), n_rows / per_group);
+        assert_eq!(groups[0].group_id, format!("g{}", n_rows / per_group - 1));
+        assert_eq!(
+            groups[0].source_indices,
+            (n_rows - per_group..n_rows).collect::<Vec<_>>()
+        );
+        assert!(
+            elapsed < std::time::Duration::from_secs(2),
+            "near-linear planner regression: {elapsed:?}"
+        );
     }
 
     #[test]

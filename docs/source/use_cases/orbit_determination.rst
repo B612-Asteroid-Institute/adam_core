@@ -101,9 +101,10 @@ orbits without explicit members abort atomically. Groups follow first
 appearance; members follow source-table order; overlapping hypotheses are
 supported.
 
-``run_od`` prepares each group once, runs IOD, and refines the accepted seed on
-the exact same rows. Original and used astrometry are persisted on members so
-standalone ``refine`` consumes the same prepared handoff. Refinement and
+``run_od`` plans and prepares each group once, runs IOD, and refines the
+accepted seed on the exact same rows. Original and used astrometry, including
+exact diagonal variances, are persisted on members so standalone ``refine``
+consumes a bitwise-lossless prepared handoff. Refinement and
 evaluation fail closed when those snapshots are missing or when current source
 astrometry differs from the persisted original snapshot. Per-member Rust
 fingerprints also bind detection metadata, epochs/scale, observatory and observer
@@ -120,6 +121,8 @@ and populate, where applicable:
 
 * adam-core version and exact source commit;
 * ordered complete source/member, membership, and exact orbit-state fingerprints;
+* a provenance fingerprint binding route, validated configuration SHA-256,
+  and input fingerprint;
 * focused route;
 * native IOD/refinement provider identity and metadata;
 * IOD and refinement diagnostics;
@@ -138,13 +141,20 @@ Malformed configuration, resources, IDs/member mappings, unsupported provider
 capabilities, malformed provider responses, and unavailable build identity are
 invocation-fatal with no partial output. Only safely isolated scientific
 no-solution/refinement/evaluation failures continue per group. They are rows of
-``OrbitDeterminationFailures`` with typed stage counters, not opaque JSON. IOD
+``OrbitDeterminationFailures`` with typed stage counters, not opaque JSON.
+``orbit_id`` is present only for an emitted state; ``input_orbit_id`` separately
+identifies a refine/evaluate input when a state-less failure occurs. IOD
 failures emit no placeholder orbit. A non-converged refinement remains in
 ``FittedOrbits`` with ``success=False`` only when Rust returned an actual best
 state; local refinement/evaluation errors never relabel an untouched input seed.
 
 Canonical IOD IDs deliberately include the complete ``OdConfig``. Exact
 ``run_iod`` → ``refine`` composition therefore requires the same refinement
-projection and complete original membership. Evaluation uses predictor settings
+projection and complete original membership. Direct ``run_iod`` results are
+valid evaluation inputs after full provenance/member/state validation, and
+evaluation may use an explicit member subset. Evaluation uses predictor settings
 from the complete configuration's refinement fit and the covariance dimension
-from ``EvaluationConfig``.
+from ``EvaluationConfig``. Provider ``RowFailure`` and other provider/protocol
+errors remain invocation-fatal rather than being converted to group failures.
+Evaluation outputs record evaluation-stage configuration/provider identity; they
+do not copy prior-stage backend fields or member weights.

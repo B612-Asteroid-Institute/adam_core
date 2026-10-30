@@ -30,8 +30,9 @@ failures produce no placeholder state. A non-converged refinement is retained
 with `success=False` only when the native solver returned its actual best state;
 a local error that produced no state emits only a failure row. Evaluation errors
 likewise emit no unchanged seed placeholder. Failure `group_id` is the original
-association hypothesis (`object_id`) when available, while `orbit_id` remains
-separate.
+association hypothesis (`object_id`) when available. `orbit_id` identifies an
+actually emitted retained/best state and is null when no state exists;
+`input_orbit_id` separately identifies the refine/evaluate input orbit.
 
 ## Configuration migration
 
@@ -71,7 +72,9 @@ fails closed on such input.
 
 The pipeline executes once per group. `run_od` gives refinement the exact
 prepared IOD rows without reapplying transforms. Fitted members persist original
-and used astrometry; standalone `refine` consumes that prepared handoff. A
+and used astrometry, including the exact diagonal variances rather than relying
+on a lossy sigma-square round trip; standalone `refine` consumes that prepared
+handoff. A
 successful `run_od` result is the same state, members, diagnostics, and canonical
 provenance as `run_iod(..., config.for_iod())` followed by
 `refine(..., config.for_refinement())`. Standalone refinement/evaluation rejects
@@ -89,6 +92,9 @@ standalone Rust predictor seams remain under
 Canonical provenance is emitted by Rust and includes clean Core build identity,
 ordered complete source/member fingerprints, exact orbit-state fingerprint,
 route, native provider metadata, stable canonical stage diagnostics, and
-canonical path-free configuration. Unknown/dirty build identity, mutated source
+canonical path-free configuration. A separate provenance fingerprint binds the
+route, validated configuration SHA-256, and input fingerprint, so relabelled
+routes or mixed configuration/input claims fail before provider binding.
+Unknown/dirty build identity, mutated source
 or observer geometry, changed membership/state, and missing provider
 fingerprints fail closed before provider binding.

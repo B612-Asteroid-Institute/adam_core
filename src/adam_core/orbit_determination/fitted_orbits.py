@@ -129,6 +129,9 @@ class OdProvenance(qv.Table):
     #: SHA-256 of the exact emitted orbit state/time/origin/covariance and
     #: physical/non-gravitational parameters, validated on later workflows.
     state_fingerprint = qv.LargeStringColumn(nullable=True)
+    #: SHA-256 binding route, validated configuration identity, and input
+    #: fingerprint. Later workflows reject relabelled or mixed provenance.
+    provenance_fingerprint = qv.LargeStringColumn(nullable=True)
     #: Exact canonical workflow route.
     route = qv.LargeStringColumn(nullable=True)
     #: Historical producer label; configured workflows leave this null.
@@ -174,7 +177,10 @@ class OrbitDeterminationFailures(qv.Table):
     """
 
     group_id = qv.LargeStringColumn()
+    #: Emitted output-orbit identity; null when no state was emitted.
     orbit_id = qv.LargeStringColumn(nullable=True)
+    #: Input orbit that was refined/evaluated; null for IOD-only failures.
+    input_orbit_id = qv.LargeStringColumn(nullable=True)
     stage = qv.LargeStringColumn()
     code = qv.LargeStringColumn()
     message = qv.LargeStringColumn()
@@ -256,6 +262,10 @@ class ObservationAstrometry(qv.Table):
         diagonal. ``sigma_lon`` is the uncertainty of RA itself (NOT
         cos(dec)-corrected), matching the `SphericalCoordinates` covariance
         convention. NaN where the covariance is not available.
+    ``variance_lon``, ``variance_lat`` : float, degrees^2
+        Exact diagonal covariance entries consumed by the fitter. These are
+        persisted separately from the display sigmas so the prepared handoff
+        is bitwise lossless across fused and composed workflows.
     ``cov_lonlat`` : float, degrees^2
         RA/Dec covariance cross-term. NaN where not available.
 
@@ -268,6 +278,8 @@ class ObservationAstrometry(qv.Table):
     lat = qv.Float64Column(nullable=True)
     sigma_lon = qv.Float64Column(nullable=True)
     sigma_lat = qv.Float64Column(nullable=True)
+    variance_lon = qv.Float64Column(nullable=True)
+    variance_lat = qv.Float64Column(nullable=True)
     cov_lonlat = qv.Float64Column(nullable=True)
 
     @classmethod
@@ -306,6 +318,8 @@ class ObservationAstrometry(qv.Table):
             lat=coordinates.lat,
             sigma_lon=sigma_lon,
             sigma_lat=sigma_lat,
+            variance_lon=covariances[:, 1, 1],
+            variance_lat=covariances[:, 2, 2],
             cov_lonlat=covariances[:, 1, 2],
         )
 

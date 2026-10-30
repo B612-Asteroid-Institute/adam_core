@@ -165,8 +165,9 @@ Current Migrated APIs
   - Boundary: nested Arrow IPC plus explicit typed configuration. Rust returns
     authoritative output disposition, success/status, solution/outlier flags,
     state retention, failure classification, fingerprints, and provenance;
-    Python only wraps those columns into quivr tables. Python does not infer
-    composition eligibility from a route string.
+    Python only wraps those columns into quivr tables. Route, validated
+    configuration SHA-256, and input identity are cryptographically bound;
+    Python does not infer composition eligibility from a mutable route string.
   - Python
     binds semantic resource slots and marshals tables; Rust validates exact
     resource identity, parses tables, executes the ordered observation
@@ -186,9 +187,12 @@ Current Migrated APIs
     grouping, fitting, rejection, covariance, or OD algorithms.
   - The canonical batch layer rejects dirty/unknown Core identity, invalid
     IDs/member mappings, and malformed resource/config/provider contracts
-    atomically before pipeline or numerical work. It defines empty-group
-    behavior, typed per-group scientific failures, deterministic overlapping
-    grouping, and canonical Rust runtime provenance.
+    atomically before pipeline or numerical work. Canonical Python calls make
+    one near-linear Rust planning/preparation pass and carry a deferred provider
+    resolver that is invoked only after that pass; empty and malformed batches
+    never bind a provider. The layer defines empty-group behavior, typed
+    per-group scientific failures, deterministic overlapping grouping, and
+    canonical Rust runtime provenance.
   - CMC2003 finalization uses one central-difference Jacobian through the full
     predictor for all observations. Selected rows form the covariance; all
     rows supply rejection/recovery projections. Huber plus CMC2003 remains a

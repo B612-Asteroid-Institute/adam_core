@@ -1,6 +1,7 @@
 """Canonical batch-native workflow composition and preflight contracts."""
 
 import dataclasses
+import json
 
 import numpy as np
 import pyarrow as pa
@@ -15,10 +16,12 @@ from .. import (
     FittedOrbitMembers,
     FittedOrbits,
     IodRunConfig,
+    NightlyBatchDeweighting,
     ObservationPipeline,
     OdConfig,
     RefinementRunConfig,
     ResourceBindings,
+    WorstResidualRefinement,
     evaluate_orbits,
     refine,
     run_iod,
@@ -136,6 +139,63 @@ def test_run_od_is_exact_run_iod_then_refine(pure_iod_orbit) -> None:
     _assert_exact_results(fused, composed)
 
 
+@pytest.mark.parametrize("force_failure", [False, True])
+def test_profile_shaped_deweighting_is_exact_across_fused_and_composed_routes(
+    pure_iod_orbit, force_failure
+) -> None:
+    base_source = _two_body_source(pure_iod_orbit)
+    # Repeat the same valid seven-epoch arc three times with distinct detection
+    # IDs. The station-night containing two rows now has six rows, so the
+    # profile's cap=4 transform genuinely changes its variance while preserving
+    # the original distinct-epoch science problem.
+    source = SourceCatalog.from_pyarrow(
+        pa.concat_tables([base_source.table] * 3).combine_chunks()
+    )
+    source = source.set_column(
+        "id",
+        pa.array(
+            [
+                f"{obs_id}-repeat-{repeat}"
+                for repeat in range(3)
+                for obs_id in base_source.id.to_pylist()
+            ],
+            type=pa.large_string(),
+        ),
+    )
+    associations = Associations.from_kwargs(
+        detection_id=source.id,
+        object_id=["group-1"] * len(source),
+    )
+    base = _not_converging_config() if force_failure else _config()
+    config = OdConfig.explicit(
+        observation_pipeline=ObservationPipeline((NightlyBatchDeweighting(4),)),
+        iod=base.for_iod(),
+        refinement=base.for_refinement(),
+        evaluation=base.for_evaluation(),
+        resources=ResourceBindings({}),
+    )
+
+    fused = run_od(source, associations, None, config)
+    iod = run_iod(source, associations, None, config.for_iod())
+    composed = refine(iod[0], iod[1], source, None, config.for_refinement())
+
+    original_variance = iod[1].original_astrometry.variance_lon.to_numpy(
+        zero_copy_only=False
+    )
+    used_variance = iod[1].used_astrometry.variance_lon.to_numpy(zero_copy_only=False)
+    assert np.any(original_variance.view(np.uint64) != used_variance.view(np.uint64))
+    np.testing.assert_array_equal(
+        fused[1]
+        .used_astrometry.variance_lon.to_numpy(zero_copy_only=False)
+        .view(np.uint64),
+        used_variance.view(np.uint64),
+    )
+    _assert_exact_results(fused, composed)
+    if force_failure:
+        assert fused[0].success.to_pylist() == [False]
+        assert fused[2].best_state_retained.to_pylist() == [True]
+
+
 def test_run_od_failure_is_exact_run_iod_then_refine(pure_iod_orbit) -> None:
     source = _two_body_source(pure_iod_orbit)
     associations = Associations.from_kwargs(
@@ -152,6 +212,45 @@ def test_run_od_failure_is_exact_run_iod_then_refine(pure_iod_orbit) -> None:
     assert fused[0].status_code.to_pylist() == [0]
     assert fused[2].group_id.to_pylist() == ["group-1"]
     assert fused[2].best_state_retained.to_pylist() == [True]
+
+
+def test_worst_residual_provenance_counts_actual_rejections(pure_iod_orbit) -> None:
+    source = _two_body_source(pure_iod_orbit)
+    ra = source.ra.to_numpy(zero_copy_only=False).copy()
+    ra[3] += 0.05
+    source = source.set_column("ra", pa.array(ra))
+    associations = Associations.from_kwargs(
+        detection_id=source.id,
+        object_id=["group-1"] * len(source),
+    )
+    base = _config()
+    fit = base.for_refinement().refinement.fit
+    refinement = RefinementRunConfig(
+        WorstResidualRefinement(
+            method="worst_residual",
+            rchi2_threshold=3.0,
+            min_obs=5,
+            min_arc_length=1.0,
+            contamination_percentage=30.0,
+            fit=fit,
+        )
+    )
+    config = OdConfig.explicit(
+        observation_pipeline=base.observation_pipeline,
+        iod=base.for_iod(),
+        refinement=refinement,
+        evaluation=base.for_evaluation(),
+        resources=ResourceBindings({}),
+    )
+    orbits, members, failures = run_od(source, associations, None, config)
+    assert len(orbits) == 1
+    assert len(failures) == 0
+    n_rejected = int(np.sum(members.outlier.to_numpy(zero_copy_only=False)))
+    assert n_rejected > 0
+    assert orbits.provenance.num_rejected.to_pylist() == [n_rejected]
+    assert orbits.provenance.rejected_fraction.to_pylist() == [n_rejected / len(source)]
+    diagnostics = json.loads(orbits.provenance.refinement_diagnostics[0].as_py())
+    assert diagnostics["n_rejected"] == n_rejected
 
 
 def test_refine_rejects_source_astrometry_changed_since_iod_before_provider_binding(
@@ -331,6 +430,8 @@ def test_typed_mixed_group_evaluation_continues_without_placeholder(
     assert failures.code.to_pylist() == ["no_included_observations"]
     assert failures.best_state_retained.to_pylist() == [False]
     assert failures.recoverable.to_pylist() == [False]
+    assert failures.orbit_id.to_pylist() == [None]
+    assert failures.input_orbit_id.to_pylist() == [orbits.orbit_id[0].as_py()]
 
 
 def test_local_refinement_error_emits_failure_only(pure_iod_orbit) -> None:
@@ -352,3 +453,5 @@ def test_local_refinement_error_emits_failure_only(pure_iod_orbit) -> None:
     assert failures.code.to_pylist() == ["rank_deficient"]
     assert failures.best_state_retained.to_pylist() == [False]
     assert failures.recoverable.to_pylist() == [False]
+    assert failures.orbit_id.to_pylist() == [None]
+    assert failures.input_orbit_id.to_pylist() == [orbits.orbit_id[0].as_py()]

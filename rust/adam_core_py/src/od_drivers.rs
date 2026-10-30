@@ -307,8 +307,18 @@ struct PySource {
 
 impl PySource {
     fn new(object: &Bound<'_, PyAny>) -> PyResult<Self> {
+        // Canonical batch workflows pass an outer zero-argument resolver so
+        // Python-side backend classification and capsule construction both
+        // remain deferred until Rust has completed all static validation and
+        // prepared-input construction. Private low-level callers may still
+        // pass a descriptor or raw capsule directly.
+        let resolved = if object.is_callable() && object.downcast::<PyTuple>().is_err() {
+            object.call0()?
+        } else {
+            object.clone()
+        };
         let (capsule_object, expected_identity) =
-            if let Ok(descriptor) = object.downcast::<PyTuple>() {
+            if let Ok(descriptor) = resolved.downcast::<PyTuple>() {
                 if descriptor.len() != 4 {
                     return Err(PyValueError::new_err(
                         "native propagator descriptor must be (capsule, name, version, two_body)",
@@ -325,7 +335,7 @@ impl PySource {
             } else {
                 // The raw capsule form remains available to the private low-level
                 // bindings; adam-core's Python dispatch always supplies identity.
-                (object.clone(), None)
+                (resolved, None)
             };
         let capsule_object = if capsule_object.is_callable() {
             capsule_object.call0()?
@@ -819,6 +829,14 @@ fn snapshot_dict<'py>(
     out.set_item(
         "sigma_lat",
         ndarray::Array1::from_vec(snapshot.sigma_lat).into_pyarray(py),
+    )?;
+    out.set_item(
+        "variance_lon",
+        ndarray::Array1::from_vec(snapshot.variance_lon).into_pyarray(py),
+    )?;
+    out.set_item(
+        "variance_lat",
+        ndarray::Array1::from_vec(snapshot.variance_lat).into_pyarray(py),
     )?;
     out.set_item(
         "cov_lonlat",
@@ -1490,11 +1508,15 @@ fn member_input_fingerprint(
         original.lat[snapshot_row],
         original.sigma_lon[snapshot_row],
         original.sigma_lat[snapshot_row],
+        original.variance_lon[snapshot_row],
+        original.variance_lat[snapshot_row],
         original.cov_lonlat[snapshot_row],
         used.lon[snapshot_row],
         used.lat[snapshot_row],
         used.sigma_lon[snapshot_row],
         used.sigma_lat[snapshot_row],
+        used.variance_lon[snapshot_row],
+        used.variance_lat[snapshot_row],
         used.cov_lonlat[snapshot_row],
     ] {
         digest.update(value.to_bits().to_le_bytes());
@@ -1672,6 +1694,49 @@ fn canonical_orbit_id(group_id: &str, config_sha256: &str, input_fingerprint: &s
     format!("{:x}", digest.finalize())
 }
 
+fn configuration_identity(configuration: &str) -> Result<String, String> {
+    let mut value: serde_json::Value = serde_json::from_str(configuration)
+        .map_err(|error| format!("invalid orbit configuration: {error}"))?;
+    let declared = value
+        .get("configuration_sha256")
+        .and_then(serde_json::Value::as_str)
+        .map(str::to_string);
+    if let Some(declared) = declared {
+        if !is_sha256(&declared) {
+            return Err("configuration_sha256 is not a lowercase SHA-256".to_string());
+        }
+        let object = value
+            .as_object_mut()
+            .ok_or_else(|| "configuration provenance is not an object".to_string())?;
+        object.remove("configuration_sha256");
+        // Profile identity records selection, not science, and is intentionally
+        // excluded by OdConfig::configuration_sha256.
+        object.remove("profile");
+        let canonical = serde_json::to_vec(&value)
+            .map_err(|error| format!("configuration is not serializable: {error}"))?;
+        let actual = format!("{:x}", Sha256::digest(canonical));
+        if declared != actual {
+            return Err("configuration_sha256 does not match canonical configuration".to_string());
+        }
+        Ok(declared)
+    } else {
+        // Standalone stage configurations have no embedded full-OD science
+        // digest, so bind their exact canonical JSON value.
+        let canonical = serde_json::to_vec(&value)
+            .map_err(|error| format!("configuration is not serializable: {error}"))?;
+        Ok(format!("{:x}", Sha256::digest(canonical)))
+    }
+}
+
+fn provenance_fingerprint(route: &str, configuration_sha256: &str, input: &str) -> String {
+    let mut digest = Sha256::new();
+    digest.update(b"adam-core-od-provenance/v1\0");
+    fingerprint_string(&mut digest, route);
+    fingerprint_string(&mut digest, configuration_sha256);
+    fingerprint_string(&mut digest, input);
+    format!("{:x}", digest.finalize())
+}
+
 #[derive(Debug, Clone)]
 struct BatchFailure {
     stage: &'static str,
@@ -1707,6 +1772,7 @@ struct OrbitProvenanceInput {
     adam_core_build: Option<String>,
     input_fingerprint: Option<String>,
     state_fingerprint: Option<String>,
+    provenance_fingerprint: Option<String>,
     route: Option<String>,
     iod_backend: Option<String>,
     iod_provider: Option<String>,
@@ -1837,21 +1903,35 @@ fn parse_orbit_provenance(
             })?;
             let configuration_value: serde_json::Value = serde_json::from_str(configuration)
                 .map_err(|error| value_error(format!("invalid orbit configuration at row {row}: {error}")))?;
+            let configuration_sha = configuration_identity(configuration).map_err(|error| {
+                value_error(format!("orbit configuration at row {row} is invalid: {error}"))
+            })?;
+            let declared_provenance_fingerprint = provenance
+                .provenance_fingerprint
+                .as_deref()
+                .filter(|value| is_sha256(value))
+                .ok_or_else(|| value_error(format!("orbit provenance at row {row} has no valid provenance fingerprint")))?;
+            let expected_provenance_fingerprint =
+                provenance_fingerprint(route, &configuration_sha, input_fingerprint);
+            if declared_provenance_fingerprint != expected_provenance_fingerprint {
+                return Err(value_error(format!(
+                    "orbit provenance at row {row} does not bind its route, configuration, and input fingerprint"
+                )));
+            }
             if route != "run_iod" {
                 return Ok(None);
             }
-            let expected_refinement = expected_refinement.as_ref().ok_or_else(|| {
-                value_error("run_iod composition provenance is invalid for this workflow")
-            })?;
-            if configuration_value.get("refinement") != Some(expected_refinement) {
-                return Err(value_error(format!(
-                    "seed IOD refinement configuration at orbit row {row} does not match the requested refinement"
-                )));
+            if let Some(expected_refinement) = expected_refinement.as_ref() {
+                if configuration_value.get("refinement") != Some(expected_refinement) {
+                    return Err(value_error(format!(
+                        "seed IOD refinement configuration at orbit row {row} does not match the requested refinement"
+                    )));
+                }
             }
             let config_sha = configuration_value
                 .get("configuration_sha256")
                 .and_then(serde_json::Value::as_str)
-                .filter(|value| is_sha256(value))
+                .filter(|value| **value == configuration_sha)
                 .ok_or_else(|| value_error(format!("seed IOD configuration at orbit row {row} has no valid configuration_sha256")))?;
             let object_id = orbits.object_id[row]
                 .as_ref()
@@ -1939,11 +2019,15 @@ fn prepared_from_member_snapshots(
     original_lat: &[Option<f64>],
     original_sigma_lon: &[Option<f64>],
     original_sigma_lat: &[Option<f64>],
+    original_variance_lon: &[Option<f64>],
+    original_variance_lat: &[Option<f64>],
     original_cov_lonlat: &[Option<f64>],
     used_lon: &[Option<f64>],
     used_lat: &[Option<f64>],
     used_sigma_lon: &[Option<f64>],
     used_sigma_lat: &[Option<f64>],
+    used_variance_lon: &[Option<f64>],
+    used_variance_lat: &[Option<f64>],
     used_cov_lonlat: &[Option<f64>],
 ) -> PropagationResultValue<adam_core_rs_coords::od::algorithms::PreparedObservations> {
     let required = member_indices
@@ -1956,11 +2040,15 @@ fn prepared_from_member_snapshots(
         original_lat.len(),
         original_sigma_lon.len(),
         original_sigma_lat.len(),
+        original_variance_lon.len(),
+        original_variance_lat.len(),
         original_cov_lonlat.len(),
         used_lon.len(),
         used_lat.len(),
         used_sigma_lon.len(),
         used_sigma_lat.len(),
+        used_variance_lon.len(),
+        used_variance_lat.len(),
         used_cov_lonlat.len(),
     ]
     .iter()
@@ -1999,6 +2087,8 @@ fn prepared_from_member_snapshots(
         lat: Vec::with_capacity(member_indices.len()),
         sigma_lon: Vec::with_capacity(member_indices.len()),
         sigma_lat: Vec::with_capacity(member_indices.len()),
+        variance_lon: Vec::with_capacity(member_indices.len()),
+        variance_lat: Vec::with_capacity(member_indices.len()),
         cov_lonlat: Vec::with_capacity(member_indices.len()),
     };
     let mut lon = Vec::with_capacity(member_indices.len());
@@ -2021,6 +2111,8 @@ fn prepared_from_member_snapshots(
             original_value(original_lat)?,
             original_value(original_sigma_lon)?,
             original_value(original_sigma_lat)?,
+            original_value(original_variance_lon)?,
+            original_value(original_variance_lat)?,
             original_value(original_cov_lonlat)?,
         ];
         let source_values = [
@@ -2028,6 +2120,8 @@ fn prepared_from_member_snapshots(
             source_original.lat[row],
             source_original.sigma_lon[row],
             source_original.sigma_lat[row],
+            source_original.variance_lon[row],
+            source_original.variance_lat[row],
             source_original.cov_lonlat[row],
         ];
         if persisted_original
@@ -2045,7 +2139,9 @@ fn prepared_from_member_snapshots(
         original.lat.push(persisted_original[1]);
         original.sigma_lon.push(persisted_original[2]);
         original.sigma_lat.push(persisted_original[3]);
-        original.cov_lonlat.push(persisted_original[4]);
+        original.variance_lon.push(persisted_original[4]);
+        original.variance_lat.push(persisted_original[5]);
+        original.cov_lonlat.push(persisted_original[6]);
 
         let member_value = |column: &[Option<f64>]| {
             column[member].ok_or_else(|| {
@@ -2059,14 +2155,22 @@ fn prepared_from_member_snapshots(
         let used_lat = member_value(used_lat)?;
         let sigma_lon = member_value(used_sigma_lon)?;
         let sigma_lat = member_value(used_sigma_lat)?;
+        let variance_lon = member_value(used_variance_lon)?;
+        let variance_lat = member_value(used_variance_lat)?;
         if !used_lon.is_finite()
             || !(0.0..360.0).contains(&used_lon)
             || !used_lat.is_finite()
             || !(-90.0..=90.0).contains(&used_lat)
             || !sigma_lon.is_finite()
             || !sigma_lat.is_finite()
+            || !variance_lon.is_finite()
+            || !variance_lat.is_finite()
             || sigma_lon <= 0.0
             || sigma_lat <= 0.0
+            || variance_lon <= 0.0
+            || variance_lat <= 0.0
+            || !equal(sigma_lon, variance_lon.sqrt())
+            || !equal(sigma_lat, variance_lat.sqrt())
         {
             return Err(adam_core_rs_coords::PropagationError::InvalidRequest(
                 format!("member used_astrometry row {member} is not finite and positive"),
@@ -2074,7 +2178,7 @@ fn prepared_from_member_snapshots(
         }
         let cross = used_cov_lonlat[member].unwrap_or(f64::NAN);
         if cross.is_infinite()
-            || (cross.is_finite() && sigma_lon.powi(2) * sigma_lat.powi(2) - cross.powi(2) <= 0.0)
+            || (cross.is_finite() && variance_lon * variance_lat - cross.powi(2) <= 0.0)
         {
             return Err(adam_core_rs_coords::PropagationError::InvalidRequest(
                 format!("member used_astrometry row {member} covariance is not positive definite"),
@@ -2084,12 +2188,14 @@ fn prepared_from_member_snapshots(
             || !equal(persisted_original[1], used_lat)
             || !equal(persisted_original[2], sigma_lon)
             || !equal(persisted_original[3], sigma_lat)
-            || !equal(persisted_original[4], cross);
+            || !equal(persisted_original[4], variance_lon)
+            || !equal(persisted_original[5], variance_lat)
+            || !equal(persisted_original[6], cross);
         values[row][1] = used_lon;
         values[row][2] = used_lat;
         let block = &mut covariance[row * 36..(row + 1) * 36];
-        block[7] = sigma_lon * sigma_lon;
-        block[14] = sigma_lat * sigma_lat;
+        block[7] = variance_lon;
+        block[14] = variance_lat;
         block[8] = cross;
         block[13] = cross;
         lon.push(used_lon);
@@ -2184,11 +2290,15 @@ fn prepare_member_groups(
     original_lat: &[Option<f64>],
     original_sigma_lon: &[Option<f64>],
     original_sigma_lat: &[Option<f64>],
+    original_variance_lon: &[Option<f64>],
+    original_variance_lat: &[Option<f64>],
     original_cov_lonlat: &[Option<f64>],
     used_lon: &[Option<f64>],
     used_lat: &[Option<f64>],
     used_sigma_lon: &[Option<f64>],
     used_sigma_lat: &[Option<f64>],
+    used_variance_lon: &[Option<f64>],
+    used_variance_lat: &[Option<f64>],
     used_cov_lonlat: &[Option<f64>],
 ) -> PyResult<
     Vec<(
@@ -2214,11 +2324,15 @@ fn prepare_member_groups(
                 original_lat,
                 original_sigma_lon,
                 original_sigma_lat,
+                original_variance_lon,
+                original_variance_lat,
                 original_cov_lonlat,
                 used_lon,
                 used_lat,
                 used_sigma_lon,
                 used_sigma_lat,
+                used_variance_lon,
+                used_variance_lat,
                 used_cov_lonlat,
             )
             .map_err(od_error)?;
@@ -2315,11 +2429,13 @@ fn failure_dict<'py>(
     py: Python<'py>,
     group_id: &str,
     orbit_id: Option<&str>,
+    input_orbit_id: Option<&str>,
     failure: &BatchFailure,
 ) -> PyResult<Bound<'py, PyDict>> {
     let out = PyDict::new(py);
     out.set_item("group_id", group_id)?;
     out.set_item("orbit_id", orbit_id)?;
+    out.set_item("input_orbit_id", input_orbit_id)?;
     out.set_item("stage", failure.stage)?;
     out.set_item("code", failure.code)?;
     out.set_item("message", &failure.message)?;
@@ -2361,11 +2477,21 @@ fn provenance_dict<'py>(
     let effective_config_json = seed_iod
         .map(|seed| seed.configuration.as_str())
         .unwrap_or(config_json);
+    let configuration_sha = configuration_identity(effective_config_json)
+        .map_err(|error| value_error(format!("cannot fingerprint orbit provenance: {error}")))?;
     let out = PyDict::new(py);
     out.set_item("adam_core_version", version)?;
     out.set_item("adam_core_build", build)?;
     out.set_item("input_fingerprint", effective_input_fingerprint)?;
     out.set_item("state_fingerprint", state_fingerprint)?;
+    out.set_item(
+        "provenance_fingerprint",
+        provenance_fingerprint(
+            effective_route,
+            &configuration_sha,
+            effective_input_fingerprint,
+        ),
+    )?;
     out.set_item("route", effective_route)?;
     out.set_item("fitter", py.None())?;
     let backend = |provider: &ProviderMetadata| format!("{} {}", provider.name, provider.version);
@@ -2606,6 +2732,11 @@ fn group_dict<'py>(
                     py,
                     group_id,
                     (output_kind != "none").then_some(orbit_id),
+                    input_orbit
+                        .map(|(orbits, row)| orbits.orbit_id[row].0.as_str())
+                        .or_else(|| {
+                            (route == "run_od" && failure.stage == "refinement").then_some(orbit_id)
+                        }),
                     failure,
                 )
             })
@@ -3015,6 +3146,7 @@ fn evaluation_group_dict<'py>(
     orbits: &DataOrbitBatch,
 ) -> PyResult<Bound<'py, PyDict>> {
     let group_id = orbit_group_id(orbits, result.orbit_index, &result.orbit_id);
+    let has_evaluation = result.evaluation.is_some();
     let out = base_group_dict(
         py,
         group_id,
@@ -3039,11 +3171,7 @@ fn evaluation_group_dict<'py>(
     out.set_item("member_indices", &result.member_rows)?;
     out.set_item(
         "output_kind",
-        if result.evaluation.is_some() {
-            "evaluation"
-        } else {
-            "none"
-        },
+        if has_evaluation { "evaluation" } else { "none" },
     )?;
     out.set_item(
         "evaluation",
@@ -3057,7 +3185,15 @@ fn evaluation_group_dict<'py>(
         result
             .failure
             .as_ref()
-            .map(|failure| failure_dict(py, group_id, Some(&result.orbit_id), failure))
+            .map(|failure| {
+                failure_dict(
+                    py,
+                    group_id,
+                    has_evaluation.then_some(result.orbit_id.as_str()),
+                    Some(&result.orbit_id),
+                    failure,
+                )
+            })
             .transpose()?,
     )?;
     Ok(out)
@@ -3082,8 +3218,8 @@ fn validate_member_snapshot_lengths(
     orbit_ipc, source_ipc, observed_ipc, observers_ipc,
     member_orbit_ids, member_obs_ids, seed_iod_provenance,
     member_input_fingerprints, member_membership_fingerprints, original_lon, original_lat, original_sigma_lon, original_sigma_lat,
-    original_cov_lonlat, used_lon, used_lat, used_sigma_lon, used_sigma_lat,
-    used_cov_lonlat, config
+    original_variance_lon, original_variance_lat, original_cov_lonlat, used_lon, used_lat, used_sigma_lon, used_sigma_lat,
+    used_variance_lon, used_variance_lat, used_cov_lonlat, config
 ))]
 #[allow(clippy::too_many_arguments)]
 fn refine_batch_preflight_ipc(
@@ -3100,11 +3236,15 @@ fn refine_batch_preflight_ipc(
     original_lat: Vec<Option<f64>>,
     original_sigma_lon: Vec<Option<f64>>,
     original_sigma_lat: Vec<Option<f64>>,
+    original_variance_lon: Vec<Option<f64>>,
+    original_variance_lat: Vec<Option<f64>>,
     original_cov_lonlat: Vec<Option<f64>>,
     used_lon: Vec<Option<f64>>,
     used_lat: Vec<Option<f64>>,
     used_sigma_lon: Vec<Option<f64>>,
     used_sigma_lat: Vec<Option<f64>>,
+    used_variance_lon: Vec<Option<f64>>,
+    used_variance_lat: Vec<Option<f64>>,
     used_cov_lonlat: Vec<Option<f64>>,
     config: PyRef<'_, PyRefinementRunConfig>,
 ) -> PyResult<usize> {
@@ -3125,11 +3265,21 @@ fn refine_batch_preflight_ipc(
             ("original_astrometry.lat", original_lat.len()),
             ("original_astrometry.sigma_lon", original_sigma_lon.len()),
             ("original_astrometry.sigma_lat", original_sigma_lat.len()),
+            (
+                "original_astrometry.variance_lon",
+                original_variance_lon.len(),
+            ),
+            (
+                "original_astrometry.variance_lat",
+                original_variance_lat.len(),
+            ),
             ("original_astrometry.cov_lonlat", original_cov_lonlat.len()),
             ("used_astrometry.lon", used_lon.len()),
             ("used_astrometry.lat", used_lat.len()),
             ("used_astrometry.sigma_lon", used_sigma_lon.len()),
             ("used_astrometry.sigma_lat", used_sigma_lat.len()),
+            ("used_astrometry.variance_lon", used_variance_lon.len()),
+            ("used_astrometry.variance_lat", used_variance_lat.len()),
             ("used_astrometry.cov_lonlat", used_cov_lonlat.len()),
         ],
     )?;
@@ -3162,11 +3312,15 @@ fn refine_batch_preflight_ipc(
         &original_lat,
         &original_sigma_lon,
         &original_sigma_lat,
+        &original_variance_lon,
+        &original_variance_lat,
         &original_cov_lonlat,
         &used_lon,
         &used_lat,
         &used_sigma_lon,
         &used_sigma_lat,
+        &used_variance_lon,
+        &used_variance_lat,
         &used_cov_lonlat,
     )?;
     Ok(groups.len())
@@ -3177,8 +3331,8 @@ fn refine_batch_preflight_ipc(
     propagator, orbit_ipc, source_ipc, observed_ipc, observers_ipc,
     member_orbit_ids, member_obs_ids, seed_iod_provenance,
     member_input_fingerprints, member_membership_fingerprints, original_lon, original_lat, original_sigma_lon, original_sigma_lat,
-    original_cov_lonlat, used_lon, used_lat, used_sigma_lon, used_sigma_lat,
-    used_cov_lonlat, config
+    original_variance_lon, original_variance_lat, original_cov_lonlat, used_lon, used_lat, used_sigma_lon, used_sigma_lat,
+    used_variance_lon, used_variance_lat, used_cov_lonlat, config
 ))]
 #[allow(clippy::too_many_arguments)]
 fn refine_batch_ipc<'py>(
@@ -3197,11 +3351,15 @@ fn refine_batch_ipc<'py>(
     original_lat: Vec<Option<f64>>,
     original_sigma_lon: Vec<Option<f64>>,
     original_sigma_lat: Vec<Option<f64>>,
+    original_variance_lon: Vec<Option<f64>>,
+    original_variance_lat: Vec<Option<f64>>,
     original_cov_lonlat: Vec<Option<f64>>,
     used_lon: Vec<Option<f64>>,
     used_lat: Vec<Option<f64>>,
     used_sigma_lon: Vec<Option<f64>>,
     used_sigma_lat: Vec<Option<f64>>,
+    used_variance_lon: Vec<Option<f64>>,
+    used_variance_lat: Vec<Option<f64>>,
     used_cov_lonlat: Vec<Option<f64>>,
     config: PyRef<'py, PyRefinementRunConfig>,
 ) -> PyResult<Bound<'py, PyDict>> {
@@ -3222,11 +3380,21 @@ fn refine_batch_ipc<'py>(
             ("original_astrometry.lat", original_lat.len()),
             ("original_astrometry.sigma_lon", original_sigma_lon.len()),
             ("original_astrometry.sigma_lat", original_sigma_lat.len()),
+            (
+                "original_astrometry.variance_lon",
+                original_variance_lon.len(),
+            ),
+            (
+                "original_astrometry.variance_lat",
+                original_variance_lat.len(),
+            ),
             ("original_astrometry.cov_lonlat", original_cov_lonlat.len()),
             ("used_astrometry.lon", used_lon.len()),
             ("used_astrometry.lat", used_lat.len()),
             ("used_astrometry.sigma_lon", used_sigma_lon.len()),
             ("used_astrometry.sigma_lat", used_sigma_lat.len()),
+            ("used_astrometry.variance_lon", used_variance_lon.len()),
+            ("used_astrometry.variance_lat", used_variance_lat.len()),
             ("used_astrometry.cov_lonlat", used_cov_lonlat.len()),
         ],
     )?;
@@ -3262,11 +3430,15 @@ fn refine_batch_ipc<'py>(
         &original_lat,
         &original_sigma_lon,
         &original_sigma_lat,
+        &original_variance_lon,
+        &original_variance_lat,
         &original_cov_lonlat,
         &used_lon,
         &used_lat,
         &used_sigma_lon,
         &used_sigma_lat,
+        &used_variance_lon,
+        &used_variance_lat,
         &used_cov_lonlat,
     )?;
     let fit = match refinement {
@@ -3385,8 +3557,8 @@ fn refine_batch_ipc<'py>(
     orbit_ipc, source_ipc, observed_ipc, observers_ipc,
     member_orbit_ids, member_obs_ids, member_outlier,
     orbit_provenance, member_input_fingerprints, member_membership_fingerprints, original_lon, original_lat, original_sigma_lon, original_sigma_lat,
-    original_cov_lonlat, used_lon, used_lat, used_sigma_lon, used_sigma_lat,
-    used_cov_lonlat, config
+    original_variance_lon, original_variance_lat, original_cov_lonlat, used_lon, used_lat, used_sigma_lon, used_sigma_lat,
+    used_variance_lon, used_variance_lat, used_cov_lonlat, config
 ))]
 #[allow(clippy::too_many_arguments)]
 fn evaluate_orbits_batch_preflight_ipc(
@@ -3404,11 +3576,15 @@ fn evaluate_orbits_batch_preflight_ipc(
     original_lat: Vec<Option<f64>>,
     original_sigma_lon: Vec<Option<f64>>,
     original_sigma_lat: Vec<Option<f64>>,
+    original_variance_lon: Vec<Option<f64>>,
+    original_variance_lat: Vec<Option<f64>>,
     original_cov_lonlat: Vec<Option<f64>>,
     used_lon: Vec<Option<f64>>,
     used_lat: Vec<Option<f64>>,
     used_sigma_lon: Vec<Option<f64>>,
     used_sigma_lat: Vec<Option<f64>>,
+    used_variance_lon: Vec<Option<f64>>,
+    used_variance_lat: Vec<Option<f64>>,
     used_cov_lonlat: Vec<Option<f64>>,
     config: PyRef<'_, PyOdConfig>,
 ) -> PyResult<usize> {
@@ -3430,11 +3606,21 @@ fn evaluate_orbits_batch_preflight_ipc(
             ("original_astrometry.lat", original_lat.len()),
             ("original_astrometry.sigma_lon", original_sigma_lon.len()),
             ("original_astrometry.sigma_lat", original_sigma_lat.len()),
+            (
+                "original_astrometry.variance_lon",
+                original_variance_lon.len(),
+            ),
+            (
+                "original_astrometry.variance_lat",
+                original_variance_lat.len(),
+            ),
             ("original_astrometry.cov_lonlat", original_cov_lonlat.len()),
             ("used_astrometry.lon", used_lon.len()),
             ("used_astrometry.lat", used_lat.len()),
             ("used_astrometry.sigma_lon", used_sigma_lon.len()),
             ("used_astrometry.sigma_lat", used_sigma_lat.len()),
+            ("used_astrometry.variance_lon", used_variance_lon.len()),
+            ("used_astrometry.variance_lat", used_variance_lat.len()),
             ("used_astrometry.cov_lonlat", used_cov_lonlat.len()),
         ],
     )?;
@@ -3468,11 +3654,15 @@ fn evaluate_orbits_batch_preflight_ipc(
         &original_lat,
         &original_sigma_lon,
         &original_sigma_lat,
+        &original_variance_lon,
+        &original_variance_lat,
         &original_cov_lonlat,
         &used_lon,
         &used_lat,
         &used_sigma_lon,
         &used_sigma_lat,
+        &used_variance_lon,
+        &used_variance_lat,
         &used_cov_lonlat,
     )?;
     Ok(groups.len())
@@ -3483,8 +3673,8 @@ fn evaluate_orbits_batch_preflight_ipc(
     propagator, orbit_ipc, source_ipc, observed_ipc, observers_ipc,
     member_orbit_ids, member_obs_ids, member_outlier,
     orbit_provenance, member_input_fingerprints, member_membership_fingerprints, original_lon, original_lat, original_sigma_lon, original_sigma_lat,
-    original_cov_lonlat, used_lon, used_lat, used_sigma_lon, used_sigma_lat,
-    used_cov_lonlat, config
+    original_variance_lon, original_variance_lat, original_cov_lonlat, used_lon, used_lat, used_sigma_lon, used_sigma_lat,
+    used_variance_lon, used_variance_lat, used_cov_lonlat, config
 ))]
 #[allow(clippy::too_many_arguments)]
 fn evaluate_orbits_batch_ipc<'py>(
@@ -3504,11 +3694,15 @@ fn evaluate_orbits_batch_ipc<'py>(
     original_lat: Vec<Option<f64>>,
     original_sigma_lon: Vec<Option<f64>>,
     original_sigma_lat: Vec<Option<f64>>,
+    original_variance_lon: Vec<Option<f64>>,
+    original_variance_lat: Vec<Option<f64>>,
     original_cov_lonlat: Vec<Option<f64>>,
     used_lon: Vec<Option<f64>>,
     used_lat: Vec<Option<f64>>,
     used_sigma_lon: Vec<Option<f64>>,
     used_sigma_lat: Vec<Option<f64>>,
+    used_variance_lon: Vec<Option<f64>>,
+    used_variance_lat: Vec<Option<f64>>,
     used_cov_lonlat: Vec<Option<f64>>,
     config: PyRef<'py, PyOdConfig>,
 ) -> PyResult<Bound<'py, PyDict>> {
@@ -3530,11 +3724,21 @@ fn evaluate_orbits_batch_ipc<'py>(
             ("original_astrometry.lat", original_lat.len()),
             ("original_astrometry.sigma_lon", original_sigma_lon.len()),
             ("original_astrometry.sigma_lat", original_sigma_lat.len()),
+            (
+                "original_astrometry.variance_lon",
+                original_variance_lon.len(),
+            ),
+            (
+                "original_astrometry.variance_lat",
+                original_variance_lat.len(),
+            ),
             ("original_astrometry.cov_lonlat", original_cov_lonlat.len()),
             ("used_astrometry.lon", used_lon.len()),
             ("used_astrometry.lat", used_lat.len()),
             ("used_astrometry.sigma_lon", used_sigma_lon.len()),
             ("used_astrometry.sigma_lat", used_sigma_lat.len()),
+            ("used_astrometry.variance_lon", used_variance_lon.len()),
+            ("used_astrometry.variance_lat", used_variance_lat.len()),
             ("used_astrometry.cov_lonlat", used_cov_lonlat.len()),
         ],
     )?;
@@ -3579,11 +3783,15 @@ fn evaluate_orbits_batch_ipc<'py>(
         &original_lat,
         &original_sigma_lon,
         &original_sigma_lat,
+        &original_variance_lon,
+        &original_variance_lat,
         &original_cov_lonlat,
         &used_lon,
         &used_lat,
         &used_sigma_lon,
         &used_sigma_lat,
+        &used_variance_lon,
+        &used_variance_lat,
         &used_cov_lonlat,
     )?;
     let settings = fit_settings_from_config(evaluation_fit)?;

@@ -23,8 +23,9 @@ This file contains notable changes in adam-core
 - Rust-owned bounded deterministic IOD/search/correction/ranging, whitened and
   robust differential correction, covariance validation, worst-residual and
   CMC2003 rejection, and propagation-only native provider ABI v2.
-- Original/used astrometry, complete per-member source/observer and membership
-  fingerprints, exact orbit-state fingerprints, physical parameters, and
+- Original/used astrometry with exact diagonal variances, complete per-member
+  source/observer and membership fingerprints, exact orbit-state and bound
+  route/configuration/input provenance fingerprints, physical parameters, and
   non-gravitational parameters in fitted-result schemas where applicable.
   Older serialized tables upgrade with nullable fields but canonical
   refinement/evaluation fail closed until complete identity is present.
@@ -33,7 +34,8 @@ This file contains notable changes in adam-core
   complete preflight, typed per-group failures, explicit memberships, and
   canonical path-free runtime provenance. Rust decides output disposition,
   success/status, solution/outlier flags, state retention, and typed failure
-  classification; Python only assembles the returned typed columns. Every
+  classification. Failure rows distinguish emitted ``orbit_id`` from
+  ``input_orbit_id``; Python only assembles the returned typed columns. Every
   workflow returns exactly
   ``FittedOrbits``, ``FittedOrbitMembers``, and
   ``OrbitDeterminationFailures``.

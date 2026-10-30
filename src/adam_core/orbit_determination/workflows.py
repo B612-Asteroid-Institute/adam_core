@@ -41,6 +41,20 @@ from .fitted_orbits import (
 _RESULT = tuple[FittedOrbits, FittedOrbitMembers, OrbitDeterminationFailures]
 
 
+def _deferred_native_propagator(propagator: Propagator | None):
+    """Resolve and bind a provider only after Rust static preflight.
+
+    The outer callable is retained by PyO3 without invocation. Empty and
+    malformed batches return before Rust asks it for the identity descriptor;
+    a valid non-empty batch resolves it exactly once immediately before native
+    predictor construction.
+    """
+
+    if propagator is None:
+        return None
+    return lambda: native_propagator(propagator)
+
+
 def _od_observations(source: SourceCatalog) -> OrbitDeterminationObservations:
     """Representation-only SourceCatalog -> OD Arrow-table marshalling."""
 
@@ -62,6 +76,11 @@ def _source_inputs(
 ) -> tuple[OrbitDeterminationObservations, bytes, bytes, bytes]:
     if not isinstance(source, SourceCatalog):
         raise TypeError("observations must be a SourceCatalog")
+    # Arrow chunking is representation-only. Normalize it before constructing
+    # nested coordinate/time arrays so scientific fingerprints depend only on
+    # rows and values, never caller chunk boundaries.
+    if source.fragmented():
+        source = SourceCatalog.from_pyarrow(source.table.combine_chunks())
     observations = _od_observations(source)
     return (
         observations,
@@ -92,6 +111,8 @@ def _snapshot(value: dict[str, Any]) -> ObservationAstrometry:
         lat=value["lat"],
         sigma_lon=value["sigma_lon"],
         sigma_lat=value["sigma_lat"],
+        variance_lon=value["variance_lon"],
+        variance_lat=value["variance_lat"],
         cov_lonlat=value["cov_lonlat"],
     )
 
@@ -102,6 +123,7 @@ def _provenance(value: dict[str, Any]) -> OdProvenance:
         adam_core_build=[value["adam_core_build"]],
         input_fingerprint=[value["input_fingerprint"]],
         state_fingerprint=[value["state_fingerprint"]],
+        provenance_fingerprint=[value["provenance_fingerprint"]],
         route=[value["route"]],
         fitter=[value["fitter"]],
         iod_backend=[value["iod_backend"]],
@@ -126,6 +148,7 @@ def _failure(value: dict[str, Any]) -> OrbitDeterminationFailures:
     return OrbitDeterminationFailures.from_kwargs(
         group_id=[value["group_id"]],
         orbit_id=[value["orbit_id"]],
+        input_orbit_id=[value["input_orbit_id"]],
         stage=[value["stage"]],
         code=[value["code"]],
         message=[value["message"]],
@@ -259,14 +282,7 @@ def run_iod(
     prepared, source_ipc, associations_ipc, observed_ipc, observers_ipc = (
         _native_batch_inputs(observations, associations)
     )
-    group_count = _rust_native.iod_od_batch_preflight_ipc(
-        source_ipc,
-        associations_ipc,
-        observed_ipc,
-        observers_ipc,
-        config._workflow_native,
-    )
-    provider = native_propagator(propagator) if group_count else None
+    provider = _deferred_native_propagator(propagator)
     native = _rust_native.run_iod_batch_ipc(
         provider,
         source_ipc,
@@ -291,14 +307,7 @@ def run_od(
     prepared, source_ipc, associations_ipc, observed_ipc, observers_ipc = (
         _native_batch_inputs(observations, associations)
     )
-    group_count = _rust_native.iod_od_batch_preflight_ipc(
-        source_ipc,
-        associations_ipc,
-        observed_ipc,
-        observers_ipc,
-        config._native,
-    )
-    provider = native_propagator(propagator) if group_count else None
+    provider = _deferred_native_propagator(propagator)
     native = _rust_native.run_od_batch_ipc(
         provider,
         source_ipc,
@@ -318,6 +327,8 @@ def _astrometry_columns(
         snapshot.lat.to_pylist(),
         snapshot.sigma_lon.to_pylist(),
         snapshot.sigma_lat.to_pylist(),
+        snapshot.variance_lon.to_pylist(),
+        snapshot.variance_lat.to_pylist(),
         snapshot.cov_lonlat.to_pylist(),
     )
 
@@ -363,21 +374,7 @@ def refine(
     orbit_provenance = _orbit_provenance(orbits)
     original = _astrometry_columns(members.original_astrometry)
     used = _astrometry_columns(members.used_astrometry)
-    group_count = _rust_native.refine_batch_preflight_ipc(
-        orbit_ipc,
-        source_ipc,
-        observed_ipc,
-        observers_ipc,
-        member_orbit_ids,
-        member_obs_ids,
-        orbit_provenance,
-        members.input_fingerprint.to_pylist(),
-        members.membership_fingerprint.to_pylist(),
-        *original,
-        *used,
-        config._native,
-    )
-    provider = native_propagator(propagator) if group_count else None
+    provider = _deferred_native_propagator(propagator)
     native = _rust_native.refine_batch_ipc(
         provider,
         orbit_ipc,
@@ -463,22 +460,7 @@ def evaluate_orbits(
     member_membership_fingerprints = members.membership_fingerprint.to_pylist()
     original = _astrometry_columns(members.original_astrometry)
     used = _astrometry_columns(members.used_astrometry)
-    group_count = _rust_native.evaluate_orbits_batch_preflight_ipc(
-        orbit_ipc,
-        source_ipc,
-        observed_ipc,
-        observers_ipc,
-        member_orbit_ids,
-        member_obs_ids,
-        member_outlier,
-        orbit_provenance,
-        member_input_fingerprints,
-        member_membership_fingerprints,
-        *original,
-        *used,
-        config._workflow_native,
-    )
-    provider = native_propagator(propagator) if group_count else None
+    provider = _deferred_native_propagator(propagator)
     native = _rust_native.evaluate_orbits_batch_ipc(
         provider,
         orbit_ipc,

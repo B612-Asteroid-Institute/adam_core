@@ -3342,10 +3342,17 @@ pub fn refine_with<T: OriginTranslationProvider>(
                 provider,
                 translation_provider,
             )?;
+            let n_rejected = output
+                .fit
+                .evaluation
+                .outlier
+                .iter()
+                .filter(|&&outlier| outlier)
+                .count();
             RefinedOutput {
                 fit: output.fit,
                 passes: output.passes,
-                n_rejected: 0,
+                n_rejected,
                 n_recovered: 0,
                 flags: Vec::new(),
             }
@@ -3465,14 +3472,18 @@ pub(crate) fn full_od_with<T: OriginTranslationProvider>(
     })
 }
 
-/// `ObservationAstrometry`: position and 1-sigma uncertainty (degrees) of
-/// every observation, the provenance columns of fitted orbit members.
+/// `ObservationAstrometry`: position, 1-sigma uncertainty, and exact
+/// covariance entries of every observation. Persisting the diagonal variances
+/// avoids a lossy `sqrt(variance) -> square` handoff between fused and composed
+/// workflows.
 #[derive(Debug, Clone, PartialEq)]
 pub struct AstrometrySnapshot {
     pub lon: Vec<f64>,
     pub lat: Vec<f64>,
     pub sigma_lon: Vec<f64>,
     pub sigma_lat: Vec<f64>,
+    pub variance_lon: Vec<f64>,
+    pub variance_lat: Vec<f64>,
     pub cov_lonlat: Vec<f64>,
 }
 
@@ -3492,6 +3503,8 @@ impl AstrometrySnapshot {
             sigma_lat: (0..n)
                 .map(|row| sqrt_or_nan(covariance[row * 36 + 14]))
                 .collect(),
+            variance_lon: (0..n).map(|row| covariance[row * 36 + 7]).collect(),
+            variance_lat: (0..n).map(|row| covariance[row * 36 + 14]).collect(),
             cov_lonlat: (0..n).map(|row| covariance[row * 36 + 8]).collect(),
         }
     }

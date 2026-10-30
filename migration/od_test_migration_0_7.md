@@ -4,7 +4,7 @@ Baseline: `d21c45649be37a218a7acccba78cc7c888501c48`
 Scope: Python test functions under `src/adam_core/orbit_determination/tests` that exist at the baseline and remain absent by name on this correction line.
 Remaining absent-by-name count: **267** across **23** files.
 
-Every row is an assertion-level disposition. `RETIRED-API` is limited to a specifically removed executable Python interface. `REPLACED-eack9` is used only when the evidence column names an exact maintained replacement test; otherwise the row remains deferred or retired. Resource-gated deferral names the missing binding explicitly. No row claims a broad file was “Rust-ported.”
+Every row is an assertion-level disposition. `RETIRED-API` marks a specifically removed executable interface; `RETIRED-SCHEMA` marks an intentionally unsupported legacy serialized schema. `SUCCESSOR-personal-7olgj` assigns resource-bound behavior to that separately tracked dependency. `REPLACED-eack9` is used only when the evidence column names an exact maintained replacement test; otherwise the row remains deferred or retired. Resource-gated deferral names the missing binding explicitly. No row claims a broad file was “Rust-ported.”
 
 ## Restored numerical fixture assertions (no longer absent by name)
 
@@ -61,7 +61,7 @@ Every row is an assertion-level disposition. `RETIRED-API` is limited to a speci
 
 | Baseline function | Disposition | Exact replacement or technical reason |
 |---|---|---|
-| `test_initial_orbit_determination_fused_batch_deduplicates` | **DEFERRED-eack9** | Deterministic grouping/deduplication is explicitly implemented by the canonical batch-native workflow layer. |
+| `test_initial_orbit_determination_fused_batch_deduplicates` | **REPLACED-eack9** | `test_overlap_first_appearance_source_order_and_no_iod_placeholder` and `test_malformed_associations_abort_before_factory` pin deterministic grouping and explicit duplicate-pair rejection. |
 | `test_initial_orbit_determination_fused_empty` | **REPLACED-eack9** | `test_empty_batches_are_rust_owned_and_never_bind_provider` is the exact maintained replacement. |
 | `test_iod` | **REPLACED** | `test_iod.py::test_focused_iod_returns_candidate_report` covers the focused external-capsule success products. |
 | `test_iod_assist_capsule_matches_explicit_prefit_stage` | **REPLACED** | `test_iod.py::test_iod_fused_matches_pinned_legacy_fixture` now exercises the explicit prefit bridge and pins every product. |
@@ -194,18 +194,18 @@ Every row is an assertion-level disposition. `RETIRED-API` is limited to a speci
 
 | Baseline function | Disposition | Exact replacement or technical reason |
 |---|---|---|
-| `test_select_observations_matches_legacy` | **DEFERRED-eack9** | `test_select_observations_matches_legacy` is deterministic sort/select/linkage/member validation implemented by the canonical batch-native workflow layer; no interim Python orchestration is retained. |
-| `test_select_observations_rejects_unknown_method` | **DEFERRED-eack9** | `test_select_observations_rejects_unknown_method` is deterministic sort/select/linkage/member validation implemented by the canonical batch-native workflow layer; no interim Python orchestration is retained. |
-| `test_select_observations_too_few_returns_empty` | **DEFERRED-eack9** | `test_select_observations_too_few_returns_empty` is deterministic sort/select/linkage/member validation implemented by the canonical batch-native workflow layer; no interim Python orchestration is retained. |
-| `test_sort_by_id_and_time_handles_chunked_observations` | **DEFERRED-eack9** | `test_sort_by_id_and_time_handles_chunked_observations` is deterministic sort/select/linkage/member validation implemented by the canonical batch-native workflow layer; no interim Python orchestration is retained. |
-| `test_sort_by_id_and_time_matches_legacy_ordering` | **DEFERRED-eack9** | `test_sort_by_id_and_time_matches_legacy_ordering` is deterministic sort/select/linkage/member validation implemented by the canonical batch-native workflow layer; no interim Python orchestration is retained. |
-| `test_sort_by_id_and_time_missing_observation_errors` | **DEFERRED-eack9** | `test_sort_by_id_and_time_missing_observation_errors` is deterministic sort/select/linkage/member validation implemented by the canonical batch-native workflow layer; no interim Python orchestration is retained. |
+| `test_select_observations_matches_legacy` | **RETIRED-API** | The public linkage observation-selection helper was removed; canonical membership is explicit through `Associations` / `FittedOrbitMembers`. |
+| `test_select_observations_rejects_unknown_method` | **RETIRED-API** | The string-selected linkage observation-selection method API was removed without an alias. |
+| `test_select_observations_too_few_returns_empty` | **RETIRED-API** | The linkage selection helper was removed; typed IOD/refinement failures now represent insufficient scientific membership. |
+| `test_sort_by_id_and_time_handles_chunked_observations` | **RETIRED-API** | The public linkage sort helper was removed; Rust planners consume explicit IDs and preserve source-row order independent of Arrow chunk layout. |
+| `test_sort_by_id_and_time_matches_legacy_ordering` | **RETIRED-API** | The public linkage sort helper was removed; `test_overlap_first_appearance_source_order_and_no_iod_placeholder` pins canonical order. |
+| `test_sort_by_id_and_time_missing_observation_errors` | **RETIRED-API** | The public linkage sort helper was removed; `test_malformed_associations_abort_before_factory` pins unknown-observation refusal. |
 
 ### `test_od_orchestration.py`
 
 | Baseline function | Disposition | Exact replacement or technical reason |
 |---|---|---|
-| `test_direct_fitter_path_leaves_provenance_null` | **DEFERRED-eack9** | Canonical runtime provenance and three-table member schema assembly are explicitly implemented by the canonical batch-native workflow layer. |
+| `test_direct_fitter_path_leaves_provenance_null` | **RETIRED-API** | Lower-level focused fitters are expert algorithms, not canonical provenance-producing workflows; canonical provenance is emitted only by the four batch APIs. |
 | `test_duplicate_observation_ids_raise` | **REPLACED-eack9** | `test_malformed_associations_abort_before_factory` is the exact maintained replacement. |
 | `test_efcc18_composite_records_shifted_positions_and_inflated_sigma` | **REPLACED/DEFERRED** | Rust `od_workflows::tests::prepare_observations_executes_repeated_pipeline_and_retains_snapshots` pins numerical original/used retention; Python member-table assembly is implemented by the canonical batch-native workflow layer. |
 | `test_empirical_covariance_inflates_used_sigma_and_keeps_positions` | **REPLACED/DEFERRED** | Rust `od_workflows::tests::prepare_observations_executes_repeated_pipeline_and_retains_snapshots` pins numerical original/used retention; Python member-table assembly is implemented by the canonical batch-native workflow layer. |
@@ -216,11 +216,11 @@ Every row is an assertion-level disposition. `RETIRED-API` is limited to a speci
 | `test_from_spherical_snapshots_position_and_uncertainty` | **REPLACED/DEFERRED** | Rust `od_workflows::tests::prepare_observations_executes_repeated_pipeline_and_retains_snapshots` pins numerical original/used retention; Python member-table assembly is implemented by the canonical batch-native workflow layer. |
 | `test_identity_model_matches_no_model_fit` | **RETIRED-API** | Legacy `models=` strings/sequences and executable Python model behavior were removed without aliases. |
 | `test_identity_model_records_used_equal_to_original` | **REPLACED/DEFERRED** | Rust `od_workflows::tests::prepare_observations_executes_repeated_pipeline_and_retains_snapshots` pins numerical original/used retention; Python member-table assembly is implemented by the canonical batch-native workflow layer. |
-| `test_legacy_members_parquet_loads_with_null_provenance` | **DEFERRED-eack9** | Canonical runtime provenance and three-table member schema assembly are explicitly implemented by the canonical batch-native workflow layer. |
+| `test_legacy_members_parquet_loads_with_null_provenance` | **RETIRED-SCHEMA** | Core 0.7 intentionally breaks the legacy member parquet schema: canonical refine/evaluate require exact variance, input, and membership fingerprints. |
 | `test_live_python_model_is_refused_before_core_stage_composition` | **RETIRED-API** | Legacy `models=` strings/sequences and executable Python model behavior were removed without aliases. |
 | `test_member_with_unknown_obs_id_raises` | **REPLACED-eack9** | `test_malformed_members_abort_before_factory` is the exact maintained replacement. |
-| `test_members_with_and_without_provenance_concatenate` | **DEFERRED-eack9** | Canonical runtime provenance and three-table member schema assembly are explicitly implemented by the canonical batch-native workflow layer. |
-| `test_members_without_provenance_have_null_columns` | **DEFERRED-eack9** | Canonical runtime provenance and three-table member schema assembly are explicitly implemented by the canonical batch-native workflow layer. |
+| `test_members_with_and_without_provenance_concatenate` | **RETIRED-SCHEMA** | Mixing legacy and canonical member schemas is retired; canonical members require complete lossless handoff identity. |
+| `test_members_without_provenance_have_null_columns` | **RETIRED-SCHEMA** | Legacy null-provenance member rows are not valid canonical refine/evaluate inputs in Core 0.7. |
 | `test_model_dropping_observations_raises` | **RETIRED-API** | Row-dropping was possible only through removed executable Python callbacks; every closed Rust transform preserves row count by construction. |
 | `test_model_reordering_observations_raises` | **RETIRED-API** | Row-reordering was possible only through removed executable Python callbacks; every closed Rust transform edits the caller-order batch in place. |
 | `test_models_and_cmc2003_refinement` | **REPLACED/DEFERRED** | `od_config::tests::pipeline_executes_non_commuting_transforms_in_declaration_order` pins transform order and `od_workflows::tests::run_od_prepares_once_and_exactly_composes_isolated_stage_predictors` pins configured CMC composition; canonical batch results/failures are covered by the canonical batch-native workflow layer. |
@@ -229,9 +229,9 @@ Every row is an assertion-level disposition. `RETIRED-API` is limited to a speci
 | `test_no_models_and_worst_residual_refinement` | **REPLACED/DEFERRED** | Rust `od_refine::tests::iterative_fit_rejects_the_worst_observation_until_converged` pins worst-residual refinement; canonical batch composition is covered by the canonical batch-native workflow layer. |
 | `test_no_models_records_originals_and_keeps_fitter_flags` | **REPLACED/DEFERRED** | Rust `od_workflows::tests::prepare_observations_executes_repeated_pipeline_and_retains_snapshots` pins numerical original/used retention; Python member-table assembly is implemented by the canonical batch-native workflow layer. |
 | `test_none_and_empty_sequence_return_input` | **RETIRED-API** | Legacy `models=` strings/sequences and executable Python model behavior were removed without aliases. |
-| `test_object_id_is_passed_to_backend_and_stamped_when_null` | **DEFERRED-eack9** | Batch IDs, membership joins, empty groups, object IDs, and public export semantics are explicitly implemented by the canonical batch-native workflow layer. |
-| `test_object_id_none_is_null_on_both_routes` | **DEFERRED-eack9** | Batch IDs, membership joins, empty groups, object IDs, and public export semantics are explicitly implemented by the canonical batch-native workflow layer. |
-| `test_provenance_joins_by_obs_id_when_fitter_reorders_members` | **DEFERRED-eack9** | Batch IDs, membership joins, empty groups, object IDs, and public export semantics are explicitly implemented by the canonical batch-native workflow layer. |
+| `test_object_id_is_passed_to_backend_and_stamped_when_null` | **REPLACED-eack9** | `test_overlap_first_appearance_source_order_and_no_iod_placeholder` pins explicit association group IDs and source-order membership; canonical groups never invent a null ID. |
+| `test_object_id_none_is_null_on_both_routes` | **RETIRED-API** | Null linkage/object hypotheses are retired; `Associations.object_id` is the required non-null canonical group identity. |
+| `test_provenance_joins_by_obs_id_when_fitter_reorders_members` | **REPLACED-eack9** | `test_overlap_first_appearance_source_order_and_no_iod_placeholder` and `test_membership_and_seed_group_fingerprints_are_enforced_before_factory` pin ID-based member identity and source-row order. |
 | `test_run_od_explicit_default_models_missing_bias_dat_is_file_not_found` | **RETIRED-API** | Legacy `models=` strings/sequences and executable Python model behavior were removed without aliases. |
 | `test_run_od_explicit_default_models_name_the_missing_data_package` | **RETIRED-API** | Legacy `models=` strings/sequences and executable Python model behavior were removed without aliases. |
 | `test_run_od_explicit_default_models_report_every_missing_input_at_once` | **RETIRED-API** | Legacy `models=` strings/sequences and executable Python model behavior were removed without aliases. |
@@ -246,7 +246,7 @@ Every row is an assertion-level disposition. `RETIRED-API` is limited to a speci
 |---|---|---|
 | `test_astcat_round_trip_and_covariance` | **REPLACED** | `test_od_observations.py::test_from_ades_retains_astcat` and `::test_from_ades_uncertainty_conversion` use the same ADES rows/formulas. |
 | `test_every_model_matches_and_preserves_positions` | **RETIRED/REPLACED** | Closed transforms are covered by exact Rust tests `empirical_add_mode_at_equator_and_high_declination`, `empirical_replace_mode_nan_cross_term_and_pass_through_rules`, `night_batch_deweighting_is_per_station_and_night`, and Veres fill/floor/replace tests; identity/performance/sigma-floor/legacy-Veres executable Python models are outside the closed pipeline and retired. |
-| `test_run_od_composite_provenance` | **DEFERRED-eack9** | Canonical batch `run_od`, member assembly, and runtime provenance are implemented; its synthetic unpinned table cannot bind to a content-pinned resource slot. |
+| `test_run_od_composite_provenance` | **REPLACED-eack9** | `test_profile_shaped_deweighting_is_exact_across_fused_and_composed_routes` and `test_route_and_configuration_provenance_are_cryptographically_bound` pin transformed member/provenance composition. |
 
 ### `test_orbit_fitter.py`
 
@@ -331,14 +331,14 @@ Every row is an assertion-level disposition. `RETIRED-API` is limited to a speci
 
 | Baseline function | Disposition | Exact replacement or technical reason |
 |---|---|---|
-| `test_build_identity_is_exact_clean_head` | **DEFERRED-eack9** | `migration/scripts/release_inventory.py::_assert_clean_source` and `create_release_inventory` enforce exact clean release source identity; runtime batch rejection of unavailable/dirty identity is implemented by the canonical batch-native workflow layer. |
+| `test_build_identity_is_exact_clean_head` | **REPLACED-eack9** | `test_native_build_identity_is_exact_clean_head` is the maintained runtime assertion; release inventory separately enforces clean artifact source. |
 | `test_efcc_descriptor_content_version_exclusions` | **RETIRED-API** | Python model-descriptor identity was removed; bound Rust resource/config fingerprints replace it (`od_config::tests::complete_config_fingerprint_is_deterministic_and_path_free`). |
 | `test_explicit_stage_composition_route_completes` | **REPLACED-eack9** | `test_run_od_is_exact_run_iod_then_refine` and `test_run_od_failure_is_exact_run_iod_then_refine` is the exact maintained replacement. |
 | `test_fused_and_composed_share_native_model_science_and_provenance` | **REPLACED-eack9** | `test_run_od_is_exact_run_iod_then_refine` and `test_provider_factory_counts_and_external_exact_composition` is the exact maintained replacement. |
-| `test_input_fingerprint_is_layout_canonical` | **DEFERRED-eack9** | This assertion concerns composed-route provider/input/runtime provenance or batch epoch validation, implemented by the canonical batch-native workflow layer. |
+| `test_input_fingerprint_is_layout_canonical` | **REPLACED-eack9** | `test_input_fingerprint_is_independent_of_arrow_chunk_layout` is the exact maintained replacement. |
 | `test_input_fingerprint_is_sensitive` | **REPLACED-eack9** | `test_member_source_identity_mutations_fail_before_provider_binding` and `test_orbit_state_and_provenance_mutations_abort_before_factory` is the exact maintained replacement. |
 | `test_model_descriptor_numpy_variants` | **RETIRED-API** | Python model-descriptor identity was removed; bound Rust resource/config fingerprints replace it (`od_config::tests::complete_config_fingerprint_is_deterministic_and_path_free`). |
-| `test_provider_metadata_comes_from_capsule_not_python_declaration` | **REPLACED-eack9** | `test_provider_factory_counts_and_external_exact_composition` and `test_explicit_evaluation_subset_and_stage_provenance` is the exact maintained replacement. |
+| `test_provider_metadata_comes_from_capsule_not_python_declaration` | **REPLACED** | `test_jacobian_declaration.py::test_capsule_identity_prevents_two_body_spoofing` proves capsule identity is authoritative; `test_explicit_evaluation_subset_and_stage_provenance` pins emitted capsule metadata. |
 | `test_two_distinct_epoch_arcs_are_refused_on_all_routes` | **REPLACED/RETIRED-API** | Rust `od_contract_tests::fewer_than_three_distinct_epochs_is_rank_deficient_before_search`, `::corrected_candidate_pool_rejects_two_epochs_before_search`, and `od_refine::tests::fit_rejects_fewer_than_three_distinct_epochs_before_prediction` pin eager single-group IOD/refinement refusal; only removed Python route aliases are retired. |
 
 ### `test_run_iod.py`
@@ -361,7 +361,7 @@ Every row is an assertion-level disposition. `RETIRED-API` is limited to a speci
 
 | Baseline function | Disposition | Exact replacement or technical reason |
 |---|---|---|
-| `test_fused_and_composed_native_model_routes_agree_with_filled_sigmas` | **DEFERRED-eack9** | Route parity requires the canonical configured batch workflow plus the separately bound fill resource. |
+| `test_fused_and_composed_native_model_routes_agree_with_filled_sigmas` | **SUCCESSOR-personal-7olgj** | Exact fill-resource wiring requires the separately tracked resource-loader task; eack9 pins the same lossless transformed-variance handoff with profile-shaped `NightlyBatchDeweighting`. |
 | `test_sigma_fill_supplies_the_missing_covariance` | **DEFERRED-resource/eack9** | End-to-end fill→OD needs the separately supplied pinned station uncertainty resource; binding failure is covered by `::test_fill_transform_requires_explicit_validated_resource`, final configured workflow parity by the canonical workflow plus resource wiring. |
 | `test_without_a_filling_model_the_fit_is_refused` | **REPLACED** | `test_run_od_null_covariance.py::test_without_a_fill_transform_the_fit_is_refused`. |
 
@@ -403,8 +403,8 @@ Every row is an assertion-level disposition. `RETIRED-API` is limited to a speci
 
 | Deleted d21 Rust assertion | Disposition | Exact replacement or deferral |
 |---|---|---|
-| `run_od_applies_models_and_records_provenance` | **DEFERRED-eack9** | `od_config::tests::pipeline_executes_non_commuting_transforms_in_declaration_order` proves native execution order; the `od_workflows` preparation test proves repetition and supplied/used retention. Canonical result provenance is implemented by the canonical batch-native workflow layer. |
-| `run_od_lets_a_sigma_model_fill_a_missing_covariance` | **DEFERRED-eack9** | The deleted test used a synthetic in-memory lookup through the removed executable/dynamic-model `run_od` route. Synthetic fill execution now participates in the non-commuting `od_config` pipeline test; complete configured fill→IOD→refinement remains canonical workflow/resource-wiring work. |
+| `run_od_applies_models_and_records_provenance` | **REPLACED-eack9** | `test_profile_shaped_deweighting_is_exact_across_fused_and_composed_routes` and `test_route_and_configuration_provenance_are_cryptographically_bound` pin transform execution, exact handoff, and canonical provenance. |
+| `run_od_lets_a_sigma_model_fill_a_missing_covariance` | **SUCCESSOR-personal-7olgj** | End-to-end fill requires the separately tracked explicit resource-loader/binding task; no runtime fallback or synthetic Python model is permitted. |
 | `run_od_without_covariance_or_a_filling_model_is_refused` | **REPLACED** | `test_run_od_null_covariance.py::test_without_a_fill_transform_the_fit_is_refused`. |
 | The deleted `run_od_with` block inside `iod_refinement_full_od_and_run_od_use_only_their_configured_stage_predictors` | **REPLACED** | `od_workflows::tests::run_od_prepares_once_and_exactly_composes_isolated_stage_predictors` directly exercises the public configured predictor seam, exact prepared-row IOD→refine composition, prepare-once behavior, and stage isolation. |
 
