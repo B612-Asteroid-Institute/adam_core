@@ -331,6 +331,46 @@ mod tests {
     }
 
     #[test]
+    fn fitted_member_planning_scales_with_declared_members_not_group_source_product() {
+        // Exercise the production member planner directly. The former
+        // O(groups * source_rows) implementation would perform 320 million
+        // full-source probes for this shape; the canonical planner collects
+        // each of the 40,000 declared pairs once and sorts five-row groups.
+        let n_rows = 40_000usize;
+        let per_group = 5usize;
+        let n_groups = n_rows / per_group;
+        let source_ids = (0..n_rows).map(|row| format!("d{row}")).collect::<Vec<_>>();
+        let orbit_ids = (0..n_groups)
+            .map(|group| format!("o{group}"))
+            .collect::<Vec<_>>();
+        let orbit_refs = orbit_ids.iter().map(String::as_str).collect::<Vec<_>>();
+        let orbits = orbits(&orbit_refs);
+        let member_orbit_ids = (0..n_rows)
+            .rev()
+            .map(|row| format!("o{}", row / per_group))
+            .collect::<Vec<_>>();
+        let member_obs_ids = (0..n_rows)
+            .rev()
+            .map(|row| format!("d{row}"))
+            .collect::<Vec<_>>();
+        let started = std::time::Instant::now();
+        let groups =
+            plan_orbit_members(&orbits, &source_ids, &member_orbit_ids, &member_obs_ids).unwrap();
+        let elapsed = started.elapsed();
+        assert_eq!(groups.len(), n_groups);
+        assert_eq!(groups[0].orbit_id, format!("o{}", n_groups - 1));
+        assert_eq!(
+            groups[0].source_indices,
+            (n_rows - per_group..n_rows).collect::<Vec<_>>()
+        );
+        assert_eq!(groups[0].member_indices, vec![4, 3, 2, 1, 0]);
+        assert!(
+            elapsed < std::time::Duration::from_secs(2),
+            "near-linear member planner regression: {elapsed:?}"
+        );
+    }
+
+    #[test]
     fn fitted_members_reject_missing_duplicate_and_unknown_references() {
         let ids = vec!["a".to_string(), "b".to_string()];
         let two = orbits(&["o1", "o2"]);

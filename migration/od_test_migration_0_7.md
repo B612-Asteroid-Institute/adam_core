@@ -246,7 +246,7 @@ Every row is an assertion-level disposition. `RETIRED-API` marks a specifically 
 |---|---|---|
 | `test_astcat_round_trip_and_covariance` | **REPLACED** | `test_od_observations.py::test_from_ades_retains_astcat` and `::test_from_ades_uncertainty_conversion` use the same ADES rows/formulas. |
 | `test_every_model_matches_and_preserves_positions` | **RETIRED/REPLACED** | Closed transforms are covered by exact Rust tests `empirical_add_mode_at_equator_and_high_declination`, `empirical_replace_mode_nan_cross_term_and_pass_through_rules`, `night_batch_deweighting_is_per_station_and_night`, and Veres fill/floor/replace tests; identity/performance/sigma-floor/legacy-Veres executable Python models are outside the closed pipeline and retired. |
-| `test_run_od_composite_provenance` | **REPLACED-eack9** | `test_profile_shaped_deweighting_is_exact_across_fused_and_composed_routes` and `test_route_and_configuration_provenance_are_cryptographically_bound` pin transformed member/provenance composition. |
+| `test_run_od_composite_provenance` | **REPLACED-eack9** | `test_profile_shaped_deweighting_is_exact_across_fused_and_composed_routes` and `test_route_configuration_and_input_provenance_have_a_validated_consistency_digest` pin transformed member/provenance composition. |
 
 ### `test_orbit_fitter.py`
 
@@ -334,7 +334,7 @@ Every row is an assertion-level disposition. `RETIRED-API` marks a specifically 
 | `test_build_identity_is_exact_clean_head` | **REPLACED-eack9** | `test_native_build_identity_is_exact_clean_head` is the maintained runtime assertion; release inventory separately enforces clean artifact source. |
 | `test_efcc_descriptor_content_version_exclusions` | **RETIRED-API** | Python model-descriptor identity was removed; bound Rust resource/config fingerprints replace it (`od_config::tests::complete_config_fingerprint_is_deterministic_and_path_free`). |
 | `test_explicit_stage_composition_route_completes` | **REPLACED-eack9** | `test_run_od_is_exact_run_iod_then_refine` and `test_run_od_failure_is_exact_run_iod_then_refine` is the exact maintained replacement. |
-| `test_fused_and_composed_share_native_model_science_and_provenance` | **REPLACED-eack9** | `test_run_od_is_exact_run_iod_then_refine` and `test_provider_factory_counts_and_external_exact_composition` is the exact maintained replacement. |
+| `test_fused_and_composed_share_native_model_science_and_provenance` | **REPLACED-eack9** | `test_profile_shaped_deweighting_is_exact_across_fused_and_composed_routes` and `test_provider_factory_counts_and_external_exact_composition` pin transformed and external-provider exact composition. |
 | `test_input_fingerprint_is_layout_canonical` | **REPLACED-eack9** | `test_input_fingerprint_is_independent_of_arrow_chunk_layout` is the exact maintained replacement. |
 | `test_input_fingerprint_is_sensitive` | **REPLACED-eack9** | `test_member_source_identity_mutations_fail_before_provider_binding` and `test_orbit_state_and_provenance_mutations_abort_before_factory` is the exact maintained replacement. |
 | `test_model_descriptor_numpy_variants` | **RETIRED-API** | Python model-descriptor identity was removed; bound Rust resource/config fingerprints replace it (`od_config::tests::complete_config_fingerprint_is_deterministic_and_path_free`). |
@@ -362,7 +362,7 @@ Every row is an assertion-level disposition. `RETIRED-API` marks a specifically 
 | Baseline function | Disposition | Exact replacement or technical reason |
 |---|---|---|
 | `test_fused_and_composed_native_model_routes_agree_with_filled_sigmas` | **SUCCESSOR-personal-7olgj** | Exact fill-resource wiring requires the separately tracked resource-loader task; eack9 pins the same lossless transformed-variance handoff with profile-shaped `NightlyBatchDeweighting`. |
-| `test_sigma_fill_supplies_the_missing_covariance` | **DEFERRED-resource/eack9** | End-to-end fill→OD needs the separately supplied pinned station uncertainty resource; binding failure is covered by `::test_fill_transform_requires_explicit_validated_resource`, final configured workflow parity by the canonical workflow plus resource wiring. |
+| `test_sigma_fill_supplies_the_missing_covariance` | **SUCCESSOR-personal-7olgj** | End-to-end fill→OD needs the separately tracked explicit resource-loader/binding task; binding failure is covered by `::test_fill_transform_requires_explicit_validated_resource`, with final configured workflow parity owned by `personal-7olgj`. |
 | `test_without_a_filling_model_the_fit_is_refused` | **REPLACED** | `test_run_od_null_covariance.py::test_without_a_fill_transform_the_fit_is_refused`. |
 
 ### `test_solver_budgets.py`
@@ -403,7 +403,7 @@ Every row is an assertion-level disposition. `RETIRED-API` marks a specifically 
 
 | Deleted d21 Rust assertion | Disposition | Exact replacement or deferral |
 |---|---|---|
-| `run_od_applies_models_and_records_provenance` | **REPLACED-eack9** | `test_profile_shaped_deweighting_is_exact_across_fused_and_composed_routes` and `test_route_and_configuration_provenance_are_cryptographically_bound` pin transform execution, exact handoff, and canonical provenance. |
+| `run_od_applies_models_and_records_provenance` | **REPLACED-eack9** | `test_profile_shaped_deweighting_is_exact_across_fused_and_composed_routes` and `test_route_configuration_and_input_provenance_have_a_validated_consistency_digest` pin transform execution, exact handoff, and canonical provenance. |
 | `run_od_lets_a_sigma_model_fill_a_missing_covariance` | **SUCCESSOR-personal-7olgj** | End-to-end fill requires the separately tracked explicit resource-loader/binding task; no runtime fallback or synthetic Python model is permitted. |
 | `run_od_without_covariance_or_a_filling_model_is_refused` | **REPLACED** | `test_run_od_null_covariance.py::test_without_a_fill_transform_the_fit_is_refused`. |
 | The deleted `run_od_with` block inside `iod_refinement_full_od_and_run_od_use_only_their_configured_stage_predictors` | **REPLACED** | `od_workflows::tests::run_od_prepares_once_and_exactly_composes_isolated_stage_predictors` directly exercises the public configured predictor seam, exact prepared-row IOD→refine composition, prepare-once behavior, and stage isolation. |

@@ -1891,6 +1891,36 @@ mod tests {
     }
 
     #[test]
+    fn stage_json_preserves_known_non_roundtripping_floats_bitwise() {
+        let mut iod: Value =
+            serde_json::from_str(&IodRunConfig::core_v1().canonical_json()).unwrap();
+        iod["search_correction_ranging"]["ranging"]["rho_min_au"] =
+            json!(1.8135371537546276e-10_f64);
+        let iod = IodRunConfig::from_json(&iod.to_string()).unwrap();
+        let iod_value: Value = serde_json::from_str(&iod.canonical_json()).unwrap();
+        assert_eq!(
+            iod_value["search_correction_ranging"]["ranging"]["rho_min_au"]
+                .as_f64()
+                .unwrap()
+                .to_bits(),
+            1.8135371537546276e-10_f64.to_bits()
+        );
+
+        let mut refinement: Value =
+            serde_json::from_str(&RefinementRunConfig::core_v1().canonical_json()).unwrap();
+        refinement["psd_floor_frac"] = json!(1e-30_f64);
+        let refinement = RefinementRunConfig::from_json(&refinement.to_string()).unwrap();
+        let refinement_value: Value = serde_json::from_str(&refinement.canonical_json()).unwrap();
+        assert_eq!(
+            refinement_value["psd_floor_frac"]
+                .as_f64()
+                .unwrap()
+                .to_bits(),
+            1e-30_f64.to_bits()
+        );
+    }
+
+    #[test]
     fn invalid_transform_is_configuration_error_not_resource_error() {
         let error = ObservationPipeline::bind_explicit(
             vec![ObservationTransform::NightlyBatchDeweighting {

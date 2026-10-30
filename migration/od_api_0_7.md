@@ -92,9 +92,12 @@ standalone Rust predictor seams remain under
 Canonical provenance is emitted by Rust and includes clean Core build identity,
 ordered complete source/member fingerprints, exact orbit-state fingerprint,
 route, native provider metadata, stable canonical stage diagnostics, and
-canonical path-free configuration. A separate provenance fingerprint binds the
-route, validated configuration SHA-256, and input fingerprint, so relabelled
-routes or mixed configuration/input claims fail before provider binding.
-Unknown/dirty build identity, mutated source
-or observer geometry, changed membership/state, and missing provider
-fingerprints fail closed before provider binding.
+canonical path-free configuration. A separate unkeyed, validated consistency
+digest covers route, complete configuration including profile selection, input
+fingerprint, and propagated IOD provider/backend/diagnostic/ambiguity fields,
+so inconsistent claims fail before provider binding. It is not authentication
+or a tamper-proof signature. Configuration JSON uses correctly rounded float parsing and preserves every
+finite Python ``float`` bit through native persistence and validation. Its
+identity is checked before pipeline/provider work. Unknown/dirty build identity,
+mutated source or observer geometry, changed membership/state, and missing
+provider fingerprints fail closed before provider binding.

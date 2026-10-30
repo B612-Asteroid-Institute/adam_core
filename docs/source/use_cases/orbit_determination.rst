@@ -121,8 +121,11 @@ and populate, where applicable:
 
 * adam-core version and exact source commit;
 * ordered complete source/member, membership, and exact orbit-state fingerprints;
-* a provenance fingerprint binding route, validated configuration SHA-256,
-  and input fingerprint;
+* a validated provenance consistency digest covering route, complete
+  configuration (including profile selection), input fingerprint, and every
+  propagated IOD provider/backend/diagnostic/ambiguity field. The digest is
+  unkeyed consistency validation, not authentication or a tamper-proof
+  signature;
 * focused route;
 * native IOD/refinement provider identity and metadata;
 * IOD and refinement diagnostics;

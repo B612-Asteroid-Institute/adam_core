@@ -165,9 +165,12 @@ Current Migrated APIs
   - Boundary: nested Arrow IPC plus explicit typed configuration. Rust returns
     authoritative output disposition, success/status, solution/outlier flags,
     state retention, failure classification, fingerprints, and provenance;
-    Python only wraps those columns into quivr tables. Route, validated
-    configuration SHA-256, and input identity are cryptographically bound;
-    Python does not infer composition eligibility from a mutable route string.
+    Python only wraps those columns into quivr tables. Route, complete
+    configuration (including profile selection), input identity, and propagated
+    IOD metadata are covered by a validated consistency digest. This unkeyed
+    digest detects inconsistent fields; it is not authentication or a
+    tamper-proof signature. Python does not infer composition eligibility from
+    a mutable route string.
   - Python
     binds semantic resource slots and marshals tables; Rust validates exact
     resource identity, parses tables, executes the ordered observation
@@ -187,7 +190,10 @@ Current Migrated APIs
     grouping, fitting, rejection, covariance, or OD algorithms.
   - The canonical batch layer rejects dirty/unknown Core identity, invalid
     IDs/member mappings, and malformed resource/config/provider contracts
-    atomically before pipeline or numerical work. Canonical Python calls make
+    atomically before pipeline or numerical work. Configuration JSON uses
+    correctly rounded float parsing, so every finite Python ``float`` bit is
+    retained through native persistence and consistency validation. Canonical
+    Python calls make
     one near-linear Rust planning/preparation pass and carry a deferred provider
     resolver that is invoked only after that pass; empty and malformed batches
     never bind a provider. The layer defines empty-group behavior, typed

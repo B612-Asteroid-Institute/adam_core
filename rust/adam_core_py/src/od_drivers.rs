@@ -1694,14 +1694,23 @@ fn canonical_orbit_id(group_id: &str, config_sha256: &str, input_fingerprint: &s
     format!("{:x}", digest.finalize())
 }
 
-fn configuration_identity(configuration: &str) -> Result<String, String> {
+#[derive(Debug, Clone)]
+struct ConfigurationIdentity {
+    science_sha256: String,
+    complete_sha256: String,
+}
+
+fn configuration_identity(configuration: &str) -> Result<ConfigurationIdentity, String> {
     let mut value: serde_json::Value = serde_json::from_str(configuration)
         .map_err(|error| format!("invalid orbit configuration: {error}"))?;
+    let complete_canonical = serde_json::to_vec(&value)
+        .map_err(|error| format!("configuration is not serializable: {error}"))?;
+    let complete_sha256 = format!("{:x}", Sha256::digest(complete_canonical));
     let declared = value
         .get("configuration_sha256")
         .and_then(serde_json::Value::as_str)
         .map(str::to_string);
-    if let Some(declared) = declared {
+    let science_sha256 = if let Some(declared) = declared {
         if !is_sha256(&declared) {
             return Err("configuration_sha256 is not a lowercase SHA-256".to_string());
         }
@@ -1710,7 +1719,8 @@ fn configuration_identity(configuration: &str) -> Result<String, String> {
             .ok_or_else(|| "configuration provenance is not an object".to_string())?;
         object.remove("configuration_sha256");
         // Profile identity records selection, not science, and is intentionally
-        // excluded by OdConfig::configuration_sha256.
+        // excluded by OdConfig::configuration_sha256. It remains covered by
+        // complete_sha256 and therefore by the provenance consistency digest.
         object.remove("profile");
         let canonical = serde_json::to_vec(&value)
             .map_err(|error| format!("configuration is not serializable: {error}"))?;
@@ -1718,22 +1728,49 @@ fn configuration_identity(configuration: &str) -> Result<String, String> {
         if declared != actual {
             return Err("configuration_sha256 does not match canonical configuration".to_string());
         }
-        Ok(declared)
+        declared
     } else {
         // Standalone stage configurations have no embedded full-OD science
-        // digest, so bind their exact canonical JSON value.
-        let canonical = serde_json::to_vec(&value)
-            .map_err(|error| format!("configuration is not serializable: {error}"))?;
-        Ok(format!("{:x}", Sha256::digest(canonical)))
-    }
+        // digest, so their canonical value supplies both identities.
+        complete_sha256.clone()
+    };
+    Ok(ConfigurationIdentity {
+        science_sha256,
+        complete_sha256,
+    })
 }
 
-fn provenance_fingerprint(route: &str, configuration_sha256: &str, input: &str) -> String {
+#[allow(clippy::too_many_arguments)]
+fn provenance_consistency_digest(
+    route: &str,
+    configuration: &ConfigurationIdentity,
+    input: &str,
+    iod_backend: Option<&str>,
+    iod_provider: Option<&str>,
+    iod_diagnostics: Option<&str>,
+    iod_ambiguous: Option<bool>,
+    iod_alternatives: Option<usize>,
+) -> String {
     let mut digest = Sha256::new();
-    digest.update(b"adam-core-od-provenance/v1\0");
+    digest.update(b"adam-core-od-provenance-consistency/v2\0");
     fingerprint_string(&mut digest, route);
-    fingerprint_string(&mut digest, configuration_sha256);
+    fingerprint_string(&mut digest, &configuration.science_sha256);
+    fingerprint_string(&mut digest, &configuration.complete_sha256);
     fingerprint_string(&mut digest, input);
+    fingerprint_optional_string(&mut digest, iod_backend);
+    fingerprint_optional_string(&mut digest, iod_provider);
+    fingerprint_optional_string(&mut digest, iod_diagnostics);
+    match iod_ambiguous {
+        Some(value) => digest.update([1, u8::from(value)]),
+        None => digest.update([0]),
+    }
+    match iod_alternatives {
+        Some(value) => {
+            digest.update([1]);
+            digest.update((value as u64).to_le_bytes());
+        }
+        None => digest.update([0]),
+    }
     format!("{:x}", digest.finalize())
 }
 
@@ -1785,6 +1822,7 @@ struct OrbitProvenanceInput {
 #[derive(Debug, Clone)]
 struct SeedIodProvenance {
     input_fingerprint: String,
+    configuration_identity: ConfigurationIdentity,
     iod_backend: String,
     iod_provider: String,
     iod_diagnostics: String,
@@ -1903,7 +1941,7 @@ fn parse_orbit_provenance(
             })?;
             let configuration_value: serde_json::Value = serde_json::from_str(configuration)
                 .map_err(|error| value_error(format!("invalid orbit configuration at row {row}: {error}")))?;
-            let configuration_sha = configuration_identity(configuration).map_err(|error| {
+            let configuration_identity = configuration_identity(configuration).map_err(|error| {
                 value_error(format!("orbit configuration at row {row} is invalid: {error}"))
             })?;
             let declared_provenance_fingerprint = provenance
@@ -1911,11 +1949,19 @@ fn parse_orbit_provenance(
                 .as_deref()
                 .filter(|value| is_sha256(value))
                 .ok_or_else(|| value_error(format!("orbit provenance at row {row} has no valid provenance fingerprint")))?;
-            let expected_provenance_fingerprint =
-                provenance_fingerprint(route, &configuration_sha, input_fingerprint);
+            let expected_provenance_fingerprint = provenance_consistency_digest(
+                route,
+                &configuration_identity,
+                input_fingerprint,
+                provenance.iod_backend.as_deref(),
+                provenance.iod_provider.as_deref(),
+                provenance.iod_diagnostics.as_deref(),
+                provenance.iod_ambiguous,
+                provenance.iod_alternatives,
+            );
             if declared_provenance_fingerprint != expected_provenance_fingerprint {
                 return Err(value_error(format!(
-                    "orbit provenance at row {row} does not bind its route, configuration, and input fingerprint"
+                    "orbit provenance at row {row} does not match its validated consistency digest"
                 )));
             }
             if route != "run_iod" {
@@ -1931,7 +1977,7 @@ fn parse_orbit_provenance(
             let config_sha = configuration_value
                 .get("configuration_sha256")
                 .and_then(serde_json::Value::as_str)
-                .filter(|value| **value == configuration_sha)
+                .filter(|value| **value == configuration_identity.science_sha256)
                 .ok_or_else(|| value_error(format!("seed IOD configuration at orbit row {row} has no valid configuration_sha256")))?;
             let object_id = orbits.object_id[row]
                 .as_ref()
@@ -1960,6 +2006,7 @@ fn parse_orbit_provenance(
                 .ok_or_else(|| value_error(format!("seed IOD provenance at row {row} has no diagnostics")))?;
             Ok(Some(SeedIodProvenance {
                 input_fingerprint: input_fingerprint.to_string(),
+                configuration_identity,
                 iod_backend,
                 iod_provider: iod_provider.to_string(),
                 iod_diagnostics,
@@ -2461,6 +2508,7 @@ fn provenance_dict<'py>(
     input_fingerprint: String,
     state_fingerprint: Option<String>,
     config_json: &str,
+    config_identity: &ConfigurationIdentity,
     iod_provider: Option<&ProviderMetadata>,
     refinement_provider: Option<&ProviderMetadata>,
     evaluation_provider: Option<&ProviderMetadata>,
@@ -2477,38 +2525,27 @@ fn provenance_dict<'py>(
     let effective_config_json = seed_iod
         .map(|seed| seed.configuration.as_str())
         .unwrap_or(config_json);
-    let configuration_sha = configuration_identity(effective_config_json)
-        .map_err(|error| value_error(format!("cannot fingerprint orbit provenance: {error}")))?;
+    let effective_config_identity = seed_iod
+        .map(|seed| &seed.configuration_identity)
+        .unwrap_or(config_identity);
     let out = PyDict::new(py);
     out.set_item("adam_core_version", version)?;
     out.set_item("adam_core_build", build)?;
     out.set_item("input_fingerprint", effective_input_fingerprint)?;
     out.set_item("state_fingerprint", state_fingerprint)?;
-    out.set_item(
-        "provenance_fingerprint",
-        provenance_fingerprint(
-            effective_route,
-            &configuration_sha,
-            effective_input_fingerprint,
-        ),
-    )?;
     out.set_item("route", effective_route)?;
     out.set_item("fitter", py.None())?;
     let backend = |provider: &ProviderMetadata| format!("{} {}", provider.name, provider.version);
-    out.set_item(
-        "iod_backend",
-        seed_iod
-            .map(|seed| seed.iod_backend.clone())
-            .or_else(|| iod_provider.map(backend)),
-    )?;
+    let iod_backend = seed_iod
+        .map(|seed| seed.iod_backend.clone())
+        .or_else(|| iod_provider.map(backend));
+    out.set_item("iod_backend", iod_backend.as_deref())?;
     out.set_item("refinement_backend", refinement_provider.map(backend))?;
     out.set_item("evaluation_backend", evaluation_provider.map(backend))?;
-    out.set_item(
-        "iod_provider",
-        seed_iod
-            .map(|seed| seed.iod_provider.clone())
-            .or_else(|| iod_provider.map(provider_json)),
-    )?;
+    let iod_provider_value = seed_iod
+        .map(|seed| seed.iod_provider.clone())
+        .or_else(|| iod_provider.map(provider_json));
+    out.set_item("iod_provider", iod_provider_value.as_deref())?;
     out.set_item(
         "refinement_provider",
         refinement_provider.map(provider_json),
@@ -2550,23 +2587,19 @@ fn provenance_dict<'py>(
         })
         .to_string()
     });
-    out.set_item("iod_diagnostics", iod_diagnostics)?;
+    out.set_item("iod_diagnostics", iod_diagnostics.as_deref())?;
     out.set_item("refinement_diagnostics", refinement_diagnostics)?;
     out.set_item("evaluation_diagnostics", evaluation_diagnostics)?;
     out.set_item("settings", py.None())?;
     out.set_item("configuration", effective_config_json)?;
-    out.set_item(
-        "iod_ambiguous",
-        seed_iod
-            .map(|seed| seed.iod_ambiguous)
-            .or_else(|| iod.map(|result| !result.ambiguous_with.is_empty())),
-    )?;
-    out.set_item(
-        "iod_alternatives",
-        seed_iod
-            .map(|seed| seed.iod_alternatives)
-            .or_else(|| iod.map(|result| result.ambiguous_with.len())),
-    )?;
+    let iod_ambiguous = seed_iod
+        .map(|seed| seed.iod_ambiguous)
+        .or_else(|| iod.map(|result| !result.ambiguous_with.is_empty()));
+    let iod_alternatives = seed_iod
+        .map(|seed| seed.iod_alternatives)
+        .or_else(|| iod.map(|result| result.ambiguous_with.len()));
+    out.set_item("iod_ambiguous", iod_ambiguous)?;
+    out.set_item("iod_alternatives", iod_alternatives)?;
     out.set_item("num_rejected", refined.map(|result| result.n_rejected))?;
     out.set_item(
         "rejected_fraction",
@@ -2577,6 +2610,19 @@ fn provenance_dict<'py>(
                 result.n_rejected as f64 / result.fit.evaluation.chi2.len() as f64
             }
         }),
+    )?;
+    out.set_item(
+        "provenance_fingerprint",
+        provenance_consistency_digest(
+            effective_route,
+            effective_config_identity,
+            effective_input_fingerprint,
+            iod_backend.as_deref(),
+            iod_provider_value.as_deref(),
+            iod_diagnostics.as_deref(),
+            iod_ambiguous,
+            iod_alternatives,
+        ),
     )?;
     Ok(out)
 }
@@ -2592,6 +2638,7 @@ fn base_group_dict<'py>(
     refinement_provider: Option<&ProviderMetadata>,
     evaluation_provider: Option<&ProviderMetadata>,
     config_json: &str,
+    config_identity: &ConfigurationIdentity,
     route: &str,
     iod: Option<&IodResult>,
     refined: Option<&adam_core_rs_coords::propagation::RefinedOutput>,
@@ -2639,6 +2686,7 @@ fn base_group_dict<'py>(
             ),
             output_orbit_state_fingerprint(iod, refined, input_orbit)?,
             config_json,
+            config_identity,
             iod_provider,
             refinement_provider,
             evaluation_provider,
@@ -2661,6 +2709,7 @@ fn group_dict<'py>(
     iod_provider: Option<&ProviderMetadata>,
     refinement_provider: Option<&ProviderMetadata>,
     config_json: &str,
+    config_identity: &ConfigurationIdentity,
     route: &str,
     iod: Option<IodResult>,
     refined: Option<adam_core_rs_coords::propagation::RefinedOutput>,
@@ -2680,6 +2729,7 @@ fn group_dict<'py>(
         refinement_provider,
         None,
         config_json,
+        config_identity,
         route,
         iod.as_ref(),
         refined.as_ref(),
@@ -2746,29 +2796,6 @@ fn group_dict<'py>(
 }
 
 #[pyfunction]
-#[pyo3(signature = (source_ipc, associations_ipc, observed_ipc, observers_ipc, config))]
-fn iod_od_batch_preflight_ipc(
-    source_ipc: &Bound<'_, PyBytes>,
-    associations_ipc: &Bound<'_, PyBytes>,
-    observed_ipc: &Bound<'_, PyBytes>,
-    observers_ipc: &Bound<'_, PyBytes>,
-    config: PyRef<'_, PyOdConfig>,
-) -> PyResult<usize> {
-    config.inner.validate().map_err(value_error)?;
-    checked_build_identity()?;
-    let source = decode_source_catalog(source_ipc)?;
-    let associations = decode_association_batch(associations_ipc)?;
-    let groups = adam_core_rs_coords::od::plan_associations(&source.id, &associations)
-        .map_err(value_error)?;
-    if groups.is_empty() {
-        return Ok(0);
-    }
-    let problem = decode_observations(observed_ipc, observers_ipc)?;
-    validate_catalog_problem(&source, &problem)?;
-    Ok(groups.len())
-}
-
-#[pyfunction]
 #[pyo3(signature = (propagator, source_ipc, associations_ipc, observed_ipc, observers_ipc, config))]
 fn run_iod_batch_ipc<'py>(
     py: Python<'py>,
@@ -2781,6 +2808,12 @@ fn run_iod_batch_ipc<'py>(
 ) -> PyResult<Bound<'py, PyDict>> {
     config.inner.validate().map_err(value_error)?;
     checked_build_identity()?;
+    let config_sha = config.inner.configuration_sha256();
+    let config_json = config.inner.provenance_json();
+    let config_identity = configuration_identity(&config_json)
+        .map_err(|error| value_error(format!("invalid canonical OD configuration: {error}")))?;
+    let owned_config = config.inner.clone();
+    drop(config);
     let source = decode_source_catalog(source_ipc)?;
     let associations = decode_association_batch(associations_ipc)?;
     let groups = adam_core_rs_coords::od::plan_associations(&source.id, &associations)
@@ -2793,10 +2826,6 @@ fn run_iod_batch_ipc<'py>(
     }
     let problem = decode_observations(observed_ipc, observers_ipc)?;
     validate_catalog_problem(&source, &problem)?;
-    let config_sha = config.inner.configuration_sha256();
-    let config_json = config.inner.provenance_json();
-    let owned_config = config.inner.clone();
-    drop(config);
     let prepared_groups = prepare_association_groups(&groups, &source, &problem, &owned_config)?;
 
     let correction_fit = *owned_config.for_iod().correction_fit();
@@ -2875,6 +2904,7 @@ fn run_iod_batch_ipc<'py>(
             Some(&metadata),
             None,
             &config_json,
+            &config_identity,
             "run_iod",
             result.iod,
             None,
@@ -2904,6 +2934,12 @@ fn run_od_batch_ipc<'py>(
 ) -> PyResult<Bound<'py, PyDict>> {
     config.inner.validate().map_err(value_error)?;
     checked_build_identity()?;
+    let config_sha = config.inner.configuration_sha256();
+    let config_json = config.inner.provenance_json();
+    let config_identity = configuration_identity(&config_json)
+        .map_err(|error| value_error(format!("invalid canonical OD configuration: {error}")))?;
+    let owned_config = config.inner.clone();
+    drop(config);
     let source = decode_source_catalog(source_ipc)?;
     let associations = decode_association_batch(associations_ipc)?;
     let groups = adam_core_rs_coords::od::plan_associations(&source.id, &associations)
@@ -2916,10 +2952,6 @@ fn run_od_batch_ipc<'py>(
     }
     let problem = decode_observations(observed_ipc, observers_ipc)?;
     validate_catalog_problem(&source, &problem)?;
-    let config_sha = config.inner.configuration_sha256();
-    let config_json = config.inner.provenance_json();
-    let owned_config = config.inner.clone();
-    drop(config);
     let prepared_groups = prepare_association_groups(&groups, &source, &problem, &owned_config)?;
     let correction_fit = *owned_config.for_iod().correction_fit();
     let iod_settings = fit_settings_from_config(correction_fit)?;
@@ -3089,6 +3121,7 @@ fn run_od_batch_ipc<'py>(
             Some(&iod_metadata),
             refinement_attempted.then_some(&refinement_metadata),
             &config_json,
+            &config_identity,
             "run_od",
             result.iod,
             result.refined,
@@ -3141,6 +3174,7 @@ fn evaluation_group_dict<'py>(
     result: BatchEvaluationGroup,
     provider: &ProviderMetadata,
     config_json: &str,
+    config_identity: &ConfigurationIdentity,
     source: &SourceCatalogBatch,
     observers: &DataObserverBatch,
     orbits: &DataOrbitBatch,
@@ -3157,6 +3191,7 @@ fn evaluation_group_dict<'py>(
         None,
         Some(provider),
         config_json,
+        config_identity,
         "evaluate_orbits",
         None,
         None,
@@ -3215,119 +3250,6 @@ fn validate_member_snapshot_lengths(
 
 #[pyfunction]
 #[pyo3(signature = (
-    orbit_ipc, source_ipc, observed_ipc, observers_ipc,
-    member_orbit_ids, member_obs_ids, seed_iod_provenance,
-    member_input_fingerprints, member_membership_fingerprints, original_lon, original_lat, original_sigma_lon, original_sigma_lat,
-    original_variance_lon, original_variance_lat, original_cov_lonlat, used_lon, used_lat, used_sigma_lon, used_sigma_lat,
-    used_variance_lon, used_variance_lat, used_cov_lonlat, config
-))]
-#[allow(clippy::too_many_arguments)]
-fn refine_batch_preflight_ipc(
-    orbit_ipc: &Bound<'_, PyBytes>,
-    source_ipc: &Bound<'_, PyBytes>,
-    observed_ipc: &Bound<'_, PyBytes>,
-    observers_ipc: &Bound<'_, PyBytes>,
-    member_orbit_ids: Vec<String>,
-    member_obs_ids: Vec<String>,
-    seed_iod_provenance: Vec<Option<String>>,
-    member_input_fingerprints: Vec<Option<String>>,
-    member_membership_fingerprints: Vec<Option<String>>,
-    original_lon: Vec<Option<f64>>,
-    original_lat: Vec<Option<f64>>,
-    original_sigma_lon: Vec<Option<f64>>,
-    original_sigma_lat: Vec<Option<f64>>,
-    original_variance_lon: Vec<Option<f64>>,
-    original_variance_lat: Vec<Option<f64>>,
-    original_cov_lonlat: Vec<Option<f64>>,
-    used_lon: Vec<Option<f64>>,
-    used_lat: Vec<Option<f64>>,
-    used_sigma_lon: Vec<Option<f64>>,
-    used_sigma_lat: Vec<Option<f64>>,
-    used_variance_lon: Vec<Option<f64>>,
-    used_variance_lat: Vec<Option<f64>>,
-    used_cov_lonlat: Vec<Option<f64>>,
-    config: PyRef<'_, PyRefinementRunConfig>,
-) -> PyResult<usize> {
-    config.inner.validate().map_err(value_error)?;
-    checked_build_identity()?;
-    let orbits = decode_orbit(orbit_ipc)?;
-    let source = decode_source_catalog(source_ipc)?;
-    validate_member_snapshot_lengths(
-        member_orbit_ids.len(),
-        &[
-            ("obs_id", member_obs_ids.len()),
-            ("input_fingerprint", member_input_fingerprints.len()),
-            (
-                "membership_fingerprint",
-                member_membership_fingerprints.len(),
-            ),
-            ("original_astrometry.lon", original_lon.len()),
-            ("original_astrometry.lat", original_lat.len()),
-            ("original_astrometry.sigma_lon", original_sigma_lon.len()),
-            ("original_astrometry.sigma_lat", original_sigma_lat.len()),
-            (
-                "original_astrometry.variance_lon",
-                original_variance_lon.len(),
-            ),
-            (
-                "original_astrometry.variance_lat",
-                original_variance_lat.len(),
-            ),
-            ("original_astrometry.cov_lonlat", original_cov_lonlat.len()),
-            ("used_astrometry.lon", used_lon.len()),
-            ("used_astrometry.lat", used_lat.len()),
-            ("used_astrometry.sigma_lon", used_sigma_lon.len()),
-            ("used_astrometry.sigma_lat", used_sigma_lat.len()),
-            ("used_astrometry.variance_lon", used_variance_lon.len()),
-            ("used_astrometry.variance_lat", used_variance_lat.len()),
-            ("used_astrometry.cov_lonlat", used_cov_lonlat.len()),
-        ],
-    )?;
-    let groups = adam_core_rs_coords::od::plan_orbit_members(
-        &orbits,
-        &source.id,
-        &member_orbit_ids,
-        &member_obs_ids,
-    )
-    .map_err(value_error)?;
-    if groups.is_empty() {
-        return Ok(0);
-    }
-    let problem = decode_observations(observed_ipc, observers_ipc)?;
-    validate_catalog_problem(&source, &problem)?;
-    let seed_iod_provenance = parse_orbit_provenance(
-        &seed_iod_provenance,
-        &orbits,
-        Some(&config.inner.canonical_json()),
-    )?;
-    prepare_member_groups(
-        &groups,
-        &source,
-        &problem,
-        &orbits,
-        Some(&seed_iod_provenance),
-        &member_input_fingerprints,
-        &member_membership_fingerprints,
-        &original_lon,
-        &original_lat,
-        &original_sigma_lon,
-        &original_sigma_lat,
-        &original_variance_lon,
-        &original_variance_lat,
-        &original_cov_lonlat,
-        &used_lon,
-        &used_lat,
-        &used_sigma_lon,
-        &used_sigma_lat,
-        &used_variance_lon,
-        &used_variance_lat,
-        &used_cov_lonlat,
-    )?;
-    Ok(groups.len())
-}
-
-#[pyfunction]
-#[pyo3(signature = (
     propagator, orbit_ipc, source_ipc, observed_ipc, observers_ipc,
     member_orbit_ids, member_obs_ids, seed_iod_provenance,
     member_input_fingerprints, member_membership_fingerprints, original_lon, original_lat, original_sigma_lon, original_sigma_lat,
@@ -3365,6 +3287,14 @@ fn refine_batch_ipc<'py>(
 ) -> PyResult<Bound<'py, PyDict>> {
     config.inner.validate().map_err(value_error)?;
     checked_build_identity()?;
+    let refinement = *config.inner.refinement();
+    let config_json = config.inner.canonical_json();
+    let config_identity = configuration_identity(&config_json).map_err(|error| {
+        value_error(format!(
+            "invalid canonical refinement configuration: {error}"
+        ))
+    })?;
+    drop(config);
     let orbits = decode_orbit(orbit_ipc)?;
     let source = decode_source_catalog(source_ipc)?;
     validate_member_snapshot_lengths(
@@ -3413,11 +3343,8 @@ fn refine_batch_ipc<'py>(
     }
     let problem = decode_observations(observed_ipc, observers_ipc)?;
     validate_catalog_problem(&source, &problem)?;
-    let refinement = *config.inner.refinement();
-    let config_json = config.inner.canonical_json();
     let seed_iod_provenance =
         parse_orbit_provenance(&seed_iod_provenance, &orbits, Some(&config_json))?;
-    drop(config);
     let prepared_groups = prepare_member_groups(
         &groups,
         &source,
@@ -3533,6 +3460,7 @@ fn refine_batch_ipc<'py>(
             None,
             Some(&metadata),
             &config_json,
+            &config_identity,
             "refine",
             None,
             result.refined,
@@ -3550,122 +3478,6 @@ fn refine_batch_ipc<'py>(
     out.set_item("groups", items)?;
     out.set_item("provider", provider_metadata_dict(py, &metadata)?)?;
     Ok(out)
-}
-
-#[pyfunction]
-#[pyo3(signature = (
-    orbit_ipc, source_ipc, observed_ipc, observers_ipc,
-    member_orbit_ids, member_obs_ids, member_outlier,
-    orbit_provenance, member_input_fingerprints, member_membership_fingerprints, original_lon, original_lat, original_sigma_lon, original_sigma_lat,
-    original_variance_lon, original_variance_lat, original_cov_lonlat, used_lon, used_lat, used_sigma_lon, used_sigma_lat,
-    used_variance_lon, used_variance_lat, used_cov_lonlat, config
-))]
-#[allow(clippy::too_many_arguments)]
-fn evaluate_orbits_batch_preflight_ipc(
-    orbit_ipc: &Bound<'_, PyBytes>,
-    source_ipc: &Bound<'_, PyBytes>,
-    observed_ipc: &Bound<'_, PyBytes>,
-    observers_ipc: &Bound<'_, PyBytes>,
-    member_orbit_ids: Vec<String>,
-    member_obs_ids: Vec<String>,
-    member_outlier: Vec<Option<bool>>,
-    orbit_provenance: Vec<Option<String>>,
-    member_input_fingerprints: Vec<Option<String>>,
-    member_membership_fingerprints: Vec<Option<String>>,
-    original_lon: Vec<Option<f64>>,
-    original_lat: Vec<Option<f64>>,
-    original_sigma_lon: Vec<Option<f64>>,
-    original_sigma_lat: Vec<Option<f64>>,
-    original_variance_lon: Vec<Option<f64>>,
-    original_variance_lat: Vec<Option<f64>>,
-    original_cov_lonlat: Vec<Option<f64>>,
-    used_lon: Vec<Option<f64>>,
-    used_lat: Vec<Option<f64>>,
-    used_sigma_lon: Vec<Option<f64>>,
-    used_sigma_lat: Vec<Option<f64>>,
-    used_variance_lon: Vec<Option<f64>>,
-    used_variance_lat: Vec<Option<f64>>,
-    used_cov_lonlat: Vec<Option<f64>>,
-    config: PyRef<'_, PyOdConfig>,
-) -> PyResult<usize> {
-    config.inner.validate().map_err(value_error)?;
-    checked_build_identity()?;
-    let orbits = decode_orbit(orbit_ipc)?;
-    let source = decode_source_catalog(source_ipc)?;
-    validate_member_snapshot_lengths(
-        member_orbit_ids.len(),
-        &[
-            ("obs_id", member_obs_ids.len()),
-            ("outlier", member_outlier.len()),
-            ("input_fingerprint", member_input_fingerprints.len()),
-            (
-                "membership_fingerprint",
-                member_membership_fingerprints.len(),
-            ),
-            ("original_astrometry.lon", original_lon.len()),
-            ("original_astrometry.lat", original_lat.len()),
-            ("original_astrometry.sigma_lon", original_sigma_lon.len()),
-            ("original_astrometry.sigma_lat", original_sigma_lat.len()),
-            (
-                "original_astrometry.variance_lon",
-                original_variance_lon.len(),
-            ),
-            (
-                "original_astrometry.variance_lat",
-                original_variance_lat.len(),
-            ),
-            ("original_astrometry.cov_lonlat", original_cov_lonlat.len()),
-            ("used_astrometry.lon", used_lon.len()),
-            ("used_astrometry.lat", used_lat.len()),
-            ("used_astrometry.sigma_lon", used_sigma_lon.len()),
-            ("used_astrometry.sigma_lat", used_sigma_lat.len()),
-            ("used_astrometry.variance_lon", used_variance_lon.len()),
-            ("used_astrometry.variance_lat", used_variance_lat.len()),
-            ("used_astrometry.cov_lonlat", used_cov_lonlat.len()),
-        ],
-    )?;
-    let groups = adam_core_rs_coords::od::plan_orbit_members(
-        &orbits,
-        &source.id,
-        &member_orbit_ids,
-        &member_obs_ids,
-    )
-    .map_err(value_error)?;
-    if groups.is_empty() {
-        return Ok(0);
-    }
-    let problem = decode_observations(observed_ipc, observers_ipc)?;
-    validate_catalog_problem(&source, &problem)?;
-    if let Some(row) = member_outlier.iter().position(Option::is_none) {
-        return Err(value_error(format!(
-            "FittedOrbitMembers outlier is null at row {row}"
-        )));
-    }
-    parse_orbit_provenance(&orbit_provenance, &orbits, None)?;
-    prepare_member_groups(
-        &groups,
-        &source,
-        &problem,
-        &orbits,
-        None,
-        &member_input_fingerprints,
-        &member_membership_fingerprints,
-        &original_lon,
-        &original_lat,
-        &original_sigma_lon,
-        &original_sigma_lat,
-        &original_variance_lon,
-        &original_variance_lat,
-        &original_cov_lonlat,
-        &used_lon,
-        &used_lat,
-        &used_sigma_lon,
-        &used_sigma_lat,
-        &used_variance_lon,
-        &used_variance_lat,
-        &used_cov_lonlat,
-    )?;
-    Ok(groups.len())
 }
 
 #[pyfunction]
@@ -3708,6 +3520,15 @@ fn evaluate_orbits_batch_ipc<'py>(
 ) -> PyResult<Bound<'py, PyDict>> {
     config.inner.validate().map_err(value_error)?;
     checked_build_identity()?;
+    let parameters = config.inner.for_evaluation().covariance_dimension() as i64;
+    let config_json = config.inner.provenance_json();
+    let config_identity = configuration_identity(&config_json).map_err(|error| {
+        value_error(format!(
+            "invalid canonical evaluation configuration: {error}"
+        ))
+    })?;
+    let refinement = *config.inner.for_refinement().refinement();
+    drop(config);
     let orbits = decode_orbit(orbit_ipc)?;
     let source = decode_source_catalog(source_ipc)?;
     validate_member_snapshot_lengths(
@@ -3763,14 +3584,10 @@ fn evaluate_orbits_batch_ipc<'py>(
         )));
     }
     parse_orbit_provenance(&orbit_provenance, &orbits, None)?;
-    let parameters = config.inner.for_evaluation().covariance_dimension() as i64;
-    let config_json = config.inner.provenance_json();
-    let refinement = *config.inner.for_refinement().refinement();
     let evaluation_fit = match refinement {
         RefinementConfig::WorstResidual(value) => value.fit,
         RefinementConfig::Cmc2003(value) => value.fit,
     };
-    drop(config);
     let prepared_groups = prepare_member_groups(
         &groups,
         &source,
@@ -3868,6 +3685,7 @@ fn evaluate_orbits_batch_ipc<'py>(
             result,
             &metadata,
             &config_json,
+            &config_identity,
             &source,
             &problem.observers,
             &orbits,
@@ -3935,12 +3753,9 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(cmc2003_fit_2body_ipc, m)?)?;
     m.add_function(wrap_pyfunction!(refine_config_ipc, m)?)?;
     m.add_function(wrap_pyfunction!(run_iod_config_ipc, m)?)?;
-    m.add_function(wrap_pyfunction!(iod_od_batch_preflight_ipc, m)?)?;
     m.add_function(wrap_pyfunction!(run_iod_batch_ipc, m)?)?;
     m.add_function(wrap_pyfunction!(run_od_batch_ipc, m)?)?;
-    m.add_function(wrap_pyfunction!(refine_batch_preflight_ipc, m)?)?;
     m.add_function(wrap_pyfunction!(refine_batch_ipc, m)?)?;
-    m.add_function(wrap_pyfunction!(evaluate_orbits_batch_preflight_ipc, m)?)?;
     m.add_function(wrap_pyfunction!(evaluate_orbits_batch_ipc, m)?)?;
     m.add_function(wrap_pyfunction!(native_provider_metadata, m)?)?;
     m.add_function(wrap_pyfunction!(od_defaults, m)?)?;

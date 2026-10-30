@@ -129,8 +129,10 @@ class OdProvenance(qv.Table):
     #: SHA-256 of the exact emitted orbit state/time/origin/covariance and
     #: physical/non-gravitational parameters, validated on later workflows.
     state_fingerprint = qv.LargeStringColumn(nullable=True)
-    #: SHA-256 binding route, validated configuration identity, and input
-    #: fingerprint. Later workflows reject relabelled or mixed provenance.
+    #: Unkeyed SHA-256 consistency digest covering route, complete
+    #: configuration (including profile), input fingerprint, and propagated
+    #: IOD metadata. This detects inconsistent fields; it is not authentication
+    #: or a tamper-proof signature.
     provenance_fingerprint = qv.LargeStringColumn(nullable=True)
     #: Exact canonical workflow route.
     route = qv.LargeStringColumn(nullable=True)

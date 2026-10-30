@@ -112,6 +112,77 @@ def _not_converging_config() -> OdConfig:
     )
 
 
+def _non_roundtripping_float_config() -> OdConfig:
+    """Known serde_json edge values retained exactly in both OD stages."""
+
+    base = _config()
+    iod_declaration = base.for_iod()
+    search = iod_declaration.search_correction_ranging
+    ranging = dataclasses.replace(search.ranging, rho_min_au=1.8135371537546276e-10)
+    iod = IodRunConfig(
+        dataclasses.replace(search, ranging=ranging),
+        iod_declaration.candidate_correction_fit,
+    )
+    refinement_declaration = base.for_refinement().refinement
+    refinement = RefinementRunConfig(
+        dataclasses.replace(refinement_declaration, psd_floor_frac=1e-30)
+    )
+    return OdConfig.explicit(
+        observation_pipeline=base.observation_pipeline,
+        iod=iod,
+        refinement=refinement,
+        evaluation=base.for_evaluation(),
+        resources=ResourceBindings({}),
+    )
+
+
+def _assert_non_roundtripping_values_in_provenance(orbits: FittedOrbits) -> None:
+    value = json.loads(orbits.provenance.configuration[0].as_py())
+    assert (
+        value["iod"]["search_correction_ranging"]["ranging"]["rho_min_au"].hex()
+        == (1.8135371537546276e-10).hex()
+    )
+    assert value["refinement"]["psd_floor_frac"].hex() == (1e-30).hex()
+    assert orbits.provenance.provenance_fingerprint[0].as_py()
+
+
+def test_non_roundtripping_config_floats_are_exact_across_every_route(
+    pure_iod_orbit,
+) -> None:
+    source = _two_body_source(pure_iod_orbit)
+    associations = Associations.from_kwargs(
+        detection_id=source.id, object_id=["group-1"] * len(source)
+    )
+    config = _non_roundtripping_float_config()
+    assert (
+        config.for_iod().search_correction_ranging.ranging.rho_min_au.hex()
+        == (1.8135371537546276e-10).hex()
+    )
+    assert config.for_refinement().refinement.psd_floor_frac.hex() == (1e-30).hex()
+
+    iod = run_iod(source, associations, None, config.for_iod())
+    fused = run_od(source, associations, None, config)
+    composed = refine(iod[0], iod[1], source, None, config.for_refinement())
+    _assert_exact_results(fused, composed)
+    for result in (iod, fused, composed):
+        assert len(result[0]) == 1
+        _assert_non_roundtripping_values_in_provenance(result[0])
+
+    evaluated_iod = evaluate_orbits(
+        iod[0], iod[1], source, None, config.for_evaluation()
+    )
+    evaluated_fused = evaluate_orbits(
+        fused[0], fused[1], source, None, config.for_evaluation()
+    )
+    evaluated_composed = evaluate_orbits(
+        composed[0], composed[1], source, None, config.for_evaluation()
+    )
+    _assert_exact_results(evaluated_fused, evaluated_composed)
+    for result in (evaluated_iod, evaluated_fused, evaluated_composed):
+        assert len(result[0]) == 1
+        _assert_non_roundtripping_values_in_provenance(result[0])
+
+
 def test_run_od_is_exact_run_iod_then_refine(pure_iod_orbit) -> None:
     source = _two_body_source(pure_iod_orbit)
     associations = Associations.from_kwargs(
@@ -162,6 +233,21 @@ def test_profile_shaped_deweighting_is_exact_across_fused_and_composed_routes(
             type=pa.large_string(),
         ),
     )
+    # Make the persisted covariance bits discriminating for both former lossy
+    # paths: snapshotting variance as sqrt(variance)^2 and reconstructing it as
+    # sigma^2. Preserve heterogeneous cross covariance as part of the handoff.
+    rng = np.random.default_rng(11)
+    source = (
+        source.set_column(
+            "ra_sigma", pa.array(0.3 * (1.0 + 0.5 * rng.random(len(source))))
+        )
+        .set_column("dec_sigma", pa.array(0.3 * (1.0 + 0.5 * rng.random(len(source)))))
+        .set_column("radec_corr", pa.array(np.linspace(-0.4, 0.4, len(source))))
+    )
+    source_covariance = source.coordinates().covariance.to_matrix()
+    source_variance_lon = source_covariance[:, 1, 1]
+    source_variance_lat = source_covariance[:, 2, 2]
+    source_cross = source_covariance[:, 1, 2]
     associations = Associations.from_kwargs(
         detection_id=source.id,
         object_id=["group-1"] * len(source),
@@ -182,8 +268,41 @@ def test_profile_shaped_deweighting_is_exact_across_fused_and_composed_routes(
     original_variance = iod[1].original_astrometry.variance_lon.to_numpy(
         zero_copy_only=False
     )
+    original_variance_lat = iod[1].original_astrometry.variance_lat.to_numpy(
+        zero_copy_only=False
+    )
     used_variance = iod[1].used_astrometry.variance_lon.to_numpy(zero_copy_only=False)
-    assert np.any(original_variance.view(np.uint64) != used_variance.view(np.uint64))
+    used_variance_lat = iod[1].used_astrometry.variance_lat.to_numpy(
+        zero_copy_only=False
+    )
+    used_cross = iod[1].used_astrometry.cov_lonlat.to_numpy(zero_copy_only=False)
+    changed = original_variance.view(np.uint64) != used_variance.view(np.uint64)
+    assert np.any(changed)
+    np.testing.assert_array_equal(
+        original_variance.view(np.uint64), source_variance_lon.view(np.uint64)
+    )
+    np.testing.assert_array_equal(
+        original_variance_lat.view(np.uint64), source_variance_lat.view(np.uint64)
+    )
+    expected_used_variance = source_variance_lon.copy()
+    expected_used_variance[changed] *= 1.5
+    expected_used_variance_lat = source_variance_lat.copy()
+    expected_used_variance_lat[changed] *= 1.5
+    expected_used_cross = source_cross.copy()
+    expected_used_cross[changed] *= 1.5
+    np.testing.assert_array_equal(
+        used_variance.view(np.uint64), expected_used_variance.view(np.uint64)
+    )
+    np.testing.assert_array_equal(
+        used_variance_lat.view(np.uint64), expected_used_variance_lat.view(np.uint64)
+    )
+    np.testing.assert_array_equal(
+        used_cross.view(np.uint64), expected_used_cross.view(np.uint64)
+    )
+    assert np.any(
+        (np.sqrt(used_variance) ** 2).view(np.uint64) != used_variance.view(np.uint64)
+    )
+    assert np.all(np.isfinite(used_cross)) and np.any(used_cross != 0.0)
     np.testing.assert_array_equal(
         fused[1]
         .used_astrometry.variance_lon.to_numpy(zero_copy_only=False)

@@ -24,7 +24,7 @@ faer = "0.22"
 # JSON marshalling for the ObsContext render/parse boundary (bead
 # personal-cmy.26); preserve_order keeps Python dict insertion order.
 serde = { version = "1", features = ["derive"] }
-serde_json = { version = "1", features = ["preserve_order"] }
+serde_json = { version = "1", features = ["preserve_order", "float_roundtrip"] }
 statrs = "0.18"
 nalgebra = "0.33"
 sha2 = "0.10"

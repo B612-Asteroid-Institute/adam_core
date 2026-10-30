@@ -24,8 +24,9 @@ This file contains notable changes in adam-core
   robust differential correction, covariance validation, worst-residual and
   CMC2003 rejection, and propagation-only native provider ABI v2.
 - Original/used astrometry with exact diagonal variances, complete per-member
-  source/observer and membership fingerprints, exact orbit-state and bound
-  route/configuration/input provenance fingerprints, physical parameters, and
+  source/observer and membership fingerprints, exact orbit-state fingerprints,
+  and an unkeyed validated consistency digest over route, complete configuration,
+  input identity, and propagated IOD metadata, plus physical parameters and
   non-gravitational parameters in fitted-result schemas where applicable.
   Older serialized tables upgrade with nullable fields but canonical
   refinement/evaluation fail closed until complete identity is present.
@@ -66,6 +67,12 @@ This file contains notable changes in adam-core
 
 ### Fixed
 
+- Canonical OD configuration JSON now preserves every finite ``f64`` bit
+  across Python construction, Rust parsing, persisted provenance, and later
+  validation. Configuration identity is validated before observation-pipeline
+  or provider work, and composed results validate the complete seed
+  configuration/profile and every propagated IOD metadata field through an
+  unkeyed consistency digest.
 - A sliced Quivr table (for example ``orbits[i:i+1]`` with a nonzero Arrow
   offset) handed to a typed Rust record-batch crossing could be read from the
   parent table's first rows. The Python bridge now materializes offset arrays

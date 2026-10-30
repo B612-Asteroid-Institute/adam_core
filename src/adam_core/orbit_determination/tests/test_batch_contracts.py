@@ -312,7 +312,7 @@ def test_membership_and_seed_group_fingerprints_are_enforced_before_factory(
 
 
 @pytest.mark.parametrize("mutation", ["route", "configuration", "input"])
-def test_route_configuration_and_input_provenance_are_cryptographically_bound(
+def test_route_configuration_and_input_provenance_have_a_validated_consistency_digest(
     pure_iod_orbit, provider_counter, mutation
 ) -> None:
     source, ids = _source_and_ids(pure_iod_orbit)
@@ -338,7 +338,7 @@ def test_route_configuration_and_input_provenance_are_cryptographically_bound(
             "provenance.input_fingerprint",
             pa.array(["a" * 64], type=pa.large_string()),
         )
-    with pytest.raises(ValueError, match="configuration|does not bind"):
+    with pytest.raises(ValueError, match="configuration|consistency digest"):
         refine(
             forged,
             members,
@@ -349,39 +349,76 @@ def test_route_configuration_and_input_provenance_are_cryptographically_bound(
     assert provider_counter.calls == 0
 
 
-@pytest.mark.parametrize("route", ["run_iod", "run_od", "refine", "evaluate"])
-def test_canonical_python_workflows_do_not_call_duplicate_native_preflight(
-    pure_iod_orbit, monkeypatch, route
+@pytest.mark.parametrize(
+    "field",
+    [
+        "profile",
+        "iod_provider",
+        "iod_backend",
+        "iod_diagnostics",
+        "iod_ambiguous",
+        "iod_alternatives",
+    ],
+)
+def test_composed_seed_fields_have_a_validated_consistency_digest(
+    pure_iod_orbit, provider_counter, field
 ) -> None:
     source, ids = _source_and_ids(pure_iod_orbit)
     associations = Associations.from_kwargs(
         detection_id=ids, object_id=["g"] * len(ids)
     )
     config = _config()
-    seed_orbits, seed_members, failures = run_od(source, associations, None, config)
+    orbits, members, failures = run_iod(source, associations, None, config.for_iod())
     assert len(failures) == 0
-
-    def duplicate_preflight(*_args, **_kwargs):
-        raise AssertionError("canonical workflow called a duplicate planning pass")
-
-    monkeypatch.setattr(_rust_native, "iod_od_batch_preflight_ipc", duplicate_preflight)
-    monkeypatch.setattr(_rust_native, "refine_batch_preflight_ipc", duplicate_preflight)
-    monkeypatch.setattr(
-        _rust_native, "evaluate_orbits_batch_preflight_ipc", duplicate_preflight
-    )
-    if route == "run_iod":
-        result = run_iod(source, associations, None, config.for_iod())
-    elif route == "run_od":
-        result = run_od(source, associations, None, config)
-    elif route == "refine":
-        result = refine(
-            seed_orbits, seed_members, source, None, config.for_refinement()
+    if field == "profile":
+        value = json.loads(orbits.provenance.configuration[0].as_py())
+        value["profile"] = {
+            "name": "ASTEROID_INSTITUTE_OD_V1",
+            "version": 1,
+            "definition_sha256": "f" * 64,
+        }
+        forged = orbits.set_column(
+            "provenance.configuration",
+            pa.array(
+                [json.dumps(value, separators=(",", ":"))],
+                type=pa.large_string(),
+            ),
+        )
+    elif field in {"iod_provider", "iod_diagnostics"}:
+        value = json.loads(getattr(orbits.provenance, field)[0].as_py())
+        value["name" if field == "iod_provider" else "triplets_tried"] = (
+            "forged-provider" if field == "iod_provider" else 123456
+        )
+        forged = orbits.set_column(
+            f"provenance.{field}",
+            pa.array([json.dumps(value)], type=pa.large_string()),
+        )
+    elif field == "iod_backend":
+        forged = orbits.set_column(
+            "provenance.iod_backend",
+            pa.array(["forged-provider 9.9.9"], type=pa.large_string()),
+        )
+    elif field == "iod_ambiguous":
+        forged = orbits.set_column(
+            "provenance.iod_ambiguous",
+            pa.array([not orbits.provenance.iod_ambiguous[0].as_py()], type=pa.bool_()),
         )
     else:
-        result = evaluate_orbits(
-            seed_orbits, seed_members, source, None, config.for_evaluation()
+        forged = orbits.set_column(
+            "provenance.iod_alternatives",
+            pa.array(
+                [orbits.provenance.iod_alternatives[0].as_py() + 41], type=pa.int64()
+            ),
         )
-    assert [len(table) for table in result] == [1, len(source), 0]
+    with pytest.raises(ValueError, match="consistency digest"):
+        refine(
+            forged,
+            members,
+            source,
+            TwoBodyPropagator(),
+            config.for_refinement(),
+        )
+    assert provider_counter.calls == 0
 
 
 def test_nonconverged_failure_carries_output_and_input_orbit_identity(
