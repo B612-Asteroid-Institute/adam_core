@@ -312,8 +312,8 @@ mod tests {
                 },
             )
             .collect();
-        let pipeline = ObservationPipeline::bind_explicit(definitions, &ResourceBindings::new())
-            .unwrap();
+        let pipeline =
+            ObservationPipeline::bind_explicit(definitions, &ResourceBindings::new()).unwrap();
         let iod = IodRunConfig::new(
             IodConfig {
                 max_triplets: Some(3),
@@ -490,10 +490,7 @@ mod tests {
             .values_row_major[7];
         // The first night has three observations: cap 2 scales by 3/2 and
         // the repeated cap 1 then scales the already-used block by 3.
-        assert_eq!(
-            once_variance.to_bits(),
-            (original_variance * 1.5).to_bits()
-        );
+        assert_eq!(once_variance.to_bits(), (original_variance * 1.5).to_bits());
         assert_eq!(
             repeated_variance.to_bits(),
             (original_variance * 1.5 * 3.0).to_bits()
@@ -573,10 +570,7 @@ mod tests {
         );
         assert!(refinement_evidence.0 > 0);
         assert_eq!(iod_predictor.backend().name, "test.stage.iod");
-        assert_eq!(
-            refinement_predictor.backend().name,
-            "test.stage.refinement"
-        );
+        assert_eq!(refinement_predictor.backend().name, "test.stage.refinement");
 
         iod_predictor.reset();
         refinement_predictor.reset();

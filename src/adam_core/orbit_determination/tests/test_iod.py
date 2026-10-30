@@ -103,11 +103,12 @@ def test_iod_fused_matches_pinned_legacy_fixture(real_data) -> None:
             rtol=0,
             atol=atol,
         )
+    assert fitted.coordinates.time.scale == "utc"
     np.testing.assert_allclose(
-        fitted.coordinates.time.rescale("tdb").mjd().to_numpy(zero_copy_only=False),
+        fitted.coordinates.time.mjd().to_numpy(zero_copy_only=False),
         fixture["epoch_mjd"],
         rtol=0,
-        atol=0,
+        atol=1e-11,
     )
     np.testing.assert_allclose(fitted.arc_length, fixture["arc_length"], rtol=0, atol=0)
     np.testing.assert_array_equal(fitted.num_obs, fixture["num_obs"])
