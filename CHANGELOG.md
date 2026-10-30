@@ -46,6 +46,20 @@ This file contains notable changes in adam-core
   identity and capability metadata, stable per-row failure codes, optional
   dynamics-consistent STMs, and complete physical/non-gravitational parameter
   transport. The provisional v1 layout is rejected.
+- **Breaking Rust API:** ``PropagationError`` adds ``RowFailure`` and
+  ``CmcCovarianceUnavailable``. Exhaustive downstream matches must handle
+  candidate-local numerical failures and fail-closed CMC covariance refusal.
+  Fatal provider and ABI/protocol failures remain separate variants.
+
+### Fixed
+
+- A sliced Quivr table (for example ``orbits[i:i+1]`` with a nonzero Arrow
+  offset) handed to a typed Rust record-batch crossing could be read from the
+  parent table's first rows. The Python bridge now materializes offset arrays
+  with ``adam_core._rust.arrow.contiguous_record_batch`` before propagation,
+  ephemeris, trajectory, and porkchop crossings. ``take``, ``apply_mask``, and
+  IPC inputs were already correct; sliced-table regressions live in
+  ``dynamics/tests/test_dynamics_table_slices.py``.
 
 ### Removed
 

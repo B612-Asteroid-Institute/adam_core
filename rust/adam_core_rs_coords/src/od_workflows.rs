@@ -138,8 +138,8 @@ mod tests {
     };
     use crate::propagation::adapter::PropagatorPredictor;
     use crate::propagation::{
-        generate_ephemeris_barycentric, BackendIdentity, CovariancePropagation, EpochPolicy,
-        EphemerisOptions, IodConfig, OrbitGeometry, PropagationOptions, StmRow, TwoBodyPropagator,
+        generate_ephemeris_barycentric, BackendIdentity, CovariancePropagation, EphemerisOptions,
+        EpochPolicy, IodConfig, OrbitGeometry, PropagationOptions, StmRow, TwoBodyPropagator,
         WhitenedFitConfig,
     };
     use crate::types::{Frame, SchemaResult};
@@ -207,10 +207,11 @@ mod tests {
     }
 
     fn dense_observers() -> ObserverBatch {
-        // Three observations per civil night, then a three-day jump. This
-        // retains a nine-day IOD arc while exercising nightly deweighting.
+        // Three observations per civil night, then a three-day jump. The
+        // 0.3-day offset keeps TDB->UTC conversion away from midnight, while
+        // the four-night layout retains a nine-day IOD arc.
         let offsets: Vec<f64> = (0..NUM_OBS)
-            .map(|row| 3.0 * (row / 3) as f64 + 0.2 * (row % 3) as f64)
+            .map(|row| 0.3 + 3.0 * (row / 3) as f64 + 0.2 * (row % 3) as f64)
             .collect();
         let times = TimeArray::new(
             TimeScale::Tdb,
@@ -305,9 +306,11 @@ mod tests {
     fn pipeline_config(caps: &[usize]) -> OdConfig {
         let definitions = caps
             .iter()
-            .map(|&effective_observation_cap| ObservationTransform::NightlyBatchDeweighting {
-                effective_observation_cap,
-            })
+            .map(
+                |&effective_observation_cap| ObservationTransform::NightlyBatchDeweighting {
+                    effective_observation_cap,
+                },
+            )
             .collect();
         let pipeline = ObservationPipeline::bind_explicit(definitions, &ResourceBindings::new())
             .unwrap();
@@ -417,12 +420,8 @@ mod tests {
             epoch_tdb: Epoch,
             times_tdb: &[Epoch],
         ) -> PropagationResultValue<Vec<StmRow>> {
-            self.inner.propagate_stm(
-                state,
-                non_gravitational_parameters,
-                epoch_tdb,
-                times_tdb,
-            )
+            self.inner
+                .propagate_stm(state, non_gravitational_parameters, epoch_tdb, times_tdb)
         }
 
         fn backend(&self) -> BackendIdentity {
@@ -433,7 +432,7 @@ mod tests {
     }
 
     #[test]
-    fn prepare_observations_executes_ordered_repeated_pipeline_and_retains_snapshots() {
+    fn prepare_observations_executes_repeated_pipeline_and_retains_snapshots() {
         let observed = synthetic_observations();
         let (obs_code, band, astcat) = metadata();
         let once = prepare_observations(
@@ -476,11 +475,7 @@ mod tests {
         assert_float_bits(&repeated.original.lon, &repeated.used.lon);
         assert_float_bits(&repeated.original.lat, &repeated.used.lat);
 
-        let original_variance = observed
-            .covariance
-            .as_ref()
-            .unwrap()
-            .values_row_major[7];
+        let original_variance = observed.covariance.as_ref().unwrap().values_row_major[7];
         let once_variance = once
             .observations
             .covariance
@@ -495,7 +490,10 @@ mod tests {
             .values_row_major[7];
         // The first night has three observations: cap 2 scales by 3/2 and
         // the repeated cap 1 then scales the already-used block by 3.
-        assert_eq!(once_variance.to_bits(), (original_variance * 1.5).to_bits());
+        assert_eq!(
+            once_variance.to_bits(),
+            (original_variance * 1.5).to_bits()
+        );
         assert_eq!(
             repeated_variance.to_bits(),
             (original_variance * 1.5 * 3.0).to_bits()
@@ -550,7 +548,10 @@ mod tests {
         .unwrap();
         assert!(iod_predictor.calls.get() > 0);
         assert_eq!(refinement_predictor.calls.get(), 0);
-        let seed = iod.seed_orbit().unwrap().expect("configured IOD found a seed");
+        let seed = iod
+            .seed_orbit()
+            .unwrap()
+            .expect("configured IOD found a seed");
         let iod_evidence = (iod_predictor.calls.get(), iod_predictor.states.get());
         let refined = refine_with_predictor(
             &refinement_predictor,
@@ -594,6 +595,7 @@ mod tests {
         .unwrap();
         let composed_refined = composed.refined.as_ref().expect("refinement ran");
 
+        assert!(composed_refined.fit.converged);
         assert_prepared_bits(&composed.prepared, &prepared);
         assert_eq!(composed.iod.accepted, iod.accepted);
         assert_eq!(composed.iod.triplets_tried, iod.triplets_tried);

@@ -30,7 +30,7 @@ Every row is an assertion-level disposition. `RETIRED-API` is limited to a speci
 
 | Baseline function | Disposition | Exact replacement or technical reason |
 |---|---|---|
-| `test_composes_with_covariance_models` | **REPLACED/RETIRED** | Python `CompositeModel` is retired; configured ordering/execution is pinned by `od_workflows::tests::prepare_observations_executes_ordered_repeated_pipeline_and_retains_snapshots`. |
+| `test_composes_with_covariance_models` | **REPLACED/RETIRED** | Python `CompositeModel` is retired; `od_config::tests::pipeline_executes_non_commuting_transforms_in_declaration_order` pins native execution order. |
 | `test_constructor_validation` | **REPLACED/RETIRED** | `od_config::tests::invalid_transform_is_configuration_error_not_resource_error`. |
 | `test_covariance_unchanged_including_nan_pattern` | **REPLACED/RETIRED** | `observation_uncertainty::tests::efcc18_model_moves_positions_and_keeps_covariance` and the restored real-table pipeline replay. |
 | `test_empty_observations` | **DEFERRED-eack9** | Empty configured batches are `personal-eack9`; the executable model method is retired. |
@@ -123,7 +123,7 @@ Every row is an assertion-level disposition. `RETIRED-API` is limited to a speci
 | `test_add_mode_at_equator` | **REPLACED** | `observation_uncertainty::tests::empirical_add_mode_at_equator_and_high_declination`. |
 | `test_add_mode_high_declination` | **REPLACED** | `observation_uncertainty::tests::empirical_add_mode_at_equator_and_high_declination`. |
 | `test_all_models_preserve_positions` | **REPLACED** | Exact position invariants are asserted by Rust `efcc18_model_moves_positions_and_keeps_covariance`, `night_batch_deweighting_is_per_station_and_night`, and Veres fill/floor/replace tests. |
-| `test_applies_models_in_sequence` | **REPLACED** | `od_workflows::tests::prepare_observations_executes_ordered_repeated_pipeline_and_retains_snapshots` numerically executes repeated declarations. |
+| `test_applies_models_in_sequence` | **REPLACED** | `od_config::tests::pipeline_executes_non_commuting_transforms_in_declaration_order` pins execution order; `od_workflows::tests::prepare_observations_executes_repeated_pipeline_and_retains_snapshots` pins repeated execution. |
 | `test_assert_positions_unchanged_detects_length_change` | **RETIRED-API** | Python model/composite/identity helper behavior was removed; no callback compatibility surface remains. |
 | `test_assert_positions_unchanged_detects_shift` | **RETIRED-API** | Python model/composite/identity helper behavior was removed; no callback compatibility surface remains. |
 | `test_band_specific_row_preferred` | **REPLACED** | `observation_uncertainty::tests::band_specific_row_is_preferred`. |
@@ -188,7 +188,7 @@ Every row is an assertion-level disposition. `RETIRED-API` is limited to a speci
 
 | Baseline function | Disposition | Exact replacement or technical reason |
 |---|---|---|
-| `test_astcat_survives_uncertainty_models` | **REPLACED** | `test_od_python_baseline_parity.py::TestEfcc18::test_debias_model_positions` runs catalog metadata through the declarative native pipeline; `od_workflows::tests::prepare_observations_executes_ordered_repeated_pipeline_and_retains_snapshots` pins retention. |
+| `test_astcat_survives_uncertainty_models` | **REPLACED** | `test_od_python_baseline_parity.py::TestEfcc18::test_debias_model_positions` runs catalog metadata through the declarative native pipeline; `od_workflows::tests::prepare_observations_executes_repeated_pipeline_and_retains_snapshots` pins retention. |
 
 ### `test_od_ops_parity.py`
 
@@ -207,27 +207,27 @@ Every row is an assertion-level disposition. `RETIRED-API` is limited to a speci
 |---|---|---|
 | `test_direct_fitter_path_leaves_provenance_null` | **DEFERRED-eack9** | Canonical runtime provenance and three-table member schema assembly are explicitly owned by `personal-eack9`. |
 | `test_duplicate_observation_ids_raise` | **DEFERRED-eack9** | Batch IDs, membership joins, empty groups, object IDs, and public export semantics are explicitly owned by `personal-eack9`. |
-| `test_efcc18_composite_records_shifted_positions_and_inflated_sigma` | **REPLACED/DEFERRED** | Rust `od_workflows::tests::prepare_observations_executes_ordered_repeated_pipeline_and_retains_snapshots` pins numerical original/used retention; Python member-table assembly is deferred to `personal-eack9`. |
-| `test_empirical_covariance_inflates_used_sigma_and_keeps_positions` | **REPLACED/DEFERRED** | Rust `od_workflows::tests::prepare_observations_executes_ordered_repeated_pipeline_and_retains_snapshots` pins numerical original/used retention; Python member-table assembly is deferred to `personal-eack9`. |
-| `test_empirical_covariance_records_used_sigma_and_is_consumed_by_the_fit` | **REPLACED/DEFERRED** | Rust `od_workflows::tests::prepare_observations_executes_ordered_repeated_pipeline_and_retains_snapshots` pins numerical original/used retention; Python member-table assembly is deferred to `personal-eack9`. |
+| `test_efcc18_composite_records_shifted_positions_and_inflated_sigma` | **REPLACED/DEFERRED** | Rust `od_workflows::tests::prepare_observations_executes_repeated_pipeline_and_retains_snapshots` pins numerical original/used retention; Python member-table assembly is deferred to `personal-eack9`. |
+| `test_empirical_covariance_inflates_used_sigma_and_keeps_positions` | **REPLACED/DEFERRED** | Rust `od_workflows::tests::prepare_observations_executes_repeated_pipeline_and_retains_snapshots` pins numerical original/used retention; Python member-table assembly is deferred to `personal-eack9`. |
+| `test_empirical_covariance_records_used_sigma_and_is_consumed_by_the_fit` | **REPLACED/DEFERRED** | Rust `od_workflows::tests::prepare_observations_executes_repeated_pipeline_and_retains_snapshots` pins numerical original/used retention; Python member-table assembly is deferred to `personal-eack9`. |
 | `test_empty_observations_return_empty_tables` | **DEFERRED-eack9** | Batch IDs, membership joins, empty groups, object IDs, and public export semantics are explicitly owned by `personal-eack9`. |
-| `test_from_spherical_empty` | **REPLACED/DEFERRED** | Rust `od_workflows::tests::prepare_observations_executes_ordered_repeated_pipeline_and_retains_snapshots` pins numerical original/used retention; Python member-table assembly is deferred to `personal-eack9`. |
-| `test_from_spherical_missing_covariance_terms_are_nan` | **REPLACED/DEFERRED** | Rust `od_workflows::tests::prepare_observations_executes_ordered_repeated_pipeline_and_retains_snapshots` pins numerical original/used retention; Python member-table assembly is deferred to `personal-eack9`. |
-| `test_from_spherical_snapshots_position_and_uncertainty` | **REPLACED/DEFERRED** | Rust `od_workflows::tests::prepare_observations_executes_ordered_repeated_pipeline_and_retains_snapshots` pins numerical original/used retention; Python member-table assembly is deferred to `personal-eack9`. |
+| `test_from_spherical_empty` | **REPLACED/DEFERRED** | Rust `od_workflows::tests::prepare_observations_executes_repeated_pipeline_and_retains_snapshots` pins numerical original/used retention; Python member-table assembly is deferred to `personal-eack9`. |
+| `test_from_spherical_missing_covariance_terms_are_nan` | **REPLACED/DEFERRED** | Rust `od_workflows::tests::prepare_observations_executes_repeated_pipeline_and_retains_snapshots` pins numerical original/used retention; Python member-table assembly is deferred to `personal-eack9`. |
+| `test_from_spherical_snapshots_position_and_uncertainty` | **REPLACED/DEFERRED** | Rust `od_workflows::tests::prepare_observations_executes_repeated_pipeline_and_retains_snapshots` pins numerical original/used retention; Python member-table assembly is deferred to `personal-eack9`. |
 | `test_identity_model_matches_no_model_fit` | **RETIRED-API** | Legacy `models=` strings/sequences and executable Python model behavior were removed without aliases. |
-| `test_identity_model_records_used_equal_to_original` | **REPLACED/DEFERRED** | Rust `od_workflows::tests::prepare_observations_executes_ordered_repeated_pipeline_and_retains_snapshots` pins numerical original/used retention; Python member-table assembly is deferred to `personal-eack9`. |
+| `test_identity_model_records_used_equal_to_original` | **REPLACED/DEFERRED** | Rust `od_workflows::tests::prepare_observations_executes_repeated_pipeline_and_retains_snapshots` pins numerical original/used retention; Python member-table assembly is deferred to `personal-eack9`. |
 | `test_legacy_members_parquet_loads_with_null_provenance` | **DEFERRED-eack9** | Canonical runtime provenance and three-table member schema assembly are explicitly owned by `personal-eack9`. |
 | `test_live_python_model_is_refused_before_core_stage_composition` | **RETIRED-API** | Legacy `models=` strings/sequences and executable Python model behavior were removed without aliases. |
 | `test_member_with_unknown_obs_id_raises` | **DEFERRED-eack9** | Batch IDs, membership joins, empty groups, object IDs, and public export semantics are explicitly owned by `personal-eack9`. |
 | `test_members_with_and_without_provenance_concatenate` | **DEFERRED-eack9** | Canonical runtime provenance and three-table member schema assembly are explicitly owned by `personal-eack9`. |
 | `test_members_without_provenance_have_null_columns` | **DEFERRED-eack9** | Canonical runtime provenance and three-table member schema assembly are explicitly owned by `personal-eack9`. |
-| `test_model_dropping_observations_raises` | **DEFERRED-eack9** | Batch IDs, membership joins, empty groups, object IDs, and public export semantics are explicitly owned by `personal-eack9`. |
-| `test_model_reordering_observations_raises` | **DEFERRED-eack9** | Batch IDs, membership joins, empty groups, object IDs, and public export semantics are explicitly owned by `personal-eack9`. |
-| `test_models_and_cmc2003_refinement` | **REPLACED/DEFERRED** | Numerical pipeline order/composition is pinned by both new `od_workflows` tests; canonical batch results/failures remain `personal-eack9`. |
-| `test_native_run_od_validates_full_settings_before_empty_exit` | **REPLACED/DEFERRED** | Numerical pipeline order/composition is pinned by both new `od_workflows` tests; canonical batch results/failures remain `personal-eack9`. |
-| `test_night_batch_deweighting_records_scaled_sigma` | **REPLACED/DEFERRED** | Numerical pipeline order/composition is pinned by both new `od_workflows` tests; canonical batch results/failures remain `personal-eack9`. |
-| `test_no_models_and_worst_residual_refinement` | **REPLACED/DEFERRED** | Numerical pipeline order/composition is pinned by both new `od_workflows` tests; canonical batch results/failures remain `personal-eack9`. |
-| `test_no_models_records_originals_and_keeps_fitter_flags` | **REPLACED/DEFERRED** | Rust `od_workflows::tests::prepare_observations_executes_ordered_repeated_pipeline_and_retains_snapshots` pins numerical original/used retention; Python member-table assembly is deferred to `personal-eack9`. |
+| `test_model_dropping_observations_raises` | **RETIRED-API** | Row-dropping was possible only through removed executable Python callbacks; every closed Rust transform preserves row count by construction. |
+| `test_model_reordering_observations_raises` | **RETIRED-API** | Row-reordering was possible only through removed executable Python callbacks; every closed Rust transform edits the caller-order batch in place. |
+| `test_models_and_cmc2003_refinement` | **REPLACED/DEFERRED** | `od_config::tests::pipeline_executes_non_commuting_transforms_in_declaration_order` pins transform order and `od_workflows::tests::run_od_prepares_once_and_exactly_composes_isolated_stage_predictors` pins configured CMC composition; canonical batch results/failures remain `personal-eack9`. |
+| `test_native_run_od_validates_full_settings_before_empty_exit` | **REPLACED/DEFERRED** | `od_config::tests::stage_json_round_trips_strictly_and_rejects_unknown_or_missing_fields` pins strict complete settings; canonical empty-batch preflight order remains `personal-eack9`. |
+| `test_night_batch_deweighting_records_scaled_sigma` | **REPLACED/DEFERRED** | `od_workflows::tests::prepare_observations_executes_repeated_pipeline_and_retains_snapshots` pins numerical nightly scaling, repetition, and used snapshots; member assembly remains `personal-eack9`. |
+| `test_no_models_and_worst_residual_refinement` | **REPLACED/DEFERRED** | Rust `od_refine::tests::iterative_fit_rejects_the_worst_observation_until_converged` pins worst-residual refinement; canonical batch composition remains `personal-eack9`. |
+| `test_no_models_records_originals_and_keeps_fitter_flags` | **REPLACED/DEFERRED** | Rust `od_workflows::tests::prepare_observations_executes_repeated_pipeline_and_retains_snapshots` pins numerical original/used retention; Python member-table assembly is deferred to `personal-eack9`. |
 | `test_none_and_empty_sequence_return_input` | **RETIRED-API** | Legacy `models=` strings/sequences and executable Python model behavior were removed without aliases. |
 | `test_object_id_is_passed_to_backend_and_stamped_when_null` | **DEFERRED-eack9** | Batch IDs, membership joins, empty groups, object IDs, and public export semantics are explicitly owned by `personal-eack9`. |
 | `test_object_id_none_is_null_on_both_routes` | **DEFERRED-eack9** | Batch IDs, membership joins, empty groups, object IDs, and public export semantics are explicitly owned by `personal-eack9`. |
@@ -237,8 +237,8 @@ Every row is an assertion-level disposition. `RETIRED-API` is limited to a speci
 | `test_run_od_explicit_default_models_report_every_missing_input_at_once` | **RETIRED-API** | Legacy `models=` strings/sequences and executable Python model behavior were removed without aliases. |
 | `test_run_od_is_exported_from_the_package` | **DEFERRED-eack9** | Batch IDs, membership joins, empty groups, object IDs, and public export semantics are explicitly owned by `personal-eack9`. |
 | `test_run_od_rejects_unknown_models_string` | **RETIRED-API** | Legacy `models=` strings/sequences and executable Python model behavior were removed without aliases. |
-| `test_run_od_with_the_default_stack` | **REPLACED/DEFERRED** | Numerical pipeline order/composition is pinned by both new `od_workflows` tests; canonical batch results/failures remain `personal-eack9`. |
-| `test_sequence_is_applied_in_order_like_a_composite` | **REPLACED/DEFERRED** | Numerical pipeline order/composition is pinned by both new `od_workflows` tests; canonical batch results/failures remain `personal-eack9`. |
+| `test_run_od_with_the_default_stack` | **REPLACED/DEFERRED** | Real EFCC execution is pinned by `TestEfcc18::test_debias_model_positions`, non-commuting fill/deweight order by `od_config::tests::pipeline_executes_non_commuting_transforms_in_declaration_order`, and configured stage composition by the direct `od_workflows` composition test; canonical batch results remain `personal-eack9`. |
+| `test_sequence_is_applied_in_order_like_a_composite` | **REPLACED/DEFERRED** | `od_config::tests::pipeline_executes_non_commuting_transforms_in_declaration_order` fails under reversed execution; the `od_workflows` preparation test separately pins repeated nightly execution. Python composite callbacks are retired. |
 
 ### `test_od_python_baseline_parity.py`
 
@@ -339,7 +339,7 @@ Every row is an assertion-level disposition. `RETIRED-API` is limited to a speci
 | `test_input_fingerprint_is_sensitive` | **DEFERRED-eack9** | This assertion concerns composed-route provider/input/runtime provenance or batch epoch validation, owned by `personal-eack9`. |
 | `test_model_descriptor_numpy_variants` | **RETIRED-API** | Python model-descriptor identity was removed; bound Rust resource/config fingerprints replace it (`od_config::tests::complete_config_fingerprint_is_deterministic_and_path_free`). |
 | `test_provider_metadata_comes_from_capsule_not_python_declaration` | **DEFERRED-eack9** | This assertion concerns composed-route provider/input/runtime provenance or batch epoch validation, owned by `personal-eack9`. |
-| `test_two_distinct_epoch_arcs_are_refused_on_all_routes` | **DEFERRED-eack9** | This assertion concerns composed-route provider/input/runtime provenance or batch epoch validation, owned by `personal-eack9`. |
+| `test_two_distinct_epoch_arcs_are_refused_on_all_routes` | **REPLACED/RETIRED-API** | Rust `od_contract_tests::fewer_than_three_distinct_epochs_is_rank_deficient_before_search`, `::corrected_candidate_pool_rejects_two_epochs_before_search`, and `od_refine::tests::fit_rejects_fewer_than_three_distinct_epochs_before_prediction` pin eager single-group IOD/refinement refusal; only removed Python route aliases are retired. |
 
 ### `test_run_iod.py`
 
@@ -375,8 +375,8 @@ Every row is an assertion-level disposition. `RETIRED-API` is limited to a speci
 
 | Baseline function | Disposition | Exact replacement or technical reason |
 |---|---|---|
-| `test_composes_after_efcc18_style_position_models` | **RETIRED/REPLACED** | Executable Python model composition is retired; Rust configured order/execution is covered by the two `od_workflows` tests and closed-transform tests. |
-| `test_composes_with_other_models` | **RETIRED/REPLACED** | Executable Python model composition is retired; Rust configured order/execution is covered by the two `od_workflows` tests and closed-transform tests. |
+| `test_composes_after_efcc18_style_position_models` | **RETIRED/REPLACED** | Executable Python model composition is retired; native declaration-order execution is pinned by `od_config::tests::pipeline_executes_non_commuting_transforms_in_declaration_order`, with EFCC positions covered by the real-table replay. |
+| `test_composes_with_other_models` | **RETIRED/REPLACED** | Executable Python model composition is retired; synthetic fill followed by nightly deweighting is pinned as a non-commuting native sequence by `od_config::tests::pipeline_executes_non_commuting_transforms_in_declaration_order`. |
 | `test_cross_term_is_preserved` | **REPLACED/RETIRED** | `veres2017::tests::floor_model_floors_per_axis_with_cos_dec_and_fill_missing`. |
 | `test_default_table_without_the_package_raises_import_error` | **DEFERRED/RETIRED** | Runtime package discovery and legacy default tables are retired; exact separately supplied resource parsing is the ignored acceptance test `od_config::tests::separately_packaged_reference_resources_parse` pending resource wiring. |
 | `test_duplicate_rows_raise` | **REPLACED/RETIRED** | `veres2017::tests::lookup_order_and_validation`. |
@@ -403,8 +403,8 @@ Every row is an assertion-level disposition. `RETIRED-API` is limited to a speci
 
 | Deleted d21 Rust assertion | Disposition | Exact replacement or deferral |
 |---|---|---|
-| `run_od_applies_models_and_records_provenance` | **REPLACED/DEFERRED-eack9** | `od_workflows::tests::prepare_observations_executes_ordered_repeated_pipeline_and_retains_snapshots` proves numerical ordered/repeated execution and supplied/used retention. Canonical result provenance is explicitly deferred to `personal-eack9`. |
-| `run_od_lets_a_sigma_model_fill_a_missing_covariance` | **DEFERRED-resource/eack9** | The fill transform requires the separately supplied, content-pinned `station_catalog_uncertainty_table`; missing binding is covered by `test_run_od_null_covariance.py::test_fill_transform_requires_explicit_validated_resource`. End-to-end fill→OD remains resource wiring plus canonical batch work. |
+| `run_od_applies_models_and_records_provenance` | **REPLACED/DEFERRED-eack9** | `od_config::tests::pipeline_executes_non_commuting_transforms_in_declaration_order` proves native execution order; the `od_workflows` preparation test proves repetition and supplied/used retention. Canonical result provenance is explicitly deferred to `personal-eack9`. |
+| `run_od_lets_a_sigma_model_fill_a_missing_covariance` | **RETIRED/DEFERRED-eack9** | The deleted test used a synthetic in-memory lookup through the removed executable/dynamic-model `run_od` route. Synthetic fill execution now participates in the non-commuting `od_config` pipeline test; complete configured fill→IOD→refinement remains canonical workflow/resource-wiring work. |
 | `run_od_without_covariance_or_a_filling_model_is_refused` | **REPLACED** | `test_run_od_null_covariance.py::test_without_a_fill_transform_the_fit_is_refused`. |
 | The deleted `run_od_with` block inside `iod_refinement_full_od_and_run_od_use_only_their_configured_stage_predictors` | **REPLACED** | `od_workflows::tests::run_od_prepares_once_and_exactly_composes_isolated_stage_predictors` directly exercises the public configured predictor seam, exact prepared-row IOD→refine composition, prepare-once behavior, and stage isolation. |
 

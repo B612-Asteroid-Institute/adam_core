@@ -1764,7 +1764,7 @@ mod tests {
     }
 
     #[test]
-    fn repeated_transforms_preserve_order() {
+    fn repeated_transform_declarations_preserve_provenance_order() {
         let pipeline = ObservationPipeline::bind_explicit(
             vec![
                 ObservationTransform::NightlyBatchDeweighting {
@@ -1780,6 +1780,67 @@ mod tests {
         assert_eq!(
             pipeline.transform_kinds(),
             vec!["nightly_batch_deweighting", "nightly_batch_deweighting"]
+        );
+    }
+
+    #[test]
+    fn pipeline_executes_non_commuting_transforms_in_declaration_order() {
+        let fill = || {
+            let lookup = VeresSigmaLookup::new(
+                &[VeresSigmaRow {
+                    obs_code: None,
+                    astcat: None,
+                    sigma_ra_arcsec: 1.0,
+                    sigma_dec_arcsec: 1.0,
+                }],
+                None,
+            )
+            .unwrap();
+            BoundObservationTransform::FillMissingAstrometricUncertainty {
+                lookup,
+                resource: ValidatedResourceIdentity {
+                    requirement: V2_SIGMA_FILL_RESOURCE,
+                    actual_sha256: V2_SIGMA_FILL_RESOURCE.sha256.to_string(),
+                    actual_byte_size: V2_SIGMA_FILL_RESOURCE.byte_size,
+                },
+            }
+        };
+        let deweight = || BoundObservationTransform::NightlyBatchDeweighting {
+            effective_observation_cap: 1,
+        };
+        let input = OrbitDeterminationAstrometry {
+            lon: vec![10.0; 3],
+            lat: vec![0.0; 3],
+            covariance: vec![f64::NAN; 3 * 36],
+            obs_code: vec!["500".to_string(); 3],
+            band: vec![None; 3],
+            astcat: vec![None; 3],
+            mjd_utc: vec![60_000.3, 60_000.4, 60_000.5],
+            jd_tdb: vec![2_460_000.8, 2_460_000.9, 2_460_001.0],
+        };
+        let mut fill_then_deweight = input.clone();
+        ObservationPipeline::ordered(vec![fill(), deweight()])
+            .unwrap()
+            .apply(&mut fill_then_deweight)
+            .unwrap();
+        let mut deweight_then_fill = input;
+        ObservationPipeline::ordered(vec![deweight(), fill()])
+            .unwrap()
+            .apply(&mut deweight_then_fill)
+            .unwrap();
+
+        let filled_variance = (1.0_f64 / 3600.0).powi(2);
+        assert_eq!(
+            fill_then_deweight.covariance[7].to_bits(),
+            (3.0 * filled_variance).to_bits()
+        );
+        assert_eq!(
+            deweight_then_fill.covariance[7].to_bits(),
+            filled_variance.to_bits()
+        );
+        assert_ne!(
+            fill_then_deweight.covariance[7].to_bits(),
+            deweight_then_fill.covariance[7].to_bits()
         );
     }
 

@@ -1,30 +1,22 @@
 //! Veres, Farnocchia & Chesley (2017) per-observation astrometric uncertainties.
 //!
-//! Rust-canonical port of `adam_core.orbit_determination.veres2017`. Veres,
-//! Farnocchia, Chesley & Chamberlin (2017, Icarus 296, 139; "VFC2017") derived
-//! station- and catalog-dependent astrometric uncertainties for MPC
+//! Veres, Farnocchia, Chesley & Chamberlin (2017, Icarus 296, 139;
+//! "VFC2017") derived station- and catalog-dependent astrometric uncertainties
+//! for MPC
 //! observations from the residual statistics of well-determined orbits.
 //! Agencies use such tables as default weights for observations that report
-//! no uncertainty, or as floors on the reported ones. This module ships the
-//! per-(station, catalog) sigma table used by the Asteroid Institute's OD
-//! experiments together with the interpreters that apply it
+//! no uncertainty, or as floors on the reported ones. Core's generic internal
+//! lookup accepts (station, catalog), station-only (`astcat` None), catalog
+//! default (`obs_code` None), and global (both None) rows. The interpreters
+//! apply fill, floor, or replacement semantics to those rows
 //! ([`VeresFloorModel`], [`VeresReplaceModel`], [`SigmaFillModel`]).
-//!
-//! The table and [`VeresSigmaLookup`] are GENERIC: rows may be (station,
-//! catalog), station-only (`astcat` None), catalog defaults (`obs_code` None)
-//! or one global row (both None). The Asteroid Institute's production fill-in
-//! table (`v2_sigma_fill`, v2 LOOO study RMS per station x catalog for
-//! high-confidence stations) uses exactly this shape with [`SigmaFillModel`];
-//! the bundled Veres numbers are the legacy reference (decision 2026-09-23).
 //!
 //! Tables
 //! ------
 //! adam_core bundles no sigma table and performs no package discovery. A
 //! caller binds a concrete file to the semantic
 //! `station_catalog_uncertainty_table` resource slot; Core validates its
-//! pinned content identity and schema before parsing [`VeresSigmaRow`] values.
-//! Standalone users may also construct [`VeresSigmaLookup`] explicitly from
-//! caller-owned rows.
+//! pinned content identity and schema before parsing its generic row values.
 //!
 //! Frames and units
 //! ----------------
@@ -269,9 +261,7 @@ impl ObservationUncertaintyModel for VeresReplaceModel {
 /// is left exactly as reported. Where an axis is filled the RA/Dec cross-term
 /// is set to zero (the table carries no correlation and a reported
 /// correlation without a reported sigma is meaningless). Observations that
-/// resolve to no sigma pass through with their NaN variances. This is the
-/// Asteroid Institute default with the `v2_sigma_fill` table (decision
-/// 2026-09-23).
+/// resolve to no sigma pass through with their NaN variances.
 #[derive(Debug, Clone, PartialEq)]
 pub struct SigmaFillModel {
     pub lookup: VeresSigmaLookup,
