@@ -277,7 +277,28 @@ def test_provider_factory_counts_and_external_exact_composition(
     composed = refine(iod[0], iod[1], source, propagator, config.for_refinement())
     fused = run_od(source, associations, propagator, config)
     _assert_exact_results(fused, composed)
-    assert provider_counter.calls == 3
+    for result in (fused, composed):
+        provenance = result[0].provenance
+        assert provenance.iod_backend[0].as_py()
+        assert provenance.iod_provider[0].as_py()
+        assert provenance.refinement_backend[0].as_py()
+        assert provenance.refinement_provider[0].as_py()
+    for field in (
+        "iod_backend",
+        "iod_provider",
+        "refinement_backend",
+        "refinement_provider",
+    ):
+        assert (
+            getattr(fused[0].provenance, field).to_pylist()
+            == getattr(composed[0].provenance, field).to_pylist()
+        )
+    evaluated = evaluate_orbits(
+        fused[0], fused[1], source, propagator, config.for_evaluation()
+    )
+    assert evaluated[0].provenance.evaluation_backend[0].as_py()
+    assert evaluated[0].provenance.evaluation_provider[0].as_py()
+    assert provider_counter.calls == 4
 
 
 def test_direct_iod_output_is_statically_valid_for_evaluation(

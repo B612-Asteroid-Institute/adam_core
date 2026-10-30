@@ -112,6 +112,43 @@ def _sorted_failure_ipc(failures: OrbitDeterminationFailures) -> bytes:
     return _canonical_ipc(failures.take(pa.array(order, type=pa.int64())))
 
 
+def _assert_batch_evaluation_matches_singletons(
+    orbits: FittedOrbits,
+    members: FittedOrbitMembers,
+    source: SourceCatalog,
+    config: EvaluationConfig,
+):
+    batch = evaluate_orbits(orbits, members, source, None, config)
+    evaluated, evaluated_members, failures = batch
+    assert len(evaluated) == len(orbits)
+    assert len(failures) == 0
+    evaluated_ids = evaluated.orbit_id.to_pylist()
+    input_states = orbits.coordinates.values
+    for row, orbit_id in enumerate(orbits.orbit_id.to_pylist()):
+        output_row = evaluated_ids.index(orbit_id)
+        np.testing.assert_array_equal(
+            evaluated.coordinates.values[output_row].view(np.uint64),
+            input_states[row].view(np.uint64),
+        )
+        input_members = members.apply_mask(pa.compute.equal(members.orbit_id, orbit_id))
+        singleton = evaluate_orbits(
+            orbits.take(pa.array([row], type=pa.int64())),
+            input_members,
+            source,
+            None,
+            config,
+        )
+        assert len(singleton[2]) == 0
+        assert _canonical_ipc(
+            evaluated.take(pa.array([output_row], type=pa.int64()))
+        ) == _canonical_ipc(singleton[0])
+        batch_members = evaluated_members.apply_mask(
+            pa.compute.equal(evaluated_members.orbit_id, orbit_id)
+        )
+        assert _canonical_ipc(batch_members) == _canonical_ipc(singleton[1])
+    return batch
+
+
 def _not_converging_config() -> OdConfig:
     config = _config()
     declaration = config.for_refinement().refinement
@@ -433,8 +470,12 @@ def test_overlapping_multigroup_ordered_pipeline_exact_composition_and_evaluatio
         transform["effective_observation_cap"] for transform in provenance["transforms"]
     ] == [4, 2]
 
-    evaluated_fused = evaluate_orbits(
-        fused[0], fused[1], source, None, config.for_evaluation()
+    evaluated_fused = _assert_batch_evaluation_matches_singletons(
+        fused[0], fused[1], source, config.for_evaluation()
+    )
+    reversed_orbits = fused[0].take(pa.array([1, 0], type=pa.int64()))
+    _assert_batch_evaluation_matches_singletons(
+        reversed_orbits, fused[1], source, config.for_evaluation()
     )
     evaluated_composed = evaluate_orbits(
         composed[0], composed[1], source, None, config.for_evaluation()
@@ -452,6 +493,54 @@ def test_overlapping_multigroup_ordered_pipeline_exact_composition_and_evaluatio
     else:
         assert fused[0].success.to_pylist() == [True, True]
         assert fused[2].group_id.to_pylist() == ["group-c-too-small"]
+
+
+def test_input_fingerprint_changes_when_pipeline_changes_only_used_astrometry(
+    pure_iod_orbit,
+) -> None:
+    base_source = _two_body_source(pure_iod_orbit)
+    source = SourceCatalog.from_pyarrow(
+        pa.concat_tables([base_source.table] * 3).combine_chunks()
+    ).set_column(
+        "id",
+        pa.array(
+            [
+                f"{obs_id}-fingerprint-{repeat}"
+                for repeat in range(3)
+                for obs_id in base_source.id.to_pylist()
+            ],
+            type=pa.large_string(),
+        ),
+    )
+    associations = Associations.from_kwargs(
+        detection_id=source.id,
+        object_id=["fingerprint-group"] * len(source),
+    )
+    as_supplied = _config()
+    transformed = OdConfig.explicit(
+        observation_pipeline=ObservationPipeline.ordered((NightlyBatchDeweighting(4),)),
+        iod=as_supplied.for_iod(),
+        refinement=as_supplied.for_refinement(),
+        evaluation=as_supplied.for_evaluation(),
+        resources=ResourceBindings({}),
+    )
+
+    original = run_iod(source, associations, None, as_supplied.for_iod())
+    changed = run_iod(source, associations, None, transformed.for_iod())
+    assert _canonical_ipc(original[1].original_astrometry) == _canonical_ipc(
+        changed[1].original_astrometry
+    )
+    assert _canonical_ipc(original[1].used_astrometry) != _canonical_ipc(
+        changed[1].used_astrometry
+    )
+    assert (
+        original[0].provenance.input_fingerprint.to_pylist()
+        != changed[0].provenance.input_fingerprint.to_pylist()
+    )
+    assert (
+        original[1].input_fingerprint.to_pylist()
+        != changed[1].input_fingerprint.to_pylist()
+    )
 
 
 def test_run_od_failure_is_exact_run_iod_then_refine(pure_iod_orbit) -> None:
