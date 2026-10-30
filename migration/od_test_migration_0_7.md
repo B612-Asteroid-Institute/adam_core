@@ -1,431 +1,413 @@
-# Core 0.7 OD test migration inventory
+# Core 0.7 OD assertion migration crosswalk
 
 Baseline: `d21c45649be37a218a7acccba78cc7c888501c48`
-Inventory scope: Python test functions under `src/adam_core/orbit_determination/tests` that existed at the baseline and are absent by name on the correction line.
-Missing-by-name count: **273** across **23** files.
-
-This is an accountability inventory, not a claim that names are the contract. Every missing function is listed below. `RUST-PORTED` means the scientific invariant moved to a named native test area; `RETIRED` is limited to intentionally removed executable Python model/fitter/attestation APIs; `DEFERRED` identifies batch-native assertions owned by Bead `personal-eack9`. The correction line retains the focused numerical suite only as internal qualification and does not restore a Python authoritative workflow.
-
-Current native evidence anchors:
-
-- `rust/adam_core_rs_coords/src/observation_uncertainty.rs`
-- `rust/adam_core_rs_coords/src/veres2017.rs`
-- `rust/adam_core_rs_coords/src/efcc18.rs`
-- `rust/adam_core_rs_coords/src/od_config.rs`
-- `rust/adam_core_rs_coords/src/propagation/od.rs`
-- `rust/adam_core_rs_coords/src/propagation/od_refine.rs`
-- `src/adam_core/orbit_determination/tests/test_iod*.py`
-- `src/adam_core/orbit_determination/tests/test_cmc2003_rejection.py`
-- `src/adam_core/orbit_determination/tests/test_evaluate.py`
-- `src/adam_core/orbit_determination/tests/test_least_squares.py`
-
-## `test_cmc2003_rejection.py` — REPLACED
-
-Executable fitter/default dispatch retired; rejection rules and native loop are covered by `test_cmc2003_rejection.py` plus Rust `od_refine` tests.
-
-Baseline-only function names (4):
-- `test_cmc2003_dispatch_forwards_loss_and_kwargs`
-- `test_cmc2003_end_to_end_through_refine_fit`
-- `test_default_is_cmc2003`
-- `test_unknown_scheme_raises`
-
-## `test_efcc18_debias_model.py` — RUST-PORTED
-
-Executable model class retired; correction, wrapping, epoch, pass-through, and covariance invariants are covered in Rust `efcc18` and `observation_uncertainty` tests, with resource parsing in `od_config`.
-
-Baseline-only function names (12):
-- `test_composes_with_covariance_models`
-- `test_constructor_validation`
-- `test_covariance_unchanged_including_nan_pattern`
-- `test_empty_observations`
-- `test_epoch_matters`
-- `test_exclude_astcats`
-- `test_injected_correction_round_trip`
-- `test_mixed_rows_only_covered_move`
-- `test_pole_and_nonfinite_rows_pass_through`
-- `test_ra_wraps_into_range`
-- `test_uncovered_and_null_catalogs_pass_through`
-- `test_zero_correction_returns_input`
-
-## `test_evaluate.py` — PARTIAL/DEFERRED
-
-Numerical statistics and frozen reference parity remain in the current file. Legacy empty/error public-workflow behavior is superseded by the canonical batch contract in `personal-eack9`.
-
-Baseline-only function names (2):
-- `test_evaluate_orbits_empty_legacy_error`
-- `test_evaluate_orbits_frozen_legacy_parity`
-
-## `test_huber_loss.py` — REPLACED
-
-Mutable fitter class/pickling surface retired; Huber behavior and explicit fit settings are covered by Rust solver/config tests.
-
-Baseline-only function names (2):
-- `test_default_fitter_is_linear`
-- `test_native_fitter_forwards_loss_and_pickles`
-
-## `test_iod.py` — PARTIAL/DEFERRED
-
-Gauss/Gibbs/numerical/capsule behavior remains in current Python and Rust tests. Fused linkage/batch entry points are superseded by `personal-eack9`.
-
-Baseline-only function names (5):
-- `test_initial_orbit_determination_fused_batch_deduplicates`
-- `test_initial_orbit_determination_fused_empty`
-- `test_iod`
-- `test_iod_assist_capsule_matches_explicit_prefit_stage`
-- `test_iod_fused_matches_pinned_legacy_fixture`
-
-## `test_least_squares.py` — PORTED
-
-Adjustment and zero-component regressions are retained through the test-only native refinement bridge; the removed public least-squares alias is not restored.
-
-Baseline-only function names (3):
-- `test_least_squares_adjusts`
-- `test_least_squares_is_refine_without_rejection`
-- `test_least_squares_zero_base`
-
-## `test_legacy_deprecations.py` — RETIRED
-
-Removed APIs have no compatibility aliases or deprecation shims by design.
-
-Baseline-only function names (3):
-- `test_differential_correction_warns_before_doing_anything`
-- `test_least_squares_warns_on_construction`
-- `test_od_warns_before_doing_anything`
-
-## `test_native_dispatch.py` — REPLACED
-
-Python fitter/model dispatch and algorithm work-unit seams were removed. Capsule ABI/capability/identity validation is covered by native propagator ABI tests and Rust provider prevalidation.
-
-Baseline-only function names (17):
-- `test_compatible_fitters_keep_fused_paths`
-- `test_custom_fitter_hooks_are_called`
-- `test_custom_fitter_runs_before_native_settings_validation`
-- `test_dispatch_requires_a_declared_backend`
-- `test_distinct_iod_and_refinement_capsules_are_obtained_and_forwarded`
-- `test_external_propagator_capsule_runs_od_natively`
-- `test_further_custom_model_override_is_refused`
-- `test_instance_model_override_is_refused`
-- `test_live_custom_model_behavior_is_refused`
-- `test_native_backend_rejects_algorithm_work_units`
-- `test_native_backend_rejects_empty_identity`
-- `test_only_exact_shipped_models_keep_fused_run_od`
-- `test_overlapping_entry_points_are_deprecated_aliases`
-- `test_overridden_dynamics_fail_without_a_native_capsule`
-- `test_provider_identity_uses_native_semver_with_or_without_version_module`
-- `test_python_propagators_are_refused`
-- `test_run_od_model_science_ignores_all_python_model_execution_surfaces`
-
-## `test_native_orbit_fitter.py` — RETIRED
-
-`NativeOrbitFitter` and the Python fitter plugin hierarchy are deliberately removed.
-
-Baseline-only function names (6):
-- `test_native_orbit_fitter_full_od`
-- `test_native_orbit_fitter_is_orbit_fitter`
-- `test_native_orbit_fitter_pickle_roundtrip`
-- `test_native_orbit_fitter_propagator_kwargs_are_not_shared`
-- `test_native_orbit_fitter_refine_fit`
-- `test_native_orbit_fitter_takes_a_propagator_instance`
-
-## `test_observation_uncertainty.py` — RUST-PORTED
-
-Executable Python models are retired. Empirical covariance, station/band selection, floor/fill, nightly deweighting, ordering, validation, and position invariants are covered by Rust `observation_uncertainty`, `veres2017`, and `od_config` tests.
-
-Baseline-only function names (40):
-- `test_absent_station_passes_through`
-- `test_add_mode_at_equator`
-- `test_add_mode_high_declination`
-- `test_all_models_preserve_positions`
-- `test_applies_models_in_sequence`
-- `test_assert_positions_unchanged_detects_length_change`
-- `test_assert_positions_unchanged_detects_shift`
-- `test_band_specific_row_preferred`
-- `test_batch_above_cap_is_deweighted`
-- `test_batch_at_or_below_cap_passes_through`
-- `test_batches_are_per_station_and_night`
-- `test_bias_below_baseline_is_noop`
-- `test_chi2_below_one_clamps_to_unchanged`
-- `test_compatible_types_cast`
-- `test_cross_term_scales_with_the_block`
-- `test_default_table_resolves_from_the_package`
-- `test_duplicate_station_rows_raise`
-- `test_empty_composite_raises`
-- `test_empty_observations`
-- `test_empty_observations_pass_through`
-- `test_extra_columns_dropped`
-- `test_floors_each_axis_independently`
-- `test_high_declination_ra_floor`
-- `test_identity_composition_is_identity`
-- `test_invalid_cap_raises`
-- `test_invalid_mode_raises`
-- `test_low_resid_cov_n_passes_through`
-- `test_missing_column_raises`
-- `test_missing_package_is_named`
-- `test_nan_base_cross_term_treated_as_zero`
-- `test_negative_variance_raises`
-- `test_non_model_component_raises`
-- `test_noop`
-- `test_null_obs_code_raises`
-- `test_null_resid_cov_n_passes_through`
-- `test_optional_table_validated`
-- `test_replace_mode`
-- `test_scales_sigmas_by_sqrt_chi2`
-- `test_uncastable_column_raises`
-- `test_valid_table_passes`
-
-## `test_observatory_bias_model_wiring.py` — RETIRED
-
-The `observatory_bias_model=` flag is removed without an alias; transforms now exist only in explicit Rust-owned `ObservationPipeline` declarations.
-
-Baseline-only function names (11):
-- `test_applies_model_and_does_not_forward_it`
-- `test_default_none_leaves_observations_unchanged`
-- `test_differential_correction`
-- `test_entry_point_accepts_observatory_bias_model`
-- `test_evaluate_orbits`
-- `test_fit_least_squares`
-- `test_fitter_interface_does_not_take_the_flag`
-- `test_initial_orbit_determination`
-- `test_iod`
-- `test_od`
-- `test_upstream_application_reaches_both_stages`
-
-## `test_od.py` — PARTIAL/DEFERRED
-
-Focused Python orchestration aliases are retired. Numerical refinement/rejection remains covered natively; canonical batch OD is `personal-eack9`.
-
-Baseline-only function names (3):
-- `test_od`
-- `test_od_is_refine_with_worst_residual_rejection`
-- `test_od_method_validation_matches_legacy`
-
-## `test_od_observations.py` — RUST-PORTED
-
-Catalog metadata preservation is tested by pipeline/native table tests; executable uncertainty-model routing is retired.
-
-Baseline-only function names (1):
-- `test_astcat_survives_uncertainty_models`
-
-## `test_od_ops_parity.py` — DEFERRED
-
-Legacy Python sort/select/linkage orchestration is superseded by Rust-owned deterministic batch grouping in `personal-eack9`.
-
-Baseline-only function names (6):
-- `test_select_observations_matches_legacy`
-- `test_select_observations_rejects_unknown_method`
-- `test_select_observations_too_few_returns_empty`
-- `test_sort_by_id_and_time_handles_chunked_observations`
-- `test_sort_by_id_and_time_matches_legacy_ordering`
-- `test_sort_by_id_and_time_missing_observation_errors`
-
-## `test_od_orchestration.py` — RETIRED/DEFERRED
-
-Python model orchestration and Python canonical provenance are deliberately removed. Original/used astrometry and pipeline semantics are Rust-owned; canonical batch result/provenance assertions move to `personal-eack9`.
-
-Baseline-only function names (34):
-- `test_direct_fitter_path_leaves_provenance_null`
-- `test_duplicate_observation_ids_raise`
-- `test_efcc18_composite_records_shifted_positions_and_inflated_sigma`
-- `test_empirical_covariance_inflates_used_sigma_and_keeps_positions`
-- `test_empirical_covariance_records_used_sigma_and_is_consumed_by_the_fit`
-- `test_empty_observations_return_empty_tables`
-- `test_from_spherical_empty`
-- `test_from_spherical_missing_covariance_terms_are_nan`
-- `test_from_spherical_snapshots_position_and_uncertainty`
-- `test_identity_model_matches_no_model_fit`
-- `test_identity_model_records_used_equal_to_original`
-- `test_legacy_members_parquet_loads_with_null_provenance`
-- `test_live_python_model_is_refused_before_core_stage_composition`
-- `test_member_with_unknown_obs_id_raises`
-- `test_members_with_and_without_provenance_concatenate`
-- `test_members_without_provenance_have_null_columns`
-- `test_model_dropping_observations_raises`
-- `test_model_reordering_observations_raises`
-- `test_models_and_cmc2003_refinement`
-- `test_native_run_od_validates_full_settings_before_empty_exit`
-- `test_night_batch_deweighting_records_scaled_sigma`
-- `test_no_models_and_worst_residual_refinement`
-- `test_no_models_records_originals_and_keeps_fitter_flags`
-- `test_none_and_empty_sequence_return_input`
-- `test_object_id_is_passed_to_backend_and_stamped_when_null`
-- `test_object_id_none_is_null_on_both_routes`
-- `test_provenance_joins_by_obs_id_when_fitter_reorders_members`
-- `test_run_od_explicit_default_models_missing_bias_dat_is_file_not_found`
-- `test_run_od_explicit_default_models_name_the_missing_data_package`
-- `test_run_od_explicit_default_models_report_every_missing_input_at_once`
-- `test_run_od_is_exported_from_the_package`
-- `test_run_od_rejects_unknown_models_string`
-- `test_run_od_with_the_default_stack`
-- `test_sequence_is_applied_in_order_like_a_composite`
-
-## `test_od_python_baseline_parity.py` — RUST-PORTED
-
-Python-model baseline fixtures are replaced by direct Rust kernel, transform, resource, CMC, whitening, and configuration tests; no executable Python-model parity surface remains.
-
-Baseline-only function names (8):
-- `test_astcat_round_trip_and_covariance`
-- `test_cmc2003_decision_kernels`
-- `test_debias_model_positions`
-- `test_every_model_matches_and_preserves_positions`
-- `test_linear_huber_ignore_and_cmc2003`
-- `test_run_od_composite_provenance`
-- `test_tiles_and_corrections_on_published_table`
-- `test_whitening_jacobian_and_robust_helpers`
-
-## `test_orbit_fitter.py` — RETIRED
-
-The abstract Python fitter plugin contract is removed.
-
-Baseline-only function names (2):
-- `test_initial_fit_only_fitter_stays_instantiable`
-- `test_orbit_fitter_still_requires_initial_fit`
-
-## `test_provenance.py` — RETIRED/DEFERRED
-
-The rejected Python attestation/model-descriptor design is removed. Rust config/resource fingerprints are tested now; complete batch provider/input/build/result provenance belongs to `personal-eack9`.
-
-Baseline-only function names (67):
-- `test_ambiguous_iod_survives_refinement`
-- `test_backend_identity_names_declared_and_python_backends`
-- `test_bias_module_delegate_mutation_is_refused_before_execution`
-- `test_bias_row_columns_monkeypatch_is_custom_on_real_route`
-- `test_builtin_behavior_overrides_and_nested_overrides_require_contract`
-- `test_builtin_descriptor_uses_exact_build_and_not_import_history`
-- `test_canonical_configuration_is_injective_and_user_mappings_cannot_forge_tags`
-- `test_common_configuration_values_are_portable_and_distinct`
-- `test_complete_provenance_keeps_distinct_native_stage_providers`
-- `test_composed_guard_rejects_model_state_changed_after_snapshot`
-- `test_composed_numpy_delegate_replacement_is_ignored_without_call`
-- `test_composite_native_model_specs_delegate_mutation_is_refused`
-- `test_contracted_moduleless_model_is_rejected`
-- `test_custom_contract_is_validated_exactly`
-- `test_custom_declaration_canonicalization_is_sensitive`
-- `test_custom_descriptor_is_stable_across_hash_seed_and_import_order`
-- `test_custom_fingerprint_is_the_implementation_identity`
-- `test_custom_non_string_module_metadata_is_never_formatted`
-- `test_custom_subclass_and_instance_apply_override_require_contract`
-- `test_default_constructor_mutation_is_refused_before_constructor`
-- `test_default_loader_selector_mutation_is_refused_before_loading`
-- `test_distribution_identity_probes_fail_closed_before_all_work`
-- `test_documented_custom_model_migration_policy_is_executable`
-- `test_exact_class_special_lookup_hooks_are_refused_before_execution`
-- `test_extra_hostile_instance_field_is_refused_before_value_lookup`
-- `test_genuine_installed_class_and_apply_monkeypatches_are_refused`
-- `test_hostile_model_sequence_is_rejected_without_iteration`
-- `test_hostile_registered_field_values_are_refused_without_hooks`
-- `test_inherited_abc_lookup_mutation_is_refused_without_execution`
-- `test_input_fingerprint_hashes_caller_and_used_astrometry_independently`
-- `test_local_contracted_class_is_rejected_before_all_work`
-- `test_main_dynamic_nonexistent_contract_is_rejected_before_all_work`
-- `test_model_descriptor_canonicalizes_colliding_sets_and_mapping_order`
-- `test_model_descriptor_hashes_numpy_configuration_and_sets`
-- `test_model_descriptor_hashes_table_content`
-- `test_model_descriptor_rejects_unsupported_and_cyclic_configuration`
-- `test_mutable_abc_metaclass_dispatch_is_attested_without_execution`
-- `test_native_kernel_delegate_mutation_is_refused_before_execution`
-- `test_native_model_spec_snapshot_has_no_mutable_model_references`
-- `test_native_settings_are_called_once_and_same_snapshot_is_recorded_and_used`
-- `test_nested_custom_lookup_is_refused_without_any_hook`
-- `test_nested_lookup_special_resolution_hook_is_refused_before_execution`
-- `test_other_entry_points_leave_provenance_null`
-- `test_preflight_describes_contract_before_apply_or_fit`
-- `test_preflight_failure_happens_before_fitter_work`
-- `test_preflight_rejects_native_python_version_mismatch_before_model_work`
-- `test_provenance_keeps_exact_native_identity_not_later_declarations`
-- `test_provenance_preflight_refuses_non_reproducible_builds`
-- `test_provider_cannot_replace_a_separate_orchestration_native_alias`
-- `test_provider_mutation_is_bound_by_final_model_and_native_spec_snapshot`
-- `test_provider_native_spec_builder_replacement_is_ignored_without_call`
-- `test_provider_time_native_replacement_is_refused_before_fake_native_work`
-- `test_public_pathlib_class_identity_is_normalized_across_private_relocation`
-- `test_public_run_od_recursively_preflights_nested_custom_models`
-- `test_python_callable_configuration_requires_explicit_portable_data`
-- `test_real_git_source_checkout_detector_is_fail_closed`
-- `test_registered_instance_data_cannot_be_shadowed_on_the_class`
-- `test_registered_instance_shadows_and_nested_subclass_are_custom`
-- `test_replaced_native_build_function_is_refused_without_call`
-- `test_replaced_native_package_module_is_refused_without_call`
-- `test_run_od_records_provenance`
-- `test_runtime_untracked_source_guard_precedes_models`
-- `test_sigma_fill_model_constant_monkeypatch_is_custom_on_real_route`
-- `test_uniform_provider_rejects_disagreement_and_partial_omission`
-- `test_unsupported_dynamic_model_has_documented_type_error`
-- `test_veres_lookup_payload_monkeypatch_is_custom_on_real_route`
-- `test_veres_registered_class_mutations_are_custom`
-
-## `test_reconstruction_contracts.py` — REPLACED/DEFERRED
-
-Source/build identity remains covered by release identity gates; model-descriptor assertions are retired; provider/input/composed-route provenance moves to `personal-eack9`.
-
-Baseline-only function names (9):
-- `test_build_identity_is_exact_clean_head`
-- `test_efcc_descriptor_content_version_exclusions`
-- `test_explicit_stage_composition_route_completes`
-- `test_fused_and_composed_share_native_model_science_and_provenance`
-- `test_input_fingerprint_is_layout_canonical`
-- `test_input_fingerprint_is_sensitive`
-- `test_model_descriptor_numpy_variants`
-- `test_provider_metadata_comes_from_capsule_not_python_declaration`
-- `test_two_distinct_epoch_arcs_are_refused_on_all_routes`
-
-## `test_run_iod.py` — PARTIAL/DEFERRED
-
-Focused numeric IOD settings/capsule coverage remains. Linkage and public stage-composition APIs are superseded by canonical batch workflows in `personal-eack9`.
-
-Baseline-only function names (11):
-- `test_fitter_forwards_the_velocity_method`
-- `test_fitter_initial_fit_runs_iod_on_the_configured_class`
-- `test_initial_orbit_determination_accepts_an_unmatched_linkage`
-- `test_initial_orbit_determination_runs_run_iod_per_linkage`
-- `test_iod_is_the_accepted_orbit_of_run_iod`
-- `test_linkage_api_validates_settings_before_empty_exit`
-- `test_native_iod_rejects_invalid_settings_centrally`
-- `test_refinement_signature_defaults_are_the_rust_defaults`
-- `test_run_iod_capsule_matches_in_tree_two_body_driver`
-- `test_run_iod_then_refine_is_the_stage_contract`
-- `test_signature_defaults_are_the_rust_defaults`
-
-## `test_run_od_null_covariance.py` — RUST-PORTED/DEFERRED
-
-Missing covariance fails closed in the native solver and fill behavior is covered by Rust `veres2017`; canonical configured workflow parity moves to `personal-eack9`.
-
-Baseline-only function names (3):
-- `test_fused_and_composed_native_model_routes_agree_with_filled_sigmas`
-- `test_sigma_fill_supplies_the_missing_covariance`
-- `test_without_a_filling_model_the_fit_is_refused`
-
-## `test_solver_budgets.py` — RUST-PORTED
-
-Both limits are fields of strict Rust-owned fit configuration and covered by round-trip/validation tests.
-
-Baseline-only function names (1):
-- `test_fitter_serializes_both_solver_limits`
-
-## `test_veres2017.py` — RUST-PORTED
-
-Executable Veres model/loaders are retired; lookup precedence, fill/floor/replace, validation, and cross-term behavior are covered by Rust `veres2017` and real-resource `od_config` tests.
-
-Baseline-only function names (23):
-- `test_composes_after_efcc18_style_position_models`
-- `test_composes_with_other_models`
-- `test_cross_term_is_preserved`
-- `test_default_table_without_the_package_raises_import_error`
-- `test_duplicate_rows_raise`
-- `test_fills_only_missing_axes_and_keeps_reported`
-- `test_floors_small_sigmas_and_keeps_large_ones`
-- `test_global_row_beats_fallback_and_is_unique`
-- `test_known_working_table_entries`
-- `test_lookup_order`
-- `test_lookup_order_station_catalog_station_catalog_global`
-- `test_missing_column_raises`
-- `test_missing_sigma_left_unless_fill_missing`
-- `test_model_defaults_resolve_the_package_tables`
-- `test_no_fallback_returns_none`
-- `test_non_positive_sigma_raises`
-- `test_nothing_missing_returns_same_object`
-- `test_null_astcat_is_a_station_or_global_row`
-- `test_package_working_table_still_validates`
-- `test_replaces_both_axes_and_zeroes_cross_term`
-- `test_unknown_catalog_uses_fallback_or_passes_through`
-- `test_unresolvable_without_global_or_fallback_stays_nan`
-- `test_working_table_schema_and_sanity`
+Scope: Python test functions under `src/adam_core/orbit_determination/tests` that exist at the baseline and remain absent by name on this correction line.
+Remaining absent-by-name count: **267** across **23** files.
+
+Every row is an assertion-level disposition. `RETIRED-API` is limited to a specifically removed executable Python interface. `DEFERRED-eack9` is limited to canonical batch grouping, IDs/memberships, empty groups, typed failures, result assembly, or runtime provenance. Resource-gated deferral names the missing binding explicitly. No row claims a broad file was “Rust-ported.”
+
+## Restored numerical fixture assertions (no longer absent by name)
+
+- `test_iod.py::test_iod_fused_matches_pinned_legacy_fixture` — **RESTORED**: `test_iod.py::test_iod_fused_matches_pinned_legacy_fixture` now replays the 2026-07-12 ASSIST fixture through `run_prefit_iod_qualified`.
+- `test_od_python_baseline_parity.py::test_tiles_and_corrections_on_published_table` — **RESTORED**: the same test now replays published-table EFCC18 tiles and corrections.
+- `test_od_python_baseline_parity.py::test_debias_model_positions` — **RESTORED**: the same test now executes real-table positions through the bound declarative Rust pipeline.
+- `test_od_python_baseline_parity.py::test_whitening_jacobian_and_robust_helpers` — **RESTORED**: the same test now replays all retained lower-level kernel values.
+- `test_od_python_baseline_parity.py::test_cmc2003_decision_kernels` — **RESTORED**: the same test now replays the native decision-kernel products.
+- `test_od_python_baseline_parity.py::test_linear_huber_ignore_and_cmc2003` — **RESTORED**: the same test now pins fitted state/covariance/statistics/weights/outliers/iterations.
+
+## Remaining baseline-only Python assertions
+
+### `test_cmc2003_rejection.py`
+
+| Baseline function | Disposition | Exact replacement or technical reason |
+|---|---|---|
+| `test_cmc2003_dispatch_forwards_loss_and_kwargs` | **RETIRED-API** | Python fitter/default-scheme dispatch was removed; Rust `od_config::tests::stage_json_round_trips_strictly_and_rejects_unknown_or_missing_fields` validates typed refinement policy. |
+| `test_cmc2003_end_to_end_through_refine_fit` | **REPLACED** | `test_cmc2003_rejection.py::TestCmc2003FitDetailed::test_gross_outliers_are_rejected` and Rust `cmc2003_rejects_gross_outliers_and_recovers_truth`. |
+| `test_default_is_cmc2003` | **RETIRED-API** | Python fitter/default-scheme dispatch was removed; Rust `od_config::tests::stage_json_round_trips_strictly_and_rejects_unknown_or_missing_fields` validates typed refinement policy. |
+| `test_unknown_scheme_raises` | **RETIRED-API** | Python fitter/default-scheme dispatch was removed; Rust `od_config::tests::stage_json_round_trips_strictly_and_rejects_unknown_or_missing_fields` validates typed refinement policy. |
+
+### `test_efcc18_debias_model.py`
+
+| Baseline function | Disposition | Exact replacement or technical reason |
+|---|---|---|
+| `test_composes_with_covariance_models` | **REPLACED/RETIRED** | Python `CompositeModel` is retired; configured ordering/execution is pinned by `od_workflows::tests::prepare_observations_executes_ordered_repeated_pipeline_and_retains_snapshots`. |
+| `test_constructor_validation` | **REPLACED/RETIRED** | `od_config::tests::invalid_transform_is_configuration_error_not_resource_error`. |
+| `test_covariance_unchanged_including_nan_pattern` | **REPLACED/RETIRED** | `observation_uncertainty::tests::efcc18_model_moves_positions_and_keeps_covariance` and the restored real-table pipeline replay. |
+| `test_empty_observations` | **DEFERRED-eack9** | Empty configured batches are `personal-eack9`; the executable model method is retired. |
+| `test_epoch_matters` | **REPLACED/RETIRED** | `efcc18::tests::corrections_read_the_right_cell_and_apply_proper_motion`. |
+| `test_exclude_astcats` | **REPLACED/RETIRED** | `test_od_python_baseline_parity.py::TestEfcc18::test_debias_model_positions` (excluded and unexcluded bound configs). |
+| `test_injected_correction_round_trip` | **REPLACED/RETIRED** | `efcc18::tests::corrections_read_the_right_cell_and_apply_proper_motion`. |
+| `test_mixed_rows_only_covered_move` | **REPLACED/RETIRED** | `efcc18::tests::debias_positions_wraps_and_skips_poles`. |
+| `test_pole_and_nonfinite_rows_pass_through` | **REPLACED/RETIRED** | `efcc18::tests::debias_positions_wraps_and_skips_poles`. |
+| `test_ra_wraps_into_range` | **REPLACED/RETIRED** | `efcc18::tests::ra_wrap_is_harmless` and `::debias_positions_wraps_and_skips_poles`. |
+| `test_uncovered_and_null_catalogs_pass_through` | **REPLACED/RETIRED** | `efcc18::tests::debias_positions_wraps_and_skips_poles`. |
+| `test_zero_correction_returns_input` | **REPLACED/RETIRED** | The removed Python object-identity return contract is retired; Rust correction values/pass-through are pinned by `debias_positions_wraps_and_skips_poles`. |
+
+### `test_evaluate.py`
+
+| Baseline function | Disposition | Exact replacement or technical reason |
+|---|---|---|
+| `test_evaluate_orbits_empty_legacy_error` | **DEFERRED-eack9** | Empty batch/group behavior belongs to `personal-eack9`; no one-group legacy error is retained. |
+| `test_evaluate_orbits_frozen_legacy_parity` | **REPLACED** | `test_evaluate.py::test_evaluate_orbits_frozen_reference_parity` replays the retained fixture. |
+
+### `test_huber_loss.py`
+
+| Baseline function | Disposition | Exact replacement or technical reason |
+|---|---|---|
+| `test_default_fitter_is_linear` | **RETIRED-API** | Mutable/pickleable Python fitter defaults were removed; Rust `linear_predictor_huber_bounds_influence_reports_exact_weights_and_robust_covariance` and `od_config::tests::stage_json_round_trips_strictly_and_rejects_unknown_or_missing_fields` pin behavior/settings. |
+| `test_native_fitter_forwards_loss_and_pickles` | **RETIRED-API** | Mutable/pickleable Python fitter defaults were removed; Rust `linear_predictor_huber_bounds_influence_reports_exact_weights_and_robust_covariance` and `od_config::tests::stage_json_round_trips_strictly_and_rejects_unknown_or_missing_fields` pin behavior/settings. |
+
+### `test_iod.py`
+
+| Baseline function | Disposition | Exact replacement or technical reason |
+|---|---|---|
+| `test_initial_orbit_determination_fused_batch_deduplicates` | **DEFERRED-eack9** | Deterministic grouping/deduplication is explicitly owned by `personal-eack9`. |
+| `test_initial_orbit_determination_fused_empty` | **DEFERRED-eack9** | Empty batch grouping is explicitly owned by `personal-eack9`. |
+| `test_iod` | **REPLACED** | `test_iod.py::test_focused_iod_returns_candidate_report` covers the focused external-capsule success products. |
+| `test_iod_assist_capsule_matches_explicit_prefit_stage` | **REPLACED** | `test_iod.py::test_iod_fused_matches_pinned_legacy_fixture` now exercises the explicit prefit bridge and pins every product. |
+
+### `test_least_squares.py`
+
+| Baseline function | Disposition | Exact replacement or technical reason |
+|---|---|---|
+| `test_least_squares_adjusts` | **REPLACED** | `test_least_squares.py::test_refinement_adjusts_and_improves_chi2`. |
+| `test_least_squares_is_refine_without_rejection` | **RETIRED-API** | The removed `LeastSquares` alias/equivalence surface has no compatibility alias; refinement numerics remain in `test_refinement_adjusts_and_improves_chi2`. |
+| `test_least_squares_zero_base` | **REPLACED** | `test_least_squares.py::test_refinement_handles_zero_state_component`. |
+
+### `test_legacy_deprecations.py`
+
+| Baseline function | Disposition | Exact replacement or technical reason |
+|---|---|---|
+| `test_differential_correction_warns_before_doing_anything` | **RETIRED-API** | `test_differential_correction_warns_before_doing_anything` exercised a removed Python fitter/model/deprecation interface; Core 0.7 intentionally provides no alias or executable callback surface. |
+| `test_least_squares_warns_on_construction` | **RETIRED-API** | `test_least_squares_warns_on_construction` exercised a removed Python fitter/model/deprecation interface; Core 0.7 intentionally provides no alias or executable callback surface. |
+| `test_od_warns_before_doing_anything` | **RETIRED-API** | `test_od_warns_before_doing_anything` exercised a removed Python fitter/model/deprecation interface; Core 0.7 intentionally provides no alias or executable callback surface. |
+
+### `test_native_dispatch.py`
+
+| Baseline function | Disposition | Exact replacement or technical reason |
+|---|---|---|
+| `test_compatible_fitters_keep_fused_paths` | **RETIRED-API** | This assertion targeted removed Python fitter/model dispatch, override, alias, or live-behavior hooks; only the closed typed Rust config/capsule path remains. |
+| `test_custom_fitter_hooks_are_called` | **RETIRED-API** | This assertion targeted removed Python fitter/model dispatch, override, alias, or live-behavior hooks; only the closed typed Rust config/capsule path remains. |
+| `test_custom_fitter_runs_before_native_settings_validation` | **RETIRED-API** | This assertion targeted removed Python fitter/model dispatch, override, alias, or live-behavior hooks; only the closed typed Rust config/capsule path remains. |
+| `test_dispatch_requires_a_declared_backend` | **REPLACED** | Rust `propagation::external::tests::exact_abi_version_and_frozen_prefixes_are_enforced`, `::provenance_suffix_is_atomic_strict_and_legacy_propagation_compatible`, and `od_refine::tests::external_propagators_run_the_od_stages_like_native_ones`. |
+| `test_distinct_iod_and_refinement_capsules_are_obtained_and_forwarded` | **REPLACED** | Rust `propagation::external::tests::exact_abi_version_and_frozen_prefixes_are_enforced`, `::provenance_suffix_is_atomic_strict_and_legacy_propagation_compatible`, and `od_refine::tests::external_propagators_run_the_od_stages_like_native_ones`. |
+| `test_external_propagator_capsule_runs_od_natively` | **REPLACED** | Rust `propagation::external::tests::exact_abi_version_and_frozen_prefixes_are_enforced`, `::provenance_suffix_is_atomic_strict_and_legacy_propagation_compatible`, and `od_refine::tests::external_propagators_run_the_od_stages_like_native_ones`. |
+| `test_further_custom_model_override_is_refused` | **RETIRED-API** | This assertion targeted removed Python fitter/model dispatch, override, alias, or live-behavior hooks; only the closed typed Rust config/capsule path remains. |
+| `test_instance_model_override_is_refused` | **RETIRED-API** | This assertion targeted removed Python fitter/model dispatch, override, alias, or live-behavior hooks; only the closed typed Rust config/capsule path remains. |
+| `test_live_custom_model_behavior_is_refused` | **RETIRED-API** | This assertion targeted removed Python fitter/model dispatch, override, alias, or live-behavior hooks; only the closed typed Rust config/capsule path remains. |
+| `test_native_backend_rejects_algorithm_work_units` | **REPLACED** | Rust `propagation::external::tests::exact_abi_version_and_frozen_prefixes_are_enforced`, `::provenance_suffix_is_atomic_strict_and_legacy_propagation_compatible`, and `od_refine::tests::external_propagators_run_the_od_stages_like_native_ones`. |
+| `test_native_backend_rejects_empty_identity` | **REPLACED** | Rust `propagation::external::tests::exact_abi_version_and_frozen_prefixes_are_enforced`, `::provenance_suffix_is_atomic_strict_and_legacy_propagation_compatible`, and `od_refine::tests::external_propagators_run_the_od_stages_like_native_ones`. |
+| `test_only_exact_shipped_models_keep_fused_run_od` | **RETIRED-API** | This assertion targeted removed Python fitter/model dispatch, override, alias, or live-behavior hooks; only the closed typed Rust config/capsule path remains. |
+| `test_overlapping_entry_points_are_deprecated_aliases` | **RETIRED-API** | This assertion targeted removed Python fitter/model dispatch, override, alias, or live-behavior hooks; only the closed typed Rust config/capsule path remains. |
+| `test_overridden_dynamics_fail_without_a_native_capsule` | **REPLACED** | Rust `propagation::external::tests::exact_abi_version_and_frozen_prefixes_are_enforced`, `::provenance_suffix_is_atomic_strict_and_legacy_propagation_compatible`, and `od_refine::tests::external_propagators_run_the_od_stages_like_native_ones`. |
+| `test_provider_identity_uses_native_semver_with_or_without_version_module` | **REPLACED** | Rust `propagation::external::tests::exact_abi_version_and_frozen_prefixes_are_enforced`, `::provenance_suffix_is_atomic_strict_and_legacy_propagation_compatible`, and `od_refine::tests::external_propagators_run_the_od_stages_like_native_ones`. |
+| `test_python_propagators_are_refused` | **REPLACED** | Rust `propagation::external::tests::exact_abi_version_and_frozen_prefixes_are_enforced`, `::provenance_suffix_is_atomic_strict_and_legacy_propagation_compatible`, and `od_refine::tests::external_propagators_run_the_od_stages_like_native_ones`. |
+| `test_run_od_model_science_ignores_all_python_model_execution_surfaces` | **RETIRED-API** | This assertion targeted removed Python fitter/model dispatch, override, alias, or live-behavior hooks; only the closed typed Rust config/capsule path remains. |
+
+### `test_native_orbit_fitter.py`
+
+| Baseline function | Disposition | Exact replacement or technical reason |
+|---|---|---|
+| `test_native_orbit_fitter_full_od` | **RETIRED-API** | `test_native_orbit_fitter_full_od` exercised a removed Python fitter/model/deprecation interface; Core 0.7 intentionally provides no alias or executable callback surface. |
+| `test_native_orbit_fitter_is_orbit_fitter` | **RETIRED-API** | `test_native_orbit_fitter_is_orbit_fitter` exercised a removed Python fitter/model/deprecation interface; Core 0.7 intentionally provides no alias or executable callback surface. |
+| `test_native_orbit_fitter_pickle_roundtrip` | **RETIRED-API** | `test_native_orbit_fitter_pickle_roundtrip` exercised a removed Python fitter/model/deprecation interface; Core 0.7 intentionally provides no alias or executable callback surface. |
+| `test_native_orbit_fitter_propagator_kwargs_are_not_shared` | **RETIRED-API** | `test_native_orbit_fitter_propagator_kwargs_are_not_shared` exercised a removed Python fitter/model/deprecation interface; Core 0.7 intentionally provides no alias or executable callback surface. |
+| `test_native_orbit_fitter_refine_fit` | **RETIRED-API** | `test_native_orbit_fitter_refine_fit` exercised a removed Python fitter/model/deprecation interface; Core 0.7 intentionally provides no alias or executable callback surface. |
+| `test_native_orbit_fitter_takes_a_propagator_instance` | **RETIRED-API** | `test_native_orbit_fitter_takes_a_propagator_instance` exercised a removed Python fitter/model/deprecation interface; Core 0.7 intentionally provides no alias or executable callback surface. |
+
+### `test_observation_uncertainty.py`
+
+| Baseline function | Disposition | Exact replacement or technical reason |
+|---|---|---|
+| `test_absent_station_passes_through` | **REPLACED** | `observation_uncertainty::tests::empirical_replace_mode_nan_cross_term_and_pass_through_rules`. |
+| `test_add_mode_at_equator` | **REPLACED** | `observation_uncertainty::tests::empirical_add_mode_at_equator_and_high_declination`. |
+| `test_add_mode_high_declination` | **REPLACED** | `observation_uncertainty::tests::empirical_add_mode_at_equator_and_high_declination`. |
+| `test_all_models_preserve_positions` | **REPLACED** | Exact position invariants are asserted by Rust `efcc18_model_moves_positions_and_keeps_covariance`, `night_batch_deweighting_is_per_station_and_night`, and Veres fill/floor/replace tests. |
+| `test_applies_models_in_sequence` | **REPLACED** | `od_workflows::tests::prepare_observations_executes_ordered_repeated_pipeline_and_retains_snapshots` numerically executes repeated declarations. |
+| `test_assert_positions_unchanged_detects_length_change` | **RETIRED-API** | Python model/composite/identity helper behavior was removed; no callback compatibility surface remains. |
+| `test_assert_positions_unchanged_detects_shift` | **RETIRED-API** | Python model/composite/identity helper behavior was removed; no callback compatibility surface remains. |
+| `test_band_specific_row_preferred` | **REPLACED** | `observation_uncertainty::tests::band_specific_row_is_preferred`. |
+| `test_batch_above_cap_is_deweighted` | **REPLACED** | `observation_uncertainty::tests::night_batch_deweighting_is_per_station_and_night`. |
+| `test_batch_at_or_below_cap_passes_through` | **REPLACED** | `observation_uncertainty::tests::night_batch_deweighting_is_per_station_and_night`. |
+| `test_batches_are_per_station_and_night` | **REPLACED** | `observation_uncertainty::tests::night_batch_deweighting_is_per_station_and_night`. |
+| `test_bias_below_baseline_is_noop` | **RETIRED-API** | Performance-weighted and generic sigma-floor executable models are outside the closed transform set; their old helper semantics are not a Core 0.7 pipeline contract. |
+| `test_chi2_below_one_clamps_to_unchanged` | **RETIRED-API** | Performance-weighted and generic sigma-floor executable models are outside the closed transform set; their old helper semantics are not a Core 0.7 pipeline contract. |
+| `test_compatible_types_cast` | **RETIRED-API** | Permissive Python bias-table casting was removed; content-pinned resource tables now require the exact Rust-owned Arrow schema. |
+| `test_cross_term_scales_with_the_block` | **REPLACED** | `observation_uncertainty::tests::night_batch_deweighting_is_per_station_and_night`. |
+| `test_default_table_resolves_from_the_package` | **RETIRED-API** | Runtime data-package discovery/fallback was removed; callers bind semantic resource slots explicitly. |
+| `test_duplicate_station_rows_raise` | **REPLACED** | Rust `od_config::tests::{invalid_transform_is_configuration_error_not_resource_error,separately_packaged_reference_resources_parse}` and strict resource schema parsing replace Python table/model validation for the closed transform set. |
+| `test_empty_composite_raises` | **RETIRED-API** | Python model/composite/identity helper behavior was removed; no callback compatibility surface remains. |
+| `test_empty_observations` | **RETIRED-API** | The executable Python model method is removed; canonical empty-group behavior is explicitly deferred to `personal-eack9`. |
+| `test_empty_observations_pass_through` | **RETIRED-API** | The executable Python model identity/pass-through method is removed; canonical empty-group behavior is explicitly deferred to `personal-eack9`. |
+| `test_extra_columns_dropped` | **RETIRED-API** | Permissive Python table normalization was removed; bound resources now require the exact Rust-owned schema and do not silently drop fields. |
+| `test_floors_each_axis_independently` | **RETIRED-API** | Performance-weighted and generic sigma-floor executable models are outside the closed transform set; their old helper semantics are not a Core 0.7 pipeline contract. |
+| `test_high_declination_ra_floor` | **RETIRED-API** | The generic Python `SigmaFloorModel` is outside the closed transform set; Veres-specific high-declination floor math remains covered by `veres2017::tests::floor_model_floors_per_axis_with_cos_dec_and_fill_missing`. |
+| `test_identity_composition_is_identity` | **RETIRED-API** | Python model/composite/identity helper behavior was removed; no callback compatibility surface remains. |
+| `test_invalid_cap_raises` | **REPLACED** | Rust `od_config::tests::{invalid_transform_is_configuration_error_not_resource_error,separately_packaged_reference_resources_parse}` and strict resource schema parsing replace Python table/model validation for the closed transform set. |
+| `test_invalid_mode_raises` | **REPLACED** | Rust `od_config::tests::{invalid_transform_is_configuration_error_not_resource_error,separately_packaged_reference_resources_parse}` and strict resource schema parsing replace Python table/model validation for the closed transform set. |
+| `test_low_resid_cov_n_passes_through` | **REPLACED** | `observation_uncertainty::tests::empirical_replace_mode_nan_cross_term_and_pass_through_rules`. |
+| `test_missing_column_raises` | **REPLACED** | Rust `od_config::tests::{invalid_transform_is_configuration_error_not_resource_error,separately_packaged_reference_resources_parse}` and strict resource schema parsing replace Python table/model validation for the closed transform set. |
+| `test_missing_package_is_named` | **RETIRED-API** | Runtime data-package discovery/fallback was removed; callers bind semantic resource slots explicitly. |
+| `test_nan_base_cross_term_treated_as_zero` | **REPLACED** | `observation_uncertainty::tests::empirical_replace_mode_nan_cross_term_and_pass_through_rules`. |
+| `test_negative_variance_raises` | **REPLACED** | Rust `od_config::tests::{invalid_transform_is_configuration_error_not_resource_error,separately_packaged_reference_resources_parse}` and strict resource schema parsing replace Python table/model validation for the closed transform set. |
+| `test_non_model_component_raises` | **RETIRED-API** | Python model/composite/identity helper behavior was removed; no callback compatibility surface remains. |
+| `test_noop` | **RETIRED-API** | Python model/composite/identity helper behavior was removed; no callback compatibility surface remains. |
+| `test_null_obs_code_raises` | **REPLACED** | Rust `od_config::tests::{invalid_transform_is_configuration_error_not_resource_error,separately_packaged_reference_resources_parse}` and strict resource schema parsing replace Python table/model validation for the closed transform set. |
+| `test_null_resid_cov_n_passes_through` | **REPLACED** | `observation_uncertainty::tests::empirical_replace_mode_nan_cross_term_and_pass_through_rules`. |
+| `test_optional_table_validated` | **REPLACED** | Rust `od_config::tests::{invalid_transform_is_configuration_error_not_resource_error,separately_packaged_reference_resources_parse}` and strict resource schema parsing replace Python table/model validation for the closed transform set. |
+| `test_replace_mode` | **REPLACED** | `observation_uncertainty::tests::empirical_replace_mode_nan_cross_term_and_pass_through_rules`. |
+| `test_scales_sigmas_by_sqrt_chi2` | **RETIRED-API** | Performance-weighted and generic sigma-floor executable models are outside the closed transform set; their old helper semantics are not a Core 0.7 pipeline contract. |
+| `test_uncastable_column_raises` | **REPLACED** | Rust `od_config::tests::{invalid_transform_is_configuration_error_not_resource_error,separately_packaged_reference_resources_parse}` and strict resource schema parsing replace Python table/model validation for the closed transform set. |
+| `test_valid_table_passes` | **REPLACED** | Rust `od_config::tests::{invalid_transform_is_configuration_error_not_resource_error,separately_packaged_reference_resources_parse}` and strict resource schema parsing replace Python table/model validation for the closed transform set. |
+
+### `test_observatory_bias_model_wiring.py`
+
+| Baseline function | Disposition | Exact replacement or technical reason |
+|---|---|---|
+| `test_applies_model_and_does_not_forward_it` | **RETIRED-API** | `test_applies_model_and_does_not_forward_it` exercised a removed Python fitter/model/deprecation interface; Core 0.7 intentionally provides no alias or executable callback surface. |
+| `test_default_none_leaves_observations_unchanged` | **RETIRED-API** | `test_default_none_leaves_observations_unchanged` exercised a removed Python fitter/model/deprecation interface; Core 0.7 intentionally provides no alias or executable callback surface. |
+| `test_differential_correction` | **RETIRED-API** | `test_differential_correction` exercised a removed Python fitter/model/deprecation interface; Core 0.7 intentionally provides no alias or executable callback surface. |
+| `test_entry_point_accepts_observatory_bias_model` | **RETIRED-API** | `test_entry_point_accepts_observatory_bias_model` exercised a removed Python fitter/model/deprecation interface; Core 0.7 intentionally provides no alias or executable callback surface. |
+| `test_evaluate_orbits` | **RETIRED-API** | `test_evaluate_orbits` exercised a removed Python fitter/model/deprecation interface; Core 0.7 intentionally provides no alias or executable callback surface. |
+| `test_fit_least_squares` | **RETIRED-API** | `test_fit_least_squares` exercised a removed Python fitter/model/deprecation interface; Core 0.7 intentionally provides no alias or executable callback surface. |
+| `test_fitter_interface_does_not_take_the_flag` | **RETIRED-API** | `test_fitter_interface_does_not_take_the_flag` exercised a removed Python fitter/model/deprecation interface; Core 0.7 intentionally provides no alias or executable callback surface. |
+| `test_initial_orbit_determination` | **RETIRED-API** | `test_initial_orbit_determination` exercised a removed Python fitter/model/deprecation interface; Core 0.7 intentionally provides no alias or executable callback surface. |
+| `test_iod` | **RETIRED-API** | `test_iod` exercised a removed Python fitter/model/deprecation interface; Core 0.7 intentionally provides no alias or executable callback surface. |
+| `test_od` | **RETIRED-API** | `test_od` exercised a removed Python fitter/model/deprecation interface; Core 0.7 intentionally provides no alias or executable callback surface. |
+| `test_upstream_application_reaches_both_stages` | **RETIRED-API** | `test_upstream_application_reaches_both_stages` exercised a removed Python fitter/model/deprecation interface; Core 0.7 intentionally provides no alias or executable callback surface. |
+
+### `test_od.py`
+
+| Baseline function | Disposition | Exact replacement or technical reason |
+|---|---|---|
+| `test_od` | **DEFERRED/RETIRED** | The old one-group `od()` orchestration/method-validation API is retired; canonical batch `run_od` composition/failures belong to `personal-eack9`. Numerical composition is pinned by `od_workflows::tests::run_od_prepares_once_and_exactly_composes_isolated_stage_predictors`. |
+| `test_od_is_refine_with_worst_residual_rejection` | **DEFERRED/RETIRED** | The old one-group `od()` orchestration/method-validation API is retired; canonical batch `run_od` composition/failures belong to `personal-eack9`. Numerical composition is pinned by `od_workflows::tests::run_od_prepares_once_and_exactly_composes_isolated_stage_predictors`. |
+| `test_od_method_validation_matches_legacy` | **DEFERRED/RETIRED** | The old one-group `od()` orchestration/method-validation API is retired; canonical batch `run_od` composition/failures belong to `personal-eack9`. Numerical composition is pinned by `od_workflows::tests::run_od_prepares_once_and_exactly_composes_isolated_stage_predictors`. |
+
+### `test_od_observations.py`
+
+| Baseline function | Disposition | Exact replacement or technical reason |
+|---|---|---|
+| `test_astcat_survives_uncertainty_models` | **REPLACED** | `test_od_python_baseline_parity.py::TestEfcc18::test_debias_model_positions` runs catalog metadata through the declarative native pipeline; `od_workflows::tests::prepare_observations_executes_ordered_repeated_pipeline_and_retains_snapshots` pins retention. |
+
+### `test_od_ops_parity.py`
+
+| Baseline function | Disposition | Exact replacement or technical reason |
+|---|---|---|
+| `test_select_observations_matches_legacy` | **DEFERRED-eack9** | `test_select_observations_matches_legacy` is deterministic sort/select/linkage/member validation owned by `personal-eack9`; no interim Python orchestration is retained. |
+| `test_select_observations_rejects_unknown_method` | **DEFERRED-eack9** | `test_select_observations_rejects_unknown_method` is deterministic sort/select/linkage/member validation owned by `personal-eack9`; no interim Python orchestration is retained. |
+| `test_select_observations_too_few_returns_empty` | **DEFERRED-eack9** | `test_select_observations_too_few_returns_empty` is deterministic sort/select/linkage/member validation owned by `personal-eack9`; no interim Python orchestration is retained. |
+| `test_sort_by_id_and_time_handles_chunked_observations` | **DEFERRED-eack9** | `test_sort_by_id_and_time_handles_chunked_observations` is deterministic sort/select/linkage/member validation owned by `personal-eack9`; no interim Python orchestration is retained. |
+| `test_sort_by_id_and_time_matches_legacy_ordering` | **DEFERRED-eack9** | `test_sort_by_id_and_time_matches_legacy_ordering` is deterministic sort/select/linkage/member validation owned by `personal-eack9`; no interim Python orchestration is retained. |
+| `test_sort_by_id_and_time_missing_observation_errors` | **DEFERRED-eack9** | `test_sort_by_id_and_time_missing_observation_errors` is deterministic sort/select/linkage/member validation owned by `personal-eack9`; no interim Python orchestration is retained. |
+
+### `test_od_orchestration.py`
+
+| Baseline function | Disposition | Exact replacement or technical reason |
+|---|---|---|
+| `test_direct_fitter_path_leaves_provenance_null` | **DEFERRED-eack9** | Canonical runtime provenance and three-table member schema assembly are explicitly owned by `personal-eack9`. |
+| `test_duplicate_observation_ids_raise` | **DEFERRED-eack9** | Batch IDs, membership joins, empty groups, object IDs, and public export semantics are explicitly owned by `personal-eack9`. |
+| `test_efcc18_composite_records_shifted_positions_and_inflated_sigma` | **REPLACED/DEFERRED** | Rust `od_workflows::tests::prepare_observations_executes_ordered_repeated_pipeline_and_retains_snapshots` pins numerical original/used retention; Python member-table assembly is deferred to `personal-eack9`. |
+| `test_empirical_covariance_inflates_used_sigma_and_keeps_positions` | **REPLACED/DEFERRED** | Rust `od_workflows::tests::prepare_observations_executes_ordered_repeated_pipeline_and_retains_snapshots` pins numerical original/used retention; Python member-table assembly is deferred to `personal-eack9`. |
+| `test_empirical_covariance_records_used_sigma_and_is_consumed_by_the_fit` | **REPLACED/DEFERRED** | Rust `od_workflows::tests::prepare_observations_executes_ordered_repeated_pipeline_and_retains_snapshots` pins numerical original/used retention; Python member-table assembly is deferred to `personal-eack9`. |
+| `test_empty_observations_return_empty_tables` | **DEFERRED-eack9** | Batch IDs, membership joins, empty groups, object IDs, and public export semantics are explicitly owned by `personal-eack9`. |
+| `test_from_spherical_empty` | **REPLACED/DEFERRED** | Rust `od_workflows::tests::prepare_observations_executes_ordered_repeated_pipeline_and_retains_snapshots` pins numerical original/used retention; Python member-table assembly is deferred to `personal-eack9`. |
+| `test_from_spherical_missing_covariance_terms_are_nan` | **REPLACED/DEFERRED** | Rust `od_workflows::tests::prepare_observations_executes_ordered_repeated_pipeline_and_retains_snapshots` pins numerical original/used retention; Python member-table assembly is deferred to `personal-eack9`. |
+| `test_from_spherical_snapshots_position_and_uncertainty` | **REPLACED/DEFERRED** | Rust `od_workflows::tests::prepare_observations_executes_ordered_repeated_pipeline_and_retains_snapshots` pins numerical original/used retention; Python member-table assembly is deferred to `personal-eack9`. |
+| `test_identity_model_matches_no_model_fit` | **RETIRED-API** | Legacy `models=` strings/sequences and executable Python model behavior were removed without aliases. |
+| `test_identity_model_records_used_equal_to_original` | **REPLACED/DEFERRED** | Rust `od_workflows::tests::prepare_observations_executes_ordered_repeated_pipeline_and_retains_snapshots` pins numerical original/used retention; Python member-table assembly is deferred to `personal-eack9`. |
+| `test_legacy_members_parquet_loads_with_null_provenance` | **DEFERRED-eack9** | Canonical runtime provenance and three-table member schema assembly are explicitly owned by `personal-eack9`. |
+| `test_live_python_model_is_refused_before_core_stage_composition` | **RETIRED-API** | Legacy `models=` strings/sequences and executable Python model behavior were removed without aliases. |
+| `test_member_with_unknown_obs_id_raises` | **DEFERRED-eack9** | Batch IDs, membership joins, empty groups, object IDs, and public export semantics are explicitly owned by `personal-eack9`. |
+| `test_members_with_and_without_provenance_concatenate` | **DEFERRED-eack9** | Canonical runtime provenance and three-table member schema assembly are explicitly owned by `personal-eack9`. |
+| `test_members_without_provenance_have_null_columns` | **DEFERRED-eack9** | Canonical runtime provenance and three-table member schema assembly are explicitly owned by `personal-eack9`. |
+| `test_model_dropping_observations_raises` | **DEFERRED-eack9** | Batch IDs, membership joins, empty groups, object IDs, and public export semantics are explicitly owned by `personal-eack9`. |
+| `test_model_reordering_observations_raises` | **DEFERRED-eack9** | Batch IDs, membership joins, empty groups, object IDs, and public export semantics are explicitly owned by `personal-eack9`. |
+| `test_models_and_cmc2003_refinement` | **REPLACED/DEFERRED** | Numerical pipeline order/composition is pinned by both new `od_workflows` tests; canonical batch results/failures remain `personal-eack9`. |
+| `test_native_run_od_validates_full_settings_before_empty_exit` | **REPLACED/DEFERRED** | Numerical pipeline order/composition is pinned by both new `od_workflows` tests; canonical batch results/failures remain `personal-eack9`. |
+| `test_night_batch_deweighting_records_scaled_sigma` | **REPLACED/DEFERRED** | Numerical pipeline order/composition is pinned by both new `od_workflows` tests; canonical batch results/failures remain `personal-eack9`. |
+| `test_no_models_and_worst_residual_refinement` | **REPLACED/DEFERRED** | Numerical pipeline order/composition is pinned by both new `od_workflows` tests; canonical batch results/failures remain `personal-eack9`. |
+| `test_no_models_records_originals_and_keeps_fitter_flags` | **REPLACED/DEFERRED** | Rust `od_workflows::tests::prepare_observations_executes_ordered_repeated_pipeline_and_retains_snapshots` pins numerical original/used retention; Python member-table assembly is deferred to `personal-eack9`. |
+| `test_none_and_empty_sequence_return_input` | **RETIRED-API** | Legacy `models=` strings/sequences and executable Python model behavior were removed without aliases. |
+| `test_object_id_is_passed_to_backend_and_stamped_when_null` | **DEFERRED-eack9** | Batch IDs, membership joins, empty groups, object IDs, and public export semantics are explicitly owned by `personal-eack9`. |
+| `test_object_id_none_is_null_on_both_routes` | **DEFERRED-eack9** | Batch IDs, membership joins, empty groups, object IDs, and public export semantics are explicitly owned by `personal-eack9`. |
+| `test_provenance_joins_by_obs_id_when_fitter_reorders_members` | **DEFERRED-eack9** | Batch IDs, membership joins, empty groups, object IDs, and public export semantics are explicitly owned by `personal-eack9`. |
+| `test_run_od_explicit_default_models_missing_bias_dat_is_file_not_found` | **RETIRED-API** | Legacy `models=` strings/sequences and executable Python model behavior were removed without aliases. |
+| `test_run_od_explicit_default_models_name_the_missing_data_package` | **RETIRED-API** | Legacy `models=` strings/sequences and executable Python model behavior were removed without aliases. |
+| `test_run_od_explicit_default_models_report_every_missing_input_at_once` | **RETIRED-API** | Legacy `models=` strings/sequences and executable Python model behavior were removed without aliases. |
+| `test_run_od_is_exported_from_the_package` | **DEFERRED-eack9** | Batch IDs, membership joins, empty groups, object IDs, and public export semantics are explicitly owned by `personal-eack9`. |
+| `test_run_od_rejects_unknown_models_string` | **RETIRED-API** | Legacy `models=` strings/sequences and executable Python model behavior were removed without aliases. |
+| `test_run_od_with_the_default_stack` | **REPLACED/DEFERRED** | Numerical pipeline order/composition is pinned by both new `od_workflows` tests; canonical batch results/failures remain `personal-eack9`. |
+| `test_sequence_is_applied_in_order_like_a_composite` | **REPLACED/DEFERRED** | Numerical pipeline order/composition is pinned by both new `od_workflows` tests; canonical batch results/failures remain `personal-eack9`. |
+
+### `test_od_python_baseline_parity.py`
+
+| Baseline function | Disposition | Exact replacement or technical reason |
+|---|---|---|
+| `test_astcat_round_trip_and_covariance` | **REPLACED** | `test_od_observations.py::test_from_ades_retains_astcat` and `::test_from_ades_uncertainty_conversion` use the same ADES rows/formulas. |
+| `test_every_model_matches_and_preserves_positions` | **RETIRED/REPLACED** | Closed transforms are covered by exact Rust tests `empirical_add_mode_at_equator_and_high_declination`, `empirical_replace_mode_nan_cross_term_and_pass_through_rules`, `night_batch_deweighting_is_per_station_and_night`, and Veres fill/floor/replace tests; identity/performance/sigma-floor/legacy-Veres executable Python models are outside the closed pipeline and retired. |
+| `test_run_od_composite_provenance` | **DEFERRED-eack9** | Requires canonical batch `run_od`, member assembly, and runtime provenance; its synthetic unpinned table cannot bind to a content-pinned resource slot. |
+
+### `test_orbit_fitter.py`
+
+| Baseline function | Disposition | Exact replacement or technical reason |
+|---|---|---|
+| `test_initial_fit_only_fitter_stays_instantiable` | **RETIRED-API** | `test_initial_fit_only_fitter_stays_instantiable` exercised a removed Python fitter/model/deprecation interface; Core 0.7 intentionally provides no alias or executable callback surface. |
+| `test_orbit_fitter_still_requires_initial_fit` | **RETIRED-API** | `test_orbit_fitter_still_requires_initial_fit` exercised a removed Python fitter/model/deprecation interface; Core 0.7 intentionally provides no alias or executable callback surface. |
+
+### `test_provenance.py`
+
+| Baseline function | Disposition | Exact replacement or technical reason |
+|---|---|---|
+| `test_ambiguous_iod_survives_refinement` | **DEFERRED/REPLACED** | Runtime build/provider/input/result provenance is `personal-eack9`; path-free config/resource identity is already pinned by `od_config::tests::complete_config_fingerprint_is_deterministic_and_path_free` and external ABI identity tests. |
+| `test_backend_identity_names_declared_and_python_backends` | **RETIRED-API** | This assertion attested mutable/executable Python model classes, hooks, delegates, mappings, descriptors, or custom contracts. That design was removed; the closed Rust `ObservationTransform` enum has no equivalent attack surface. |
+| `test_bias_module_delegate_mutation_is_refused_before_execution` | **RETIRED-API** | This assertion attested mutable/executable Python model classes, hooks, delegates, mappings, descriptors, or custom contracts. That design was removed; the closed Rust `ObservationTransform` enum has no equivalent attack surface. |
+| `test_bias_row_columns_monkeypatch_is_custom_on_real_route` | **RETIRED-API** | This assertion attested mutable/executable Python model classes, hooks, delegates, mappings, descriptors, or custom contracts. That design was removed; the closed Rust `ObservationTransform` enum has no equivalent attack surface. |
+| `test_builtin_behavior_overrides_and_nested_overrides_require_contract` | **RETIRED-API** | This assertion attested mutable/executable Python model classes, hooks, delegates, mappings, descriptors, or custom contracts. That design was removed; the closed Rust `ObservationTransform` enum has no equivalent attack surface. |
+| `test_builtin_descriptor_uses_exact_build_and_not_import_history` | **DEFERRED/REPLACED** | Runtime build/provider/input/result provenance is `personal-eack9`; path-free config/resource identity is already pinned by `od_config::tests::complete_config_fingerprint_is_deterministic_and_path_free` and external ABI identity tests. |
+| `test_canonical_configuration_is_injective_and_user_mappings_cannot_forge_tags` | **RETIRED-API** | This assertion attested mutable/executable Python model classes, hooks, delegates, mappings, descriptors, or custom contracts. That design was removed; the closed Rust `ObservationTransform` enum has no equivalent attack surface. |
+| `test_common_configuration_values_are_portable_and_distinct` | **RETIRED-API** | This assertion attested mutable/executable Python model classes, hooks, delegates, mappings, descriptors, or custom contracts. That design was removed; the closed Rust `ObservationTransform` enum has no equivalent attack surface. |
+| `test_complete_provenance_keeps_distinct_native_stage_providers` | **DEFERRED/REPLACED** | Runtime build/provider/input/result provenance is `personal-eack9`; path-free config/resource identity is already pinned by `od_config::tests::complete_config_fingerprint_is_deterministic_and_path_free` and external ABI identity tests. |
+| `test_composed_guard_rejects_model_state_changed_after_snapshot` | **RETIRED-API** | This assertion attested mutable/executable Python model classes, hooks, delegates, mappings, descriptors, or custom contracts. That design was removed; the closed Rust `ObservationTransform` enum has no equivalent attack surface. |
+| `test_composed_numpy_delegate_replacement_is_ignored_without_call` | **RETIRED-API** | This assertion attested mutable/executable Python model classes, hooks, delegates, mappings, descriptors, or custom contracts. That design was removed; the closed Rust `ObservationTransform` enum has no equivalent attack surface. |
+| `test_composite_native_model_specs_delegate_mutation_is_refused` | **RETIRED-API** | This assertion attested mutable/executable Python model classes, hooks, delegates, mappings, descriptors, or custom contracts. That design was removed; the closed Rust `ObservationTransform` enum has no equivalent attack surface. |
+| `test_contracted_moduleless_model_is_rejected` | **RETIRED-API** | This assertion attested mutable/executable Python model classes, hooks, delegates, mappings, descriptors, or custom contracts. That design was removed; the closed Rust `ObservationTransform` enum has no equivalent attack surface. |
+| `test_custom_contract_is_validated_exactly` | **RETIRED-API** | This assertion attested mutable/executable Python model classes, hooks, delegates, mappings, descriptors, or custom contracts. That design was removed; the closed Rust `ObservationTransform` enum has no equivalent attack surface. |
+| `test_custom_declaration_canonicalization_is_sensitive` | **RETIRED-API** | This assertion attested mutable/executable Python model classes, hooks, delegates, mappings, descriptors, or custom contracts. That design was removed; the closed Rust `ObservationTransform` enum has no equivalent attack surface. |
+| `test_custom_descriptor_is_stable_across_hash_seed_and_import_order` | **RETIRED-API** | This assertion attested mutable/executable Python model classes, hooks, delegates, mappings, descriptors, or custom contracts. That design was removed; the closed Rust `ObservationTransform` enum has no equivalent attack surface. |
+| `test_custom_fingerprint_is_the_implementation_identity` | **RETIRED-API** | This assertion attested mutable/executable Python model classes, hooks, delegates, mappings, descriptors, or custom contracts. That design was removed; the closed Rust `ObservationTransform` enum has no equivalent attack surface. |
+| `test_custom_non_string_module_metadata_is_never_formatted` | **RETIRED-API** | This assertion attested mutable/executable Python model classes, hooks, delegates, mappings, descriptors, or custom contracts. That design was removed; the closed Rust `ObservationTransform` enum has no equivalent attack surface. |
+| `test_custom_subclass_and_instance_apply_override_require_contract` | **RETIRED-API** | This assertion attested mutable/executable Python model classes, hooks, delegates, mappings, descriptors, or custom contracts. That design was removed; the closed Rust `ObservationTransform` enum has no equivalent attack surface. |
+| `test_default_constructor_mutation_is_refused_before_constructor` | **RETIRED-API** | This assertion attested mutable/executable Python model classes, hooks, delegates, mappings, descriptors, or custom contracts. That design was removed; the closed Rust `ObservationTransform` enum has no equivalent attack surface. |
+| `test_default_loader_selector_mutation_is_refused_before_loading` | **RETIRED-API** | This assertion attested mutable/executable Python model classes, hooks, delegates, mappings, descriptors, or custom contracts. That design was removed; the closed Rust `ObservationTransform` enum has no equivalent attack surface. |
+| `test_distribution_identity_probes_fail_closed_before_all_work` | **DEFERRED/REPLACED** | Runtime build/provider/input/result provenance is `personal-eack9`; path-free config/resource identity is already pinned by `od_config::tests::complete_config_fingerprint_is_deterministic_and_path_free` and external ABI identity tests. |
+| `test_documented_custom_model_migration_policy_is_executable` | **RETIRED-API** | This assertion attested mutable/executable Python model classes, hooks, delegates, mappings, descriptors, or custom contracts. That design was removed; the closed Rust `ObservationTransform` enum has no equivalent attack surface. |
+| `test_exact_class_special_lookup_hooks_are_refused_before_execution` | **RETIRED-API** | This assertion attested mutable/executable Python model classes, hooks, delegates, mappings, descriptors, or custom contracts. That design was removed; the closed Rust `ObservationTransform` enum has no equivalent attack surface. |
+| `test_extra_hostile_instance_field_is_refused_before_value_lookup` | **RETIRED-API** | This assertion attested mutable/executable Python model classes, hooks, delegates, mappings, descriptors, or custom contracts. That design was removed; the closed Rust `ObservationTransform` enum has no equivalent attack surface. |
+| `test_genuine_installed_class_and_apply_monkeypatches_are_refused` | **RETIRED-API** | This assertion attested mutable/executable Python model classes, hooks, delegates, mappings, descriptors, or custom contracts. That design was removed; the closed Rust `ObservationTransform` enum has no equivalent attack surface. |
+| `test_hostile_model_sequence_is_rejected_without_iteration` | **RETIRED-API** | This assertion attested mutable/executable Python model classes, hooks, delegates, mappings, descriptors, or custom contracts. That design was removed; the closed Rust `ObservationTransform` enum has no equivalent attack surface. |
+| `test_hostile_registered_field_values_are_refused_without_hooks` | **RETIRED-API** | This assertion attested mutable/executable Python model classes, hooks, delegates, mappings, descriptors, or custom contracts. That design was removed; the closed Rust `ObservationTransform` enum has no equivalent attack surface. |
+| `test_inherited_abc_lookup_mutation_is_refused_without_execution` | **RETIRED-API** | This assertion attested mutable/executable Python model classes, hooks, delegates, mappings, descriptors, or custom contracts. That design was removed; the closed Rust `ObservationTransform` enum has no equivalent attack surface. |
+| `test_input_fingerprint_hashes_caller_and_used_astrometry_independently` | **DEFERRED/REPLACED** | Runtime build/provider/input/result provenance is `personal-eack9`; path-free config/resource identity is already pinned by `od_config::tests::complete_config_fingerprint_is_deterministic_and_path_free` and external ABI identity tests. |
+| `test_local_contracted_class_is_rejected_before_all_work` | **RETIRED-API** | This assertion attested mutable/executable Python model classes, hooks, delegates, mappings, descriptors, or custom contracts. That design was removed; the closed Rust `ObservationTransform` enum has no equivalent attack surface. |
+| `test_main_dynamic_nonexistent_contract_is_rejected_before_all_work` | **RETIRED-API** | This assertion attested mutable/executable Python model classes, hooks, delegates, mappings, descriptors, or custom contracts. That design was removed; the closed Rust `ObservationTransform` enum has no equivalent attack surface. |
+| `test_model_descriptor_canonicalizes_colliding_sets_and_mapping_order` | **RETIRED-API** | This assertion attested mutable/executable Python model classes, hooks, delegates, mappings, descriptors, or custom contracts. That design was removed; the closed Rust `ObservationTransform` enum has no equivalent attack surface. |
+| `test_model_descriptor_hashes_numpy_configuration_and_sets` | **RETIRED-API** | This assertion attested mutable/executable Python model classes, hooks, delegates, mappings, descriptors, or custom contracts. That design was removed; the closed Rust `ObservationTransform` enum has no equivalent attack surface. |
+| `test_model_descriptor_hashes_table_content` | **RETIRED-API** | This assertion attested mutable/executable Python model classes, hooks, delegates, mappings, descriptors, or custom contracts. That design was removed; the closed Rust `ObservationTransform` enum has no equivalent attack surface. |
+| `test_model_descriptor_rejects_unsupported_and_cyclic_configuration` | **RETIRED-API** | This assertion attested mutable/executable Python model classes, hooks, delegates, mappings, descriptors, or custom contracts. That design was removed; the closed Rust `ObservationTransform` enum has no equivalent attack surface. |
+| `test_mutable_abc_metaclass_dispatch_is_attested_without_execution` | **RETIRED-API** | This assertion attested mutable/executable Python model classes, hooks, delegates, mappings, descriptors, or custom contracts. That design was removed; the closed Rust `ObservationTransform` enum has no equivalent attack surface. |
+| `test_native_kernel_delegate_mutation_is_refused_before_execution` | **RETIRED-API** | This assertion attested mutable/executable Python model classes, hooks, delegates, mappings, descriptors, or custom contracts. That design was removed; the closed Rust `ObservationTransform` enum has no equivalent attack surface. |
+| `test_native_model_spec_snapshot_has_no_mutable_model_references` | **RETIRED-API** | This assertion attested mutable/executable Python model classes, hooks, delegates, mappings, descriptors, or custom contracts. That design was removed; the closed Rust `ObservationTransform` enum has no equivalent attack surface. |
+| `test_native_settings_are_called_once_and_same_snapshot_is_recorded_and_used` | **DEFERRED/REPLACED** | Runtime build/provider/input/result provenance is `personal-eack9`; path-free config/resource identity is already pinned by `od_config::tests::complete_config_fingerprint_is_deterministic_and_path_free` and external ABI identity tests. |
+| `test_nested_custom_lookup_is_refused_without_any_hook` | **RETIRED-API** | This assertion attested mutable/executable Python model classes, hooks, delegates, mappings, descriptors, or custom contracts. That design was removed; the closed Rust `ObservationTransform` enum has no equivalent attack surface. |
+| `test_nested_lookup_special_resolution_hook_is_refused_before_execution` | **RETIRED-API** | This assertion attested mutable/executable Python model classes, hooks, delegates, mappings, descriptors, or custom contracts. That design was removed; the closed Rust `ObservationTransform` enum has no equivalent attack surface. |
+| `test_other_entry_points_leave_provenance_null` | **DEFERRED/REPLACED** | Runtime build/provider/input/result provenance is `personal-eack9`; path-free config/resource identity is already pinned by `od_config::tests::complete_config_fingerprint_is_deterministic_and_path_free` and external ABI identity tests. |
+| `test_preflight_describes_contract_before_apply_or_fit` | **DEFERRED/REPLACED** | Runtime build/provider/input/result provenance is `personal-eack9`; path-free config/resource identity is already pinned by `od_config::tests::complete_config_fingerprint_is_deterministic_and_path_free` and external ABI identity tests. |
+| `test_preflight_failure_happens_before_fitter_work` | **DEFERRED/REPLACED** | Runtime build/provider/input/result provenance is `personal-eack9`; path-free config/resource identity is already pinned by `od_config::tests::complete_config_fingerprint_is_deterministic_and_path_free` and external ABI identity tests. |
+| `test_preflight_rejects_native_python_version_mismatch_before_model_work` | **DEFERRED/REPLACED** | Runtime build/provider/input/result provenance is `personal-eack9`; path-free config/resource identity is already pinned by `od_config::tests::complete_config_fingerprint_is_deterministic_and_path_free` and external ABI identity tests. |
+| `test_provenance_keeps_exact_native_identity_not_later_declarations` | **RETIRED-API** | This assertion attested mutable/executable Python model classes, hooks, delegates, mappings, descriptors, or custom contracts. That design was removed; the closed Rust `ObservationTransform` enum has no equivalent attack surface. |
+| `test_provenance_preflight_refuses_non_reproducible_builds` | **DEFERRED/REPLACED** | Runtime build/provider/input/result provenance is `personal-eack9`; path-free config/resource identity is already pinned by `od_config::tests::complete_config_fingerprint_is_deterministic_and_path_free` and external ABI identity tests. |
+| `test_provider_cannot_replace_a_separate_orchestration_native_alias` | **DEFERRED/REPLACED** | Runtime build/provider/input/result provenance is `personal-eack9`; path-free config/resource identity is already pinned by `od_config::tests::complete_config_fingerprint_is_deterministic_and_path_free` and external ABI identity tests. |
+| `test_provider_mutation_is_bound_by_final_model_and_native_spec_snapshot` | **DEFERRED/REPLACED** | Runtime build/provider/input/result provenance is `personal-eack9`; path-free config/resource identity is already pinned by `od_config::tests::complete_config_fingerprint_is_deterministic_and_path_free` and external ABI identity tests. |
+| `test_provider_native_spec_builder_replacement_is_ignored_without_call` | **DEFERRED/REPLACED** | Runtime build/provider/input/result provenance is `personal-eack9`; path-free config/resource identity is already pinned by `od_config::tests::complete_config_fingerprint_is_deterministic_and_path_free` and external ABI identity tests. |
+| `test_provider_time_native_replacement_is_refused_before_fake_native_work` | **DEFERRED/REPLACED** | Runtime build/provider/input/result provenance is `personal-eack9`; path-free config/resource identity is already pinned by `od_config::tests::complete_config_fingerprint_is_deterministic_and_path_free` and external ABI identity tests. |
+| `test_public_pathlib_class_identity_is_normalized_across_private_relocation` | **RETIRED-API** | This assertion attested mutable/executable Python model classes, hooks, delegates, mappings, descriptors, or custom contracts. That design was removed; the closed Rust `ObservationTransform` enum has no equivalent attack surface. |
+| `test_public_run_od_recursively_preflights_nested_custom_models` | **DEFERRED/REPLACED** | Runtime build/provider/input/result provenance is `personal-eack9`; path-free config/resource identity is already pinned by `od_config::tests::complete_config_fingerprint_is_deterministic_and_path_free` and external ABI identity tests. |
+| `test_python_callable_configuration_requires_explicit_portable_data` | **RETIRED-API** | This assertion attested mutable/executable Python model classes, hooks, delegates, mappings, descriptors, or custom contracts. That design was removed; the closed Rust `ObservationTransform` enum has no equivalent attack surface. |
+| `test_real_git_source_checkout_detector_is_fail_closed` | **RETIRED-API** | This assertion attested mutable/executable Python model classes, hooks, delegates, mappings, descriptors, or custom contracts. That design was removed; the closed Rust `ObservationTransform` enum has no equivalent attack surface. |
+| `test_registered_instance_data_cannot_be_shadowed_on_the_class` | **RETIRED-API** | This assertion attested mutable/executable Python model classes, hooks, delegates, mappings, descriptors, or custom contracts. That design was removed; the closed Rust `ObservationTransform` enum has no equivalent attack surface. |
+| `test_registered_instance_shadows_and_nested_subclass_are_custom` | **RETIRED-API** | This assertion attested mutable/executable Python model classes, hooks, delegates, mappings, descriptors, or custom contracts. That design was removed; the closed Rust `ObservationTransform` enum has no equivalent attack surface. |
+| `test_replaced_native_build_function_is_refused_without_call` | **DEFERRED/REPLACED** | Runtime build/provider/input/result provenance is `personal-eack9`; path-free config/resource identity is already pinned by `od_config::tests::complete_config_fingerprint_is_deterministic_and_path_free` and external ABI identity tests. |
+| `test_replaced_native_package_module_is_refused_without_call` | **RETIRED-API** | This assertion attested mutable/executable Python model classes, hooks, delegates, mappings, descriptors, or custom contracts. That design was removed; the closed Rust `ObservationTransform` enum has no equivalent attack surface. |
+| `test_run_od_records_provenance` | **DEFERRED/REPLACED** | Runtime build/provider/input/result provenance is `personal-eack9`; path-free config/resource identity is already pinned by `od_config::tests::complete_config_fingerprint_is_deterministic_and_path_free` and external ABI identity tests. |
+| `test_runtime_untracked_source_guard_precedes_models` | **DEFERRED/REPLACED** | Runtime build/provider/input/result provenance is `personal-eack9`; path-free config/resource identity is already pinned by `od_config::tests::complete_config_fingerprint_is_deterministic_and_path_free` and external ABI identity tests. |
+| `test_sigma_fill_model_constant_monkeypatch_is_custom_on_real_route` | **RETIRED-API** | This assertion attested mutable/executable Python model classes, hooks, delegates, mappings, descriptors, or custom contracts. That design was removed; the closed Rust `ObservationTransform` enum has no equivalent attack surface. |
+| `test_uniform_provider_rejects_disagreement_and_partial_omission` | **DEFERRED/REPLACED** | Runtime build/provider/input/result provenance is `personal-eack9`; path-free config/resource identity is already pinned by `od_config::tests::complete_config_fingerprint_is_deterministic_and_path_free` and external ABI identity tests. |
+| `test_unsupported_dynamic_model_has_documented_type_error` | **RETIRED-API** | This assertion attested mutable/executable Python model classes, hooks, delegates, mappings, descriptors, or custom contracts. That design was removed; the closed Rust `ObservationTransform` enum has no equivalent attack surface. |
+| `test_veres_lookup_payload_monkeypatch_is_custom_on_real_route` | **RETIRED-API** | This assertion attested mutable/executable Python model classes, hooks, delegates, mappings, descriptors, or custom contracts. That design was removed; the closed Rust `ObservationTransform` enum has no equivalent attack surface. |
+| `test_veres_registered_class_mutations_are_custom` | **RETIRED-API** | This assertion attested mutable/executable Python model classes, hooks, delegates, mappings, descriptors, or custom contracts. That design was removed; the closed Rust `ObservationTransform` enum has no equivalent attack surface. |
+
+### `test_reconstruction_contracts.py`
+
+| Baseline function | Disposition | Exact replacement or technical reason |
+|---|---|---|
+| `test_build_identity_is_exact_clean_head` | **REPLACED/DEFERRED-eack9** | `migration/scripts/release_inventory.py::_assert_clean_source` and `create_release_inventory` enforce exact clean release source identity; runtime batch rejection of unavailable/dirty identity is explicitly deferred to `personal-eack9`. |
+| `test_efcc_descriptor_content_version_exclusions` | **RETIRED-API** | Python model-descriptor identity was removed; bound Rust resource/config fingerprints replace it (`od_config::tests::complete_config_fingerprint_is_deterministic_and_path_free`). |
+| `test_explicit_stage_composition_route_completes` | **DEFERRED-eack9** | This assertion concerns composed-route provider/input/runtime provenance or batch epoch validation, owned by `personal-eack9`. |
+| `test_fused_and_composed_share_native_model_science_and_provenance` | **DEFERRED-eack9** | This assertion concerns composed-route provider/input/runtime provenance or batch epoch validation, owned by `personal-eack9`. |
+| `test_input_fingerprint_is_layout_canonical` | **DEFERRED-eack9** | This assertion concerns composed-route provider/input/runtime provenance or batch epoch validation, owned by `personal-eack9`. |
+| `test_input_fingerprint_is_sensitive` | **DEFERRED-eack9** | This assertion concerns composed-route provider/input/runtime provenance or batch epoch validation, owned by `personal-eack9`. |
+| `test_model_descriptor_numpy_variants` | **RETIRED-API** | Python model-descriptor identity was removed; bound Rust resource/config fingerprints replace it (`od_config::tests::complete_config_fingerprint_is_deterministic_and_path_free`). |
+| `test_provider_metadata_comes_from_capsule_not_python_declaration` | **DEFERRED-eack9** | This assertion concerns composed-route provider/input/runtime provenance or batch epoch validation, owned by `personal-eack9`. |
+| `test_two_distinct_epoch_arcs_are_refused_on_all_routes` | **DEFERRED-eack9** | This assertion concerns composed-route provider/input/runtime provenance or batch epoch validation, owned by `personal-eack9`. |
+
+### `test_run_iod.py`
+
+| Baseline function | Disposition | Exact replacement or technical reason |
+|---|---|---|
+| `test_fitter_forwards_the_velocity_method` | **RETIRED-API** | Python fitter dispatch/default forwarding was removed; typed Rust `IodRunConfig` is the only policy path. |
+| `test_fitter_initial_fit_runs_iod_on_the_configured_class` | **RETIRED-API** | Python fitter dispatch/default forwarding was removed; typed Rust `IodRunConfig` is the only policy path. |
+| `test_initial_orbit_determination_accepts_an_unmatched_linkage` | **DEFERRED-eack9** | Batch linkage grouping/member semantics are explicitly owned by `personal-eack9`. |
+| `test_initial_orbit_determination_runs_run_iod_per_linkage` | **DEFERRED-eack9** | Batch linkage grouping/member semantics are explicitly owned by `personal-eack9`. |
+| `test_iod_is_the_accepted_orbit_of_run_iod` | **REPLACED** | `test_iod.py::test_iod_fused_matches_pinned_legacy_fixture` and current `test_run_iod.py` corrected/prefit acceptance tests pin the accepted candidate policy. |
+| `test_linkage_api_validates_settings_before_empty_exit` | **DEFERRED-eack9** | Batch linkage grouping/member semantics are explicitly owned by `personal-eack9`. |
+| `test_native_iod_rejects_invalid_settings_centrally` | **REPLACED** | `test_run_iod.py::test_run_iod_validates_all_settings_before_empty_exit` and `od_config::tests::stage_json_round_trips_strictly_and_rejects_unknown_or_missing_fields`. |
+| `test_refinement_signature_defaults_are_the_rust_defaults` | **REPLACED** | `test_final_config.py::test_complete_stage_configs_are_explicitly_constructible` and `::test_core_constants_match_d21_effective_values_exactly`; high-level APIs have no implicit defaults. |
+| `test_run_iod_capsule_matches_in_tree_two_body_driver` | **REPLACED** | Rust `od_refine::tests::external_propagators_run_the_od_stages_like_native_ones`. |
+| `test_run_iod_then_refine_is_the_stage_contract` | **REPLACED** | `od_workflows::tests::run_od_prepares_once_and_exactly_composes_isolated_stage_predictors`. |
+| `test_signature_defaults_are_the_rust_defaults` | **REPLACED** | `test_final_config.py::test_complete_stage_configs_are_explicitly_constructible` and `::test_core_constants_match_d21_effective_values_exactly`; high-level APIs have no implicit defaults. |
+
+### `test_run_od_null_covariance.py`
+
+| Baseline function | Disposition | Exact replacement or technical reason |
+|---|---|---|
+| `test_fused_and_composed_native_model_routes_agree_with_filled_sigmas` | **DEFERRED-eack9** | Route parity requires the canonical configured batch workflow plus the separately bound fill resource. |
+| `test_sigma_fill_supplies_the_missing_covariance` | **DEFERRED-resource/eack9** | End-to-end fill→OD needs the separately supplied pinned station uncertainty resource; binding failure is covered by `::test_fill_transform_requires_explicit_validated_resource`, final configured workflow parity by `personal-eack9`/resource wiring. |
+| `test_without_a_filling_model_the_fit_is_refused` | **REPLACED** | `test_run_od_null_covariance.py::test_without_a_fill_transform_the_fit_is_refused`. |
+
+### `test_solver_budgets.py`
+
+| Baseline function | Disposition | Exact replacement or technical reason |
+|---|---|---|
+| `test_fitter_serializes_both_solver_limits` | **REPLACED** | Rust `od_refine::tests::iteration_budget_is_independent_of_evaluation_budget` and `::evaluation_budget_bounds_every_residual_evaluation`, plus `od_config::tests::stage_json_round_trips_strictly_and_rejects_unknown_or_missing_fields`. |
+
+### `test_veres2017.py`
+
+| Baseline function | Disposition | Exact replacement or technical reason |
+|---|---|---|
+| `test_composes_after_efcc18_style_position_models` | **RETIRED/REPLACED** | Executable Python model composition is retired; Rust configured order/execution is covered by the two `od_workflows` tests and closed-transform tests. |
+| `test_composes_with_other_models` | **RETIRED/REPLACED** | Executable Python model composition is retired; Rust configured order/execution is covered by the two `od_workflows` tests and closed-transform tests. |
+| `test_cross_term_is_preserved` | **REPLACED/RETIRED** | `veres2017::tests::floor_model_floors_per_axis_with_cos_dec_and_fill_missing`. |
+| `test_default_table_without_the_package_raises_import_error` | **DEFERRED/RETIRED** | Runtime package discovery and legacy default tables are retired; exact separately supplied resource parsing is the ignored acceptance test `od_config::tests::separately_packaged_reference_resources_parse` pending resource wiring. |
+| `test_duplicate_rows_raise` | **REPLACED/RETIRED** | `veres2017::tests::lookup_order_and_validation`. |
+| `test_fills_only_missing_axes_and_keeps_reported` | **REPLACED/RETIRED** | `veres2017::tests::fill_model_fills_only_missing_axes_and_zeroes_cross_term`. |
+| `test_floors_small_sigmas_and_keeps_large_ones` | **REPLACED/RETIRED** | `veres2017::tests::floor_model_floors_per_axis_with_cos_dec_and_fill_missing`. |
+| `test_global_row_beats_fallback_and_is_unique` | **REPLACED/RETIRED** | `veres2017::tests::generic_rows_lookup_order_station_catalog_station_catalog_global`. |
+| `test_known_working_table_entries` | **DEFERRED/RETIRED** | Runtime package discovery and legacy default tables are retired; exact separately supplied resource parsing is the ignored acceptance test `od_config::tests::separately_packaged_reference_resources_parse` pending resource wiring. |
+| `test_lookup_order` | **REPLACED/RETIRED** | `veres2017::tests::lookup_order_and_validation`. |
+| `test_lookup_order_station_catalog_station_catalog_global` | **REPLACED/RETIRED** | `veres2017::tests::generic_rows_lookup_order_station_catalog_station_catalog_global`. |
+| `test_missing_column_raises` | **REPLACED/RETIRED** | `od_config::tests::separately_packaged_reference_resources_parse` plus strict `sigma_schema` validation (resource-gated). |
+| `test_missing_sigma_left_unless_fill_missing` | **REPLACED/RETIRED** | `veres2017::tests::floor_model_floors_per_axis_with_cos_dec_and_fill_missing`. |
+| `test_model_defaults_resolve_the_package_tables` | **DEFERRED/RETIRED** | Runtime package discovery and legacy default tables are retired; exact separately supplied resource parsing is the ignored acceptance test `od_config::tests::separately_packaged_reference_resources_parse` pending resource wiring. |
+| `test_no_fallback_returns_none` | **REPLACED/RETIRED** | `veres2017::tests::lookup_order_and_validation`. |
+| `test_non_positive_sigma_raises` | **REPLACED/RETIRED** | `veres2017::tests::lookup_order_and_validation`. |
+| `test_nothing_missing_returns_same_object` | **REPLACED/RETIRED** | The executable Python identity/object-reuse contract is retired; Rust `fill_model_fills_only_missing_axes_and_zeroes_cross_term` pins unchanged values. |
+| `test_null_astcat_is_a_station_or_global_row` | **REPLACED/RETIRED** | `veres2017::tests::generic_rows_lookup_order_station_catalog_station_catalog_global`. |
+| `test_package_working_table_still_validates` | **DEFERRED/RETIRED** | Runtime package discovery and legacy default tables are retired; exact separately supplied resource parsing is the ignored acceptance test `od_config::tests::separately_packaged_reference_resources_parse` pending resource wiring. |
+| `test_replaces_both_axes_and_zeroes_cross_term` | **REPLACED/RETIRED** | `veres2017::tests::replace_model_overwrites_and_zeroes_cross_term`. |
+| `test_unknown_catalog_uses_fallback_or_passes_through` | **REPLACED/RETIRED** | `veres2017::tests::lookup_order_and_validation`. |
+| `test_unresolvable_without_global_or_fallback_stays_nan` | **REPLACED/RETIRED** | `veres2017::tests::lookup_order_and_validation`. |
+| `test_working_table_schema_and_sanity` | **DEFERRED/RETIRED** | Runtime package discovery and legacy default tables are retired; exact separately supplied resource parsing is the ignored acceptance test `od_config::tests::separately_packaged_reference_resources_parse` pending resource wiring. |
+
+## Deleted d21 Rust `run_od` assertions
+
+| Deleted d21 Rust assertion | Disposition | Exact replacement or deferral |
+|---|---|---|
+| `run_od_applies_models_and_records_provenance` | **REPLACED/DEFERRED-eack9** | `od_workflows::tests::prepare_observations_executes_ordered_repeated_pipeline_and_retains_snapshots` proves numerical ordered/repeated execution and supplied/used retention. Canonical result provenance is explicitly deferred to `personal-eack9`. |
+| `run_od_lets_a_sigma_model_fill_a_missing_covariance` | **DEFERRED-resource/eack9** | The fill transform requires the separately supplied, content-pinned `station_catalog_uncertainty_table`; missing binding is covered by `test_run_od_null_covariance.py::test_fill_transform_requires_explicit_validated_resource`. End-to-end fill→OD remains resource wiring plus canonical batch work. |
+| `run_od_without_covariance_or_a_filling_model_is_refused` | **REPLACED** | `test_run_od_null_covariance.py::test_without_a_fill_transform_the_fit_is_refused`. |
+| The deleted `run_od_with` block inside `iod_refinement_full_od_and_run_od_use_only_their_configured_stage_predictors` | **REPLACED** | `od_workflows::tests::run_od_prepares_once_and_exactly_composes_isolated_stage_predictors` directly exercises the public configured predictor seam, exact prepared-row IOD→refine composition, prepare-once behavior, and stage isolation. |
+
+## Mechanical verification
+
+The crosswalk is generated from AST function names at the exact baseline and current tree. The restored section is excluded from the absent set; every remaining `(file, function)` appears exactly once above. The correction report records the independent count/check command.

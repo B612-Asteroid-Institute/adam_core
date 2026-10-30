@@ -129,7 +129,14 @@ null.
 Failure boundary
 ----------------
 
-Malformed configuration, resources, IDs/member mappings, unsupported provider
-capabilities, and malformed provider responses are invocation-fatal and produce
-no partial output. The forthcoming batch layer will classify only safely
-isolated scientific no-solution/refinement failures per group.
+The current foundation validates configuration and bound resources and adopts
+external capsules through the native ABI checks, but it does not yet own batch
+IDs/member mappings, empty-group behavior, or the ordering of all invocation
+preflights.
+
+The forthcoming canonical batch layer will make malformed
+configuration, resources, IDs/member mappings, unsupported provider
+capabilities, malformed provider responses, and unavailable build identity
+invocation-fatal before pipeline/numerical work, with no partial output. It will
+classify only safely isolated scientific no-solution/refinement failures per
+group and will populate canonical runtime provenance.

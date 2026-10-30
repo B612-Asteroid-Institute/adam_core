@@ -19,12 +19,12 @@
 //!
 //! Tables
 //! ------
-//! adam_core bundles NO sigma table. The tables (the Asteroid Institute
-//! `v2_sigma_fill` default, the legacy `veres2017_working` reference) are data
-//! shipped by the private `adam-observatory-uncertainties` package and handed
-//! in as [`VeresSigmaRow`] rows; the Python veneer resolves a default table by
-//! importing that package, the way EFCC18 resolves the `jpl_debias_2018` data
-//! package.
+//! adam_core bundles no sigma table and performs no package discovery. A
+//! caller binds a concrete file to the semantic
+//! `station_catalog_uncertainty_table` resource slot; Core validates its
+//! pinned content identity and schema before parsing [`VeresSigmaRow`] values.
+//! Standalone users may also construct [`VeresSigmaLookup`] explicitly from
+//! caller-owned rows.
 //!
 //! Frames and units
 //! ----------------
@@ -379,9 +379,9 @@ mod tests {
     }
 
     #[test]
-    fn rows_mirror_a_package_sigma_table() {
-        // The row shapes `adam-observatory-uncertainties` ships: a (station,
-        // catalog) override and a catalog default, plus the scalar fallback.
+    fn rows_mirror_the_semantic_sigma_table_schema() {
+        // Supported row shapes: a (station, catalog) override and a catalog
+        // default, plus the scalar fallback.
         let rows = vec![
             VeresSigmaRow {
                 obs_code: Some("F51".into()),

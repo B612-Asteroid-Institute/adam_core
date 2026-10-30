@@ -1,5 +1,8 @@
 """Focused IOD qualification against an external propagation capsule."""
 
+import json
+from pathlib import Path
+
 import numpy as np
 import pyarrow.compute as pc
 import pytest
@@ -10,7 +13,7 @@ from ...observers import Observers
 from ...utils.helpers.observations import make_observations
 from ...utils.helpers.orbits import make_real_orbits
 from ..evaluate import OrbitDeterminationObservations
-from ._focused import run_iod_qualified
+from ._focused import run_iod_qualified, run_prefit_iod_qualified
 
 ASSISTPropagator = pytest.importorskip("adam_assist").ASSISTPropagator
 
@@ -65,3 +68,60 @@ def test_focused_iod_is_deterministic(real_data) -> None:
         first[0].coordinates.values, second[0].coordinates.values
     )
     assert first[1].solution.to_pylist() == second[1].solution.to_pylist()
+
+
+def test_iod_fused_matches_pinned_legacy_fixture(real_data) -> None:
+    """Pin the accepted d21 single-arc ASSIST IOD numerical products."""
+
+    fixture = json.loads(
+        (
+            Path(__file__).parents[4]
+            / "migration/artifacts/iod_orchestration_fixture_2026-07-12.json"
+        ).read_text()
+    )["case"]
+    observations = real_data[:10]
+    assert observations.id.to_pylist() == fixture["observation_ids"]
+
+    fitted, members = run_prefit_iod_qualified(
+        observations,
+        ASSISTPropagator(),
+        min_obs=6,
+        min_arc_length=1.0,
+        rchi2_threshold=1000.0,
+        observation_selection_method="combinations",
+        light_time=True,
+    )
+
+    # This preliminary orbit is mildly ill-conditioned with respect to the
+    # platform libm RA/Dec conversion. Preserve d21's component-specific
+    # bounds for the macOS-arm64 fixture; see iod_platform_numerics_2026-07-15.md.
+    state_atol = [4e-12, 2e-11, 4e-12, 4e-13, 4e-13, 4e-13]
+    for axis, atol in enumerate(state_atol):
+        np.testing.assert_allclose(
+            fitted.coordinates.values[:, axis],
+            np.asarray(fixture["state"])[:, axis],
+            rtol=0,
+            atol=atol,
+        )
+    np.testing.assert_allclose(fitted.arc_length, fixture["arc_length"], rtol=0, atol=0)
+    np.testing.assert_array_equal(fitted.num_obs, fixture["num_obs"])
+    np.testing.assert_allclose(fitted.chi2, fixture["chi2"], rtol=1e-7, atol=2e-5)
+    np.testing.assert_allclose(
+        fitted.reduced_chi2, fixture["reduced_chi2"], rtol=1e-7, atol=2e-6
+    )
+    np.testing.assert_allclose(
+        members.residuals.to_array(),
+        fixture["residual_values"],
+        rtol=0,
+        atol=3e-11,
+        equal_nan=True,
+    )
+    np.testing.assert_allclose(
+        members.residuals.chi2,
+        fixture["residual_chi2"],
+        rtol=2e-7,
+        atol=2e-5,
+    )
+    assert members.obs_id.to_pylist() == fixture["member_obs_ids"]
+    assert members.solution.to_pylist() == fixture["solution"]
+    assert members.outlier.to_pylist() == fixture["outlier"]

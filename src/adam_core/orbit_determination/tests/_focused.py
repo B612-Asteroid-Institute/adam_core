@@ -126,10 +126,18 @@ def run_prefit_iod_qualified(observations, propagator, **settings):
     return orbit, members
 
 
-def refine_qualified(orbit, observations, propagator, **settings):
-    """Test-only native refinement bridge without workflow provenance."""
+def refine_qualified(
+    orbit, observations, propagator, *, _config: OdConfig | None = None, **settings
+):
+    """Test-only native refinement bridge without workflow provenance.
+
+    ``_config`` lets the composition helper pass the exact configuration used
+    for IOD. Direct callers instead provide only refinement settings.
+    """
     propagator = _instance(propagator)
-    config = explicit_config(**settings)
+    if _config is not None and settings:
+        raise TypeError("settings cannot be combined with the prepared test config")
+    config = _config if _config is not None else explicit_config(**settings)
     seed = orbit.to_orbits() if hasattr(orbit, "to_orbits") else orbit
     output = _rust_native.refine_config_ipc(
         native_propagator(propagator),
@@ -158,7 +166,7 @@ def run_od_qualified(observations, propagator, *, object_id=None, **settings):
         seed,
         observations,
         propagator,
-        refinement_method=settings.get("refinement_method", "cmc2003"),
+        _config=config,
     )
     if object_id is not None and len(fitted):
         fitted = fitted.set_column(

@@ -174,14 +174,17 @@ Current Migrated APIs
     ``run_od_with_predictors``. The last applies the pipeline once and gives
     both stages the same prepared coordinates.
   - External native propagators expose the propagation-only
-    ``adam_core.propagator.v2`` capsule. Core validates provider identity and
-    capabilities before pipeline work. Providers never select transforms,
-    profiles, grouping, fitting, rejection, covariance, or OD algorithms.
-  - Canonical configured workflows reject dirty/unknown Core identity, invalid
-    IDs, malformed resources/config/provider contracts atomically. Empty
-    groups return empty results before provider or
-    pipeline work. The future batch layer will classify only safely isolated
-    scientific failures per group.
+    ``adam_core.propagator.v2`` capsule. Capsule adoption validates its ABI,
+    identity fields, and capabilities. The current predictor-level composition
+    accepts an already-adopted predictor and does not itself sequence global
+    provider/build/ID preflight. Providers never select transforms, profiles,
+    grouping, fitting, rejection, covariance, or OD algorithms.
+  - The forthcoming canonical batch layer will reject dirty/unknown
+    Core identity, invalid IDs/member mappings, and malformed
+    resource/config/provider contracts atomically before pipeline or numerical
+    work. It will define empty-group behavior, typed per-group scientific
+    failures, and canonical runtime provenance. None of those batch guarantees
+    is claimed by the current focused foundation.
   - CMC2003 finalization uses one central-difference Jacobian through the full
     predictor for all observations. Selected rows form the covariance; all
     rows supply rejection/recovery projections. Huber plus CMC2003 remains a
