@@ -50,12 +50,11 @@ pub use external::{
 pub use od::{
     candidate_orbit_batch, evaluate_orbit, evaluate_orbit_barycentric,
     fit_orbit_least_squares_barycentric, fit_orbit_least_squares_evaluated_barycentric, iod_fit,
-    iod_fit_barycentric, iod_fit_linkages_barycentric, vallado_least_squares_barycentric,
-    CorrectionConfig, EvaluatedLeastSquaresFit, FitEvaluation, IodAcceptance, IodCandidate,
-    IodCandidateFailure, IodConfig, IodOutput, IodResult, ObservationSelectionMethod,
-    OrbitGeometry, PrefitScope, SpanSearchConfig, ValladoConfig, ValladoIteration, ValladoResult,
-    ValladoStatus, VelocityMethod, INVALID_LIGHT_TIME_MESSAGE, IOD_DEFAULT_MU,
-    IOD_DEFAULT_SPEED_OF_LIGHT,
+    iod_fit_barycentric, vallado_least_squares_barycentric, CorrectionConfig,
+    EvaluatedLeastSquaresFit, FitEvaluation, IodAcceptance, IodCandidate, IodCandidateFailure,
+    IodConfig, IodOutput, IodResult, ObservationSelectionMethod, OrbitGeometry, PrefitScope,
+    SpanSearchConfig, ValladoConfig, ValladoIteration, ValladoResult, ValladoStatus,
+    VelocityMethod, INVALID_LIGHT_TIME_MESSAGE, IOD_DEFAULT_MU, IOD_DEFAULT_SPEED_OF_LIGHT,
 };
 pub use od_ranging::{
     admissible_rho_dot_interval, attributable, ranging_state, Attributable, RangingConfig,
@@ -63,30 +62,23 @@ pub use od_ranging::{
 };
 pub use od_refine::{
     apply_configured_observation_pipeline, cmc2003_fit_barycentric, fit_orbit_whitened_barycentric,
-    iterative_fit_barycentric, max_outliers, refine_barycentric, run_iod_barycentric,
-    run_iod_linkages_barycentric, symmetric_eigen_6x6, AppliedObservationModels,
+    iterative_fit_barycentric, max_outliers, symmetric_eigen_6x6, AppliedObservationModels,
     AstrometrySnapshot, Cmc2003FitConfig, Cmc2003FitOutput, CovarianceValidation,
     IterativeFitConfig, IterativeFitOutput, JacobianMethod, RefinedOutput, RefinementConfig,
     WhitenedFitConfig, WhitenedFitOutput, DELTA_CHI2_WINDOW,
 };
 pub use pipeline::{OrbitRow, PropagationResult};
 
-/// The OD loops over a [`SphericalPredictor`](adapter::SphericalPredictor), the narrow prediction
-/// interface the stages are written against.
-///
-/// The supported stage contract is the `Propagator`-generic functions at the
-/// top of this module ([`run_iod_barycentric`], [`refine_barycentric`], and
-/// the fit and rejection loops' `*_barycentric` forms), which name the
-/// propagator each stage runs on. Configured composition lives under
-/// `crate::od::algorithms`. These adapter-level
-/// forms take an already-built predictor; they exist for language bindings
-/// that build the predictor themselves and are not a separate contract.
+/// Predictor-level focused OD kernels over the narrow [`od::SphericalPredictor`]
+/// interface. Canonical configured composition lives under
+/// `crate::od::algorithms`; these focused kernels are not alternate public
+/// batch orchestration.
 pub mod adapter {
     pub use super::od::{run_iod, PropagatorPredictor, SphericalPredictor};
     pub use super::od_ranging::systematic_ranging_with;
     pub use super::od_refine::{
         cmc2003_fit_with, fit_orbit_whitened_with, iterative_fit_with, refine_with,
-        run_iod_corrected, run_iod_linkages_with, run_iod_with, validate_fit_covariance_with,
+        run_iod_corrected, run_iod_with, validate_fit_covariance_with,
     };
 }
 pub use request::{
@@ -101,6 +93,24 @@ use std::fmt;
 
 pub type PropagationResultValue<T> = std::result::Result<T, PropagationError>;
 
+/// Stable typed classifications for group-local numerical/scientific outcomes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GroupScientificFailureCode {
+    RankDeficient,
+    NoIncludedObservations,
+    NoFitPass,
+}
+
+impl GroupScientificFailureCode {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::RankDeficient => "rank_deficient",
+            Self::NoIncludedObservations => "no_included_observations",
+            Self::NoFitPass => "no_fit_pass",
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum PropagationError {
     Schema(SchemaError),
@@ -109,7 +119,14 @@ pub enum PropagationError {
     CmcCovarianceUnavailable(String),
     MissingOrbitTimes,
     UnsupportedCovarianceMode(CovariancePropagation),
-    /// Candidate-local numerical failure reported in-band by a successful backend request.
+    /// An explicitly classified group-local numerical/scientific outcome.
+    GroupScientific {
+        code: GroupScientificFailureCode,
+        message: String,
+    },
+    /// Candidate-local propagation failure reported in-band by a successful backend request.
+    /// This is not safe to continue at the group-workflow boundary because a
+    /// provider may use it for global coverage/resource failures.
     RowFailure(String),
     /// Fatal provider operation failure (including a caught provider panic).
     Backend(String),
@@ -129,6 +146,9 @@ impl fmt::Display for PropagationError {
             Self::MissingOrbitTimes => write!(f, "propagation requires per-orbit coordinate times"),
             Self::UnsupportedCovarianceMode(mode) => {
                 write!(f, "unsupported covariance propagation mode: {mode:?}")
+            }
+            Self::GroupScientific { code, message } => {
+                write!(f, "group scientific failure ({}): {message}", code.as_str())
             }
             Self::RowFailure(message) => write!(f, "propagation row failure: {message}"),
             Self::Backend(message) => write!(f, "propagation backend error: {message}"),

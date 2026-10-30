@@ -126,6 +126,9 @@ class OdProvenance(qv.Table):
     adam_core_build = qv.LargeStringColumn(nullable=True)
     #: SHA-256 of the ordered caller table plus exact used-astrometry rows.
     input_fingerprint = qv.LargeStringColumn(nullable=True)
+    #: SHA-256 of the exact emitted orbit state/time/origin/covariance and
+    #: physical/non-gravitational parameters, validated on later workflows.
+    state_fingerprint = qv.LargeStringColumn(nullable=True)
     #: Exact canonical workflow route.
     route = qv.LargeStringColumn(nullable=True)
     #: Historical producer label; configured workflows leave this null.
@@ -175,6 +178,7 @@ class OrbitDeterminationFailures(qv.Table):
     stage = qv.LargeStringColumn()
     code = qv.LargeStringColumn()
     message = qv.LargeStringColumn()
+    #: True only when Rust retained an actual native best/non-converged state.
     recoverable = qv.BooleanColumn()
     num_obs = qv.Int64Column()
     arc_length = qv.Float64Column(nullable=True)
@@ -352,3 +356,9 @@ class FittedOrbitMembers(qv.Table):
     original_astrometry = ObservationAstrometry.as_column(nullable=True)
     used_astrometry = ObservationAstrometry.as_column(nullable=True)
     astcat = qv.LargeStringColumn(nullable=True)
+    #: Rust-owned SHA-256 of the complete source/observer/original/used input
+    #: row. Canonical refinement and evaluation require and revalidate it.
+    input_fingerprint = qv.LargeStringColumn(nullable=True)
+    #: Rust-owned SHA-256 binding ordered explicit membership to the
+    #: association hypothesis and orbit identity.
+    membership_fingerprint = qv.LargeStringColumn(nullable=True)

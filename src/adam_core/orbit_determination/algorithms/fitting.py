@@ -520,7 +520,7 @@ def _fitted_tables_from_native_output(
     """
     state = np.asarray(output["state"], dtype=np.float64)
     covariance_matrix = np.asarray(output["covariance"], dtype=np.float64)
-    converged = bool(output["converged"])
+    success = bool(output["success"])
     fitted_orbit = FittedOrbits.from_kwargs(
         orbit_id=orbit.orbit_id,
         object_id=orbit.object_id,
@@ -546,8 +546,8 @@ def _fitted_tables_from_native_output(
         reduced_chi2=[output["reduced_chi2"]],
         iterations=[output["iterations"]],
         optimizer_iterations=[output["optimizer_iterations"]],
-        success=[converged],
-        status_code=[int(output.get("status_code", 1 if converged else 0))],
+        success=[success],
+        status_code=[int(output["status_code"])],
     )
     residuals = Residuals.from_kwargs(
         values=np.asarray(output["residual_values"], dtype=np.float64).tolist(),
@@ -560,7 +560,7 @@ def _fitted_tables_from_native_output(
         orbit_id=np.full(len(observations), orbit.orbit_id[0].as_py(), dtype="object"),
         obs_id=observations.id,
         residuals=residuals,
-        solution=~outlier,
+        solution=output["solution"],
         outlier=outlier,
         weight=np.asarray(weights, dtype=np.float64),
     )

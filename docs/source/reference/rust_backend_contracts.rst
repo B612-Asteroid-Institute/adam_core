@@ -162,7 +162,12 @@ Current Migrated APIs
     ``evaluate_orbits`` are exported. Every route returns fitted orbits,
     explicit fitted members, and typed scientific failures; expert numerical
     kernels remain under ``adam_core.orbit_determination.algorithms``.
-  - Boundary: nested Arrow IPC plus an explicit native ``OdConfig``. Python
+  - Boundary: nested Arrow IPC plus explicit typed configuration. Rust returns
+    authoritative output disposition, success/status, solution/outlier flags,
+    state retention, failure classification, fingerprints, and provenance;
+    Python only wraps those columns into quivr tables. Python does not infer
+    composition eligibility from a route string.
+  - Python
     binds semantic resource slots and marshals tables; Rust validates exact
     resource identity, parses tables, executes the ordered observation
     pipeline, and owns numerical loops. There are no model callback/native-spec

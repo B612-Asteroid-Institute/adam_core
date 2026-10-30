@@ -85,6 +85,7 @@ def test_removed_legacy_modules_and_native_routes_have_no_aliases() -> None:
         "validate_iod_settings",
         "validate_full_od_settings",
         "iod_defaults",
+        "sort_linkages_by_id_and_time_numpy",
     ):
         assert not hasattr(_rust_native, symbol)
 

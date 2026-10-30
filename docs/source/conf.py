@@ -161,9 +161,9 @@ def _generate_api_reference(_: object) -> None:
         r"""adam\_core.orbit\_determination package
 =======================================
 
-The package exports immutable configuration/profile values and OD result
-schemas. It deliberately exposes no interim Python configured workflow; expert
-numerical kernels live in the ``algorithms`` namespace.
+The package exports immutable configuration/profile values, OD result schemas,
+and the four canonical native-backed batch workflows. Expert numerical kernels
+live in the ``algorithms`` namespace.
 
 Subpackages
 -----------
@@ -184,6 +184,7 @@ Submodules
    adam_core.orbit_determination.fitted_orbits
    adam_core.orbit_determination.observation_pipeline
    adam_core.orbit_determination.profiles
+   adam_core.orbit_determination.workflows
 """,
         encoding="utf-8",
     )

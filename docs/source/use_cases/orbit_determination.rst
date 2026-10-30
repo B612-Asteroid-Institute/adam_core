@@ -105,7 +105,10 @@ supported.
 the exact same rows. Original and used astrometry are persisted on members so
 standalone ``refine`` consumes the same prepared handoff. Refinement and
 evaluation fail closed when those snapshots are missing or when current source
-astrometry differs from the persisted original snapshot. Expert kernels remain
+astrometry differs from the persisted original snapshot. Per-member Rust
+fingerprints also bind detection metadata, epochs/scale, observatory and observer
+geometry, prepared astrometry, explicit orbit membership, and exact orbit state.
+Expert kernels remain
 under ``adam_core.orbit_determination.algorithms``. Standalone Rust exposes
 predictor-level building blocks under ``adam_core_rs_coords::od::algorithms``.
 
@@ -116,7 +119,8 @@ Canonical batch results fail closed on unknown or dirty native build identity
 and populate, where applicable:
 
 * adam-core version and exact source commit;
-* ordered input/used-astrometry fingerprint and focused route;
+* ordered complete source/member, membership, and exact orbit-state fingerprints;
+* focused route;
 * native IOD/refinement provider identity and metadata;
 * IOD and refinement diagnostics;
 * complete canonical Rust configuration and its SHA-256;
@@ -135,5 +139,12 @@ capabilities, malformed provider responses, and unavailable build identity are
 invocation-fatal with no partial output. Only safely isolated scientific
 no-solution/refinement/evaluation failures continue per group. They are rows of
 ``OrbitDeterminationFailures`` with typed stage counters, not opaque JSON. IOD
-failures emit no placeholder orbit; useful failed refinement/evaluation states
-remain in ``FittedOrbits`` with ``success=False``.
+failures emit no placeholder orbit. A non-converged refinement remains in
+``FittedOrbits`` with ``success=False`` only when Rust returned an actual best
+state; local refinement/evaluation errors never relabel an untouched input seed.
+
+Canonical IOD IDs deliberately include the complete ``OdConfig``. Exact
+``run_iod`` → ``refine`` composition therefore requires the same refinement
+projection and complete original membership. Evaluation uses predictor settings
+from the complete configuration's refinement fit and the covariance dimension
+from ``EvaluationConfig``.

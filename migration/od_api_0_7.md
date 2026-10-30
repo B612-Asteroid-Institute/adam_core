@@ -26,8 +26,12 @@ overlapping hypotheses are supported.
 Safely isolated scientific failures continue per group and are typed columns in
 `OrbitDeterminationFailures`. Contract, resource, provider, provenance, and
 invariant failures are invocation-fatal and never become failure rows. IOD
-failures produce no placeholder state. Useful failed refinement/evaluation
-states remain in `FittedOrbits` with `success=False`.
+failures produce no placeholder state. A non-converged refinement is retained
+with `success=False` only when the native solver returned its actual best state;
+a local error that produced no state emits only a failure row. Evaluation errors
+likewise emit no unchanged seed placeholder. Failure `group_id` is the original
+association hypothesis (`object_id`) when available, while `orbit_id` remains
+separate.
 
 ## Configuration migration
 
@@ -38,7 +42,11 @@ projection from `config.for_iod()`; `refine` takes `RefinementRunConfig`; and
 `evaluate_orbits` takes the bound `EvaluationConfig` projection from
 `config.for_evaluation()`. Profiles or manual
 `OdConfig.explicit(...)` construction bind every resource path before an IOD/OD
-workflow begins.
+workflow begins. Canonical IOD orbit identity deliberately includes the complete
+`OdConfig`, so changing later-stage or evaluation policy changes the seed ID even
+when IOD numerics are otherwise unchanged. Evaluation uses the two-body/predictor
+settings of the complete configuration's refinement fit; the evaluation policy
+itself supplies the covariance dimension.
 
 The old `ObservationUncertaintyModel`, `CompositeModel`,
 `apply_observation_models`, `initial_orbit_determination`, `iod`,
@@ -69,12 +77,18 @@ provenance as `run_iod(..., config.for_iod())` followed by
 `refine(..., config.for_refinement())`. Standalone refinement/evaluation rejects
 legacy members with missing snapshots and rejects source astrometry changed since
 the persisted original snapshot; rerun canonical IOD to produce a complete
-handoff. Expert numerical kernels remain under
+handoff. Exact composition is intentionally strict: a `run_iod` seed may be
+refined only with the refinement projection embedded in its complete
+configuration and with its original complete membership. To try a different
+refinement strategy, run a distinct complete configuration and therefore obtain
+a distinct canonical identity. Expert numerical kernels remain under
 `adam_core.orbit_determination.algorithms` and
 standalone Rust predictor seams remain under
 `adam_core_rs_coords::od::algorithms`.
 
 Canonical provenance is emitted by Rust and includes clean Core build identity,
-ordered input fingerprint, route, native provider metadata, stage diagnostics,
-and canonical path-free configuration. Unknown/dirty build identity and missing
-provider fingerprints fail closed.
+ordered complete source/member fingerprints, exact orbit-state fingerprint,
+route, native provider metadata, stable canonical stage diagnostics, and
+canonical path-free configuration. Unknown/dirty build identity, mutated source
+or observer geometry, changed membership/state, and missing provider
+fingerprints fail closed before provider binding.

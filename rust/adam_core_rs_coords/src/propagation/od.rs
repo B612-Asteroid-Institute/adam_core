@@ -299,9 +299,10 @@ pub fn evaluate_orbit(
     let included: Vec<bool> = ignore.iter().map(|&flag| !flag).collect();
     let num_included = included.iter().filter(|&&keep| keep).count();
     if num_included == 0 {
-        return Err(PropagationError::InvalidRequest(
-            "zero-size array to reduction operation maximum which has no identity".to_string(),
-        ));
+        return Err(PropagationError::GroupScientific {
+            code: super::GroupScientificFailureCode::NoIncludedObservations,
+            message: "orbit evaluation requires at least one included observation".to_string(),
+        });
     }
     let (arc_length, _, _) = masked_arc_length(&times_mjd, &included);
     let mut chi2_total = 0.0;
@@ -2809,58 +2810,6 @@ fn run_iod_sorted(
         not_found_reason: Some(reason),
     }
     .with_search_counters(&counters))
-}
-
-/// Batch the legacy IOD work unit ([`iod_fit_barycentric`]) across linkage
-/// row selections. `chunk_size` is a scheduling control owned by Rust;
-/// output order always matches `linkage_rows`.
-#[deprecated(
-    since = "0.6.0",
-    note = "the legacy IOD policy over linkages; use run_iod_linkages_barycentric \
-            (the run_iod stage, corrected acceptance by default)"
-)]
-#[allow(clippy::too_many_arguments)]
-pub fn iod_fit_linkages_barycentric<P, T>(
-    propagator: &P,
-    observed: &CoordinateBatch,
-    observers: &ObserverBatch,
-    linkage_rows: &[Vec<usize>],
-    chunk_size: usize,
-    config: &IodConfig,
-    options: &EphemerisOptions,
-    provider: &dyn TimeScaleProvider,
-    translation_provider: &T,
-) -> PropagationResultValue<Vec<IodOutput>>
-where
-    P: Propagator,
-    T: OriginTranslationProvider,
-{
-    let chunk_size = chunk_size.max(1);
-    let mut outputs = Vec::with_capacity(linkage_rows.len());
-    for chunk in linkage_rows.chunks(chunk_size) {
-        for rows in chunk {
-            for &row in rows {
-                if row >= observed.len() {
-                    return Err(PropagationError::InvalidRequest(format!(
-                        "linkage observation row {row} is out of bounds for {} observations",
-                        observed.len()
-                    )));
-                }
-            }
-            let linkage_observed = take_coordinate_batch(observed, rows)?;
-            let linkage_observers = take_observer_batch(observers, rows)?;
-            outputs.push(iod_fit_barycentric(
-                propagator,
-                &linkage_observed,
-                &linkage_observers,
-                config,
-                options,
-                provider,
-                translation_provider,
-            )?);
-        }
-    }
-    Ok(outputs)
 }
 
 pub(super) fn mjd_epoch(mjd: f64) -> crate::Epoch {

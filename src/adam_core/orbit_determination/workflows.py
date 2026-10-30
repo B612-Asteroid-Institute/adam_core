@@ -101,6 +101,7 @@ def _provenance(value: dict[str, Any]) -> OdProvenance:
         adam_core_version=[value["adam_core_version"]],
         adam_core_build=[value["adam_core_build"]],
         input_fingerprint=[value["input_fingerprint"]],
+        state_fingerprint=[value["state_fingerprint"]],
         route=[value["route"]],
         fitter=[value["fitter"]],
         iod_backend=[value["iod_backend"]],
@@ -174,6 +175,14 @@ def _decorate_group(
         )
         .set_column("used_astrometry", _snapshot(group["used_astrometry"]))
         .set_column("astcat", observations.astcat)
+        .set_column(
+            "input_fingerprint",
+            pa.array(group["member_input_fingerprints"], type=pa.large_string()),
+        )
+        .set_column(
+            "membership_fingerprint",
+            pa.array(group["member_membership_fingerprints"], type=pa.large_string()),
+        )
     )
     return orbit, members
 
@@ -181,8 +190,6 @@ def _decorate_group(
 def _assemble(
     native: dict[str, Any],
     observations: OrbitDeterminationObservations,
-    *,
-    route: str,
 ) -> _RESULT:
     orbit_tables: list[FittedOrbits] = []
     member_tables: list[FittedOrbitMembers] = []
@@ -197,11 +204,8 @@ def _assemble(
             iod_orbit, iod_members = _tables_from_iod_output(
                 group["orbit_id"], grouped, iod_output
             )
-            iod_orbit = iod_orbit.set_column(
-                "success", pa.array([True], type=pa.bool_())
-            ).set_column("status_code", pa.array([1], type=pa.int64()))
 
-        if route == "run_od" and group["refined"] is not None:
+        if group["output_kind"] == "refined":
             if len(iod_orbit) != 1:
                 raise RuntimeError("native refinement has no accepted IOD seed")
             output = group["refined"]
@@ -214,11 +218,9 @@ def _assemble(
             orbit, members = _decorate_group(orbit, members, group, grouped)
             orbit_tables.append(orbit)
             member_tables.append(members)
-        elif len(iod_orbit):
-            if route == "run_od" and group["failure"] is not None:
-                iod_orbit = iod_orbit.set_column(
-                    "success", pa.array([False], type=pa.bool_())
-                )
+        elif group["output_kind"] == "iod":
+            if len(iod_orbit) != 1:
+                raise RuntimeError("native IOD disposition has no accepted state")
             orbit, members = _decorate_group(iod_orbit, iod_members, group, grouped)
             orbit_tables.append(orbit)
             member_tables.append(members)
@@ -273,7 +275,7 @@ def run_iod(
         observers_ipc,
         config._workflow_native,
     )
-    return _assemble(native, prepared, route="run_iod")
+    return _assemble(native, prepared)
 
 
 def run_od(
@@ -305,7 +307,7 @@ def run_od(
         observers_ipc,
         config._native,
     )
-    return _assemble(native, prepared, route="run_od")
+    return _assemble(native, prepared)
 
 
 def _astrometry_columns(
@@ -320,30 +322,21 @@ def _astrometry_columns(
     )
 
 
-def _seed_iod_provenance(orbits: FittedOrbits) -> list[str | None]:
+def _orbit_provenance(orbits: FittedOrbits) -> list[str | None]:
+    """Marshal every typed provenance field without classifying the route."""
+
     provenance = orbits.provenance
     columns = {
         name: getattr(provenance, name).to_pylist()
-        for name in (
-            "adam_core_version",
-            "adam_core_build",
-            "input_fingerprint",
-            "route",
-            "iod_backend",
-            "iod_provider",
-            "iod_diagnostics",
-            "configuration",
-            "iod_ambiguous",
-            "iod_alternatives",
-        )
+        for name in OdProvenance.schema.names
     }
     encoded: list[str | None] = []
     for row in range(len(orbits)):
-        if columns["route"][row] != "run_iod":
-            encoded.append(None)
-            continue
+        value = {name: column[row] for name, column in columns.items()}
         encoded.append(
-            _canonical_json({name: column[row] for name, column in columns.items()})
+            None
+            if all(item is None for item in value.values())
+            else _canonical_json(value)
         )
     return encoded
 
@@ -367,7 +360,7 @@ def refine(
     orbit_ipc = orbits_to_ipc(orbits.to_orbits())
     member_orbit_ids = members.orbit_id.to_pylist()
     member_obs_ids = members.obs_id.to_pylist()
-    seed_iod_provenance = _seed_iod_provenance(orbits)
+    orbit_provenance = _orbit_provenance(orbits)
     original = _astrometry_columns(members.original_astrometry)
     used = _astrometry_columns(members.used_astrometry)
     group_count = _rust_native.refine_batch_preflight_ipc(
@@ -377,7 +370,9 @@ def refine(
         observers_ipc,
         member_orbit_ids,
         member_obs_ids,
-        seed_iod_provenance,
+        orbit_provenance,
+        members.input_fingerprint.to_pylist(),
+        members.membership_fingerprint.to_pylist(),
         *original,
         *used,
         config._native,
@@ -391,7 +386,9 @@ def refine(
         observers_ipc,
         member_orbit_ids,
         member_obs_ids,
-        seed_iod_provenance,
+        orbit_provenance,
+        members.input_fingerprint.to_pylist(),
+        members.membership_fingerprint.to_pylist(),
         *original,
         *used,
         config._native,
@@ -402,18 +399,13 @@ def refine(
     for group in native["groups"]:
         seed = orbits.take(pa.array([group["orbit_index"]], type=pa.int64()))
         grouped = prepared.take(pa.array(group["row_indices"], type=pa.int64()))
-        if group["refined"] is not None:
+        if group["output_kind"] == "refined":
             output = group["refined"]
             orbit, output_members = _fitted_tables_from_native_output(
                 seed.to_orbits(),
                 grouped,
                 output,
                 np.asarray(output["weights"], dtype=np.float64),
-            )
-        elif group["failure"] is not None and group["failure"]["best_state_retained"]:
-            orbit = seed.set_column("success", pa.array([False], type=pa.bool_()))
-            output_members = members.take(
-                pa.array(group["member_indices"], type=pa.int64())
             )
         else:
             orbit = FittedOrbits.empty()
@@ -466,6 +458,9 @@ def evaluate_orbits(
     member_orbit_ids = members.orbit_id.to_pylist()
     member_obs_ids = members.obs_id.to_pylist()
     member_outlier = members.outlier.to_pylist()
+    orbit_provenance = _orbit_provenance(orbits)
+    member_input_fingerprints = members.input_fingerprint.to_pylist()
+    member_membership_fingerprints = members.membership_fingerprint.to_pylist()
     original = _astrometry_columns(members.original_astrometry)
     used = _astrometry_columns(members.used_astrometry)
     group_count = _rust_native.evaluate_orbits_batch_preflight_ipc(
@@ -476,6 +471,9 @@ def evaluate_orbits(
         member_orbit_ids,
         member_obs_ids,
         member_outlier,
+        orbit_provenance,
+        member_input_fingerprints,
+        member_membership_fingerprints,
         *original,
         *used,
         config._workflow_native,
@@ -490,6 +488,9 @@ def evaluate_orbits(
         member_orbit_ids,
         member_obs_ids,
         member_outlier,
+        orbit_provenance,
+        member_input_fingerprints,
+        member_membership_fingerprints,
         *original,
         *used,
         config._workflow_native,
@@ -501,16 +502,9 @@ def evaluate_orbits(
         seed = orbits.take(pa.array([group["orbit_index"]], type=pa.int64()))
         grouped = prepared.take(pa.array(group["row_indices"], type=pa.int64()))
         output = group["evaluation"]
-        if (
-            output is None
-            and group["failure"] is not None
-            and group["failure"]["best_state_retained"]
-        ):
-            orbit = seed.set_column("success", pa.array([False], type=pa.bool_()))
-            output_members = members.take(
-                pa.array(group["member_indices"], type=pa.int64())
-            )
-        elif output is not None:
+        if group["output_kind"] == "evaluation":
+            if output is None:
+                raise RuntimeError("native evaluation disposition has no output")
             residuals = Residuals.from_kwargs(
                 values=np.asarray(output["residual_values"], dtype=np.float64).tolist(),
                 chi2=output["residual_chi2"],
@@ -528,14 +522,14 @@ def evaluate_orbits(
                 num_obs=[output["num_obs"]],
                 chi2=[output["chi2"]],
                 reduced_chi2=[output["reduced_chi2"]],
-                success=[True],
-                status_code=[1],
+                success=[output["success"]],
+                status_code=[output["status_code"]],
             )
             output_members = FittedOrbitMembers.from_kwargs(
                 orbit_id=[seed.orbit_id[0].as_py()] * len(grouped),
                 obs_id=grouped.id,
                 residuals=residuals,
-                solution=~outlier,
+                solution=output["solution"],
                 outlier=outlier,
             )
         else:

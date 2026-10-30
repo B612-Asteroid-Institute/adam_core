@@ -201,6 +201,7 @@ fn apply_veres_model(
 /// practice). The RA/Dec cross-term is left unchanged. A non-finite reported
 /// variance is left as is unless `fill_missing` is set, in which case it is
 /// replaced by the VFC2017 variance.
+#[allow(dead_code)]
 #[derive(Debug, Clone, PartialEq)]
 pub struct VeresFloorModel {
     pub lookup: VeresSigmaLookup,
@@ -239,6 +240,7 @@ impl ObservationUncertaintyModel for VeresFloorModel {
 /// Replace each axis sigma by the VFC2017 station/catalog sigma outright
 /// (classic weighting-file practice, ignoring reported uncertainties). The
 /// RA/Dec cross-term is set to zero since the table carries no correlation.
+#[allow(dead_code)]
 #[derive(Debug, Clone, PartialEq)]
 pub struct VeresReplaceModel {
     pub lookup: VeresSigmaLookup,

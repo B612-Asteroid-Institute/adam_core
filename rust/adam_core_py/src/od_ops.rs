@@ -389,72 +389,6 @@ fn assign_duplicate_observations_numpy<'py>(
     Ok((orbit_take.into_pyarray(py), member_keep.into_pyarray(py)))
 }
 
-type SortOrders<'py> = (Bound<'py, PyArray1<i64>>, Bound<'py, PyArray1<i64>>);
-
-/// `sort_by_id_and_time` ordering: linkages sorted by id; members stably
-/// sorted by (linkage id, observation days, observation nanos).
-#[pyfunction]
-fn sort_linkages_by_id_and_time_numpy<'py>(
-    py: Python<'py>,
-    linkage_ids: Vec<String>,
-    member_linkage_ids: Vec<String>,
-    member_obs_ids: Vec<String>,
-    observation_ids: Vec<String>,
-    observation_days: PyReadonlyArray1<'py, i64>,
-    observation_nanos: PyReadonlyArray1<'py, i64>,
-) -> PyResult<SortOrders<'py>> {
-    let days = observation_days
-        .as_array()
-        .as_slice()
-        .map(<[i64]>::to_vec)
-        .ok_or_else(|| PyValueError::new_err("observation_days must be contiguous"))?;
-    let nanos = observation_nanos
-        .as_array()
-        .as_slice()
-        .map(<[i64]>::to_vec)
-        .ok_or_else(|| PyValueError::new_err("observation_nanos must be contiguous"))?;
-    if observation_ids.len() != days.len() || observation_ids.len() != nanos.len() {
-        return Err(PyValueError::new_err("observation columns must align"));
-    }
-    if member_linkage_ids.len() != member_obs_ids.len() {
-        return Err(PyValueError::new_err("member columns must align"));
-    }
-    let mut observation_times = HashMap::with_capacity(observation_ids.len());
-    for (row, id) in observation_ids.iter().enumerate() {
-        observation_times.insert(id.as_str(), (days[row], nanos[row]));
-    }
-
-    let mut linkage_order: Vec<i64> = (0..linkage_ids.len() as i64).collect();
-    linkage_order.sort_by(|&a, &b| linkage_ids[a as usize].cmp(&linkage_ids[b as usize]));
-
-    let mut member_order: Vec<i64> = (0..member_linkage_ids.len() as i64).collect();
-    let member_key = |row: i64| -> PyResult<(&str, i64, i64)> {
-        let row = row as usize;
-        let times = observation_times
-            .get(member_obs_ids[row].as_str())
-            .ok_or_else(|| {
-                PyValueError::new_err(format!(
-                    "member observation id {} not present in observations",
-                    member_obs_ids[row]
-                ))
-            })?;
-        Ok((member_linkage_ids[row].as_str(), times.0, times.1))
-    };
-    // Validate all keys first so sorting is infallible.
-    for row in 0..member_order.len() as i64 {
-        member_key(row)?;
-    }
-    member_order.sort_by(|&a, &b| {
-        let a = member_key(a).expect("validated");
-        let b = member_key(b).expect("validated");
-        a.cmp(&b)
-    });
-    Ok((
-        linkage_order.into_pyarray(py),
-        member_order.into_pyarray(py),
-    ))
-}
-
 struct ImpactInput {
     variant_orbit_ids: Vec<String>,
     collision_orbit_ids: Vec<String>,
@@ -773,7 +707,6 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
         m
     )?)?;
     m.add_function(wrap_pyfunction!(select_observation_triplets_numpy, m)?)?;
-    m.add_function(wrap_pyfunction!(sort_linkages_by_id_and_time_numpy, m)?)?;
     m.add_function(wrap_pyfunction!(assign_duplicate_observations_numpy, m)?)?;
     m.add_function(wrap_pyfunction!(impact_probability_stats_numpy, m)?)?;
     m.add_function(wrap_pyfunction!(

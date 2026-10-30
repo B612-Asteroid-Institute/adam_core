@@ -44,6 +44,7 @@ pub(crate) fn od_error(err: PropagationError) -> PyErr {
         | PropagationError::MissingOrbitTimes
         | PropagationError::UnsupportedCovarianceMode(_) => PyValueError::new_err(err.to_string()),
         PropagationError::CmcCovarianceUnavailable(_)
+        | PropagationError::GroupScientific { .. }
         | PropagationError::RowFailure(_)
         | PropagationError::Backend(_)
         | PropagationError::BackendProtocol(_)

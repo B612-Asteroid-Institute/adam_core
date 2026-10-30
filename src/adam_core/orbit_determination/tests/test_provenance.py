@@ -37,6 +37,7 @@ def test_runtime_provenance_schema_contains_complete_identity_fields() -> None:
         "adam_core_version",
         "adam_core_build",
         "input_fingerprint",
+        "state_fingerprint",
         "route",
         "iod_provider",
         "iod_diagnostics",

@@ -189,9 +189,9 @@ pub fn plan_orbit_members(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::types::Frame;
     use crate::{
-        CoordinateBatch, CoordinateValues, Frame, ObjectId, OriginArray, OriginId, TimeArray,
-        TimeScale,
+        CoordinateBatch, CoordinateValues, ObjectId, OriginArray, OriginId, TimeArray, TimeScale,
     };
 
     fn orbits(ids: &[&str]) -> OrbitBatch {

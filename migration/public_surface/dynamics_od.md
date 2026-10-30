@@ -59,9 +59,12 @@ identities are separate and never used as compute evidence.
 
 ## Closure
 
-No adam-core-owned numerical-kernel or canonical batch-workflow gap remains in
-these domains. `approxLangrangeCoeffs` is an intentionally
-retired Gauss implementation helper;
+The generated manifest remains authoritative: canonical `refine` and
+`evaluate_orbits` are classified `mixed_rust_python_gap` because Python still
+assembles Rust-decided typed columns into quivr tables and native timing is not
+yet represented as a direct Arrow result. This document does not claim that gap
+is closed. `approxLangrangeCoeffs` is an intentionally retired Gauss
+implementation helper;
 the public Gauss solve is Rust-backed. The former generic propagator composition
 helpers (`propagation_worker*`, `ephemeris_worker_ray`, and
 `attach_magnitude_or_phase`) are likewise retired because concrete backends own

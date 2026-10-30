@@ -393,6 +393,8 @@ def _tables_from_iod_output(
         num_obs=[output["num_obs"]],
         chi2=[output["chi2"]],
         reduced_chi2=[output["reduced_chi2"]],
+        success=[output["success"]],
+        status_code=[output["status_code"]],
     )
     residuals = Residuals.from_kwargs(
         values=np.asarray(output["residual_values"], dtype=np.float64).tolist(),
