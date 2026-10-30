@@ -1,12 +1,4 @@
-"""Rust-owned orbit-determination configuration foundation for Core 0.7.
-
-The canonical batch ``run_iod``, ``run_od``, ``refine``, and
-``evaluate_orbits`` surface is intentionally not exported here until
-``personal-eack9`` implements Associations/FittedOrbitMembers grouping and
-typed per-group failures. This foundation deliberately exposes no interim
-Python workflow or provenance implementation; predictor-level configured
-composition lives in Rust under ``adam_core_rs_coords::od::algorithms``.
-"""
+"""Rust-owned orbit-determination configuration and canonical batch APIs."""
 
 from . import algorithms as algorithms
 from .config import (
@@ -32,6 +24,7 @@ from .fitted_orbits import (
     FittedOrbits,
     ObservationAstrometry,
     OdProvenance,
+    OrbitDeterminationFailures,
     drop_duplicate_orbits,
 )
 from .observation_pipeline import (
@@ -44,6 +37,7 @@ from .observation_pipeline import (
     StationBandResidualCovarianceAdjustment,
 )
 from .profiles import ASTEROID_INSTITUTE_OD_V1, CORE_OD_V1, OdProfile
+from .workflows import evaluate_orbits, refine, run_iod, run_od
 
 __all__ = [
     "ASTEROID_INSTITUTE_OD_V1",
@@ -61,6 +55,7 @@ __all__ = [
     "ObservationAstrometry",
     "ObservationPipeline",
     "ObservationTransform",
+    "OrbitDeterminationFailures",
     "OdConfig",
     "OdConfigurationError",
     "OdResourceValidationError",
@@ -78,4 +73,8 @@ __all__ = [
     "WorstResidualRefinement",
     "algorithms",
     "drop_duplicate_orbits",
+    "evaluate_orbits",
+    "refine",
+    "run_iod",
+    "run_od",
 ]

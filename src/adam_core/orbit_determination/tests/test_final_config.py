@@ -9,6 +9,7 @@ import pytest
 
 import adam_core.orbit_determination as od
 from adam_core import _rust_native
+from adam_core.observations import Associations, SourceCatalog
 from adam_core.orbit_determination import algorithms
 
 
@@ -22,10 +23,11 @@ def _as_supplied() -> od.OdConfig:
     )
 
 
-def test_primary_batch_names_are_intentionally_not_exported() -> None:
+def test_primary_batch_names_are_exported_without_one_group_aliases() -> None:
     for name in ("run_iod", "run_od", "refine", "evaluate_orbits"):
-        assert name not in od.__all__
-        assert not hasattr(od, name)
+        assert name in od.__all__
+        assert callable(getattr(od, name))
+    assert "OrbitDeterminationFailures" in od.__all__
     for name in (
         "run_iod_one_group",
         "run_od_one_group",
@@ -34,6 +36,29 @@ def test_primary_batch_names_are_intentionally_not_exported() -> None:
     ):
         assert name not in algorithms.__all__
         assert not hasattr(algorithms, name)
+
+
+def test_iod_projection_retains_the_explicit_bound_workflow_context() -> None:
+    config = _as_supplied()
+    assert config.for_iod()._workflow_native is config._native
+    assert config.for_evaluation()._workflow_native is config._native
+    assert od.IodRunConfig.core_v1()._workflow_native is None
+    assert od.EvaluationConfig.six_dimensional()._workflow_native is None
+
+
+def test_empty_batch_returns_three_typed_empty_tables_without_provider_binding() -> (
+    None
+):
+    fitted, members, failures = od.run_iod(
+        SourceCatalog.empty(),
+        Associations.empty(),
+        object(),
+        _as_supplied().for_iod(),
+    )
+    assert isinstance(fitted, od.FittedOrbits)
+    assert isinstance(members, od.FittedOrbitMembers)
+    assert isinstance(failures, od.OrbitDeterminationFailures)
+    assert len(fitted) == len(members) == len(failures) == 0
 
 
 def test_removed_legacy_modules_and_native_routes_have_no_aliases() -> None:

@@ -130,18 +130,22 @@ class OdProvenance(qv.Table):
     route = qv.LargeStringColumn(nullable=True)
     #: Historical producer label; configured workflows leave this null.
     fitter = qv.LargeStringColumn(nullable=True)
-    #: Backend of the IOD stage and of the refinement (``name version``; a
-    #: propagator without a `NativeBackend` is ``python:module.qualname``).
+    #: Native provider backend for IOD, refinement, and evaluation
+    #: (``name version``). Canonical workflows reject propagators without a
+    #: compatible declared native capsule.
     iod_backend = qv.LargeStringColumn(nullable=True)
     refinement_backend = qv.LargeStringColumn(nullable=True)
+    evaluation_backend = qv.LargeStringColumn(nullable=True)
     #: Capsule-decoded native provider metadata (JSON), including ABI,
     #: capabilities, scale, dynamics, and immutable configuration/data hashes.
     iod_provider = qv.LargeStringColumn(nullable=True)
     refinement_provider = qv.LargeStringColumn(nullable=True)
+    evaluation_provider = qv.LargeStringColumn(nullable=True)
     #: Native decision diagnostics (JSON): bounded IOD work/failures and
     #: refinement pass/rejection/recovery/CMC flags.
     iod_diagnostics = qv.LargeStringColumn(nullable=True)
     refinement_diagnostics = qv.LargeStringColumn(nullable=True)
+    evaluation_diagnostics = qv.LargeStringColumn(nullable=True)
     #: Historical settings field; configured workflows use ``configuration``.
     settings = qv.LargeStringColumn(nullable=True)
     #: Expanded complete OD configuration (canonical JSON): profile identity,
@@ -155,6 +159,34 @@ class OdProvenance(qv.Table):
     #: fraction of the observations it was given.
     num_rejected = qv.Int64Column(nullable=True)
     rejected_fraction = qv.Float64Column(nullable=True)
+
+
+class OrbitDeterminationFailures(qv.Table):
+    """Typed per-group scientific failures from canonical batch workflows.
+
+    Contract, resource, provider, provenance, and invariant failures are never
+    rows in this table: they abort the invocation atomically. Each row here is
+    a safely isolated scientific outcome. Stage-specific counters remain
+    ordinary typed nullable columns rather than an opaque JSON payload.
+    """
+
+    group_id = qv.LargeStringColumn()
+    orbit_id = qv.LargeStringColumn(nullable=True)
+    stage = qv.LargeStringColumn()
+    code = qv.LargeStringColumn()
+    message = qv.LargeStringColumn()
+    recoverable = qv.BooleanColumn()
+    num_obs = qv.Int64Column()
+    arc_length = qv.Float64Column(nullable=True)
+    triplets_tried = qv.Int64Column(nullable=True)
+    candidates_evaluated = qv.Int64Column(nullable=True)
+    candidates_failed = qv.Int64Column(nullable=True)
+    corrections_run = qv.Int64Column(nullable=True)
+    passes = qv.Int64Column(nullable=True)
+    n_rejected = qv.Int64Column(nullable=True)
+    n_recovered = qv.Int64Column(nullable=True)
+    status_code = qv.Int64Column(nullable=True)
+    best_state_retained = qv.BooleanColumn()
 
 
 class FittedOrbits(qv.Table):

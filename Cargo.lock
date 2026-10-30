@@ -31,6 +31,7 @@ dependencies = [
  "parquet",
  "pathdiff",
  "pyo3",
+ "serde",
  "serde_json",
  "sha2",
  "tzf-rs",

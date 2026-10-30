@@ -9,8 +9,9 @@ from adam_core import _rust_native
 
 
 @pytest.mark.parametrize("name", ["run_iod", "run_od", "refine", "evaluate_orbits"])
-def test_primary_batch_names_are_not_prematurely_exported(name: str) -> None:
-    assert not hasattr(od, name)
+def test_primary_batch_names_are_canonical_not_legacy_aliases(name: str) -> None:
+    assert callable(getattr(od, name))
+    assert getattr(od, name).__module__ == "adam_core.orbit_determination.workflows"
 
 
 @pytest.mark.parametrize(

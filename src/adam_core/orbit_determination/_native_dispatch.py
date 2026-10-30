@@ -113,9 +113,9 @@ def native_work_unit(propagator: object, name: str):
 
 
 def native_propagator(propagator: object):
-    """What the Rust drivers receive for ``propagator``: the external-
-    propagator capsule (``adam_core.propagator.v2``) when its `NativeBackend`
-    declares the ``propagator_capsule`` work unit, so every OD stage runs
+    """What the Rust drivers receive for ``propagator``: a lazy descriptor
+    for the external-propagator capsule (``adam_core.propagator.v2``) when its
+    `NativeBackend` declares the ``propagator_capsule`` work unit, so every OD stage runs
     natively with its dynamics (no Python call per prediction). None stays
     None (adam-core's two-body propagator).
 
@@ -129,8 +129,11 @@ def native_propagator(propagator: object):
         # boundary compares it with the table identity before doing any work.
         backend = native_backend(propagator)
         assert backend is not None
+        # Keep capsule creation lazy. Rust invokes this one-time binding only
+        # after static input/config/resource preflight and skips it entirely for
+        # an empty batch; predictions themselves never call back into Python.
         return (
-            capsule(),
+            capsule,
             backend.name,
             backend.version,
             bool(getattr(propagator, "two_body_dynamics", False)),

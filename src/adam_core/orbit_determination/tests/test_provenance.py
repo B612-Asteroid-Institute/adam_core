@@ -9,7 +9,7 @@ from ..config import (
     RefinementRunConfig,
     ResourceBindings,
 )
-from ..fitted_orbits import OdProvenance
+from ..fitted_orbits import OdProvenance, OrbitDeterminationFailures
 from ..observation_pipeline import ObservationPipeline
 
 
@@ -42,7 +42,31 @@ def test_runtime_provenance_schema_contains_complete_identity_fields() -> None:
         "iod_diagnostics",
         "refinement_provider",
         "refinement_diagnostics",
+        "evaluation_provider",
+        "evaluation_diagnostics",
         "configuration",
         "num_rejected",
         "rejected_fraction",
     } <= names
+
+
+def test_batch_scientific_failure_schema_is_typed_and_not_opaque() -> None:
+    assert OrbitDeterminationFailures.schema.names == [
+        "group_id",
+        "orbit_id",
+        "stage",
+        "code",
+        "message",
+        "recoverable",
+        "num_obs",
+        "arc_length",
+        "triplets_tried",
+        "candidates_evaluated",
+        "candidates_failed",
+        "corrections_run",
+        "passes",
+        "n_rejected",
+        "n_recovered",
+        "status_code",
+        "best_state_retained",
+    ]

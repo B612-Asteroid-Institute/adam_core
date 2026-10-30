@@ -39,7 +39,7 @@ local paths by semantic slot, marshals tables, and assembles result tables.
 | `station_catalog_uncertainty_table`, `efcc18_catalog_bias_table`, `station_band_residual_covariance_table` | explicit content-pinned semantic slots; no Core package discovery, fallback, or runtime download | aggregate hash/schema/row/structure validation with path-free provenance |
 | `OdConfig`, stage configs, `CORE_OD_V1`, `ASTEROID_INSTITUTE_OD_V1` | immutable Rust definitions mirrored in Python; profiles never select propagators | strict native round-trip, profile/explicit parity, fingerprint tests |
 | `fit_least_squares`, `iterative_fit`, `cmc2003_fit_detailed` | Core-owned Rust numerical algorithms; propagation providers expose only the negotiated capsule | native solver/covariance/rejection tests |
-| canonical batch `run_iod`, `run_od`, `refine`, `evaluate_orbits` | reserved for the batch-native Associations/FittedOrbitMembers and typed-failure layer; no interim Python configured workflow is exported | public-surface and migration contract tests |
+| canonical batch `run_iod`, `run_od`, `refine`, `evaluate_orbits` | Rust-owned deterministic Associations/FittedOrbitMembers grouping and typed failures; Python only marshals and assembles the three direct result tables | native planner/workflow, public-surface, and migration contract tests |
 
 ## Impacts and associations
 
@@ -59,10 +59,8 @@ identities are separate and never used as compute evidence.
 
 ## Closure
 
-No adam-core-owned numerical-kernel gap remains in these domains. Canonical
-batch grouping, typed failures, and public workflow orchestration remain
-explicitly outstanding under `personal-eack9`; this foundation does not claim
-that batch layer is complete. `approxLangrangeCoeffs` is an intentionally
+No adam-core-owned numerical-kernel or canonical batch-workflow gap remains in
+these domains. `approxLangrangeCoeffs` is an intentionally
 retired Gauss implementation helper;
 the public Gauss solve is Rust-backed. The former generic propagator composition
 helpers (`propagation_worker*`, `ephemeris_worker_ray`, and

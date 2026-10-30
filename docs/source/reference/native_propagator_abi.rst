@@ -29,8 +29,11 @@ Cargo SemVer exported by that provider's native extension (for example
 440-normalized ``__version__``. Thus a native ``1.2.3-rc.4`` remains exactly
 that spelling even when Python package metadata says ``1.2.3rc4``. Its
 ``propagator_capsule()`` returns a ``PyCapsule`` named exactly
-``adam_core.propagator.v2``. Adam-core retains the capsule for the complete
-native call and compares the declaration's name, native SemVer and two-body
+``adam_core.propagator.v2``. Adam-core retains the bound capsule factory as a
+lazy descriptor: static native preflight runs first, empty batches never invoke
+the factory, and the capsule is created only for a valid nonempty execution.
+Adam-core then retains the capsule for the complete native call and compares the
+declaration's name, native SemVer and two-body
 declaration with the immutable identity in the table. Constructing ``NativeBackend`` with an algorithm work unit (rather than
 only ``propagator_capsule``), or with an empty identity field, raises
 ``ValueError``. Empty or mismatched capsule identities fail before propagation.
@@ -221,8 +224,7 @@ Migration from backend-owned OD methods
 Provider packages should delete or deprecate Python and PyO3 methods such as
 ``fit_least_squares``, ``fit_least_squares_evaluated``, ``od_fit``,
 ``initial_orbit_determination``, ``run_iod_linkages`` and ``run_od_fit``.
-The Core 0.7 Rust foundation accepts an explicit complete ``OdConfig`` in its
-predictor-level configured algorithms and passes the provider only as the
-stage propagator. Canonical Python batch workflows are forthcoming; providers must not
-publish backend-owned OD compatibility routes in the meantime. There is no
-bridge package.
+Core 0.7 accepts explicit typed configuration in its canonical batch and
+predictor-level algorithms and passes the provider only as the stage
+propagator. Providers must not publish backend-owned OD compatibility routes;
+there is no bridge package.

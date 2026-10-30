@@ -1,7 +1,8 @@
 """Expert numerical OD kernels.
 
-Configured workflows remain Rust-only until the canonical batch API lands; this
-namespace does not expose interim Python orchestration or provenance behavior.
+Canonical configured batch workflows are exported by the parent package; this
+namespace exposes only focused expert kernels, not alternate orchestration or
+provenance behavior.
 """
 
 from .fitting import fit_least_squares, iterative_fit

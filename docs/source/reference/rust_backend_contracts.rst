@@ -157,11 +157,11 @@ Current Migrated APIs
     units. Only ``xtol``, ``ftol``, ``gtol`` and ``max_nfev`` are accepted;
     any other solver keyword raises ``ValueError`` (there is no scipy path).
 
-- OD configuration and Rust workflow foundation
+- OD configuration and canonical Rust batch workflows
   - Status: canonical batch ``run_iod`` / ``run_od`` / ``refine`` /
-    ``evaluate_orbits`` are forthcoming and are not exported by this
-    foundation. No interim Python configured workflow is exposed; expert
-    numerical kernels remain under ``adam_core.orbit_determination.algorithms``.
+    ``evaluate_orbits`` are exported. Every route returns fitted orbits,
+    explicit fitted members, and typed scientific failures; expert numerical
+    kernels remain under ``adam_core.orbit_determination.algorithms``.
   - Boundary: nested Arrow IPC plus an explicit native ``OdConfig``. Python
     binds semantic resource slots and marshals tables; Rust validates exact
     resource identity, parses tables, executes the ordered observation
@@ -179,12 +179,11 @@ Current Migrated APIs
     accepts an already-adopted predictor and does not itself sequence global
     provider/build/ID preflight. Providers never select transforms, profiles,
     grouping, fitting, rejection, covariance, or OD algorithms.
-  - The forthcoming canonical batch layer will reject dirty/unknown
-    Core identity, invalid IDs/member mappings, and malformed
-    resource/config/provider contracts atomically before pipeline or numerical
-    work. It will define empty-group behavior, typed per-group scientific
-    failures, and canonical runtime provenance. None of those batch guarantees
-    is claimed by the current focused foundation.
+  - The canonical batch layer rejects dirty/unknown Core identity, invalid
+    IDs/member mappings, and malformed resource/config/provider contracts
+    atomically before pipeline or numerical work. It defines empty-group
+    behavior, typed per-group scientific failures, deterministic overlapping
+    grouping, and canonical Rust runtime provenance.
   - CMC2003 finalization uses one central-difference Jacobian through the full
     predictor for all observations. Selected rows form the covariance; all
     rows supply rejection/recovery projections. Huber plus CMC2003 remains a

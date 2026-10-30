@@ -1,18 +1,15 @@
-Orbit-determination configuration foundation
-============================================
+Orbit determination
+===================
 
-.. important::
+Core 0.7's canonical batch functions are ``run_iod``, ``run_od``, ``refine``,
+and ``evaluate_orbits``. Each returns ``FittedOrbits``,
+``FittedOrbitMembers``, and typed ``OrbitDeterminationFailures``. Raw IOD/OD
+uses a ``SourceCatalog`` plus explicit ``Associations``; refinement and
+evaluation use explicit ``FittedOrbitMembers``. One object is one group through
+the same batch path; there are no primary one-group aliases.
 
-   Core 0.7's canonical batch ``run_iod``, ``run_od``, ``refine``, and
-   ``evaluate_orbits`` API is **not implemented by this foundation**. Those
-   names are deliberately absent from ``adam_core.orbit_determination`` until
-   the Associations/FittedOrbitMembers grouping and typed-failure work lands.
-   The intended batch result is ``FittedOrbits``, ``FittedOrbitMembers``, and
-   ``OrbitDeterminationFailures``; no one-group three-value signature is being
-   frozen as the public API.
-
-What this foundation implements
--------------------------------
+Rust-owned configuration and execution
+--------------------------------------
 
 Core Rust owns complete OD configuration, profile expansion, ordered
 observation transforms, resource validation/parsing, fitting and rejection
@@ -21,7 +18,10 @@ immutable values, binds explicit local paths, marshals tables, and assembles
 result tables. A propagation provider supplies only its negotiated native
 capsule.
 
-The complete configuration is ``OdConfig``. It contains:
+The complete configuration is ``OdConfig``. ``run_od`` receives it directly;
+``run_iod`` receives its bound ``config.for_iod()`` projection. Standalone
+``refine`` receives ``RefinementRunConfig`` and ``evaluate_orbits`` receives
+the bound ``config.for_evaluation()`` projection. ``OdConfig`` contains:
 
 * ``IodRunConfig``: search, selection, velocity, acceptance, correction,
   ranging, candidate-fit, solver, Jacobian, covariance, and two-body settings;
@@ -92,27 +92,28 @@ The profiles preserve the accepted d21 effective numerical constants:
 iterations 10. Changing settings, transform order, resource bytes, or schemas
 requires a new version/fingerprint decision.
 
-Configured workflow foundation
-------------------------------
+Canonical batch workflows
+-------------------------
 
-This foundation does not expose interim Python one-group workflow functions.
-Doing so would put orchestration and provenance behavior in Python or freeze a
-signature that conflicts with the forthcoming batch contract. Expert numerical
-kernels remain under ``adam_core.orbit_determination.algorithms``; they are not
-complete configured workflows.
+Rust parses and validates complete memberships before provider or pipeline
+work. Null group IDs, unknown references, duplicate pairs, non-unique IDs, and
+orbits without explicit members abort atomically. Groups follow first
+appearance; members follow source-table order; overlapping hypotheses are
+supported.
 
-Standalone Rust exposes predictor-level configured building blocks under
-``adam_core_rs_coords::od::algorithms``:
-``prepare_observations``, ``run_iod_with_predictor``,
-``refine_with_predictor``, and ``run_od_with_predictors``. They consume the
-closed ``OdConfig`` path; the old executable ``dyn ObservationUncertaintyModel``
-route is not public.
+``run_od`` prepares each group once, runs IOD, and refines the accepted seed on
+the exact same rows. Original and used astrometry are persisted on members so
+standalone ``refine`` consumes the same prepared handoff. Refinement and
+evaluation fail closed when those snapshots are missing or when current source
+astrometry differs from the persisted original snapshot. Expert kernels remain
+under ``adam_core.orbit_determination.algorithms``. Standalone Rust exposes
+predictor-level building blocks under ``adam_core_rs_coords::od::algorithms``.
 
 Provenance
 ----------
 
-The forthcoming canonical batch results fail closed on unknown or dirty native
-build identity and populate, where applicable:
+Canonical batch results fail closed on unknown or dirty native build identity
+and populate, where applicable:
 
 * adam-core version and exact source commit;
 * ordered input/used-astrometry fingerprint and focused route;
@@ -129,14 +130,10 @@ null.
 Failure boundary
 ----------------
 
-The current foundation validates configuration and bound resources and adopts
-external capsules through the native ABI checks, but it does not yet own batch
-IDs/member mappings, empty-group behavior, or the ordering of all invocation
-preflights.
-
-The forthcoming canonical batch layer will make malformed
-configuration, resources, IDs/member mappings, unsupported provider
-capabilities, malformed provider responses, and unavailable build identity
-invocation-fatal before pipeline/numerical work, with no partial output. It will
-classify only safely isolated scientific no-solution/refinement failures per
-group and will populate canonical runtime provenance.
+Malformed configuration, resources, IDs/member mappings, unsupported provider
+capabilities, malformed provider responses, and unavailable build identity are
+invocation-fatal with no partial output. Only safely isolated scientific
+no-solution/refinement/evaluation failures continue per group. They are rows of
+``OrbitDeterminationFailures`` with typed stage counters, not opaque JSON. IOD
+failures emit no placeholder orbit; useful failed refinement/evaluation states
+remain in ``FittedOrbits`` with ``success=False``.

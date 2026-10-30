@@ -194,6 +194,14 @@ impl TimeArray {
         }
         Ok(())
     }
+
+    pub fn take(&self, indices: &[usize]) -> SchemaResult<Self> {
+        validate_indices("time", self.len(), indices)?;
+        Self::new(
+            self.scale,
+            indices.iter().map(|&index| self.epochs[index]).collect(),
+        )
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -459,6 +467,25 @@ impl CovarianceBatch {
             9
         }
     }
+
+    pub fn take(&self, indices: &[usize]) -> SchemaResult<Self> {
+        validate_indices("covariance", self.rows, indices)?;
+        let stride = self.dimension * self.dimension;
+        let mut values = Vec::with_capacity(indices.len() * stride);
+        for &index in indices {
+            values.extend_from_slice(self.row_values(index));
+        }
+        let mut out = Self::new(indices.len(), self.dimension, values, self.units.clone())?;
+        if let Some(validity) = &self.row_validity {
+            out = out.with_row_validity(Validity::from_bools(
+                &indices
+                    .iter()
+                    .map(|&index| validity.is_valid(index))
+                    .collect::<Vec<_>>(),
+            ))?;
+        }
+        Ok(out)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -518,6 +545,18 @@ impl CoordinateValues {
             | Self::Cometary(values)
             | Self::Geodetic(values) => values,
         }
+    }
+
+    pub fn take(&self, indices: &[usize]) -> SchemaResult<Self> {
+        validate_indices("coordinate values", self.len(), indices)?;
+        let gather = |values: &[[f64; 6]]| indices.iter().map(|&index| values[index]).collect();
+        Ok(match self {
+            Self::Cartesian(values) => Self::Cartesian(gather(values)),
+            Self::Spherical(values) => Self::Spherical(gather(values)),
+            Self::Keplerian(values) => Self::Keplerian(gather(values)),
+            Self::Cometary(values) => Self::Cometary(gather(values)),
+            Self::Geodetic(values) => Self::Geodetic(gather(values)),
+        })
     }
 }
 
@@ -591,6 +630,28 @@ impl CoordinateBatch {
 
     pub fn representation(&self) -> CoordinateRepresentation {
         self.values.representation()
+    }
+
+    pub fn take(&self, indices: &[usize]) -> SchemaResult<Self> {
+        validate_indices("coordinates", self.len(), indices)?;
+        Self::new(
+            self.values.take(indices)?,
+            self.frame,
+            OriginArray::new(
+                indices
+                    .iter()
+                    .map(|&index| self.origins.origins[index].clone())
+                    .collect(),
+            ),
+            self.times
+                .as_ref()
+                .map(|times| times.take(indices))
+                .transpose()?,
+            self.covariance
+                .as_ref()
+                .map(|covariance| covariance.take(indices))
+                .transpose()?,
+        )
     }
 
     pub fn validate(&self) -> SchemaResult<()> {
@@ -880,6 +941,28 @@ impl OrbitBatch {
         self.coordinates.is_empty()
     }
 
+    pub fn take(&self, indices: &[usize]) -> SchemaResult<Self> {
+        validate_indices("orbits", self.len(), indices)?;
+        let mut out = Self::new(
+            indices
+                .iter()
+                .map(|&index| self.orbit_id[index].clone())
+                .collect(),
+            indices
+                .iter()
+                .map(|&index| self.object_id[index].clone())
+                .collect(),
+            self.coordinates.take(indices)?,
+        )?;
+        if let Some(parameters) = &self.physical_parameters {
+            out = out.with_physical_parameters(parameters.take(indices))?;
+        }
+        if let Some(parameters) = &self.non_gravitational_parameters {
+            out = out.with_non_gravitational_parameters(parameters.take(indices))?;
+        }
+        Ok(out)
+    }
+
     pub fn validate(&self) -> SchemaResult<()> {
         validate_orbit_metadata(&self.orbit_id, &self.object_id, &self.coordinates)?;
         if let Some(physical_parameters) = &self.physical_parameters {
@@ -1013,6 +1096,17 @@ impl ObserverBatch {
 
     pub fn is_empty(&self) -> bool {
         self.coordinates.is_empty()
+    }
+
+    pub fn take(&self, indices: &[usize]) -> SchemaResult<Self> {
+        validate_indices("observers", self.len(), indices)?;
+        Self::new(
+            indices
+                .iter()
+                .map(|&index| self.code[index].clone())
+                .collect(),
+            self.coordinates.take(indices)?,
+        )
     }
 
     pub fn validate(&self) -> SchemaResult<()> {
@@ -1155,6 +1249,15 @@ fn validate_len(field: &str, expected: usize, actual: usize) -> SchemaResult<()>
     })
 }
 
+fn validate_indices(field: &str, rows: usize, indices: &[usize]) -> SchemaResult<()> {
+    if let Some(index) = indices.iter().copied().find(|&index| index >= rows) {
+        return Err(SchemaError::InvalidRecordBatch(format!(
+            "{field} row index {index} is out of bounds for {rows} rows"
+        )));
+    }
+    Ok(())
+}
+
 fn validate_optional_finite(field: &str, values: &[Option<f64>]) -> SchemaResult<()> {
     for (row, value) in values.iter().enumerate() {
         if value.is_some_and(|value| !value.is_finite()) {
@@ -1194,6 +1297,45 @@ mod tests {
         let err =
             CoordinateBatch::cartesian(values, Frame::Ecliptic, origins, None, None).unwrap_err();
         assert!(matches!(err, SchemaError::LengthMismatch { .. }));
+    }
+
+    #[test]
+    fn coordinate_batch_take_preserves_order_and_rejects_out_of_bounds_rows() {
+        let values = vec![
+            [1.0, 2.0, 3.0, 0.1, 0.2, 0.3],
+            [4.0, 5.0, 6.0, 0.4, 0.5, 0.6],
+        ];
+        let time = TimeArray::new(
+            TimeScale::Tdb,
+            vec![Epoch::new(60_000, 1), Epoch::new(60_001, 2)],
+        )
+        .unwrap();
+        let coordinates = CoordinateBatch::cartesian(
+            values.clone(),
+            Frame::Ecliptic,
+            OriginArray::repeat(OriginId::SolarSystemBarycenter, 2),
+            Some(time),
+            None,
+        )
+        .unwrap();
+
+        let gathered = coordinates.take(&[1, 0, 1]).unwrap();
+        assert_eq!(
+            gathered.values.cartesian().unwrap(),
+            &[values[1], values[0], values[1]]
+        );
+        assert_eq!(
+            gathered.times.unwrap().epochs,
+            vec![
+                Epoch::new(60_001, 2),
+                Epoch::new(60_000, 1),
+                Epoch::new(60_001, 2)
+            ]
+        );
+        assert!(matches!(
+            coordinates.take(&[2]).unwrap_err(),
+            SchemaError::InvalidRecordBatch(_)
+        ));
     }
 
     #[test]

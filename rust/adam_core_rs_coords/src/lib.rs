@@ -37,11 +37,15 @@ pub use efcc18::{
 };
 
 mod observation_uncertainty;
+mod od_batch;
 mod od_config;
 mod od_workflows;
 
 /// Rust-owned Core 0.7 orbit-determination configuration boundary.
 pub mod od {
+    pub use crate::od_batch::{
+        plan_associations, plan_orbit_members, AssociationGroup, OrbitMemberGroup,
+    };
     pub use crate::od_config::{
         EvaluationConfig, IodRunConfig, ObservationPipeline, ObservationTransform, OdConfig,
         OdConfigError, RefinementRunConfig, ResidualCovarianceOperation, ResourceBindings,
@@ -50,7 +54,7 @@ pub mod od {
     };
     pub use crate::propagation::apply_configured_observation_pipeline;
 
-    /// Focused predictor-level building blocks for the forthcoming batch API.
+    /// Focused predictor-level building blocks used by the canonical batch API.
     pub mod algorithms {
         pub use crate::od_workflows::{
             prepare_observations, refine_with_predictor, run_iod_with_predictor,

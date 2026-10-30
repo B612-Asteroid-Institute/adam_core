@@ -138,6 +138,7 @@ class IodRunConfig:
     search_correction_ranging: IodSearchConfig
     candidate_correction_fit: WhitenedFitConfig
     _native: Any = field(init=False, repr=False, compare=False)
+    _workflow_native: Any | None = field(init=False, repr=False, compare=False)
 
     def __post_init__(self) -> None:
         declaration = {
@@ -146,6 +147,7 @@ class IodRunConfig:
         }
         native = _rust.iod_run_config_from_json(_canonical_json(declaration))
         object.__setattr__(self, "_native", native)
+        object.__setattr__(self, "_workflow_native", None)
 
     @classmethod
     def core_v1(cls) -> IodRunConfig:
@@ -154,7 +156,9 @@ class IodRunConfig:
         return cls._from_native(_rust.IodRunConfig.core_v1())
 
     @classmethod
-    def _from_native(cls, native: Any) -> IodRunConfig:
+    def _from_native(
+        cls, native: Any, *, workflow_native: Any | None = None
+    ) -> IodRunConfig:
         raw = json.loads(native.canonical_json)
         search = raw["search_correction_ranging"]
         fit = raw["candidate_correction_fit"]
@@ -163,6 +167,7 @@ class IodRunConfig:
             candidate_correction_fit=_fit_from_dict(fit),
         )
         object.__setattr__(value, "_native", native)
+        object.__setattr__(value, "_workflow_native", workflow_native)
         return value
 
 
@@ -234,20 +239,25 @@ class EvaluationConfig:
 
     covariance_dimension: int
     _native: Any = field(init=False, repr=False, compare=False)
+    _workflow_native: Any | None = field(init=False, repr=False, compare=False)
 
     def __post_init__(self) -> None:
         object.__setattr__(
             self, "_native", _rust.evaluation_config(self.covariance_dimension)
         )
+        object.__setattr__(self, "_workflow_native", None)
 
     @classmethod
     def six_dimensional(cls) -> EvaluationConfig:
         return cls(6)
 
     @classmethod
-    def _from_native(cls, native: Any) -> EvaluationConfig:
+    def _from_native(
+        cls, native: Any, *, workflow_native: Any | None = None
+    ) -> EvaluationConfig:
         value = cls(cast(int, native.covariance_dimension))
         object.__setattr__(value, "_native", native)
+        object.__setattr__(value, "_workflow_native", workflow_native)
         return value
 
 
@@ -305,13 +315,21 @@ class OdConfig:
         return cls(native)
 
     def for_iod(self) -> IodRunConfig:
-        return IodRunConfig._from_native(self._native.for_iod())
+        """Project a complete bound setup to the public IOD stage config."""
+
+        return IodRunConfig._from_native(
+            self._native.for_iod(), workflow_native=self._native
+        )
 
     def for_refinement(self) -> RefinementRunConfig:
         return RefinementRunConfig._from_native(self._native.for_refinement())
 
     def for_evaluation(self) -> EvaluationConfig:
-        return EvaluationConfig._from_native(self._native.for_evaluation())
+        """Project a complete bound setup to the public evaluation config."""
+
+        return EvaluationConfig._from_native(
+            self._native.for_evaluation(), workflow_native=self._native
+        )
 
     @property
     def observation_pipeline(self) -> ObservationPipeline:

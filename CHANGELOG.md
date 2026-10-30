@@ -26,6 +26,12 @@ This file contains notable changes in adam-core
 - Original/used astrometry, physical parameters, and non-gravitational
   parameters in fitted-result schemas where applicable. Older serialized
   fitted-orbit tables are upgraded with nullable fields by the current reader.
+- Canonical batch ``run_iod``, ``run_od``, ``refine``, and
+  ``evaluate_orbits`` workflows with Rust-owned deterministic grouping,
+  complete preflight, typed per-group failures, explicit memberships, and
+  canonical path-free runtime provenance. Every workflow returns exactly
+  ``FittedOrbits``, ``FittedOrbitMembers``, and
+  ``OrbitDeterminationFailures``.
 
 ### Changed
 
@@ -74,11 +80,10 @@ This file contains notable changes in adam-core
 
 ### Compatibility
 
-- Core 0.7's canonical batch ``run_iod``, ``run_od``, ``refine``, and
-  ``evaluate_orbits`` workflows are forthcoming. This foundation deliberately
-  does not expose an interim Python configured workflow; the batch layer will
-  own deterministic grouping, memberships, typed per-group failures, complete
-  preflight ordering, and runtime provenance.
+- Core 0.7's canonical OD workflows require explicit configuration and an
+  ABI-v2 propagation provider with complete provenance fingerprints. Invalid
+  input/configuration/resource/provider contracts fail atomically; safely
+  isolated scientific failures continue as typed group failures.
 - These changes are intentionally source-breaking for the removed Python and
   Rust OD surfaces. They target adam-core 0.7.0; no merge, publication, release,
   or cross-package compatibility claim is implied by this unreleased entry.

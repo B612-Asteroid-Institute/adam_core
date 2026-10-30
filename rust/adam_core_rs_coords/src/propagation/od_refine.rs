@@ -3541,7 +3541,10 @@ pub struct AstrometrySnapshot {
 }
 
 impl AstrometrySnapshot {
-    fn from_columns(lon: &[f64], lat: &[f64], covariance: &[f64]) -> Self {
+    /// Build the canonical lon/lat astrometry snapshot from row-major 6x6
+    /// covariance blocks. Language bindings use this same constructor when
+    /// reconstructing the prepared handoff persisted in fitted members.
+    pub fn from_columns(lon: &[f64], lat: &[f64], covariance: &[f64]) -> Self {
         let sqrt_or_nan = |value: f64| if value >= 0.0 { value.sqrt() } else { f64::NAN };
         let n = lon.len();
         Self {
