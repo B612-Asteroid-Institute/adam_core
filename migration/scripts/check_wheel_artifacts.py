@@ -4,44 +4,62 @@ from __future__ import annotations
 
 import hashlib
 import json
-import re
 import sys
 from email.parser import Parser
 from email.utils import collapse_rfc2231_value
 from pathlib import Path
 from zipfile import BadZipFile, ZipFile
 
+from packaging.tags import Tag, parse_tag
+from packaging.utils import (
+    InvalidWheelFilename,
+    canonicalize_name,
+    parse_wheel_filename,
+)
+
 NATIVE_MODULE_PREFIX = "adam_core/_rust_native"
 VERSION_MODULE = "adam_core/_version.py"
 RELEASE_INVENTORY = "adam_core/_release_inventory.json"
 RELEASE_INVENTORY_FORMAT = "adam-core-release-inventory-v2"
 FORBIDDEN_RUNTIME_DEPENDENCIES = {"pdm"}
-
-# The release wrapper produces CPython ABI-specific wheels without a build tag.
-# Validate that exact PEP 427 subset using only the standard library so the
-# fresh release matrix can import the builder before optional tooling exists.
-_WHEEL_FILENAME = re.compile(
-    r"^(?P<distribution>[A-Za-z0-9]+(?:_[A-Za-z0-9]+)*)-"
-    r"(?P<version>[0-9]+(?:\.[0-9]+)+(?:a[0-9]+|b[0-9]+|rc[0-9]+)?)-"
-    r"(?P<python>cp[0-9]+)-(?P<abi>cp[0-9]+)-"
-    r"(?P<platform>[A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)*)\.whl$"
-)
+EXPECTED_DISTRIBUTION = "adam-core"
+EXPECTED_FILENAME_DISTRIBUTION = "adam_core"
 
 
-def _canonicalize_name(name: str) -> str:
-    return re.sub(r"[-_.]+", "-", name).lower()
+def _validated_wheel_filename(wheel: Path) -> tuple[str, str, frozenset[Tag]]:
+    """Return the exact canonical identity encoded by a Core wheel filename."""
 
+    try:
+        name, version, build, tags = parse_wheel_filename(wheel.name)
+    except InvalidWheelFilename as error:
+        raise SystemExit(f"{wheel} has an invalid wheel filename: {error}") from error
 
-def _validated_wheel_filename(wheel: Path) -> tuple[str, str]:
-    """Return canonical distribution/version from our PEP 427 wheel subset."""
-
-    match = _WHEEL_FILENAME.fullmatch(wheel.name)
-    if match is None or match["python"] != match["abi"]:
+    raw_parts = wheel.name.removesuffix(".whl").split("-")
+    if len(raw_parts) != 5 or build:
         raise SystemExit(
-            f"{wheel} has an invalid wheel filename: expected "
-            "<distribution>-<version>-cp<python>-cp<python>-<platform>.whl"
+            f"{wheel} has an invalid wheel filename: build tags are not supported"
         )
-    return _canonicalize_name(match["distribution"]), match["version"]
+    raw_name, raw_version, python_tag, abi_tag, platform_tag = raw_parts
+    if canonicalize_name(name) != EXPECTED_DISTRIBUTION:
+        raise SystemExit(
+            f"{wheel} has an invalid wheel filename: unexpected distribution {name!r}"
+        )
+    if raw_name != EXPECTED_FILENAME_DISTRIBUTION:
+        raise SystemExit(
+            f"{wheel} has an invalid wheel filename: distribution must be spelled "
+            f"exactly {EXPECTED_FILENAME_DISTRIBUTION!r}"
+        )
+    if raw_version != str(version):
+        raise SystemExit(
+            f"{wheel} has an invalid wheel filename: version must use canonical "
+            f"spelling {str(version)!r}"
+        )
+    raw_tags = (python_tag, abi_tag, platform_tag)
+    if any(value != value.lower() for value in raw_tags):
+        raise SystemExit(
+            f"{wheel} has an invalid wheel filename: tags must be lowercase"
+        )
+    return EXPECTED_DISTRIBUTION, raw_version, tags
 
 
 def _wheel_metadata(archive: ZipFile, wheel: Path) -> tuple[str, str, list[str]]:
@@ -62,6 +80,27 @@ def _wheel_metadata(archive: ZipFile, wheel: Path) -> tuple[str, str, list[str]]
         raise SystemExit(f"{wheel} METADATA is missing Name or Version")
     requirements = metadata.get_all("Requires-Dist", [])
     return name, version, requirements
+
+
+def _wheel_tags(archive: ZipFile, wheel: Path) -> frozenset[Tag]:
+    wheel_files = [
+        name for name in archive.namelist() if name.endswith(".dist-info/WHEEL")
+    ]
+    if len(wheel_files) != 1:
+        raise SystemExit(
+            f"{wheel} should contain exactly one WHEEL file, found {len(wheel_files)}"
+        )
+    metadata = Parser().parsestr(
+        archive.read(wheel_files[0]).decode("utf-8", errors="replace")
+    )
+    raw_tags = metadata.get_all("Tag", [])
+    if not raw_tags:
+        raise SystemExit(f"{wheel} WHEEL metadata is missing Tag")
+    try:
+        tags = frozenset(tag for value in raw_tags for tag in parse_tag(value))
+    except ValueError as error:
+        raise SystemExit(f"{wheel} has an invalid WHEEL Tag: {error}") from error
+    return tags
 
 
 def _runtime_version(archive: ZipFile, wheel: Path) -> str:
@@ -124,11 +163,11 @@ def _verify_release_inventory(archive: ZipFile, wheel: Path) -> None:
 
 
 def _inspect_wheel(wheel: Path) -> str:
-    filename_name, filename_version = _validated_wheel_filename(wheel)
+    filename_name, filename_version, filename_tags = _validated_wheel_filename(wheel)
     try:
         with ZipFile(wheel) as archive:
             name, metadata_version, requirements = _wheel_metadata(archive, wheel)
-            if _canonicalize_name(name) != filename_name:
+            if name != "adam_core" or canonicalize_name(name) != filename_name:
                 raise SystemExit(
                     f"{wheel} filename distribution {filename_name!r} does not match "
                     f"METADATA name {name!r}"
@@ -138,9 +177,15 @@ def _inspect_wheel(wheel: Path) -> str:
                     f"{wheel} filename version {filename_version!r} does not match "
                     f"METADATA version {metadata_version!r}"
                 )
+            wheel_tags = _wheel_tags(archive, wheel)
+            if filename_tags != wheel_tags:
+                raise SystemExit(
+                    f"{wheel} filename tags {sorted(map(str, filename_tags))} do not "
+                    f"match WHEEL tags {sorted(map(str, wheel_tags))}"
+                )
             runtime_version = _runtime_version(archive, wheel)
             _verify_release_inventory(archive, wheel)
-            if name not in {"adam_core", "adam-core"}:
+            if name != "adam_core":
                 raise SystemExit(f"{wheel} has unexpected package name {name!r}")
             if runtime_version != metadata_version:
                 raise SystemExit(

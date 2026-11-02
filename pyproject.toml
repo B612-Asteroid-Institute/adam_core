@@ -89,6 +89,11 @@ build-backend = "maturin"
 
 
 [dependency-groups]
+build = [
+    "maturin==1.15.0",
+    "packaging==25.0",
+    "ziglang==0.17.0",
+]
 test = [
     # Freeze data authorities for regression fixtures while keeping runtime
     # requirements broad so wheel consumers can receive current updates.
@@ -190,6 +195,7 @@ public-surface-check = "python migration/scripts/audit_public_surface.py --check
 wheel-version = "python migration/scripts/write_maturin_version.py"
 wheel-build = "python migration/scripts/build_release_wheel.py --out dist"
 wheel-inspect = "python migration/scripts/check_wheel_artifacts.py dist"
+release-build-environment-check = "python migration/scripts/validate_release_build_environment.py"
 format = { composite = ["black ./src/adam_core", "isort ./src/adam_core"] }
 lint = { composite = [
   "ruff check ./src/adam_core",

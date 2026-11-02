@@ -20,6 +20,16 @@ from typing import Any
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PYPROJECT = REPO_ROOT / "pyproject.toml"
 WORKFLOW_DIR = REPO_ROOT / ".github" / "workflows"
+RELEASE_WORKFLOW = WORKFLOW_DIR / "release-candidate-wheel-matrix.yml"
+EXPECTED_BUILD_TOOLS = [
+    "maturin==1.15.0",
+    "packaging==25.0",
+    "ziglang==0.17.0",
+]
+EXPECTED_MANYLINUX_TARGETS = [
+    "x86_64-unknown-linux-gnu",
+    "aarch64-unknown-linux-gnu",
+]
 
 STALE_REFERENCES = (
     "src/adam_core/tests/test_rust_orbit_determination.py",
@@ -70,9 +80,12 @@ OUTPUT_PREFIXES = (
 )
 
 
-def _load_scripts() -> dict[str, Any]:
-    data = tomllib.loads(PYPROJECT.read_text(encoding="utf-8"))
-    scripts = data.get("tool", {}).get("pdm", {}).get("scripts", {})
+def _load_project() -> dict[str, Any]:
+    return tomllib.loads(PYPROJECT.read_text(encoding="utf-8"))
+
+
+def _load_scripts(project: dict[str, Any]) -> dict[str, Any]:
+    scripts = project.get("tool", {}).get("pdm", {}).get("scripts", {})
     if not isinstance(scripts, dict):
         raise SystemExit("[tool.pdm.scripts] is missing or not a table")
     return scripts
@@ -324,6 +337,53 @@ def _required_script_output_failures(scripts: dict[str, Any]) -> list[str]:
     return failures
 
 
+def _release_workflow_failures(project: dict[str, Any]) -> list[str]:
+    failures: list[str] = []
+    build_tools = project.get("dependency-groups", {}).get("build")
+    if build_tools != EXPECTED_BUILD_TOOLS:
+        failures.append(
+            "pyproject.toml: build dependency group must equal "
+            f"{EXPECTED_BUILD_TOOLS!r}"
+        )
+    if not RELEASE_WORKFLOW.is_file():
+        return failures + ["release candidate wheel workflow is missing"]
+
+    text = RELEASE_WORKFLOW.read_text(encoding="utf-8")
+    install_marker = "Install audited adam-core wheel builder"
+    builder = "python migration/scripts/build_release_wheel.py"
+    inspector = "python migration/scripts/check_wheel_artifacts.py"
+    if not all(marker in text for marker in (install_marker, builder, inspector)):
+        failures.append("release workflow is missing install/build/inspect steps")
+    else:
+        install_offset = text.index(install_marker)
+        builder_offset = text.index(builder)
+        inspector_offset = text.index(inspector)
+        if not install_offset < builder_offset < inspector_offset:
+            failures.append(
+                "release workflow must install exact build tools before build/inspect"
+            )
+        for tool in EXPECTED_BUILD_TOOLS:
+            pin = f'"{tool}"'
+            if text.count(pin) != 1:
+                failures.append(
+                    f"release workflow must install exact build tool {tool!r} once"
+                )
+            elif not install_offset < text.index(pin) < builder_offset:
+                failures.append(
+                    f"release workflow must install {tool!r} before its first build"
+                )
+    for target in EXPECTED_MANYLINUX_TARGETS:
+        if f"target: {target}" not in text:
+            failures.append(f"release workflow is missing exact Rust target {target}")
+    for shorthand in ("target: x86_64\n", "target: aarch64\n"):
+        if shorthand in text:
+            failures.append(
+                "release workflow must not pass maturin-action target shorthands "
+                "to the maturin CLI"
+            )
+    return failures
+
+
 def _required_workflow_artifact_failures(
     workflows: list[tuple[Path, str]],
 ) -> list[str]:
@@ -340,7 +400,8 @@ def _required_workflow_artifact_failures(
 
 
 def main() -> None:
-    scripts = _load_scripts()
+    project = _load_project()
+    scripts = _load_scripts(project)
     script_names = set(scripts)
     script_commands = _all_script_commands(scripts)
 
@@ -361,6 +422,7 @@ def main() -> None:
         failures.extend(_stale_reference_failures(source, text))
         failures.extend(_workflow_pdm_run_failures(source, text, script_names))
     failures.extend(_required_workflow_artifact_failures(workflows))
+    failures.extend(_release_workflow_failures(project))
 
     if failures:
         print("PDM/CI script preflight failed:", file=sys.stderr)

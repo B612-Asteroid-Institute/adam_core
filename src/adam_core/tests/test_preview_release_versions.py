@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 import importlib.util
-import subprocess
-import sys
 import tomllib
 from pathlib import Path
 
@@ -91,55 +89,36 @@ def test_release_matrix_generates_and_inspects_runtime_version() -> None:
     assert "assist-rust-develop" not in extended_coverage
 
 
-def test_release_builder_imports_in_minimal_pinned_environment(tmp_path: Path) -> None:
-    """The pre-build workflow environment has no optional filename parser."""
+def test_release_builder_uses_declared_exact_tools_and_supported_targets() -> None:
+    """The release matrix and fresh-build guard share one exact tool set."""
+
+    with (ROOT / "pyproject.toml").open("rb") as source:
+        project = tomllib.load(source)
+    expected_tools = [
+        "maturin==1.15.0",
+        "packaging==25.0",
+        "ziglang==0.17.0",
+    ]
+    assert project["dependency-groups"]["build"] == expected_tools
+    assert project["tool"]["pdm"]["scripts"]["release-build-environment-check"] == (
+        "python migration/scripts/validate_release_build_environment.py"
+    )
 
     workflow = (
         ROOT / ".github/workflows/release-candidate-wheel-matrix.yml"
     ).read_text()
-    installer = 'python -m pip install "maturin==1.15.0" "ziglang==0.17.0"'
-    builder = "python migration/scripts/build_release_wheel.py"
-    inspector = "python migration/scripts/check_wheel_artifacts.py"
-    later_parser = "python -m pip install --only-binary=:all: packaging"
-    assert workflow.index(installer) < workflow.index(builder)
-    assert workflow.index(builder) < workflow.index(inspector)
-    assert workflow.index(inspector) < workflow.index(later_parser)
-
-    # ``-S`` is stricter than the release venv containing only pip plus the
-    # two pinned build executables: no third-party site package can satisfy an
-    # accidental import. The builder must still reach argparse, and the checker
-    # must reach its own expected CLI error rather than fail while importing.
-    help_result = subprocess.run(
-        [
-            sys.executable,
-            "-S",
-            str(ROOT / "migration/scripts/build_release_wheel.py"),
-            "--help",
-        ],
-        cwd=ROOT,
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-    assert help_result.returncode == 0
-    assert "usage: build_release_wheel.py" in help_result.stdout
-
-    missing = tmp_path / "missing-wheelhouse"
-    inspect_result = subprocess.run(
-        [
-            sys.executable,
-            "-S",
-            str(ROOT / "migration/scripts/check_wheel_artifacts.py"),
-            str(missing),
-        ],
-        cwd=ROOT,
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-    assert inspect_result.returncode != 0
-    assert f"{missing} does not exist" in inspect_result.stderr
-    assert "ModuleNotFoundError" not in inspect_result.stderr
+    install_step = workflow.index("Install audited adam-core wheel builder")
+    builder = workflow.index("python migration/scripts/build_release_wheel.py")
+    inspector = workflow.index("python migration/scripts/check_wheel_artifacts.py")
+    assert install_step < builder < inspector
+    for tool in expected_tools:
+        assert workflow.count(f'"{tool}"') == 1
+        assert install_step < workflow.index(f'"{tool}"') < builder
+    assert "--only-binary=:all: packaging" not in workflow
+    assert "target: x86_64-unknown-linux-gnu" in workflow
+    assert "target: aarch64-unknown-linux-gnu" in workflow
+    assert "target: x86_64\n" not in workflow
+    assert "target: aarch64\n" not in workflow
 
 
 def test_kernel_data_constrains_icu_for_clean_rust_1_87_consumers() -> None:

@@ -77,30 +77,56 @@ def _write_inspectable_wheel(path: Path) -> None:
         )
         archive.writestr(
             "adam_core-0.7.0.dist-info/METADATA",
-            "Metadata-Version: 2.4\nName: adam-core\nVersion: 0.7.0\n",
+            "Metadata-Version: 2.4\nName: adam_core\nVersion: 0.7.0\n",
+        )
+        archive.writestr(
+            "adam_core-0.7.0.dist-info/WHEEL",
+            "Wheel-Version: 1.0\n"
+            "Generator: focused-test\n"
+            "Root-Is-Purelib: false\n"
+            "Tag: cp312-cp312-manylinux_2_39_aarch64\n",
         )
 
 
-def test_wheel_checker_rejects_malformed_or_misnamed_evidence(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    "mutated_name",
+    [
+        "Adam_Core-0.7.0-cp312-cp312-manylinux_2_39_aarch64.whl",
+        "ADAM_CORE-0.7.0-cp312-cp312-manylinux_2_39_aarch64.whl",
+        "adam_core-0.7.0-cp312-cp312-MANYLINUX_2_39_AARCH64.whl",
+        "adam_core-0.7.0-cp312-cp311-manylinux_2_39_aarch64.whl",
+        "adam_core-0.7.0-cp311-cp311-manylinux_2_39_aarch64.whl",
+        "adam_core-0.7.0-cp312-cp312-manylinux_2_39_x86_64.whl",
+        "adam_core-0.7.0-cp312-cp312-win_amd64.whl",
+        "adam_core-0.7.0-cp312-cp312-cc873d7f.whl",
+        "adam_core-0.7.0-cp312-cp312-manylinux_2_39_aarch64.zip.whl",
+        "adam_core-0.7.0-18e230cd-cp312-manylinux_2_39_aarch64.whl",
+        "adam_kore-0.7.0-cp312-cp312-manylinux_2_39_aarch64.whl",
+    ],
+)
+def test_wheel_checker_rejects_noncanonical_or_inconsistent_names(
+    tmp_path: Path, mutated_name: str
+) -> None:
     canonical = tmp_path / "adam_core-0.7.0-cp312-cp312-manylinux_2_39_aarch64.whl"
     _write_inspectable_wheel(canonical)
-    assert _validated_wheel_filename(canonical) == ("adam-core", "0.7.0")
+    name, version, tags = _validated_wheel_filename(canonical)
+    assert (name, version) == ("adam-core", "0.7.0")
+    assert {str(tag) for tag in tags} == {"cp312-cp312-manylinux_2_39_aarch64"}
     assert _inspect_wheel(canonical) == "0.7.0"
 
-    malformed = tmp_path / "adam_core-0.7.0-18e230cd-cp312-manylinux_2_39_aarch64.whl"
-    malformed.write_bytes(canonical.read_bytes())
-    with pytest.raises(SystemExit, match="invalid wheel filename"):
-        _inspect_wheel(malformed)
+    mutated = tmp_path / mutated_name
+    mutated.write_bytes(canonical.read_bytes())
+    with pytest.raises(SystemExit):
+        _inspect_wheel(mutated)
 
+
+def test_wheel_checker_rejects_wrong_version(tmp_path: Path) -> None:
+    canonical = tmp_path / "adam_core-0.7.0-cp312-cp312-manylinux_2_39_aarch64.whl"
+    _write_inspectable_wheel(canonical)
     wrong_version = tmp_path / "adam_core-0.7.1-cp312-cp312-manylinux_2_39_aarch64.whl"
     wrong_version.write_bytes(canonical.read_bytes())
     with pytest.raises(SystemExit, match="filename version.*METADATA version"):
         _inspect_wheel(wrong_version)
-
-    wrong_name = tmp_path / "adam_kore-0.7.0-cp312-cp312-manylinux_2_39_aarch64.whl"
-    wrong_name.write_bytes(canonical.read_bytes())
-    with pytest.raises(SystemExit, match="filename distribution.*METADATA name"):
-        _inspect_wheel(wrong_name)
 
 
 def test_release_inventory_refuses_visible_and_ignored_package_python(

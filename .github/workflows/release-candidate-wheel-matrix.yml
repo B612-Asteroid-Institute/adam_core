@@ -35,13 +35,13 @@ jobs:
             runner: ubuntu-latest
             system: Linux-x86_64
             family: manylinux
-            target: x86_64
+            target: x86_64-unknown-linux-gnu
             wheel_tag: manylinux*x86_64
           - name: manylinux-aarch64
             runner: ubuntu-24.04-arm
             system: Linux-aarch64
             family: manylinux
-            target: aarch64
+            target: aarch64-unknown-linux-gnu
             wheel_tag: manylinux*aarch64
           - name: macos-arm64
             runner: macos-14
@@ -101,7 +101,9 @@ jobs:
           PY
 
       - name: Install audited adam-core wheel builder
-        run: python -m pip install "maturin==1.15.0" "ziglang==0.17.0"
+        run: >-
+          python -m pip install "maturin==1.15.0" "packaging==25.0"
+          "ziglang==0.17.0"
 
       - name: Build adam-core manylinux wheel (attested wrapper)
         if: matrix.platform.family == 'manylinux'
@@ -161,7 +163,6 @@ jobs:
       - name: Verify platform wheel count and tags
         shell: bash
         run: |
-          python -m pip install --only-binary=:all: packaging
           python - <<'PY'
           import email
           import fnmatch
