@@ -5,8 +5,8 @@ measures two deliberately separate boundaries over identical deterministic
 workloads:
 
 * native Rust work timed with ``std::time::Instant`` after Arrow decoding and
-  settings parsing (``refine(..., rejection='none')``'s whitened fit and the
-  complete model-free ``run_od`` IOD + refinement workflow); and
+  configuration parsing (configured ``refine`` over a prepared IOD handoff and
+  the complete configured ``run_od`` prepare + IOD + refinement workflow); and
 * public Python end-to-end wall clock for ``refine`` and ``run_od`` including
   serialization, provenance checks and table assembly.
 
@@ -37,17 +37,24 @@ import adam_core
 from adam_core import _rust_native
 from adam_core.coordinates import CartesianCoordinates, CoordinateCovariances
 from adam_core.coordinates.origin import Origin
-from adam_core.coordinates.spherical import SphericalCoordinates
 from adam_core.dynamics.ephemeris import generate_ephemeris_2body
 from adam_core.dynamics.propagation import propagate_2body
 from adam_core.observers import Observers
-from adam_core.orbit_determination._native_dispatch import native_propagator
-from adam_core.orbit_determination.evaluate import (
-    OrbitDeterminationObservations,
-    OrbitDeterminationPhotometry,
+from adam_core.observations import Associations, SourceCatalog
+from adam_core.orbit_determination import (
+    EvaluationConfig,
+    IodRunConfig,
+    ObservationPipeline,
+    OdConfig,
+    RefinementRunConfig,
+    ResourceBindings,
+    refine,
+    run_iod,
+    run_od,
 )
-from adam_core.orbit_determination.native_orbit_fitter import NativeOrbitFitter
-from adam_core.orbit_determination.od_orchestration import refine, run_od
+from adam_core.orbit_determination._native_dispatch import native_propagator
+from adam_core.orbit_determination.workflows import _native_batch_inputs
+from adam_core.orbits.arrow_bridge import orbits_to_ipc
 from adam_core.orbits.ephemeris import Ephemeris
 from adam_core.orbits.orbits import Orbits
 from adam_core.propagator import NativeBackend, Propagator
@@ -104,8 +111,8 @@ class BenchmarkTwoBodyPropagator(Propagator):
 @dataclass(frozen=True)
 class Workload:
     name: str
-    observations: OrbitDeterminationObservations
-    seed: Orbits
+    observations: SourceCatalog
+    associations: Associations
     arc_days: float
     rng_seed: int
 
@@ -114,10 +121,7 @@ class Workload:
 class Operation:
     name: str
     native_name: str
-    public_call: Callable[[], tuple[Any, Any]]
-    iod_settings: dict[str, Any] | None
-    refinement: dict[str, Any] | None
-    fit_settings: dict[str, Any]
+    public_call: Callable[[], tuple[Any, Any, Any]]
 
 
 def _truth_orbit() -> Orbits:
@@ -170,27 +174,25 @@ def _workload(name: str, n_obs: int, arc_days: float, seed: int) -> Workload:
     sigma_deg = SIGMA_ARCSEC / 3600.0
     rng = np.random.default_rng(seed)
     noise = rng.normal(0.0, sigma_deg, size=(n_obs, 2))
-    covariance = np.full((n_obs, 6, 6), np.nan)
-    covariance[:, 1, 1] = sigma_deg**2 / cos_lat**2
-    covariance[:, 2, 2] = sigma_deg**2
-    observations = OrbitDeterminationObservations.from_kwargs(
-        id=[f"{name}-{row:04d}" for row in range(n_obs)],
-        coordinates=SphericalCoordinates.from_kwargs(
-            lon=lon + noise[:, 0] / cos_lat,
-            lat=lat + noise[:, 1],
-            time=times,
-            covariance=CoordinateCovariances.from_matrix(covariance),
-            origin=Origin.from_kwargs(code=["500"] * n_obs),
-            frame="equatorial",
-        ),
-        observers=observers,
-        photometry=OrbitDeterminationPhotometry.from_kwargs(
-            mag=[None] * n_obs,
-            rmsmag=[None] * n_obs,
-            band=[None] * n_obs,
-        ),
+    ids = [f"{name}-{row:04d}" for row in range(n_obs)]
+    observations = SourceCatalog.from_kwargs(
+        id=ids,
+        time=times,
+        ra=lon + noise[:, 0] / cos_lat,
+        dec=lat + noise[:, 1],
+        ra_sigma=[SIGMA_ARCSEC] * n_obs,
+        dec_sigma=[SIGMA_ARCSEC] * n_obs,
+        radec_corr=[0.0] * n_obs,
+        observatory_code=["500"] * n_obs,
+        object_id=[name] * n_obs,
+        catalog_id=["adam-core-od-benchmark"] * n_obs,
+        astcat=[None] * n_obs,
     )
-    return Workload(name, observations, _seed_orbit(), arc_days, seed)
+    associations = Associations.from_kwargs(
+        detection_id=ids,
+        object_id=[name] * n_obs,
+    )
+    return Workload(name, observations, associations, arc_days, seed)
 
 
 def _state(fitted: Any) -> np.ndarray:
@@ -200,7 +202,7 @@ def _state(fitted: Any) -> np.ndarray:
 
 
 def _sample_public(
-    call: Callable[[], tuple[Any, Any]], reps: int, trials: int, warmup_reps: int
+    call: Callable[[], tuple[Any, Any, Any]], reps: int, trials: int, warmup_reps: int
 ) -> list[list[float]]:
     samples: list[list[float]] = []
     for _ in range(trials):
@@ -239,116 +241,66 @@ def _sha256_parts(*parts: bytes) -> str:
     return digest.hexdigest()
 
 
-def _native_preflight(
-    operation: Operation,
-    propagator_descriptor: Any,
-    orbit_ipc: bytes,
-    observed_ipc: bytes,
-    observers_ipc: bytes,
-    obs_code: list[str],
-    band: list[str | None],
-    astcat: list[str | None],
-) -> np.ndarray:
-    if operation.native_name == "refine_none":
-        output = _rust_native.fit_orbit_whitened_ipc(
-            propagator_descriptor,
-            orbit_ipc,
-            observed_ipc,
-            observers_ipc,
-            [False] * len(obs_code),
-            fit_settings=operation.fit_settings,
-        )
-    elif operation.native_name == "run_od":
-        output = _rust_native.run_od_ipc(
-            propagator_descriptor,
-            observed_ipc,
-            observers_ipc,
-            obs_code,
-            band,
-            astcat,
-            models=[],
-            iod_settings=operation.iod_settings,
-            refinement=operation.refinement,
-            fit_settings=operation.fit_settings,
-            iod_propagator=propagator_descriptor,
-        )
-    else:
-        raise AssertionError(
-            f"unsupported benchmark operation {operation.native_name!r}"
-        )
-    fit_output = output["fit"] if operation.native_name == "run_od" else output
-    state = np.asarray(fit_output["state"], dtype=np.float64)
-    if state.shape != (6,) or not np.isfinite(state).all():
-        raise RuntimeError("native correctness preflight produced an invalid state")
-    return state
+def _benchmark_config() -> OdConfig:
+    return OdConfig.explicit(
+        observation_pipeline=ObservationPipeline.as_supplied(),
+        iod=IodRunConfig.core_v1(),
+        refinement=RefinementRunConfig.core_v1(),
+        evaluation=EvaluationConfig.six_dimensional(),
+        resources=ResourceBindings({}),
+    )
 
 
 def _benchmark_workload(
     workload: Workload, *, reps: int, trials: int, warmup_reps: int
 ) -> dict[str, Any]:
-    from adam_core.orbit_determination.differential_correction import _native_problem
-
     provider = BenchmarkTwoBodyPropagator()
-    fitter = NativeOrbitFitter(
+    config = _benchmark_config()
+    iod_orbits, iod_members, iod_failures = run_iod(
+        workload.observations,
+        workload.associations,
         provider,
-        iod_rchi2_threshold=1e6,
-        contamination_percentage=0.0,
-        outlier_rejection="worst_residual",
+        config.for_iod(),
     )
-    iod_settings, refinement_settings, fit_settings = fitter.native_settings()
-    orbit_ipc, observed_ipc, observers_ipc = _native_problem(
-        workload.seed, workload.observations
+    if len(iod_orbits) != 1 or len(iod_failures):
+        raise RuntimeError("benchmark IOD preflight did not produce one seed")
+
+    _, source_ipc, associations_ipc, observed_ipc, observers_ipc = (
+        _native_batch_inputs(workload.observations, workload.associations)
     )
+    orbit_ipc = orbits_to_ipc(iod_orbits.to_orbits())
     propagator_descriptor = native_propagator(provider)
-    obs_code = workload.observations.observers.code.to_pylist()
-    band = workload.observations.photometry.band.to_pylist()
+    obs_code = workload.observations.observatory_code.to_pylist()
+    band = workload.observations.filter.to_pylist()
     astcat = workload.observations.astcat.to_pylist()
 
     operations = [
         Operation(
-            "refine_none",
-            "refine_none",
+            "refine",
+            "refine",
             lambda: refine(
-                workload.seed,
+                iod_orbits,
+                iod_members,
                 workload.observations,
                 provider,
-                rejection="none",
-                fit_settings=fit_settings,
+                config.for_refinement(),
             ),
-            None,
-            None,
-            fit_settings,
         ),
         Operation(
-            "run_od_model_free_worst_residual",
+            "run_od",
             "run_od",
             lambda: run_od(
                 workload.observations,
-                fitter,
-                models=None,
-                propagator=provider,
-                object_id="benchmark",
+                workload.associations,
+                provider,
+                config,
             ),
-            iod_settings,
-            refinement_settings,
-            fit_settings,
         ),
     ]
 
     rows = []
     for operation in operations:
         public_state = _state(operation.public_call()[0])
-        native_state = _native_preflight(
-            operation,
-            propagator_descriptor,
-            orbit_ipc,
-            observed_ipc,
-            observers_ipc,
-            obs_code,
-            band,
-            astcat,
-        )
-        np.testing.assert_allclose(public_state, native_state, rtol=0.0, atol=1e-13)
         native = dict(
             _rust_native.benchmark_od_fit_ipc(
                 propagator_descriptor,
@@ -359,20 +311,16 @@ def _benchmark_workload(
                 obs_code,
                 band,
                 astcat,
+                config._native,
                 reps,
                 trials,
                 warmup_reps,
-                iod_settings=operation.iod_settings,
-                refinement=operation.refinement,
-                fit_settings=operation.fit_settings,
             )
         )
+        native_state = np.asarray(native.pop("state"), dtype=np.float64)
+        np.testing.assert_allclose(public_state, native_state, rtol=0.0, atol=1e-13)
         public_samples = _sample_public(
             operation.public_call, reps, trials, warmup_reps
-        )
-        timed_native_state = np.asarray(native.pop("state"), dtype=np.float64)
-        np.testing.assert_allclose(
-            native_state, timed_native_state, rtol=0.0, atol=1e-15
         )
         native_samples = native.pop("samples_seconds")
         native_timing = _summary(native_samples)
@@ -380,12 +328,7 @@ def _benchmark_workload(
         rows.append(
             {
                 "operation": operation.name,
-                "configuration": {
-                    "iod_settings": operation.iod_settings,
-                    "refinement": operation.refinement,
-                    "fit_settings": operation.fit_settings,
-                    "observation_models": [],
-                },
+                "configuration": dict(config.provenance),
                 "native_rust": {
                     **native,
                     **native_timing,
@@ -423,8 +366,14 @@ def _benchmark_workload(
         },
         "input_identity": {
             "combined_ipc_sha256": _sha256_parts(
-                orbit_ipc, observed_ipc, observers_ipc
+                source_ipc,
+                associations_ipc,
+                orbit_ipc,
+                observed_ipc,
+                observers_ipc,
             ),
+            "source_ipc_sha256": hashlib.sha256(source_ipc).hexdigest(),
+            "associations_ipc_sha256": hashlib.sha256(associations_ipc).hexdigest(),
             "orbit_ipc_sha256": hashlib.sha256(orbit_ipc).hexdigest(),
             "observed_ipc_sha256": hashlib.sha256(observed_ipc).hexdigest(),
             "observers_ipc_sha256": hashlib.sha256(observers_ipc).hexdigest(),

@@ -163,10 +163,11 @@ there is no independent current implementation with equivalent semantics.
 Instead, the artifact keeps two timing boundaries separate over the same
 source-identified deterministic workloads:
 
-- a Rust-owned `std::time::Instant` adapter for the native whitened refinement
-  stage and the native model-free `run_od` workflow; Arrow decoding, settings
-  parsing, imports, workload creation, and correctness checks are outside the
-  intervals; and
+- a Rust-owned `std::time::Instant` adapter for configured native refinement
+  over an already prepared IOD handoff and the complete configured `run_od`
+  prepare + IOD + refinement workflow; Arrow decoding, configuration parsing,
+  imports, workload creation, and correctness checks are outside the intervals;
+  and
 - public Python end-to-end `refine` and `run_od` wall clock, including Arrow
   serialization, provenance checks, and result-table assembly.
 

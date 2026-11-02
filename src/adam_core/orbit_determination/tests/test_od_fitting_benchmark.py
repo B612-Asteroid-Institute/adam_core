@@ -7,58 +7,18 @@ import numpy as np
 import pytest
 
 from adam_core import _rust_native
-from adam_core.orbit_determination._native_dispatch import native_propagator
-from adam_core.orbit_determination.differential_correction import _native_problem
 from migration.scripts import benchmark_od_fitting as benchmark
 
 
 def test_native_od_benchmark_has_closed_operation_and_count_contracts() -> None:
+    config = benchmark._benchmark_config()
     with pytest.raises(ValueError, match="operation must be exactly"):
         _rust_native.benchmark_od_fit_ipc(
-            None, "other", b"", b"", b"", [], [], [], 1, 1, 0
+            None, "other", b"", b"", b"", [], [], [], config._native, 1, 1, 0
         )
     with pytest.raises(ValueError, match="reps and trials must be >= 1"):
         _rust_native.benchmark_od_fit_ipc(
-            None, "refine_none", b"", b"", b"", [], [], [], 0, 1, 0
-        )
-
-
-def test_legacy_angular_projection_flag_is_ignored_by_complete_od() -> None:
-    """N1 final-line coverage: the private legacy flag belongs only to LS."""
-    workload = benchmark._workload("legacy-flag", 8, 21.0, 9041)
-    covariance = workload.observations.coordinates.covariance.to_matrix()
-    full = np.full((len(workload.observations), 9, 9), np.nan)
-    full[:, :6, :6] = covariance
-    full[-1, 6, 6] = 1.0
-    observations = workload.observations.set_column(
-        "coordinates.covariance", benchmark.CoordinateCovariances.from_matrix(full)
-    )
-    provider = benchmark.BenchmarkTwoBodyPropagator()
-    fitter = benchmark.NativeOrbitFitter(
-        provider,
-        iod_rchi2_threshold=1e6,
-        contamination_percentage=0.0,
-        outlier_rejection="worst_residual",
-    )
-    iod_settings, refinement, fit_settings = fitter.native_settings()
-    fit_settings["_legacy_angular_only_covariance"] = True
-    _, observed_ipc, observers_ipc = _native_problem(workload.seed, observations)
-
-    with pytest.raises(
-        ValueError, match="observation covariance must have dimension 6, got 9"
-    ):
-        _rust_native.run_od_ipc(
-            native_propagator(provider),
-            observed_ipc,
-            observers_ipc,
-            observations.observers.code.to_pylist(),
-            observations.photometry.band.to_pylist(),
-            observations.astcat.to_pylist(),
-            models=[],
-            iod_settings=iod_settings,
-            refinement=refinement,
-            fit_settings=fit_settings,
-            iod_propagator=native_propagator(provider),
+            None, "refine", b"", b"", b"", [], [], [], config._native, 0, 1, 0
         )
 
 

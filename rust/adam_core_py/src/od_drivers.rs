@@ -15,6 +15,9 @@
 use crate::coordinates::{read_orbit_ipc, write_orbit_ipc, ErfaTimeProvider};
 use crate::od_config::{PyIodRunConfig, PyOdConfig, PyRefinementRunConfig};
 use crate::od_support::{od_error, LockingSpiceTranslation};
+use adam_core_rs_coords::od::algorithms::{
+    prepare_observations, refine_with_predictor, run_od_with_predictors, PreparedObservations,
+};
 use adam_core_rs_coords::propagation::adapter::{
     cmc2003_fit_with, fit_orbit_whitened_with, iterative_fit_with, refine_with, run_iod_with,
     validate_fit_covariance_with, PropagatorPredictor, SphericalPredictor,
@@ -29,11 +32,11 @@ use adam_core_rs_coords::propagation::{
 };
 use adam_core_rs_coords::{
     validate_loss, AssociationBatch, CoordinateBatch as DataCoordinateBatch, CoordinateValues,
-    CovarianceBatch, IntoNestedRecordBatch, LossType, ObserverBatch as DataObserverBatch, OdConfig,
+    CovarianceBatch, IntoNestedRecordBatch, ObserverBatch as DataObserverBatch, OdConfig,
     OrbitBatch as DataOrbitBatch, SourceCatalogBatch, TimeScale, TryFromNestedRecordBatch,
     TwoBodyModelConfig, CMC2003_APPARITION_GAP_DAYS, CMC2003_CHI2_FRAC,
     CMC2003_CHI2_RECOVER, CMC2003_CHI2_REJECT, CMC2003_MAX_ITERATIONS,
-    CMC2003_MAX_REJECTED_FRACTION, CMC2003_PSD_FLOOR_FRAC, HUBER_F_SCALE_DEFAULT,
+    CMC2003_MAX_REJECTED_FRACTION, CMC2003_PSD_FLOOR_FRAC,
 };
 use numpy::{IntoPyArray, PyReadonlyArray2};
 use pyo3::exceptions::PyValueError;
@@ -3788,24 +3791,24 @@ mod batch_contract_tests {
 /// Native OD timing lanes supported by [`benchmark_od_fit_ipc`].
 #[derive(Clone, Copy)]
 enum NativeOdBenchmarkOperation {
-    RefineNone,
+    Refine,
     RunOd,
 }
 
 impl NativeOdBenchmarkOperation {
     fn parse(value: &str) -> PyResult<Self> {
         match value {
-            "refine_none" => Ok(Self::RefineNone),
+            "refine" => Ok(Self::Refine),
             "run_od" => Ok(Self::RunOd),
             _ => Err(value_error(
-                "operation must be exactly 'refine_none' or 'run_od'",
+                "operation must be exactly 'refine' or 'run_od'",
             )),
         }
     }
 
     fn as_str(self) -> &'static str {
         match self {
-            Self::RefineNone => "refine_none",
+            Self::Refine => "refine",
             Self::RunOd => "run_od",
         }
     }
@@ -3827,37 +3830,35 @@ fn run_native_od_benchmark_once(
     predictor: &dyn SphericalPredictor,
     orbit: &DataOrbitBatch,
     problem: &OdObservations,
+    prepared: &PreparedObservations,
     obs_code: &[String],
     band: &[Option<String>],
     astcat: &[Option<String>],
-    ignore: &[bool],
-    full_config: &FullOdConfig,
-    fit_config: &WhitenedFitConfig,
+    config: &OdConfig,
 ) -> PropagationResultValue<NativeOdBenchmarkResult> {
     match operation {
-        NativeOdBenchmarkOperation::RefineNone => {
-            let fit = fit_orbit_whitened_with(
+        NativeOdBenchmarkOperation::Refine => {
+            let refined = refine_with_predictor(
                 predictor,
                 orbit,
-                &problem.observed,
+                prepared,
                 &problem.observers,
-                ignore,
-                fit_config,
+                config,
                 &ErfaTimeProvider,
                 &LockingSpiceTranslation,
             )?;
             Ok(NativeOdBenchmarkResult {
-                fit,
+                fit: refined.fit,
                 iod_found: None,
                 triplets_tried: None,
                 candidates_evaluated: None,
-                passes: 1,
-                n_rejected: 0,
-                n_recovered: 0,
+                passes: refined.passes,
+                n_rejected: refined.n_rejected,
+                n_recovered: refined.n_recovered,
             })
         }
         NativeOdBenchmarkOperation::RunOd => {
-            let output = run_od_with(
+            let output = run_od_with_predictors(
                 predictor,
                 predictor,
                 &problem.observed,
@@ -3865,15 +3866,14 @@ fn run_native_od_benchmark_once(
                 obs_code,
                 band,
                 astcat,
-                Vec::new(),
-                full_config,
+                config,
                 &ErfaTimeProvider,
                 &LockingSpiceTranslation,
             )?;
-            let iod_found = output.full_od.iod.found();
-            let triplets_tried = output.full_od.iod.triplets_tried;
-            let candidates_evaluated = output.full_od.iod.candidates_evaluated;
-            let refined = output.full_od.refined.ok_or_else(|| {
+            let iod_found = output.iod.found();
+            let triplets_tried = output.iod.triplets_tried;
+            let candidates_evaluated = output.iod.candidates_evaluated;
+            let refined = output.refined.ok_or_else(|| {
                 adam_core_rs_coords::propagation::PropagationError::InvalidRequest(
                     "benchmark run_od workload did not produce a refined orbit".to_string(),
                 )
@@ -3893,10 +3893,11 @@ fn run_native_od_benchmark_once(
 
 /// Rust-owned `Instant` timing for Core OD fit stages.
 ///
-/// Arrow decoding, Python extraction and settings parsing happen once before
-/// the correctness run and are excluded from every sample. `refine_none`
-/// times the native whitened fit behind public `refine(..., rejection="none")`;
-/// `run_od` times the complete native model-free IOD + refinement workflow.
+/// Arrow decoding, Python extraction, configuration validation, and the
+/// refinement lane's one-time observation preparation happen before the
+/// correctness run and are excluded from every sample. `refine` times the
+/// configured native refinement stage over an already prepared IOD handoff;
+/// `run_od` times the complete configured prepare + IOD + refinement workflow.
 /// The returned state/diagnostics come from an untimed preflight run so the
 /// Python benchmark harness can assert correctness before reporting timings.
 #[pyfunction]
@@ -3909,12 +3910,10 @@ fn run_native_od_benchmark_once(
     obs_code,
     band,
     astcat,
+    config,
     reps,
     trials,
-    warmup_reps,
-    iod_settings=None,
-    refinement=None,
-    fit_settings=None
+    warmup_reps
 ))]
 #[allow(clippy::too_many_arguments)]
 fn benchmark_od_fit_ipc<'py>(
@@ -3927,12 +3926,10 @@ fn benchmark_od_fit_ipc<'py>(
     obs_code: Vec<String>,
     band: Vec<Option<String>>,
     astcat: Vec<Option<String>>,
+    config: PyRef<'py, PyOdConfig>,
     reps: usize,
     trials: usize,
     warmup_reps: usize,
-    iod_settings: Option<&Bound<'py, PyDict>>,
-    refinement: Option<&Bound<'py, PyDict>>,
-    fit_settings: Option<&Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyDict>> {
     if reps == 0 || trials == 0 {
         return Err(value_error("reps and trials must be >= 1"));
@@ -3946,19 +3943,30 @@ fn benchmark_od_fit_ipc<'py>(
     };
     let orbit = decode_orbit(orbit_ipc)?;
     let problem = decode_observations(observed_ipc, observers_ipc)?;
-    let settings = parse_fit_settings(fit_settings)?;
-    let full_config = FullOdConfig {
-        iod: parse_iod_settings(iod_settings)?,
-        refinement: parse_refinement(refinement, settings.config)?,
+    config.inner.validate().map_err(value_error)?;
+    let owned_config = config.inner.clone();
+    let refinement = *owned_config.for_refinement().refinement();
+    let refinement_fit = match refinement {
+        RefinementConfig::WorstResidual(value) => value.fit,
+        RefinementConfig::Cmc2003(value) => value.fit,
     };
-    full_config.validate().map_err(value_error)?;
+    let settings = fit_settings_from_config(refinement_fit)?;
+    drop(config);
     let n = problem.observed.len();
-    let ignore = vec![false; n];
     if obs_code.len() != n || band.len() != n || astcat.len() != n {
         return Err(value_error(
             "observed, obs_code, band and astcat must have equal length",
         ));
     }
+    let prepared = prepare_observations(
+        &problem.observed,
+        &obs_code,
+        &band,
+        &astcat,
+        &owned_config,
+        &ErfaTimeProvider,
+    )
+    .map_err(od_error)?;
 
     let (samples, correctness) = py
         .allow_threads(|| {
@@ -3980,12 +3988,11 @@ fn benchmark_od_fit_ipc<'py>(
                     predictor,
                     &orbit,
                     &problem,
+                    &prepared,
                     &obs_code,
                     &band,
                     &astcat,
-                    &ignore,
-                    &full_config,
-                    &settings.config,
+                    &owned_config,
                 )
             };
             let correctness = run_once()?;
