@@ -1,25 +1,7 @@
 """Keep native specifications paired with the Python behavior they describe."""
 
-import contextlib
-import contextvars
 import functools
 import warnings
-
-# Test-only: lets the OD test suite exercise the Rust loops with Python
-# dynamics (linear, counting, failing propagators) through the private
-# callback adapter. Not part of the supported surface.
-_PYTHON_PROPAGATORS = contextvars.ContextVar("_python_propagators", default=False)
-
-
-@contextlib.contextmanager
-def _allow_python_propagators():
-    """Test-only: let OD predict through a Python propagator's
-    ``generate_ephemeris`` (one Python call per prediction)."""
-    token = _PYTHON_PROPAGATORS.set(True)
-    try:
-        yield
-    finally:
-        _PYTHON_PROPAGATORS.reset(token)
 
 
 def deprecated(implementation, replacement: str):
@@ -63,7 +45,7 @@ def _has_compatible_native_spec(
     Defining a specification on a class explicitly declares that it represents
     that class's Python methods, including inherited methods. A subclass that
     changes one of those methods must supply a new specification. Instance
-    method replacements conservatively use the Python composition.
+    method replacements conservatively invalidate the native declaration.
     """
     if any(name in getattr(instance, "__dict__", {}) for name in method_names):
         return False
@@ -96,9 +78,10 @@ def native_backend(propagator: object):
 
     The declaration is the one on the nearest class in the MRO that sets
     ``native_backend``. It holds only while every propagation method and
-    declared work unit the instance uses is the declaring class's own (or
-    inherited by it): a subclass or instance that overrides one of them is
-    not covered, so OD runs the composed path on its Python behavior.
+    declared capsule method the instance uses is the declaring class's own
+    (or inherited by it): a subclass or instance that overrides one is
+    not covered, so native OD rejects it unless that class declares a backend
+    matching its own propagation behavior.
     """
     for cls in type(propagator).__mro__:
         if "native_backend" not in cls.__dict__:
@@ -130,9 +113,9 @@ def native_work_unit(propagator: object, name: str):
 
 
 def native_propagator(propagator: object):
-    """What the Rust drivers receive for ``propagator``: the external-
-    propagator capsule (``adam_core.propagator.v1``) when its `NativeBackend`
-    declares the ``propagator_capsule`` work unit, so every OD stage runs
+    """What the Rust drivers receive for ``propagator``: a lazy descriptor
+    for the external-propagator capsule (``adam_core.propagator.v2``) when its
+    `NativeBackend` declares the ``propagator_capsule`` work unit, so every OD stage runs
     natively with its dynamics (no Python call per prediction). None stays
     None (adam-core's two-body propagator).
 
@@ -142,16 +125,26 @@ def native_propagator(propagator: object):
         return None
     capsule = native_work_unit(propagator, "propagator_capsule")
     if capsule is not None:
-        return capsule()
-    if _PYTHON_PROPAGATORS.get():
-        return propagator
+        # Carry the declared identity beside the retained capsule. The Rust
+        # boundary compares it with the table identity before doing any work.
+        backend = native_backend(propagator)
+        assert backend is not None
+        # Keep capsule creation lazy. Rust invokes this one-time binding only
+        # after static input/config/resource preflight and skips it entirely for
+        # an empty batch; predictions themselves never call back into Python.
+        return (
+            capsule,
+            backend.name,
+            backend.version,
+            bool(getattr(propagator, "two_body_dynamics", False)),
+        )
     cls = type(propagator)
     raise TypeError(
         f"{cls.__module__}.{cls.__qualname__} has no native orbit-determination "
         "backend: OD runs natively, without calling back into Python for each "
         "prediction. Use adam-core's two-body propagator (propagator=None in the "
         "low-level drivers) or a propagator whose NativeBackend declares the "
-        "'propagator_capsule' work unit (adam-assist >= 0.5's ASSISTPropagator). "
+        "'propagator_capsule' work unit (a compatible adam-assist ASSISTPropagator). "
         "A subclass that overrides propagation is not covered by its parent's "
         "declaration."
     )

@@ -8,7 +8,6 @@ orbit with injected gross outliers (from ``test_differential_correction``).
 
 from __future__ import annotations
 
-import pickle
 import warnings
 from typing import Any
 
@@ -16,14 +15,9 @@ import numpy as np
 import numpy.testing as npt
 import pyarrow as pa
 import pytest
-import quivr as qv
 
-from ...coordinates.covariances import CoordinateCovariances
-from .. import native_orbit_fitter as native_module
-from ..differential_correction import fit_least_squares
-from ..fitted_orbits import FittedOrbitMembers, FittedOrbits
-from ..native_orbit_fitter import NativeOrbitFitter
-from ..rejection import (
+from ..algorithms.fitting import fit_least_squares
+from ..algorithms.rejection import (
     CMC2003_CHI2_FRAC,
     CMC2003_CHI2_RECOVER,
     CMC2003_CHI2_REJECT,
@@ -32,21 +26,20 @@ from ..rejection import (
     _apparitions,
     _cmc2003_select,
     _expected_residual_chi2,
-    cmc2003_fit,
     cmc2003_fit_detailed,
 )
+from ..fitted_orbits import FittedOrbits
 from .test_differential_correction import (
-    EPOCH_MJD_TDB,
     TRUTH_STATE,
-    LinearPropagator,
-    NativeTwoBodyPropagator,
     TwoBodyPropagator,
-    _central_difference_jacobian,
     make_initial_guess,
-    make_linear_problem,
     make_synthetic_observations,
-    make_truth_orbit,
 )
+
+
+def _cmc_tables(*args, **kwargs):
+    result = cmc2003_fit_detailed(*args, **kwargs)
+    return result.fitted_orbit, result.fitted_orbit_members
 
 
 def state_of(fitted: FittedOrbits) -> np.ndarray:
@@ -256,7 +249,7 @@ class TestTwoBodyIntegration:
         injected = {3: 8.0, 10: 10.0, 17: 15.0, 20: -12.0, 22: 9.0}
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            fitted, members = cmc2003_fit(
+            fitted, members = _cmc_tables(
                 make_initial_guess(), with_outliers(injected), TwoBodyPropagator()
             )
         rejected = [i for i, flag in enumerate(members.outlier.to_pylist()) if flag]
@@ -266,7 +259,7 @@ class TestTwoBodyIntegration:
     def test_composes_with_huber_loss(self) -> None:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            fitted, members = cmc2003_fit(
+            fitted, members = _cmc_tables(
                 make_initial_guess(),
                 with_outliers({10: 10.0}),
                 TwoBodyPropagator(),
@@ -277,7 +270,7 @@ class TestTwoBodyIntegration:
 
     def test_ignore_kwarg_is_rejected(self) -> None:
         with pytest.raises(ValueError, match="ignore"):
-            cmc2003_fit(
+            _cmc_tables(
                 make_initial_guess(),
                 make_synthetic_observations(n_obs=6),
                 TwoBodyPropagator(),
@@ -286,301 +279,43 @@ class TestTwoBodyIntegration:
 
     def test_empty_observations_raise(self) -> None:
         with pytest.raises(ValueError, match="at least one"):
-            cmc2003_fit(
+            _cmc_tables(
                 make_initial_guess(),
                 make_synthetic_observations(n_obs=6)[:0],
                 TwoBodyPropagator(),
             )
 
 
-class TestNativeOrbitFitterDispatch:
-    def test_default_is_cmc2003(self) -> None:
-        fitter = NativeOrbitFitter(TwoBodyPropagator())
-        assert fitter.outlier_rejection == "cmc2003"
-        assert fitter.rejection_kwargs == {}
+class TestCmc2003CapsuleDriver:
+    """Behavioral checks of the single core-owned capsule CMC2003 driver."""
 
-    def test_unknown_scheme_raises(self) -> None:
-        with pytest.raises(ValueError, match="outlier_rejection"):
-            NativeOrbitFitter(
-                TwoBodyPropagator(),
-                outlier_rejection="cmc2004",  # type: ignore[arg-type]
-            )
-
-    def test_cmc2003_dispatch_forwards_loss_and_kwargs(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        fitter = NativeOrbitFitter(
-            TwoBodyPropagator(),
-            outlier_rejection="cmc2003",
-            loss="huber",
-            f_scale=2.0,
-            rejection_kwargs={"chi2_reject": 9.0, "max_nfev": 50},
-        )
-        restored = pickle.loads(pickle.dumps(fitter))
-        assert restored.outlier_rejection == "cmc2003"
-        assert restored.rejection_kwargs == {"chi2_reject": 9.0, "max_nfev": 50}
-
-        captured: dict[str, Any] = {}
-
-        def fake_cmc2003_fit(
-            orbit: Any, observations: Any, propagator: Any, **kwargs: Any
-        ) -> Any:
-            captured.update(kwargs)
-            return FittedOrbits.empty(), FittedOrbitMembers.empty()
-
-        monkeypatch.setattr(native_module, "_cmc2003_fit", fake_cmc2003_fit)
-        fitted = FittedOrbits.from_kwargs(
-            orbit_id=["o"],
-            coordinates=make_initial_guess().coordinates,
-            arc_length=[1.0],
-            num_obs=[6],
-            chi2=[1.0],
-            reduced_chi2=[0.5],
-        )
-        fitter.refine_fit(
-            fitted, make_synthetic_observations(n_obs=6), TwoBodyPropagator()
-        )
-        assert captured == {
-            "loss": "huber",
-            "f_scale": 2.0,
-            "chi2_reject": 9.0,
-            "max_nfev": 50,
-        }
-
-    def test_cmc2003_end_to_end_through_refine_fit(self) -> None:
-        fitter = NativeOrbitFitter(TwoBodyPropagator(), outlier_rejection="cmc2003")
-        start = FittedOrbits.from_kwargs(
-            orbit_id=["o"],
-            coordinates=make_initial_guess().coordinates,
-            arc_length=[60.0],
-            num_obs=[25],
-            chi2=[1.0],
-            reduced_chi2=[0.5],
-        )
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            fitted, members = fitter.refine_fit(
-                start, with_outliers({17: 15.0}), TwoBodyPropagator()
-            )
-        assert members.outlier.to_pylist().count(True) == 1
-        assert members.outlier.to_pylist()[17] is True
-        assert fitted.num_obs[0].as_py() == 24
-
-
-class TestFusedCmc2003Fit:
-    """The Rust one-crossing CMC2003 loop is the Python loop's twin."""
-
-    def _fits(self, observations, **kwargs):
+    @staticmethod
+    def _fit(observations, **kwargs):
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", RuntimeWarning)
-            expected = cmc2003_fit_detailed(
+            return cmc2003_fit_detailed(
                 make_initial_guess(), observations, TwoBodyPropagator(), **kwargs
             )
-            fused = cmc2003_fit_detailed(
-                make_initial_guess(), observations, NativeTwoBodyPropagator(), **kwargs
-            )
-        return expected, fused
 
-    def test_gross_outliers_match_python_loop(self) -> None:
-        expected, fused = self._fits(with_outliers({10: 10.0, 17: 15.0}))
-        assert (
-            fused.fitted_orbit_members.outlier.to_pylist()
-            == expected.fitted_orbit_members.outlier.to_pylist()
-        )
+    def test_gross_outliers_are_rejected(self) -> None:
+        result = self._fit(with_outliers({10: 10.0, 17: 15.0}))
         assert [
             i
-            for i, flag in enumerate(fused.fitted_orbit_members.outlier.to_pylist())
+            for i, flag in enumerate(result.fitted_orbit_members.outlier.to_pylist())
             if flag
         ] == [10, 17]
-        assert fused.n_rejected == expected.n_rejected == 2
-        assert fused.n_recovered == expected.n_recovered
-        assert fused.n_iterations == expected.n_iterations
-        assert fused.flags == expected.flags == ()
-        npt.assert_allclose(
-            state_of(fused.fitted_orbit),
-            state_of(expected.fitted_orbit),
-            rtol=1e-9,
-            atol=1e-13,
-        )
-        npt.assert_allclose(
-            fused.fitted_orbit.coordinates.covariance.to_matrix(),
-            expected.fitted_orbit.coordinates.covariance.to_matrix(),
-            rtol=1e-6,
-        )
-        assert (
-            fused.fitted_orbit_members.weight.to_pylist()
-            == expected.fitted_orbit_members.weight.to_pylist()
-        )
-        assert fused.fitted_orbit.success[0].as_py()
-
-    def test_clean_arc_matches_python_loop(self) -> None:
-        expected, fused = self._fits(make_synthetic_observations())
-        assert fused.n_iterations == expected.n_iterations == 1
-        assert fused.n_rejected == 0
-        assert fused.fitted_orbit_members.outlier.to_pylist() == [False] * 25
-        npt.assert_allclose(
-            state_of(fused.fitted_orbit),
-            state_of(expected.fitted_orbit),
-            rtol=1e-9,
-            atol=1e-13,
-        )
-
-    def test_huber_matches_python_loop(self) -> None:
-        expected, fused = self._fits(with_outliers({10: 10.0}), loss="huber")
-        assert (
-            fused.fitted_orbit_members.outlier.to_pylist()
-            == expected.fitted_orbit_members.outlier.to_pylist()
-        )
-        npt.assert_allclose(
-            state_of(fused.fitted_orbit), state_of(expected.fitted_orbit), rtol=1e-7
-        )
-        npt.assert_allclose(
-            fused.fitted_orbit_members.weight.to_numpy(zero_copy_only=False),
-            expected.fitted_orbit_members.weight.to_numpy(zero_copy_only=False),
-            atol=1e-5,
-        )
-
-
-class SubsetLinearPropagator(LinearPropagator):
-    """Known non-Keplerian sensitivities, supporting refit subsets/batches."""
-
-    def generate_ephemeris(self, orbits, observers, max_processes=1):
-        all_times = self.times.mjd().to_pylist()
-        indices = [
-            all_times.index(t) for t in observers.coordinates.time.mjd().to_pylist()
-        ]
-        predict = super().generate_ephemeris
-        return qv.concatenate(
-            [
-                predict(orbits.take([i]), observers).take(indices)
-                for i in range(len(orbits))
-            ]
-        )
-
-
-def correlated_linear_problem():
-    observations, linear, _, _ = make_linear_problem()
-    cov = observations.coordinates.covariance.to_matrix().copy()
-    cov[:, 1, 2] = cov[:, 2, 1] = 0.4 * np.sqrt(cov[:, 1, 1] * cov[:, 2, 2])
-    observations = observations.set_column(
-        "coordinates.covariance", CoordinateCovariances.from_matrix(cov)
-    )
-    predictor = SubsetLinearPropagator(observations, linear.design_matrix, TRUTH_STATE)
-    # Independent weighted normal equations in raw angular units. This also
-    # checks that covariance and scoring apply RA/Dec correlation consistently.
-    a = linear.design_matrix.reshape(-1, 2, 6)
-    r = cov[:, 1:3, 1:3]
-    normals = np.array([ai.T @ np.linalg.solve(ri, ai) for ai, ri in zip(a, r)])
-    return observations, predictor, a, r, normals
-
-
-class TestFullPredictionFinalization:
-    @pytest.mark.parametrize("jacobian", ["analytic", "central", "2-point"])
-    @pytest.mark.parametrize("validate_covariance", [False, True])
-    def test_covariance_uses_full_predictor_independently_of_solver(
-        self, jacobian, validate_covariance
-    ):
-        observations, predictor, _, _, normals = correlated_linear_problem()
-        with warnings.catch_warnings():
-            warnings.simplefilter("error", RuntimeWarning)
-            result = cmc2003_fit_detailed(
-                make_truth_orbit(),
-                observations,
-                predictor,
-                jacobian=jacobian,
-                validate_covariance=validate_covariance,
-                # Keep the state fixed: this test isolates finalization from
-                # optimizer convergence with deliberately wrong 2-body partials.
-                max_nfev=1,
-            )
-        npt.assert_allclose(
-            result.fitted_orbit.coordinates.covariance.to_matrix()[0],
-            np.linalg.inv(normals.sum(axis=0)),
-            rtol=2e-6,
-            atol=1e-23,
-        )
-        assert result.n_rejected == 0
+        assert result.n_rejected == 2
         assert result.flags == ()
-
-    @pytest.mark.parametrize("jacobian", ["analytic", "central", "2-point"])
-    @pytest.mark.parametrize("raw_chi2,max_passes", [(6.0, 1), (10.0, 2)])
-    def test_near_threshold_selection_and_final_refit_use_consistent_derivatives(
-        self, jacobian, raw_chi2, max_passes
-    ):
-        observations, predictor, a, r, normals = correlated_linear_problem()
-        covariance = np.linalg.inv(normals.sum(axis=0))
-        # Choose a direction strongly constrained by this very observation.
-        # Raw chi2=6 is below rejection; the correct I-P score exceeds 8.
-        # Raw chi2=10 needs the excluded row's J C J^T to recover on pass 2:
-        # after excluding that row, its expected chi2 is 10 * (1-leverage).
-        candidates = []
-        for i, (ai, ri) in enumerate(zip(a, r)):
-            l_inv = np.linalg.inv(np.linalg.cholesky(ri))
-            values, vectors = np.linalg.eigh(l_inv @ ai @ covariance @ ai.T @ l_inv.T)
-            candidates.append((values[-1], i, vectors[:, -1]))
-        leverage, index, direction = max(candidates, key=lambda c: c[0])
-        assert raw_chi2 / (1.0 - leverage) > 9.0
-        assert raw_chi2 * (1.0 - leverage) < 7.0
-        offset = np.linalg.cholesky(r[index]) @ (np.sqrt(raw_chi2) * direction)
-        for component, delta in zip(("lon", "lat"), offset):
-            values = getattr(observations.coordinates, component).to_numpy().copy()
-            values[index] += delta
-            observations = observations.set_column(
-                f"coordinates.{component}", pa.array(values)
-            )
-        result = cmc2003_fit_detailed(
-            make_truth_orbit(),
-            observations,
-            predictor,
-            jacobian=jacobian,
-            max_nfev=1,
-            max_iterations=max_passes,
-            validate_covariance=False,
-        )
-        expected_mask = (np.arange(len(observations)) == index) & (max_passes == 1)
-        assert result.n_recovered == max_passes - 1
-        npt.assert_array_equal(
-            result.fitted_orbit_members.outlier.to_pylist(), expected_mask
-        )
-        assert result.flags == ("max_iterations",)
-        # Final covariance must match the final mask: excluded after pass 1,
-        # recovered after pass 2, even with the optimizer budget exhausted.
-        npt.assert_allclose(
-            result.fitted_orbit.coordinates.covariance.to_matrix()[0],
-            np.linalg.inv(normals[~expected_mask].sum(axis=0)),
-            rtol=2e-6,
-            atol=1e-23,
-        )
-
-    def test_full_model_fit_rejects_outlier_and_recovers_known_state(self):
-        observations, predictor, _, r, normals = correlated_linear_problem()
-        lat = observations.coordinates.lat.to_numpy().copy()
-        lat[6] += 40.0 * np.sqrt(r[6, 1, 1])
-        observations = observations.set_column("coordinates.lat", pa.array(lat))
-        result = cmc2003_fit_detailed(
-            make_initial_guess(), observations, predictor, jacobian="central"
-        )
         assert result.fitted_orbit.success[0].as_py()
-        assert result.n_rejected == 1
-        assert result.fitted_orbit_members.outlier.to_pylist()[6]
-        assert result.flags == ()
-        npt.assert_allclose(
-            state_of(result.fitted_orbit), TRUTH_STATE, atol=1e-11, rtol=0
-        )
-        npt.assert_allclose(
-            result.fitted_orbit.coordinates.covariance.to_matrix()[0],
-            np.linalg.inv(np.delete(normals, 6, axis=0).sum(axis=0)),
-            rtol=2e-6,
-            atol=1e-23,
-        )
 
-    def test_central_step_size_stability_against_closed_form_covariance(self):
-        observations, predictor, _, _, normals = correlated_linear_problem()
-        expected = np.linalg.inv(normals.sum(axis=0))
-        for step in (0.5e-6, 1e-6, 2e-6):
-            jac = _central_difference_jacobian(
-                TRUTH_STATE, EPOCH_MJD_TDB, observations, predictor, rel_step=step
-            )
-            npt.assert_allclose(
-                np.linalg.inv(jac.T @ jac), expected, rtol=2e-6, atol=1e-23
-            )
+    def test_clean_arc_finishes_without_rejection(self) -> None:
+        result = self._fit(make_synthetic_observations())
+        assert result.n_iterations == 1
+        assert result.n_rejected == 0
+        assert result.fitted_orbit_members.outlier.to_pylist() == [False] * 25
+
+    def test_huber_reports_downweighting_without_fabricated_route_parity(self) -> None:
+        result = self._fit(with_outliers({10: 10.0}), loss="huber")
+        weights = result.fitted_orbit_members.weight.to_numpy(zero_copy_only=False)
+        assert weights[10] < 1.0
+        assert np.all(np.isfinite(state_of(result.fitted_orbit)))

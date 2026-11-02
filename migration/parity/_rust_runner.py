@@ -839,7 +839,7 @@ def _orbit_determination_gauss_iod(
     # Runs the PUBLIC gaussIOD facade (Arrow-native Orbits output) so the
     # comparison and timing stay symmetric with the pinned-legacy runner,
     # which also calls its public gaussIOD.
-    from adam_core.orbit_determination.gauss import gaussIOD
+    from adam_core.orbit_determination.algorithms.gauss import gaussIOD
 
     n = ra_deg_per_triplet.shape[0]
     K_MAX = 1

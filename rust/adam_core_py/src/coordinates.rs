@@ -1345,11 +1345,12 @@ fn tisserand_parameter_numpy<'py>(
 pub(crate) fn read_orbit_ipc(bytes: &[u8]) -> PyResult<RecordBatch> {
     let mut reader = StreamReader::try_new(bytes, None)
         .map_err(|err| PyValueError::new_err(format!("invalid Arrow IPC stream: {err}")))?;
-    let batch = reader
-        .next()
-        .ok_or_else(|| PyValueError::new_err("Arrow IPC stream contained no record batches"))?
-        .map_err(|err| PyValueError::new_err(format!("failed to read Arrow IPC batch: {err}")))?;
-    Ok(batch)
+    let schema = reader.schema();
+    match reader.next() {
+        Some(batch) => batch
+            .map_err(|err| PyValueError::new_err(format!("failed to read Arrow IPC batch: {err}"))),
+        None => Ok(RecordBatch::new_empty(schema)),
+    }
 }
 
 pub(crate) fn write_orbit_ipc(batch: &RecordBatch) -> PyResult<Vec<u8>> {

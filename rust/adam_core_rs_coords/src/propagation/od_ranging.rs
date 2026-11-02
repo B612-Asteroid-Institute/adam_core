@@ -7,8 +7,9 @@
 //! of the observer's planet) completes the attributable to an orbit, and
 //! each orbit is scored against all the observations (systematic ranging,
 //! Farnocchia, Chesley & Micheli 2015; statistical ranging, Virtanen et al.
-//! 2001). The result is a weighted orbit sample, `exp(-Δχ²/2)`, and its
-//! best member seeds the corrected IOD's staged differential correction.
+//! 2001). The result is a weighted orbit sample under the physical
+//! `dρ dρ̇` measure: each log-range-grid node is proportional to
+//! `exp(-χ²/2) ρ Δlnρ Δρ̇`. Its best member seeds the corrected IOD's staged differential correction.
 //!
 //! Phase 1 keeps the attributable at its fitted value at every node (the
 //! four-parameter fit per node of the full method is phase 2), uses a
@@ -17,7 +18,7 @@
 //! position advanced by the light time along the orbit's velocity).
 
 use super::od::SphericalPredictor;
-use super::od::{gauss_geometry, observed_times_mjd, OrbitGeometry, GAUSS_OBLIQUITY_RAD};
+use super::od::{gauss_geometry, OrbitGeometry, GAUSS_OBLIQUITY_RAD};
 use super::od_refine::{JacobianMethod, WhitenedFitConfig, WhitenedProblem};
 use super::{PropagationError, PropagationResultValue};
 use crate::translation::OriginTranslationProvider;
@@ -56,6 +57,33 @@ pub struct RangingConfig {
     /// the best node already sat a grid step off the truth); on a long arc
     /// it would also propagate every node across the whole arc.
     pub max_arc_days: f64,
+}
+
+impl RangingConfig {
+    /// Validate every ranging setting independently of the caller or language binding.
+    pub fn validate(&self) -> Result<(), String> {
+        if !self.rho_min_au.is_finite() || self.rho_min_au <= 0.0 {
+            return Err("ranging.rho_min_au must be positive and finite".to_string());
+        }
+        if !self.rho_max_au.is_finite() || self.rho_max_au <= self.rho_min_au {
+            return Err(
+                "ranging.rho_max_au must be finite and greater than rho_min_au".to_string(),
+            );
+        }
+        if self.n_rho == 0 || self.n_rho_dot == 0 {
+            return Err("ranging.n_rho and ranging.n_rho_dot must be positive".to_string());
+        }
+        if self.max_corrections == 0 {
+            return Err("ranging.max_corrections must be positive".to_string());
+        }
+        if self.chunk_size == 0 {
+            return Err("ranging.chunk_size must be positive".to_string());
+        }
+        if !self.max_arc_days.is_finite() || self.max_arc_days < 0.0 {
+            return Err("ranging.max_arc_days must be finite and non-negative".to_string());
+        }
+        Ok(())
+    }
 }
 
 impl Default for RangingConfig {
@@ -99,7 +127,8 @@ pub struct RangingSample {
     pub rho_au: f64,
     pub rho_dot_au_per_day: f64,
     pub chi2: f64,
-    /// `exp(-(chi2 - chi2_min) / 2)`, normalized over the sample.
+    /// `exp(-chi2 / 2) * rho * delta(log(rho)) * delta(rho_dot)`,
+    /// normalized over all successfully scored admissible cells.
     pub weight: f64,
 }
 
@@ -171,9 +200,10 @@ fn value_and_rate(dt: &[f64], y: &[f64], w: &[f64], degree: usize) -> Option<(f6
 pub fn attributable(
     observed: &CoordinateBatch,
     observers: &ObserverBatch,
+    provider: &dyn TimeScaleProvider,
 ) -> PropagationResultValue<Attributable> {
     let (directions, observer_states) = gauss_geometry(observed, observers)?;
-    let times = observed_times_mjd(observed)?;
+    let times = super::od::observed_times_mjd_tdb(observed, provider)?;
     let n = times.len();
     let mut epochs: Vec<f64> = times.clone();
     epochs.sort_by(f64::total_cmp);
@@ -309,6 +339,29 @@ pub fn ranging_state(attributable: &Attributable, rho: f64, rho_dot: f64) -> [f6
     ]
 }
 
+/// Natural log of the physical `(rho, rho_dot)` cell measure. The rho
+/// grid is uniform in ln(rho), so d-rho contributes the Jacobian rho; the
+/// admissible rho-dot width varies with rho and must also be retained.
+fn ranging_log_cell_measure(rho: f64, log_cell_width: f64, rho_dot_width: f64) -> f64 {
+    rho.ln() + log_cell_width.ln() + rho_dot_width.ln()
+}
+
+/// Phase 1 applies Earth's GM for the planet-bound exclusion. Do not apply
+/// that Earth-only physics to Mars/Jupiter/deep-space observers.
+fn ensure_earth_ranging_context(observer: [f64; 6]) -> PropagationResultValue<()> {
+    let radius = dot(
+        [observer[0], observer[1], observer[2]],
+        [observer[0], observer[1], observer[2]],
+    )
+    .sqrt();
+    if !(0.9..=1.1).contains(&radius) {
+        return Err(PropagationError::InvalidRequest(format!(
+            "systematic ranging currently supports only geocentric/Earth-near observers; reference heliocentric distance is {radius:.6} au"
+        )));
+    }
+    Ok(())
+}
+
 /// Systematic ranging of `observed` scored through `predictor` (see the
 /// module documentation). `mu` is the heliocentric gravitational
 /// parameter (au³/day²).
@@ -322,21 +375,19 @@ pub fn systematic_ranging_with<T: OriginTranslationProvider>(
     provider: &dyn TimeScaleProvider,
     translation_provider: &T,
 ) -> PropagationResultValue<RangingResult> {
-    if config.n_rho == 0
-        || config.n_rho_dot == 0
-        || config.rho_min_au.is_nan()
-        || config.rho_max_au.is_nan()
-        || config.rho_min_au <= 0.0
-        || config.rho_max_au <= config.rho_min_au
-    {
+    config
+        .validate()
+        .map_err(PropagationError::InvalidRequest)?;
+    if !mu.is_finite() || mu <= 0.0 {
         return Err(PropagationError::InvalidRequest(
-            "ranging needs n_rho, n_rho_dot > 0 and rho_max_au > rho_min_au > 0".to_string(),
+            "systematic-ranging mu must be positive and finite".to_string(),
         ));
     }
-    let attributable = attributable(observed, observers)?;
+    let attributable = attributable(observed, observers, provider)?;
+    ensure_earth_ranging_context(attributable.observer)?;
     let (_, rho_hat_dot) = direction_and_rate(&attributable);
     let angular_rate2 = dot(rho_hat_dot, rho_hat_dot);
-    let mut nodes: Vec<(f64, f64, [f64; 6])> = Vec::new();
+    let mut nodes: Vec<(f64, f64, [f64; 6], f64)> = Vec::new();
     let mut grid_points = 0_usize;
     let log_min = config.rho_min_au.ln();
     let log_step = if config.n_rho > 1 {
@@ -351,6 +402,13 @@ pub fn systematic_ranging_with<T: OriginTranslationProvider>(
             continue;
         };
         let step = (hi - lo) / config.n_rho_dot as f64;
+        let log_cell_width = if config.n_rho <= 1 {
+            (config.rho_max_au.ln() - log_min).max(f64::MIN_POSITIVE)
+        } else if i == 0 || i + 1 == config.n_rho {
+            0.5 * log_step
+        } else {
+            log_step
+        };
         for j in 0..config.n_rho_dot {
             let rho_dot = lo + (j as f64 + 0.5) * step;
             // Not bound to the observer's planet: positive two-body energy
@@ -360,7 +418,12 @@ pub fn systematic_ranging_with<T: OriginTranslationProvider>(
             if planet_energy < 0.0 {
                 continue;
             }
-            nodes.push((rho, rho_dot, ranging_state(&attributable, rho, rho_dot)));
+            nodes.push((
+                rho,
+                rho_dot,
+                ranging_state(&attributable, rho, rho_dot),
+                ranging_log_cell_measure(rho, log_cell_width, step),
+            ));
         }
     }
     let admissible_points = nodes.len();
@@ -436,17 +499,22 @@ pub fn systematic_ranging_with<T: OriginTranslationProvider>(
             }
         }
     }
-    let minimum = chi2.iter().copied().fold(f64::INFINITY, f64::min);
+    let max_log_weight = nodes
+        .iter()
+        .zip(&chi2)
+        .filter(|(_, c)| c.is_finite())
+        .map(|((_, _, _, log_measure), &c)| -0.5 * c + log_measure)
+        .fold(f64::NEG_INFINITY, f64::max);
     let mut samples: Vec<RangingSample> = nodes
         .iter()
         .zip(&chi2)
         .filter(|(_, c)| c.is_finite())
-        .map(|((rho, rho_dot, state), &c)| RangingSample {
+        .map(|((rho, rho_dot, state, log_measure), &c)| RangingSample {
             state: *state,
             rho_au: *rho,
             rho_dot_au_per_day: *rho_dot,
             chi2: c,
-            weight: (-(c - minimum) / 2.0).exp(),
+            weight: (-0.5 * c + log_measure - max_log_weight).exp(),
         })
         .collect();
     let total: f64 = samples.iter().map(|s| s.weight).sum();
@@ -466,3 +534,40 @@ pub fn systematic_ranging_with<T: OriginTranslationProvider>(
         num_obs,
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ranging_weight_uses_physical_cell_measure() {
+        let rho = 2.5;
+        let delta_log_rho = 0.2;
+        let delta_rho_dot = 0.03;
+        let measure = ranging_log_cell_measure(rho, delta_log_rho, delta_rho_dot).exp();
+        assert!((measure - rho * delta_log_rho * delta_rho_dot).abs() < 1.0e-15);
+        assert!(
+            (ranging_log_cell_measure(2.0 * rho, delta_log_rho, delta_rho_dot).exp() / measure
+                - 2.0)
+                .abs()
+                < 1.0e-14
+        );
+        assert!(
+            (ranging_log_cell_measure(rho, delta_log_rho, 3.0 * delta_rho_dot).exp() / measure
+                - 3.0)
+                .abs()
+                < 1.0e-14
+        );
+    }
+
+    #[test]
+    fn earth_specific_admissible_region_fails_closed_elsewhere() {
+        assert!(ensure_earth_ranging_context([1.0, 0.0, 0.0, 0.0, 0.0, 0.0]).is_ok());
+        let error = ensure_earth_ranging_context([1.52, 0.0, 0.0, 0.0, 0.0, 0.0]).unwrap_err();
+        assert!(error.to_string().contains("only geocentric/Earth-near"));
+    }
+}
+
+#[cfg(test)]
+#[path = "od_ranging_contract_tests.rs"]
+mod contract_tests;

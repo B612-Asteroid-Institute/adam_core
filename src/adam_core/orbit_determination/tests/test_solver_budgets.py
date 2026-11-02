@@ -2,36 +2,29 @@
 The Rust solver has independent iteration and residual-evaluation limits.
 
 ``max_iterations`` bounds optimizer iterations (one Jacobian each);
-``max_nfev`` bounds scipy's ``nfev``, the initial residual evaluation plus
-every trial step. Finite-difference Jacobian evaluations (6 forward or 12
-central per iteration) are reported in the legacy ``iterations`` column but
-are not budget, as in ``scipy.optimize.least_squares(method="trf")``.
+``max_nfev`` bounds every residual-vector evaluation: initial, numerical
+Jacobian columns, and trials. ``iterations`` reports those evaluations while
+``optimizer_iterations`` reports Jacobian/step iterations.
 """
 
 import numpy.testing as npt
 import pytest
 
-from adam_core.orbit_determination.differential_correction import (
+from adam_core.orbit_determination.algorithms.fitting import (
     fit_least_squares,
     iterative_fit,
 )
-from adam_core.orbit_determination.native_orbit_fitter import NativeOrbitFitter
-from adam_core.orbit_determination.rejection import cmc2003_fit
+from adam_core.orbit_determination.algorithms.rejection import cmc2003_fit_detailed
 from adam_core.orbit_determination.tests.test_differential_correction import (
-    NativeTwoBodyPropagator,
     TwoBodyPropagator,
     make_initial_guess,
     make_synthetic_observations,
 )
 
 
-class CountingPropagator(TwoBodyPropagator):
-    def __init__(self):
-        self.batches = []
-
-    def generate_ephemeris(self, orbits, observers, **kwargs):
-        self.batches.append(len(orbits))
-        return super().generate_ephemeris(orbits, observers, **kwargs)
+def _cmc_tables(*args, **kwargs):
+    result = cmc2003_fit_detailed(*args, **kwargs)
+    return result.fitted_orbit, result.fitted_orbit_members
 
 
 @pytest.fixture
@@ -39,15 +32,14 @@ def observations():
     return make_synthetic_observations()
 
 
-@pytest.mark.parametrize("backend", [CountingPropagator, NativeTwoBodyPropagator])
 @pytest.mark.parametrize(
     "jacobian, jacobian_evals", [("analytic", 0), ("2-point", 6), ("central", 12)]
 )
 @pytest.mark.parametrize("budget", [1, 2, 7, 8, 13, 14])
-def test_evaluation_budget_caps_solver_work(
-    observations, backend, jacobian, jacobian_evals, budget
+def test_evaluation_budget_caps_all_solver_work(
+    observations, jacobian, jacobian_evals, budget
 ):
-    propagator = backend()
+    propagator = TwoBodyPropagator()
     initial = make_initial_guess()
     fitted, _ = fit_least_squares(
         initial,
@@ -61,40 +53,33 @@ def test_evaluation_budget_caps_solver_work(
         ftol=0.0,
         gtol=0.0,
     )
-    # Zero tolerances never stop the solver: it spends its whole budget of
-    # trial evaluations, plus one Jacobian batch per iteration on top.
     nfev = fitted.iterations[0].as_py()
+    optimizer_iterations = fitted.optimizer_iterations[0].as_py()
     assert fitted.success.to_pylist() == [False]
     assert fitted.status_code.to_pylist() == [0]
-    assert nfev >= budget
-    jacobians, remainder = divmod(nfev - budget, max(jacobian_evals, 1))
-    assert remainder == 0, (nfev, budget, jacobian_evals)
+    assert nfev <= budget
     if budget == 1:
-        assert nfev == 1  # no step, so no Jacobian either
+        assert nfev == 1
+        assert optimizer_iterations == 0
         npt.assert_array_equal(fitted.coordinates.values, initial.coordinates.values)
-    elif jacobian_evals:
-        assert 1 <= jacobians <= budget - 1
-    if isinstance(propagator, CountingPropagator):
-        # Final covariance Jacobian and evaluation are separate diagnostics.
-        assert sum(propagator.batches) == nfev + jacobian_evals + 1
-        solver_trials = sum(1 for size in propagator.batches if size == 1) - 1
-        assert solver_trials == budget
-        if jacobian_evals:
-            assert propagator.batches.count(jacobian_evals) == jacobians + 1
+    elif jacobian_evals and budget < 1 + jacobian_evals:
+        # A numerical Jacobian is atomic and is not started unless every
+        # finite-difference column fits in the remaining budget.
+        assert nfev == 1
+        assert optimizer_iterations == 0
+    else:
+        assert optimizer_iterations >= 1
 
 
-@pytest.mark.parametrize("backend", [CountingPropagator, NativeTwoBodyPropagator])
 @pytest.mark.parametrize(
     "jacobian, expected_nfev", [("analytic", 2), ("2-point", 8), ("central", 14)]
 )
 @pytest.mark.parametrize("max_nfev", [None, 1000])
-def test_iteration_budget_is_separate(
-    observations, backend, jacobian, expected_nfev, max_nfev
-):
+def test_iteration_budget_is_separate(observations, jacobian, expected_nfev, max_nfev):
     fitted, _ = fit_least_squares(
         make_initial_guess(),
         observations,
-        backend(),
+        TwoBodyPropagator(),
         jacobian=jacobian,
         validate_covariance=False,
         max_iterations=1,
@@ -104,52 +89,86 @@ def test_iteration_budget_is_separate(
         gtol=0.0,
     )
     assert fitted.iterations.to_pylist() == [expected_nfev]
+    assert fitted.optimizer_iterations.to_pylist() == [1]
     assert fitted.status_code.to_pylist() == [0]
     assert fitted.success.to_pylist() == [False]
 
 
-@pytest.mark.parametrize("backend", [CountingPropagator, NativeTwoBodyPropagator])
+def test_propagator_jacobian_phases_share_tiny_budget(observations):
+    fitted, _ = fit_least_squares(
+        make_initial_guess(),
+        observations,
+        TwoBodyPropagator(),
+        jacobian="propagator",
+        validate_covariance=False,
+        max_iterations=1,
+        max_nfev=1,
+    )
+    assert fitted.iterations.to_pylist() == [1]
+    assert fitted.optimizer_iterations.to_pylist() == [0]
+    assert fitted.status_code.to_pylist() == [0]
+    assert fitted.success.to_pylist() == [False]
+
+
 @pytest.mark.parametrize("limit", ["max_nfev", "max_iterations"])
-def test_zero_solver_budget_is_rejected(observations, backend, limit):
+def test_zero_solver_budget_is_rejected(observations, limit):
     with pytest.raises(ValueError, match=limit):
-        fit_least_squares(make_initial_guess(), observations, backend(), **{limit: 0})
+        fit_least_squares(
+            make_initial_guess(), observations, TwoBodyPropagator(), **{limit: 0}
+        )
 
 
-@pytest.mark.parametrize("backend", [CountingPropagator, NativeTwoBodyPropagator])
 @pytest.mark.parametrize("algorithm", ["worst_residual", "cmc2003"])
-def test_rejection_loops_forward_the_evaluation_budget(
-    observations, backend, algorithm
-):
+def test_rejection_loops_forward_the_evaluation_budget(observations, algorithm):
     if algorithm == "worst_residual":
         fitted, _ = iterative_fit(
             make_initial_guess(),
             observations,
-            backend(),
+            TwoBodyPropagator(),
             contamination_percentage=0,
             max_iterations=3,
             max_nfev=1,
             validate_covariance=False,
         )
     else:
-        fitted, _ = cmc2003_fit(
+        fitted, _ = _cmc_tables(
             make_initial_guess(),
             observations,
-            backend(),
+            TwoBodyPropagator(),
             max_iterations=1,
             max_nfev=1,
             validate_covariance=False,
         )
     assert fitted.iterations.to_pylist() == [1]
+    assert fitted.optimizer_iterations.to_pylist() == [0]
     assert fitted.success.to_pylist() == [False]
 
 
-def test_fitter_serializes_both_solver_limits():
-    fitter = NativeOrbitFitter(
-        TwoBodyPropagator(),
-        outlier_rejection="worst_residual",
-        rejection_kwargs={"max_nfev": 11, "max_iterations": 3},
-    )
-    assert fitter.supports_native_full_od()
-    _, _, settings = fitter.native_settings()
-    assert settings["max_iterations"] == 3
-    assert settings["max_nfev"] == 11
+@pytest.mark.parametrize(
+    "algorithm, kwargs, message",
+    [
+        ("worst_residual", {"min_obs": 2}, "min_obs"),
+        (
+            "worst_residual",
+            {"contamination_percentage": float("nan")},
+            "contamination_percentage",
+        ),
+        ("cmc2003", {"max_iterations": 0}, "cmc2003.max_iterations"),
+        (
+            "cmc2003",
+            {"chi2_reject": 1.0, "chi2_recover": 2.0},
+            "chi2_reject",
+        ),
+    ],
+)
+def test_refinement_settings_are_validated_by_rust(
+    observations, algorithm, kwargs, message
+):
+    function = iterative_fit if algorithm == "worst_residual" else _cmc_tables
+    with pytest.raises(ValueError, match=message):
+        function(
+            make_initial_guess(),
+            observations,
+            TwoBodyPropagator(),
+            **kwargs,
+        )

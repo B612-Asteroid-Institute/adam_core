@@ -111,6 +111,11 @@ def observers_from_ipc(raw: bytes) -> Observers:
     return Observers.from_pyarrow(_to_quivr_metadata(_read_ipc(raw)))
 
 
+def coordinates_from_ipc(raw: bytes, coordinate_type):
+    """Reconstruct a coordinate table from Rust-produced nested IPC bytes."""
+    return coordinate_type.from_pyarrow(_to_quivr_metadata(_read_ipc(raw)))
+
+
 def coordinates_to_ipc(coordinates, representation: str) -> bytes:
     """Serialize a coordinate table (``cartesian`` or ``spherical``) to Arrow IPC."""
     table = _stamp_adam_core_metadata(
@@ -122,7 +127,15 @@ def coordinates_to_ipc(coordinates, representation: str) -> bytes:
     )
     sink = pa.BufferOutputStream()
     with pa.ipc.new_stream(sink, table.schema) as writer:
-        writer.write_table(table)
+        if len(table):
+            writer.write_table(table)
+        else:
+            writer.write_batch(
+                pa.RecordBatch.from_arrays(
+                    [pa.array([], type=field.type) for field in table.schema],
+                    schema=table.schema,
+                )
+            )
     return sink.getvalue().to_pybytes()
 
 
@@ -220,9 +233,9 @@ def _evaluate_residuals_2body_ipc_candidate(
     """Diagnostic Arrow-IPC candidate for the OD residual inner loop.
 
     Private per the bridge-naming policy (bead personal-cmy.13.1.4): the
-    canonical public surfaces are ``coordinates.residuals.Residuals.calculate``
-    and ``orbit_determination.evaluate_orbits``; this workflow is their fused
-    2-body transport experiment, kept for the parity/speed harness.
+    canonical public surface is
+    ``coordinates.residuals.Residuals.calculate``. This fused two-body
+    transport experiment is kept only for the parity and speed harness.
 
     ``orbits`` must already be at the observation times (1:1 with the observed
     astrometry and observers). Composes the same 2-body ephemeris + residual

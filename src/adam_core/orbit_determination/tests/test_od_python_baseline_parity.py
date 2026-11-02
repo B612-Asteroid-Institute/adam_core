@@ -1,26 +1,13 @@
-"""
-Behavioral parity against the grid-validated Python OD baseline.
+"""Replay applicable d21 OD numerical products without legacy workflow APIs.
 
-The fixture ``migration/artifacts/od_python_baseline_parity_fixture_2026-09-16.json``
-records synthetic inputs together with every product the Python
-``kk/obs-uncertainty-interface`` branch (``d56114ac``, JAX/numpy) produced for
-them: the ``astcat`` / ``from_ades`` mapping, EFCC18 tiles and corrections on
-JPL's ``bias.dat``, every sigma-interpreter covariance block (positions
-provably unchanged), the whitening factors and analytic Jacobian, the robust
-loss helpers, the CMC2003 decision kernels, linear / Huber / ignore fits, a
-CMC2003 rejection run and a ``run_od`` provenance run with
-``Composite([EFCC18Debias, EmpiricalCovariance])``. This test replays the same
-inputs through the Rust-backed implementation and compares.
-
-Tolerances: positions and covariance blocks of the models are exact; fitted
-states 1e-9 relative, covariances 1e-6 relative (different SPICE and 2-body
-backends behind the two environments). Products that need the published
-EFCC18 table skip when ``bias.dat`` is not installed.
+The retained fixture records the accepted 2026-09-16 Python-baseline products.
+This module replays only surviving numerical kernels and the declarative
+Rust-owned EFCC18 pipeline. Removed executable model/fitter/provenance APIs are
+not reconstructed here.
 """
 
 from __future__ import annotations
 
-import importlib.util
 import json
 import warnings
 from pathlib import Path
@@ -33,37 +20,21 @@ import pytest
 from ...coordinates.covariances import CoordinateCovariances
 from ...coordinates.origin import Origin
 from ...coordinates.spherical import SphericalCoordinates
-from ...dynamics.propagation import propagate_2body
 from ...observations import efcc18
-from ...observations.ades import ADESObservations
 from ...observers import Observers
 from ...orbits.orbits import Orbits
 from ...time import Timestamp
-from .. import differential_correction as dc
-from .. import rejection
+from .._pipeline import apply_pipeline_once
+from ..algorithms import fitting as dc
+from ..algorithms import rejection
+from ..algorithms.fitting import fit_least_squares
+from ..algorithms.rejection import cmc2003_fit_detailed
+from ..config import OdConfig, ResourceBindings
 from ..evaluate import OrbitDeterminationObservations, OrbitDeterminationPhotometry
 from ..fitted_orbits import FittedOrbitMembers, FittedOrbits
-from ..native_orbit_fitter import NativeOrbitFitter
-from ..observation_uncertainty import (
-    BIAS_TABLE_SCHEMA,
-    CompositeModel,
-    EFCC18DebiasModel,
-    EmpiricalCovarianceModel,
-    IdentityModel,
-    NightBatchDeweightingModel,
-    PerformanceWeightedModel,
-    SigmaFloorModel,
-)
-from ..od_orchestration import run_od
-from ..rejection import cmc2003_fit_detailed
-from ..veres2017 import (
-    SIGMA_TABLE_PACKAGE,
-    VERES2017_WORKING_TABLE,
-    VeresFloorModel,
-    VeresReplaceModel,
-    load_sigma_table,
-)
-from .test_differential_correction import TwoBodyPropagator, fit_least_squares
+from ..observation_pipeline import Efcc18CatalogBiasCorrection, ObservationPipeline
+from ._focused import explicit_config
+from .test_differential_correction import TwoBodyPropagator
 
 FIXTURE = (
     Path(__file__).resolve().parents[4]
@@ -81,14 +52,6 @@ def fixture() -> dict[str, Any]:
         return json.load(f)
 
 
-def _truth_orbit(state: np.ndarray = TRUTH_STATE) -> Orbits:
-    return Orbits.from_kwargs(
-        orbit_id=["truth"],
-        object_id=["synthetic"],
-        coordinates=CartesianCoordinatesFromState(state),
-    )
-
-
 def CartesianCoordinatesFromState(state: np.ndarray):  # noqa: N802
     from ...coordinates.cartesian import CartesianCoordinates
 
@@ -102,6 +65,14 @@ def CartesianCoordinatesFromState(state: np.ndarray):  # noqa: N802
         time=Timestamp.from_mjd([EPOCH_MJD_TDB], scale="tdb"),
         origin=Origin.from_kwargs(code=["SUN"]),
         frame="ecliptic",
+    )
+
+
+def _truth_orbit(state: np.ndarray = TRUTH_STATE) -> Orbits:
+    return Orbits.from_kwargs(
+        orbit_id=["truth"],
+        object_id=["synthetic"],
+        coordinates=CartesianCoordinatesFromState(state),
     )
 
 
@@ -145,32 +116,6 @@ def _observations(
         ),
         astcat=inputs["astcat"],
     )
-
-
-def _bias_table() -> pa.Table:
-    rows = {
-        "obs_code": ["500", "F51", "F51", "W84"],
-        "band": [None, None, "g", None],
-        "n_obs": [1000, 2000, 300, 800],
-        "n_objects": [100, 200, 30, 80],
-        "bias_ra_arcsec": [2.0, -1.0, -0.5, 0.05],
-        "bias_ra_ci_low": [1.5, -1.2, -0.7, 0.0],
-        "bias_ra_ci_high": [2.5, -0.8, -0.3, 0.1],
-        "bias_dec_arcsec": [1.5, 0.5, 0.2, -3.0],
-        "bias_dec_ci_low": [1.0, 0.3, 0.1, -3.5],
-        "bias_dec_ci_high": [2.0, 0.7, 0.3, -2.5],
-        "resid_var_ra": [0.36, 0.04, 0.09, 0.25],
-        "resid_var_dec": [0.25, 0.04, 0.16, 0.16],
-        "resid_cov_ra_dec": [0.09, -0.01, 0.02, 0.01],
-        "resid_cov_n": [100, 500, 40, 5],
-        "rms_ra_arcsec": [0.6, 0.2, 0.3, 0.5],
-        "rms_dec_arcsec": [0.5, 0.2, 0.4, 0.4],
-        "chi2_per_obs": [4.0, 2.5, 0.5, 9.0],
-        "bias_significant": [True, True, False, False],
-        "high_confidence": [True, True, False, False],
-        "confidence_score": [1.0, 0.9, 0.3, 0.2],
-    }
-    return pa.table(rows, schema=BIAS_TABLE_SCHEMA)
 
 
 def _positions(observations: OrbitDeterminationObservations) -> np.ndarray:
@@ -221,13 +166,6 @@ def _assert_fit(actual: dict[str, Any], expected: dict[str, Any], label: str) ->
     _assert_close(
         actual["reduced_chi2"], expected["reduced_chi2"], 1e-6, 1e-9, f"{label} rchi2"
     )
-    # The Rust solver and the baseline's scipy trust-region solver reach the
-    # same minimum (robust cost equal to a part in 1e9) but stop at slightly
-    # different points along the flat along-track valley: states agree to
-    # 1e-9 and the aggregate chi2 to 1e-6, while the chi2 of an individual
-    # sub-sigma residual resolves that difference at the 1e-5 level and a
-    # Huber weight (f_scale / |r| of one residual component) at the 1e-6
-    # level.
     _assert_close(
         actual["residual_chi2"],
         expected["residual_chi2"],
@@ -241,47 +179,35 @@ def _assert_fit(actual: dict[str, Any], expected: dict[str, Any], label: str) ->
     assert actual["outlier"] == expected["outlier"], label
 
 
-def _real_bias_table():
+def _real_bias_path() -> Path:
     try:
-        efcc18.resolve_bias_dat()
+        return efcc18.resolve_bias_dat()
     except FileNotFoundError:
-        pytest.skip("EFCC18 bias.dat not installed (pip install jpl-debias-2018)")
-    return efcc18.load_efcc18_biases()
+        pytest.skip("EFCC18 bias.dat is not installed")
 
 
-class TestFromAdes:
-    def test_astcat_round_trip_and_covariance(self, fixture: dict[str, Any]) -> None:
-        expected = fixture["products"]["from_ades"]
-        n = 6
-        ades = ADESObservations.from_kwargs(
-            permID=["3000"] * n,
-            trkSub=["a1234b"] * n,
-            obsSubID=[f"s{i}" for i in range(n)],
-            obsTime=Timestamp.from_mjd(60434.0 + 0.1 * np.arange(n), scale="utc"),
-            ra=[240.0, 240.05, 15.0, 15.05, 100.0, 359.99],
-            dec=[-15.0, -15.05, 10.0, 60.0, 80.0, -70.0],
-            rmsRACosDec=[0.9659, 0.9657, None, 0.5, 0.25, 0.3],
-            rmsDec=[1.0, 1.0, None, 0.25, 0.3, 0.3],
-            rmsCorr=[0.2, None, None, -0.5, 0.1, None],
-            mag=[20.0, 20.3, None, 21.4, 19.0, 18.5],
-            rmsMag=[0.1, 0.2, None, 0.3, 0.1, 0.1],
-            band=["r", "g", None, "r", "w", "o"],
-            stn=["W84", "W84", "V00", "695", "F51", "T05"],
-            mode=["CCD"] * n,
-            astCat=["Gaia2", "Gaia2", "UCAC4", "PPMXL", "Gaia3", "Gaia2"],
-        )
-        od_ades = OrbitDeterminationObservations.from_ades(ades)
-        assert od_ades.id.to_pylist() == expected["id"]
-        assert od_ades.astcat.to_pylist() == expected["astcat"]
-        assert od_ades.observers.code.to_pylist() == expected["codes"]
-        _assert_close(_positions(od_ades), expected["positions"], 0.0, 0.0, "positions")
-        _assert_close(
-            _cov(od_ades)[:, 1:3, 1:3],
-            expected["covariance_lonlat_block"],
-            1e-12,
-            0.0,
-            "covariance",
-        )
+def _real_bias_table():
+    return efcc18.load_efcc18_biases(_real_bias_path())
+
+
+def _efcc_config(path: Path, exclude_astcats: tuple[str, ...]) -> OdConfig:
+    base = explicit_config()
+    return OdConfig.explicit(
+        observation_pipeline=ObservationPipeline.ordered(
+            [Efcc18CatalogBiasCorrection(exclude_astcats=exclude_astcats)]
+        ),
+        iod=base.for_iod(),
+        refinement=base.for_refinement(),
+        evaluation=base.for_evaluation(),
+        resources=ResourceBindings({"efcc18_catalog_bias_table": path}),
+    )
+
+
+def test_core_config_pins_accepted_d21_two_body_constants() -> None:
+    two_body = explicit_config().for_iod().candidate_correction_fit.two_body
+    assert two_body.lt_tol == 1.0e-12
+    assert two_body.ephemeris_max_iter == 1000
+    assert two_body.max_lt_iter == 10
 
 
 class TestEfcc18:
@@ -338,17 +264,24 @@ class TestEfcc18:
         )
 
     def test_debias_model_positions(self, fixture: dict[str, Any]) -> None:
-        bias = _real_bias_table()
+        path = _real_bias_path()
         expected = fixture["products"]["efcc18_model"]
         observations = _observations(fixture["inputs"])
-        debiased = EFCC18DebiasModel(bias_table=bias).apply(observations)
+
+        debiased, output = apply_pipeline_once(
+            observations, _efcc_config(path, exclude_astcats=())
+        )
+        assert output["pipeline_changed"]
         _assert_close(
             _positions(debiased), expected["positions"], 0.0, 1e-12, "positions"
         )
         assert np.array_equal(_cov(debiased), _cov(observations), equal_nan=True)
-        excluded = EFCC18DebiasModel(
-            bias_table=bias, exclude_astcats=efcc18.EFCC18_JPL_UNDEBIASED_ASTCATS
-        ).apply(observations)
+
+        excluded, excluded_output = apply_pipeline_once(
+            observations,
+            _efcc_config(path, tuple(efcc18.EFCC18_JPL_UNDEBIASED_ASTCATS)),
+        )
+        assert excluded_output["pipeline_changed"]
         _assert_close(
             _positions(excluded),
             expected["positions_jpl_excluded"],
@@ -356,55 +289,7 @@ class TestEfcc18:
             1e-12,
             "excluded",
         )
-
-
-class TestSigmaInterpreters:
-    def test_every_model_matches_and_preserves_positions(
-        self, fixture: dict[str, Any]
-    ) -> None:
-        table = _bias_table()
-        models = {
-            "identity": IdentityModel(table),
-            "empirical_add": EmpiricalCovarianceModel(table),
-            "empirical_replace": EmpiricalCovarianceModel(table, mode="replace"),
-            "empirical_min5": EmpiricalCovarianceModel(table, min_resid_cov_n=5),
-            "performance_weighted": PerformanceWeightedModel(table),
-            "sigma_floor": SigmaFloorModel(table),
-            "night_batch": NightBatchDeweightingModel(cap=4),
-            "composite": CompositeModel(
-                PerformanceWeightedModel(table), NightBatchDeweightingModel(cap=4)
-            ),
-        }
-        # The Veres products were recorded with the working table the Python
-        # baseline bundled; it now ships in the data package.
-        if importlib.util.find_spec(SIGMA_TABLE_PACKAGE) is not None:
-            working = load_sigma_table(VERES2017_WORKING_TABLE)
-            models.update(
-                {
-                    "veres_floor": VeresFloorModel(working),
-                    "veres_floor_fill": VeresFloorModel(working, fill_missing=True),
-                    "veres_replace": VeresReplaceModel(working),
-                    "veres_floor_nofallback": VeresFloorModel(
-                        working, fallback_sigma_arcsec=None
-                    ),
-                }
-            )
-        observations = _observations(fixture["inputs"])
-        obs_cross = _observations(fixture["inputs"], cross_term=1e-9)
-        expected = fixture["products"]["models"]
-        for name, model in models.items():
-            for label, source in (("nan_cross", observations), ("cross", obs_cross)):
-                key = f"{name}/{label}"
-                result = model.apply(source)
-                _assert_close(
-                    _cov(result)[:, 1:3, 1:3],
-                    expected[key]["covariance_block"],
-                    1e-12,
-                    0.0,
-                    key,
-                )
-                assert np.array_equal(_positions(result), _positions(source)), key
-                assert (result is source) == expected[key]["is_input"], key
+        assert np.array_equal(_cov(excluded), _cov(observations), equal_nan=True)
 
 
 class TestDifferentialCorrectionKernels:
@@ -422,8 +307,6 @@ class TestDifferentialCorrectionKernels:
         _assert_close(
             jacobian, expected["whitening"]["jacobian"], 1e-8, 1e-9, "jacobian"
         )
-        # Whitened units (sigma = 0.5"): 1e-5 sigma is 1.4e-9 arcsec between the
-        # two environments' SPICE / 2-body backends.
         residuals = dc.residual_function(
             TRUTH_STATE, EPOCH_MJD_TDB, obs_cross, TwoBodyPropagator()
         )
@@ -563,58 +446,3 @@ class TestFits:
             expected["cmc2003_fit"]["n_recovered"],
         )
         assert sorted(result.flags) == sorted(expected["cmc2003_fit"]["flags"])
-
-    def test_run_od_composite_provenance(
-        self, fixture: dict[str, Any], propagator: TwoBodyPropagator
-    ) -> None:
-        bias = _real_bias_table()
-        expected = fixture["products"]["run_od_composite"]
-        observations = _observations(fixture["inputs"])
-        fitter = NativeOrbitFitter(
-            TwoBodyPropagator(),
-            min_obs=6,
-            rchi2_threshold=10.0,
-            iod_rchi2_threshold=1e6,
-        )
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            fitted_orbits, members = run_od(
-                observations,
-                fitter,
-                CompositeModel(
-                    EFCC18DebiasModel(bias_table=bias),
-                    EmpiricalCovarianceModel(_bias_table()),
-                ),
-                propagator=propagator,
-                object_id="synthetic",
-            )
-        members = members.sort_by("obs_id")
-        assert len(fitted_orbits) == expected["n_orbits"]
-        assert fitted_orbits.success.to_pylist() == expected["success"]
-        assert fitted_orbits.object_id.to_pylist() == expected["object_id"]
-        assert members.obs_id.to_pylist() == expected["obs_id"]
-        assert members.astcat.to_pylist() == expected["astcat"]
-        assert members.outlier.to_pylist() == expected["outlier"]
-        for which in ("original", "used"):
-            astrometry = getattr(members, f"{which}_astrometry")
-            for name in ("lon", "lat", "sigma_lon", "sigma_lat", "cov_lonlat"):
-                _assert_close(
-                    astrometry.table[name].to_numpy(zero_copy_only=False),
-                    expected[which][name],
-                    1e-9,
-                    1e-12,
-                    f"{which} {name}",
-                )
-        # The IOD epoch may differ between IOD implementations: compare the
-        # fitted orbit propagated to the common truth epoch.
-        at_truth = propagate_2body(
-            fitted_orbits.to_orbits().set_column(
-                "coordinates.covariance",
-                CoordinateCovariances.nulls(len(fitted_orbits)),
-            ),
-            Timestamp.from_mjd([EPOCH_MJD_TDB], scale="tdb"),
-        )
-        state = np.concatenate([at_truth.coordinates.r[0], at_truth.coordinates.v[0]])
-        _assert_close(
-            state, expected["state_at_truth_epoch"], 1e-9, 1e-10, "state at truth epoch"
-        )

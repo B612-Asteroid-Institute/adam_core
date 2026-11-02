@@ -1,58 +1,46 @@
-"""
-The legacy finite-difference OD surfaces (`od.od`, `od.differential_correction`,
-`LeastSquares`) are deprecated in favour of the Rust solver entry points and
-say so on use, before doing any work.
-"""
+"""Core 0.7 removes legacy OD aliases rather than translating them."""
+
+import importlib
 
 import pytest
 
-from ..evaluate import OrbitDeterminationObservations
-from ..fitted_orbits import FittedOrbitMembers, FittedOrbits
-from ..least_squares import LeastSquares
-from ..od import differential_correction, od
-from .test_differential_correction import (
-    TwoBodyPropagator,
-    make_initial_guess,
-    make_synthetic_observations,
+import adam_core.orbit_determination as od
+from adam_core import _rust_native
+
+
+@pytest.mark.parametrize("name", ["run_iod", "run_od", "refine", "evaluate_orbits"])
+def test_primary_batch_names_are_canonical_not_legacy_aliases(name: str) -> None:
+    assert callable(getattr(od, name))
+    assert getattr(od, name).__module__ == "adam_core.orbit_determination.workflows"
+
+
+@pytest.mark.parametrize(
+    "module",
+    [
+        "least_squares",
+        "native_orbit_fitter",
+        "orbit_fitter",
+        "observation_uncertainty",
+        "observation_models",
+        "model_provenance",
+        "provenance",
+        "od_orchestration",
+    ],
 )
+def test_removed_legacy_modules_have_no_compatibility_alias(module: str) -> None:
+    with pytest.raises(ModuleNotFoundError):
+        importlib.import_module(f"adam_core.orbit_determination.{module}")
 
 
-def test_least_squares_warns_on_construction() -> None:
-    with pytest.warns(DeprecationWarning, match="LeastSquares is deprecated"):
-        LeastSquares(use_central_difference=True)
-
-
-def test_differential_correction_warns_before_doing_anything() -> None:
-    with pytest.warns(
-        DeprecationWarning, match="od.differential_correction is deprecated"
-    ):
-        orbits, members = differential_correction(
-            FittedOrbits.empty(),
-            FittedOrbitMembers.empty(),
-            OrbitDeterminationObservations.empty(),
-            TwoBodyPropagator,
-        )
-    assert len(orbits) == 0
-    assert len(members) == 0
-
-
-def test_od_warns_before_doing_anything() -> None:
-    guess = make_initial_guess()
-    fitted = FittedOrbits.from_kwargs(
-        orbit_id=guess.orbit_id,
-        object_id=guess.object_id,
-        coordinates=guess.coordinates,
-        arc_length=[0.0],
-        num_obs=[0],
-        chi2=[0.0],
-        reduced_chi2=[0.0],
-        iterations=[0],
-        success=[False],
-        status_code=[0],
-    )
-    # Fewer observations than the legacy loop's min_obs: nothing is fitted.
-    observations = make_synthetic_observations(n_obs=4)
-    with pytest.warns(DeprecationWarning, match="od.od is deprecated"):
-        orbits, members = od(fitted, observations, TwoBodyPropagator)
-    assert len(orbits) == 0
-    assert len(members) == 0
+@pytest.mark.parametrize(
+    "name",
+    [
+        "run_od_ipc",
+        "run_od_2body_ipc",
+        "full_od_ipc",
+        "full_od_2body_ipc",
+        "bias_table_model_apply_numpy",
+    ],
+)
+def test_removed_native_model_routes_are_absent(name: str) -> None:
+    assert not hasattr(_rust_native, name)

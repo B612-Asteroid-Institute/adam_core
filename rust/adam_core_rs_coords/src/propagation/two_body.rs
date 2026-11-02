@@ -183,9 +183,18 @@ impl Propagator for TwoBodyPropagator {
     fn propagate_stm(
         &self,
         state: [f64; 6],
+        non_gravitational_parameters: Option<crate::NonGravitationalParametersRow>,
         epoch_tdb: Epoch,
         times_tdb: &[Epoch],
     ) -> PropagationResultValue<Vec<super::StmRow>> {
+        if non_gravitational_parameters
+            .as_ref()
+            .is_some_and(crate::NonGravitationalParametersRow::is_active)
+        {
+            return Err(PropagationError::InvalidRequest(
+                "two-body STMs do not support non-gravitational parameters".to_string(),
+            ));
+        }
         use adam_core_rs_autodiff::{Dual, Scalar};
         let mu = origin_mu_au3_day2(&crate::OriginId::from_code("SUN"))?;
         Ok(times_tdb

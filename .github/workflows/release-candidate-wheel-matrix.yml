@@ -18,7 +18,9 @@ concurrency:
 env:
   ADAM_ASSIST_REF: ${{ inputs.adam_assist_ref }}
   PIP_ONLY_BINARY: ":all:"
-  PYTHON_PREVIEW_VERSION: "0.6.1"
+  PYTHON_PREVIEW_VERSION: "0.7.0"
+  ADAM_CORE_RELEASE_BUILD: "1"
+  ADAM_CORE_BUILD_COMMIT: ${{ github.sha }}
 
 jobs:
   artifact-acceptance:
@@ -98,18 +100,15 @@ jobs:
               raise SystemExit(f"runner architecture mismatch: {actual} != {expected}")
           PY
 
-      - name: Write adam-core runtime version
-        run: python migration/scripts/write_maturin_version.py
+      - name: Install audited adam-core wheel builder
+        run: python -m pip install "maturin==1.15.0" "ziglang==0.17.0"
 
-      - name: Build adam-core manylinux wheel
+      - name: Build adam-core manylinux wheel (attested wrapper)
         if: matrix.platform.family == 'manylinux'
-        uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1
-        with:
-          command: build
-          target: ${{ matrix.platform.target }}
-          manylinux: "2_17"
-          working-directory: .
-          args: --release -i python${{ matrix.python-version }} --out wheelhouse
+        run: >-
+          python migration/scripts/build_release_wheel.py --out wheelhouse --
+          --zig --target ${{ matrix.platform.target }} --manylinux 2_17
+          -i python${{ matrix.python-version }}
 
       - name: Build adam-assist manylinux wheel
         if: matrix.platform.family == 'manylinux'
@@ -121,13 +120,11 @@ jobs:
           working-directory: adam-assist
           args: --release --locked -i python${{ matrix.python-version }} --out ../wheelhouse
 
-      - name: Build adam-core native wheel
+      - name: Build adam-core native wheel (attested wrapper)
         if: matrix.platform.family == 'native'
-        uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1
-        with:
-          command: build
-          working-directory: .
-          args: --release -i python${{ matrix.python-version }} --out wheelhouse
+        run: >-
+          python migration/scripts/build_release_wheel.py --out wheelhouse --
+          -i python${{ matrix.python-version }}
 
       - name: Build adam-assist native wheel
         if: matrix.platform.family == 'native'

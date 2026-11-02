@@ -4,7 +4,7 @@ version = 4
 
 [[package]]
 name = "adam_core"
-version = "0.6.1"
+version = "0.7.0"
 dependencies = [
  "adam_core_rs_autodiff",
  "adam_core_rs_coords",
@@ -15,7 +15,7 @@ dependencies = [
 
 [[package]]
 name = "adam_core_py"
-version = "0.6.1"
+version = "0.7.0"
 dependencies = [
  "adam_core_rs_coords",
  "adam_core_rs_orbit_determination",
@@ -31,6 +31,7 @@ dependencies = [
  "parquet",
  "pathdiff",
  "pyo3",
+ "serde",
  "serde_json",
  "sha2",
  "tzf-rs",
@@ -39,29 +40,32 @@ dependencies = [
 
 [[package]]
 name = "adam_core_rs_autodiff"
-version = "0.6.1"
+version = "0.7.0"
 
 [[package]]
 name = "adam_core_rs_coords"
-version = "0.6.1"
+version = "0.7.0"
 dependencies = [
  "adam_core_rs_autodiff",
  "adam_core_rs_orbit_determination",
  "arrow-array",
  "arrow-buffer",
  "arrow-schema",
+ "bytes",
  "erfars",
  "faer",
  "nalgebra",
  "parquet",
  "rayon",
+ "serde",
  "serde_json",
+ "sha2",
  "statrs",
 ]
 
 [[package]]
 name = "adam_core_rs_kernel_data"
-version = "0.6.1"
+version = "0.7.0"
 dependencies = [
  "adam_core_rs_spice",
  "flate2",
@@ -77,11 +81,11 @@ dependencies = [
 
 [[package]]
 name = "adam_core_rs_orbit_determination"
-version = "0.6.1"
+version = "0.7.0"
 
 [[package]]
 name = "adam_core_rs_spice"
-version = "0.6.1"
+version = "0.7.0"
 dependencies = [
  "adam_core_rs_coords",
  "faer",
@@ -2381,6 +2385,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9a8e94ea7f378bd32cbbd37198a4a91436180c5bb472411e48b5ec2e2124ae9e"
 dependencies = [
  "serde_core",
+ "serde_derive",
 ]
 
 [[package]]

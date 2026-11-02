@@ -10,7 +10,9 @@ from typing_extensions import Self
 from ..coordinates.cartesian import CartesianCoordinates
 from ..coordinates.residuals import Residuals
 from ..coordinates.spherical import SphericalCoordinates
+from ..orbits.non_gravitational_parameters import NonGravitationalParameters
 from ..orbits.orbits import Orbits
+from ..orbits.physical_parameters import PhysicalParameters
 
 
 def assign_duplicate_observations(
@@ -108,31 +110,55 @@ def drop_duplicate_orbits(
 
 
 class OdProvenance(qv.Table):
-    """
-    Compact provenance of one fitted orbit: what produced it and how.
+    """Runtime provenance for a fitted orbit.
 
-    Written by `~adam_core.orbit_determination.run_od` (every field) and by
-    the IOD stage (``iod_*``); null for orbits produced by other entry points.
-    Configurations and model descriptors are compact JSON; model tables are
-    identified by content hash, not copied.
+    Canonical batch workflows populate clean adam-core identity,
+    ordered-input fingerprint, route, native provider metadata, stage
+    diagnostics, complete canonical Rust configuration, and rejection counts.
+    Rows produced by lower-level numerical kernels may leave fields null.
+    Resource paths are never recorded.
     """
 
     #: adam-core version that produced the orbit.
     adam_core_version = qv.LargeStringColumn(nullable=True)
-    #: ``"fused"`` (one native ``run_od`` crossing) or ``"composed"``.
+    #: Exact clean source commit embedded by the native build. Configured
+    #: workflows refuse dirty or unknown identities before work.
+    adam_core_build = qv.LargeStringColumn(nullable=True)
+    #: SHA-256 of the ordered caller table plus exact used-astrometry rows.
+    input_fingerprint = qv.LargeStringColumn(nullable=True)
+    #: SHA-256 of the exact emitted orbit state/time/origin/covariance and
+    #: physical/non-gravitational parameters, validated on later workflows.
+    state_fingerprint = qv.LargeStringColumn(nullable=True)
+    #: Unkeyed SHA-256 consistency digest covering route, complete
+    #: configuration (including profile), input fingerprint, and propagated
+    #: IOD metadata. This detects inconsistent fields; it is not authentication
+    #: or a tamper-proof signature.
+    provenance_fingerprint = qv.LargeStringColumn(nullable=True)
+    #: Exact canonical workflow route.
     route = qv.LargeStringColumn(nullable=True)
-    #: The `OrbitFitter` class (``module.qualname``).
+    #: Historical producer label; configured workflows leave this null.
     fitter = qv.LargeStringColumn(nullable=True)
-    #: Backend of the IOD stage and of the refinement (``name version``; a
-    #: propagator without a `NativeBackend` is ``python:module.qualname``).
+    #: Native provider backend for IOD, refinement, and evaluation
+    #: (``name version``). Canonical workflows reject propagators without a
+    #: compatible declared native capsule.
     iod_backend = qv.LargeStringColumn(nullable=True)
     refinement_backend = qv.LargeStringColumn(nullable=True)
-    #: IOD, refinement and solver settings (JSON), when the fitter exposes
-    #: them (`NativeOrbitFitter.native_settings`).
+    evaluation_backend = qv.LargeStringColumn(nullable=True)
+    #: Capsule-decoded native provider metadata (JSON), including ABI,
+    #: capabilities, scale, dynamics, and immutable configuration/data hashes.
+    iod_provider = qv.LargeStringColumn(nullable=True)
+    refinement_provider = qv.LargeStringColumn(nullable=True)
+    evaluation_provider = qv.LargeStringColumn(nullable=True)
+    #: Native decision diagnostics (JSON): bounded IOD work/failures and
+    #: refinement pass/rejection/recovery/CMC flags.
+    iod_diagnostics = qv.LargeStringColumn(nullable=True)
+    refinement_diagnostics = qv.LargeStringColumn(nullable=True)
+    evaluation_diagnostics = qv.LargeStringColumn(nullable=True)
+    #: Historical settings field; configured workflows use ``configuration``.
     settings = qv.LargeStringColumn(nullable=True)
-    #: Observation models applied at fit time (JSON list of descriptors:
-    #: type, scalar parameters, SHA-256 of each table).
-    models = qv.LargeStringColumn(nullable=True)
+    #: Expanded complete OD configuration (canonical JSON): profile identity,
+    #: ordered transforms/resources, stage settings, and evaluation policy.
+    configuration = qv.LargeStringColumn(nullable=True)
     #: Whether the IOD found another converged solution, distinct from the
     #: accepted one yet fitting about as well, and how many.
     iod_ambiguous = qv.BooleanColumn(nullable=True)
@@ -143,19 +169,56 @@ class OdProvenance(qv.Table):
     rejected_fraction = qv.Float64Column(nullable=True)
 
 
+class OrbitDeterminationFailures(qv.Table):
+    """Typed per-group scientific failures from canonical batch workflows.
+
+    Contract, resource, provider, provenance, and invariant failures are never
+    rows in this table: they abort the invocation atomically. Each row here is
+    a safely isolated scientific outcome. Stage-specific counters remain
+    ordinary typed nullable columns rather than an opaque JSON payload.
+    """
+
+    group_id = qv.LargeStringColumn()
+    #: Emitted output-orbit identity; null when no state was emitted.
+    orbit_id = qv.LargeStringColumn(nullable=True)
+    #: Input orbit that was refined/evaluated; null for IOD-only failures.
+    input_orbit_id = qv.LargeStringColumn(nullable=True)
+    stage = qv.LargeStringColumn()
+    code = qv.LargeStringColumn()
+    message = qv.LargeStringColumn()
+    #: True only when Rust retained an actual native best/non-converged state.
+    recoverable = qv.BooleanColumn()
+    num_obs = qv.Int64Column()
+    arc_length = qv.Float64Column(nullable=True)
+    triplets_tried = qv.Int64Column(nullable=True)
+    candidates_evaluated = qv.Int64Column(nullable=True)
+    candidates_failed = qv.Int64Column(nullable=True)
+    corrections_run = qv.Int64Column(nullable=True)
+    passes = qv.Int64Column(nullable=True)
+    n_rejected = qv.Int64Column(nullable=True)
+    n_recovered = qv.Int64Column(nullable=True)
+    status_code = qv.Int64Column(nullable=True)
+    best_state_retained = qv.BooleanColumn()
+
+
 class FittedOrbits(qv.Table):
 
     orbit_id = qv.LargeStringColumn(default=lambda: uuid.uuid4().hex)
     object_id = qv.LargeStringColumn(nullable=True)
     coordinates = CartesianCoordinates.as_column()
+    physical_parameters = PhysicalParameters.as_column(nullable=True)
+    non_gravitational_parameters = NonGravitationalParameters.as_column(nullable=True)
     arc_length = qv.Float64Column()
     num_obs = qv.Int64Column()
     chi2 = qv.Float64Column()
     reduced_chi2 = qv.Float64Column()
+    #: Residual-vector evaluations, including numerical-Jacobian columns.
     iterations = qv.Int64Column(nullable=True)
+    #: Jacobian/step iterations completed by the optimizer.
+    optimizer_iterations = qv.Int64Column(nullable=True)
     success = qv.BooleanColumn(nullable=True)
     status_code = qv.Int64Column(nullable=True)
-    #: Compact provenance (`OdProvenance`); null outside `run_od` and IOD.
+    #: Compact provenance; fields may be null for lower-level kernels.
     provenance = OdProvenance.as_column(nullable=True)
 
     def to_orbits(self) -> Orbits:
@@ -172,6 +235,8 @@ class FittedOrbits(qv.Table):
             orbit_id=self.orbit_id,
             object_id=self.object_id,
             coordinates=self.coordinates,
+            physical_parameters=self.physical_parameters,
+            non_gravitational_parameters=self.non_gravitational_parameters,
         )
 
 
@@ -182,9 +247,9 @@ class ObservationAstrometry(qv.Table):
     `FittedOrbitMembers` embeds two of these per observation: the astrometry as
     ORIGINALLY supplied to orbit determination (``original_astrometry``) and
     the astrometry actually USED by the fitter (``used_astrometry``) after any
-    observation models (star-catalog debiasing, uncertainty inflation,
-    deweighting) were applied at fit time by
-    `~adam_core.orbit_determination.run_od`. Values are embedded directly so
+    configured observation transforms (catalog correction, uncertainty fill,
+    covariance adjustment, deweighting) were applied at fit time. Values are
+    embedded directly so
     that fitted orbit members are self-contained provenance: the observations
     the fit was based on can be inspected (and the model's effect audited)
     without re-joining to the input observations or re-running the models.
@@ -199,6 +264,10 @@ class ObservationAstrometry(qv.Table):
         diagonal. ``sigma_lon`` is the uncertainty of RA itself (NOT
         cos(dec)-corrected), matching the `SphericalCoordinates` covariance
         convention. NaN where the covariance is not available.
+    ``variance_lon``, ``variance_lat`` : float, degrees^2
+        Exact diagonal covariance entries consumed by the fitter. These are
+        persisted separately from the display sigmas so the prepared handoff
+        is bitwise lossless across fused and composed workflows.
     ``cov_lonlat`` : float, degrees^2
         RA/Dec covariance cross-term. NaN where not available.
 
@@ -211,6 +280,8 @@ class ObservationAstrometry(qv.Table):
     lat = qv.Float64Column(nullable=True)
     sigma_lon = qv.Float64Column(nullable=True)
     sigma_lat = qv.Float64Column(nullable=True)
+    variance_lon = qv.Float64Column(nullable=True)
+    variance_lat = qv.Float64Column(nullable=True)
     cov_lonlat = qv.Float64Column(nullable=True)
 
     @classmethod
@@ -249,6 +320,8 @@ class ObservationAstrometry(qv.Table):
             lat=coordinates.lat,
             sigma_lon=sigma_lon,
             sigma_lat=sigma_lat,
+            variance_lon=covariances[:, 1, 1],
+            variance_lat=covariances[:, 2, 2],
             cov_lonlat=covariances[:, 1, 2],
         )
 
@@ -277,8 +350,7 @@ class FittedOrbitMembers(qv.Table):
         Position and uncertainty of the observation as ORIGINALLY supplied.
     used_astrometry : `ObservationAstrometry`, nullable
         Position and uncertainty actually USED by the fitter, i.e. after the
-        observation models applied at fit time by
-        `~adam_core.orbit_determination.run_od`. Equal to
+        configured observation pipeline applied at fit time. Equal to
         ``original_astrometry`` when no model changed the observation.
     astcat : str, nullable
         Star catalog the observation was reduced against (see
@@ -300,3 +372,9 @@ class FittedOrbitMembers(qv.Table):
     original_astrometry = ObservationAstrometry.as_column(nullable=True)
     used_astrometry = ObservationAstrometry.as_column(nullable=True)
     astcat = qv.LargeStringColumn(nullable=True)
+    #: Rust-owned SHA-256 of the complete source/observer/original/used input
+    #: row. Canonical refinement and evaluation require and revalidate it.
+    input_fingerprint = qv.LargeStringColumn(nullable=True)
+    #: Rust-owned SHA-256 binding ordered explicit membership to the
+    #: association hypothesis and orbit identity.
+    membership_fingerprint = qv.LargeStringColumn(nullable=True)

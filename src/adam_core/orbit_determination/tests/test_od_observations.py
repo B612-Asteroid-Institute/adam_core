@@ -13,8 +13,6 @@ from ...observations.ades import ADESObservations
 from ...observers.observers import Observers
 from ...time import Timestamp
 from ..evaluate import OrbitDeterminationObservations, OrbitDeterminationPhotometry
-from ..observation_uncertainty import IdentityModel, SigmaFloorModel
-from .test_observation_uncertainty import make_bias_table
 
 
 @pytest.fixture
@@ -231,33 +229,3 @@ def test_astcat_nullable_and_back_compatible(
     assert len(reloaded_legacy) == len(legacy)
     assert reloaded_legacy.astcat.null_count == len(legacy)
     assert reloaded_legacy.id.to_pylist() == legacy.id.to_pylist()
-
-
-def test_astcat_survives_uncertainty_models(
-    ades_observations: ADESObservations,
-) -> None:
-    # Uncertainty models rebuild the coordinates column only; astcat must pass
-    # through untouched (both populated and null), including when the model
-    # actually changes the covariance.
-    populated = OrbitDeterminationObservations.from_ades(ades_observations)
-    legacy = _od_observations_without_astcat()
-
-    # Synthetic bias table: a W84 floor well above the baseline sigmas so the
-    # model engages on the W84 rows.
-    bias_table = make_bias_table(
-        [{"obs_code": "W84", "bias_ra_arcsec": 3.0, "bias_dec_arcsec": 3.0}]
-    )
-    for model in (IdentityModel(), SigmaFloorModel(bias_table)):
-        after = model.apply(populated)
-        assert after.astcat.to_pylist() == populated.astcat.to_pylist()
-        assert after.id.to_pylist() == populated.id.to_pylist()
-        after_legacy = model.apply(legacy)
-        assert after_legacy.astcat.null_count == len(legacy)
-
-    # Confirm the floor really changed W84 sigmas (so the pass-through above was
-    # exercised under a genuine covariance rewrite)
-    floored = SigmaFloorModel(bias_table).apply(populated)
-    assert np.all(
-        floored.coordinates.covariance.sigmas[:2, 2]
-        > populated.coordinates.covariance.sigmas[:2, 2]
-    )

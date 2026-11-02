@@ -1,5 +1,5 @@
 import warnings
-from typing import TYPE_CHECKING, List, Optional, Tuple, Union
+from typing import List, Optional, Tuple, Union
 
 import numpy as np
 import numpy.typing as npt
@@ -17,11 +17,6 @@ from ..observers.observers import Observers
 from ..orbits.orbits import Orbits
 from ..propagator.propagator import Propagator
 from .fitted_orbits import FittedOrbitMembers, FittedOrbits
-
-if TYPE_CHECKING:
-    # Imported lazily to avoid a circular import: observation_uncertainty
-    # imports OrbitDeterminationObservations from this module.
-    from .observation_uncertainty import ObservationUncertaintyModel
 
 
 class OrbitDeterminationPhotometry(qv.Table):
@@ -86,9 +81,9 @@ class OrbitDeterminationObservations(qv.Table):
           sigma is ``rmsRACosDec / cos(dec)``. ``rmsCorr`` (dimensionless, nullable)
           is used as the RA/Dec correlation; a null correlation is treated as 0.
           Null ``rmsRACosDec``/``rmsDec`` produce NaN variances, i.e. no
-          uncertainty is invented here; apply an
-          `~adam_core.orbit_determination.ObservationUncertaintyModel` or fill the
-          sigmas before fitting. The covariance block is assembled by the Rust
+          uncertainty is invented here; select an explicit
+          :class:`~adam_core.orbit_determination.ObservationPipeline` before
+          fitting. The covariance block is assembled by the Rust
           ``ades_angular_covariance`` kernel.
         - ``stn``, ``obsTime`` -> ``observers`` via `Observers.from_codes`.
         - ``mag``, ``rmsMag``, ``band`` -> ``photometry``.
@@ -174,13 +169,12 @@ class OrbitDeterminationObservations(qv.Table):
         )
 
 
-def evaluate_orbits(
+def _evaluate_orbits_prepared(
     orbits: Union[Orbits, FittedOrbits],
     observations: OrbitDeterminationObservations,
     propagator: Propagator,
-    parameters: int = 6,
-    ignore: Optional[List[str]] = None,
-    observatory_bias_model: Optional["ObservationUncertaintyModel"] = None,
+    parameters: int,
+    ignore: Optional[List[str]],
 ) -> Tuple["FittedOrbits", "FittedOrbitMembers"]:
     """
     Creates a fitted orbit and fitted orbit members from input orbits and observations.
@@ -195,7 +189,7 @@ def evaluate_orbits(
     ----------
     orbit : `~adam_core.orbits.Orbits` (N)
         Orbits to calculate residuals with respect to the observations for.
-    observations : `~adam_core.orbit_determination.DifferentialCorrectionObservations` (M)
+    observations : `~adam_core.orbit_determination.OrbitDeterminationObservations` (M)
         Observations believed to belong to the input orbit.
     propagator : `~adam_core.propagator.Propagator`
         Propagator to use to generate ephemeris.
@@ -205,11 +199,6 @@ def evaluate_orbits(
     ignore : list of str
         List of observation IDs to ignore when calculating chi2 and reduced chi2 values. This
         is typically a list of outlier observation IDs.
-    observatory_bias_model : `~adam_core.orbit_determination.ObservationUncertaintyModel`, optional
-        Observation uncertainty model applied to the observations before evaluation
-        (e.g. inflating per-station sigmas from an observatory bias table). Default
-        None leaves the observations unchanged. The model is applied once at this
-        entry point and is not forwarded to nested calls.
 
     Returns
     -------
@@ -218,9 +207,6 @@ def evaluate_orbits(
     fitted_orbit_members : `~adam_core.orbit_determination.FittedOrbitMembers` (N * M)
         Fitted orbit members.
     """
-    if observatory_bias_model is not None:
-        observations = observatory_bias_model.apply(observations)
-
     num_orbits = len(orbits)
     if isinstance(orbits, FittedOrbits):
         orbits = orbits.to_orbits()
@@ -286,6 +272,8 @@ def evaluate_orbits(
         orbit_id=orbits.orbit_id,
         object_id=orbits.object_id,
         coordinates=orbits.coordinates,
+        physical_parameters=orbits.physical_parameters,
+        non_gravitational_parameters=orbits.non_gravitational_parameters,
         arc_length=arc_length,
         num_obs=num_obs,
         chi2=chi2,

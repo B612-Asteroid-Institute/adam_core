@@ -2,11 +2,9 @@
 CMC2003 guards: a row whose rejection statistic cannot be established must
 never look acceptable (PR #217 review round 2, phase 1, item 1).
 
-The decision kernel is pinned on hand-built inputs (``+inf`` with the flag,
-never ``0``); the end-to-end check runs `cmc2003_fit_detailed` on the
-two-body backend with one crafted observation whose residual is NaN, which
-must come out flagged and rejected while the fit recovers the truth from the
-remaining observations.
+The decision kernel is pinned on hand-built internal inputs (``+inf`` with
+the flag, never ``0``). Public fitting rejects a non-finite observed position
+eagerly instead of sending it through a provider or presenting a partial fit.
 """
 
 from __future__ import annotations
@@ -16,11 +14,11 @@ import warnings
 import numpy as np
 import numpy.testing as npt
 import pyarrow as pa
+import pytest
 
-from ..rejection import _expected_residual_chi2, cmc2003_fit_detailed
-from .test_cmc2003_rejection import select, state_of
+from ..algorithms.rejection import _expected_residual_chi2, cmc2003_fit_detailed
+from .test_cmc2003_rejection import select
 from .test_differential_correction import (
-    TRUTH_STATE,
     TwoBodyPropagator,
     make_initial_guess,
     make_synthetic_observations,
@@ -75,31 +73,13 @@ class TestStatisticGuards:
         assert not selected[5] and n_recovered == 0
 
 
-def test_nan_residual_observation_is_flagged_and_rejected_end_to_end() -> None:
-    """One observation with a NaN position: its prediction residual is NaN."""
+def test_nan_observation_is_rejected_eagerly_end_to_end() -> None:
+    """A non-finite observed position is an invalid OD request, not an outlier."""
     observations = make_synthetic_observations()
-    bad = 12
     lon = observations.coordinates.lon.to_numpy(zero_copy_only=False).copy()
-    lon[bad] = np.nan
+    lon[12] = np.nan
     observations = observations.set_column("coordinates.lon", pa.array(lon))
 
-    with warnings.catch_warnings():
+    with warnings.catch_warnings(), pytest.raises(ValueError, match="longitude"):
         warnings.simplefilter("ignore")
-        result = cmc2003_fit_detailed(
-            make_initial_guess(), observations, TwoBodyPropagator()
-        )
-
-    assert "non_finite_chi2" in result.flags
-    members = result.fitted_orbit_members
-    outlier = members.outlier.to_pylist()
-    assert outlier[bad] is True
-    assert sum(outlier) == 1
-    assert result.n_rejected == 1 and result.n_recovered == 0
-    assert result.fitted_orbit.num_obs[0].as_py() == len(observations) - 1
-    assert result.fitted_orbit.success[0].as_py()
-    # The remaining observations recover the truth.
-    error = state_of(result.fitted_orbit) - TRUTH_STATE
-    covariance = result.fitted_orbit.coordinates.covariance.to_matrix()[0]
-    assert np.all(np.isfinite(covariance))
-    mahalanobis = np.sqrt(error @ np.linalg.solve(covariance, error))
-    assert mahalanobis < 4.6
+        cmc2003_fit_detailed(make_initial_guess(), observations, TwoBodyPropagator())

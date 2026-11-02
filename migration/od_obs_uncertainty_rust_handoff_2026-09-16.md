@@ -1,3 +1,12 @@
+> **Superseded historical handoff.** This document records the September 2026
+> transition design and is not the current provider contract. The propagation-only
+> capsule architecture in `migration/propagation_only_capsule.md` and
+> `docs/source/reference/native_propagator_abi.rst` supersedes its callback and
+> provider-owned OD-work-unit descriptions. Legacy API names below are historical
+> only, not compatibility promises. Scientific resources are identified in current
+> Core documentation only by semantic slot; distribution package identities are
+> intentionally omitted from this public record.
+
 # OD observation-uncertainty features on the Rust adam-core: handoff / PR description
 
 Date: 2026-09-16
@@ -44,7 +53,7 @@ the "Stays Python" entries for the fit and the loops are superseded:
 | `EmpiricalCovarianceModel` / `PerformanceWeightedModel` / `SigmaFloorModel` | `bias_table_model_apply_numpy` | `validate_bias_table` (pyarrow cast), quivr `set_column` only when Rust reports a change |
 | `NightBatchDeweightingModel` | `night_batch_deweighting_model_apply_numpy` | — |
 | `EFCC18DebiasModel`, `observations.efcc18.*` | `efcc18_parse_bias_dat`, `efcc18_ra_dec_to_healpix_numpy`, `efcc18_catalog_columns_numpy`, `efcc18_corrections_numpy`, `efcc18_debias_model_apply_numpy`, `healpix_ang2pix_lonlat_numpy` | locating / downloading / checksumming / caching `bias.dat` (I/O) |
-| `VeresFloorModel` / `VeresReplaceModel` / `SigmaFillModel` / `VeresSigmaLookup` / `load_sigma_table` | `veres_sigma_lookup_numpy`, `veres_model_apply_numpy` | `validate_veres_sigma_table` (pyarrow cast); default tables resolved by importing the private `observatory_uncertainties` data package (no table bundled, 2026-09-27) |
+| `VeresFloorModel` / `VeresReplaceModel` / `SigmaFillModel` / `VeresSigmaLookup` / `load_sigma_table` | `veres_sigma_lookup_numpy`, `veres_model_apply_numpy` | `validate_veres_sigma_table` (pyarrow cast); default tables resolved by importing the private `station resource provider` data package (no table bundled, 2026-09-27) |
 | `fit_least_squares` (whitened residuals, `jacobian="analytic"`, `loss="huber"`, weak-direction probe), `iterative_fit`, `residual_function` | `observation_whitening_matrices_numpy`, `whiten_residual_pairs_numpy`, `whitened_2body_jacobian_numpy`, `robust_*_numpy`, `validate_robust_loss` | `scipy.optimize.least_squares` (the grid-validated optimizer), N-body residuals through `propagator.generate_ephemeris`, the probe / central-difference fallback (they call the propagator) |
 | `cmc2003_fit`, `cmc2003_fit_detailed` | `cmc2003_apparitions_numpy`, `cmc2003_expected_residual_chi2_numpy`, `cmc2003_select_numpy` | the refit loop (calls `fit_least_squares`) |
 | `run_od`, `apply_observation_models`, `attach_observation_provenance`, `ObservationAstrometry`, `FittedOrbitMembers.{weight, original_astrometry, used_astrometry, astcat}` | `sqrt_values_numpy` | pyarrow `index_in` / `take` joins; drives any `OrbitFitter` (adam_fo overrides `full_od`) |
@@ -104,7 +113,7 @@ flipped, mirroring the Python baseline: `NativeOrbitFitter` still defaults to
 `outlier_rejection="worst_residual"`, `NightBatchDeweightingModel` already
 defaults to `cap=4`, `EmpiricalCovarianceModel` to `mode="add"`, and
 `SigmaFillModel(sigma_table=None)` now (2026-09-27) resolves `v2_sigma_fill`
-by importing the private `observatory_uncertainties` data package, and the
+by importing the private `station resource provider` data package, and the
 Veres models resolve its `veres2017_working` table; adam_core bundles no sigma
 table and still does not depend on the package (ImportError names it when
 missing). (Superseded 2026-09-28: the fitter default was flipped, see below.)
@@ -279,7 +288,9 @@ dict keys unchanged; keys and `IodOutput` fields were added).
    for the models (units: spherical coordinate covariance, no row
    validity); after the models every observation must have finite,
    positive lon/lat variances, else `InvalidRequest` whose message ends
-   with `MISSING_COVARIANCE_REMEDY` (names `SigmaFillModel`). The same
+   with `MISSING_COVARIANCE_REMEDY`. At this historical revision that text
+   named the retired `SigmaFillModel`; current Core names
+   `FillMissingAstrometricUncertainty` and its semantic resource slot. The same
    remedy text replaced the bare "orbit determination requires observed
    covariance" of `observed_covariance_flat`, which is what the composed
    route (`apply_observation_models` -> `NativeOrbitFitter.full_od` ->
@@ -435,9 +446,12 @@ walk-forward and consistency runs exposed.
 * A non-finite Jacobian / gradient / normal matrix ends the fit with
   `status_code = -2`, `success = False`, iterate untouched (was: NaN ignored
   by the gradient norm, status 1 "converged").
-* `max_nfev` is scipy's `nfev` (initial evaluation plus trial steps); the
-  finite-difference Jacobian evaluations stay in the `iterations` column but
-  are not budget, as in the baseline and the study harness's `max_nfev=200`.
+* Historical 2026-09-16 contract: `max_nfev` matched scipy's trial-only
+  `nfev`. **Superseded on the 0.7 correctness line:** one honest `max_nfev`
+  now includes the initial residual, every finite-difference column, and every
+  trial across approximate/exact/fallback phases. `iterations` reports that
+  residual-evaluation count and `optimizer_iterations` reports Jacobian/step
+  iterations.
 * The contract (objective, derivatives and their exactness, scaling, step and
   acceptance, every status code, limits, covariance) lives on
   `WhitenedFitConfig` and in the `fit_least_squares` Notes.

@@ -7,8 +7,8 @@ against its EXPECTED residual covariance rather than against its reported
 uncertainty alone. The scheme is the one implemented in OrbFit
 (``src/propag/least_squares.f90`` ``reject_obs``, defaults in
 ``lib/reject.def``) and used by NEODyS/AstDyS; this module ports it as an
-outlier treatment for adam_core's differential correction, selectable as
-``outlier_rejection="cmc2003"`` on `NativeOrbitFitter`.
+outlier treatment for adam_core's differential correction and as the
+Core-v1 typed refinement policy.
 
 Algorithm (one pass; passes repeat until no observation changes state)
 ----------------------------------------------------------------------
@@ -73,15 +73,15 @@ from typing import Any
 import numpy as np
 import numpy.typing as npt
 
-from ..orbits.orbits import Orbits
-from ..propagator.propagator import Propagator
-from ._native_dispatch import (
+from ...orbits.orbits import Orbits
+from ...propagator.propagator import Propagator
+from .._native_dispatch import (
     _warn_if_analytic_jacobian_mismatches,
-    deprecated,
     native_propagator,
-    native_work_unit,
 )
-from .differential_correction import (
+from ..evaluate import OrbitDeterminationObservations
+from ..fitted_orbits import FittedOrbitMembers, FittedOrbits
+from .fitting import (
     _FUSED_LOOP_KWARGS,
     _NATIVE_FIT_KWARGS,
     HUBER_F_SCALE_DEFAULT,
@@ -93,8 +93,6 @@ from .differential_correction import (
     _native_problem,
     _whiten_residual_pairs,
 )
-from .evaluate import OrbitDeterminationObservations
-from .fitted_orbits import FittedOrbitMembers, FittedOrbits
 
 logger = logging.getLogger(__name__)
 
@@ -107,7 +105,6 @@ __all__ = [
     "CMC2003_MAX_REJECTED_FRACTION",
     "CMC2003_PSD_FLOOR_FRAC",
     "CMC2003Fit",
-    "cmc2003_fit",
     "cmc2003_fit_detailed",
 ]
 
@@ -381,21 +378,14 @@ def cmc2003_fit_detailed(
         psd_floor_frac=psd_floor_frac,
     )
 
-    # Rust-backed propagators run the whole CMC2003 loop in one crossing
-    # (``cmc2003_fit`` work unit); every other propagator runs the same Rust
-    # loop through the callback route. The facade only wraps the final pass.
-    fused = native_work_unit(propagator, "cmc2003_fit")
-    if fused is not None:
-        output = fused(orbit, observations, fit_settings=fit_settings, **loop_settings)
-    else:
-        from adam_core import _rust_native
+    from adam_core import _rust_native
 
-        output = _rust_native.cmc2003_fit_ipc(
-            native_propagator(propagator),
-            *_native_problem(orbit, observations),
-            fit_settings=fit_settings,
-            **loop_settings,
-        )
+    output = _rust_native.cmc2003_fit_ipc(
+        native_propagator(propagator),
+        *_native_problem(orbit, observations),
+        fit_settings=fit_settings,
+        **loop_settings,
+    )
     _emit_native_warnings(output)
     fitted_orbit, fitted_orbit_members = _fitted_tables_from_native_output(
         orbit, observations, output, np.asarray(output["weights"], dtype=np.float64)
@@ -408,35 +398,3 @@ def cmc2003_fit_detailed(
         n_recovered=int(output["n_recovered"]),
         flags=tuple(sorted(output["flags"])),
     )
-
-
-def _cmc2003_fit(
-    orbit: Orbits,
-    observations: OrbitDeterminationObservations,
-    propagator: Propagator,
-    **kwargs: Any,
-) -> tuple[FittedOrbits, FittedOrbitMembers]:
-    """
-    Differentially correct an orbit with CMC2003 outlier rejection and
-    re-inclusion.
-
-    Convenience wrapper around `cmc2003_fit_detailed` returning only the
-    fitted orbit and members (rejected observations have ``outlier`` True).
-    All keyword arguments are forwarded; see `cmc2003_fit_detailed`.
-
-    Returns
-    -------
-    fitted_orbit : `FittedOrbits` (1)
-    fitted_orbit_members : `FittedOrbitMembers` (N)
-    """
-    result = cmc2003_fit_detailed(orbit, observations, propagator, **kwargs)
-    return result.fitted_orbit, result.fitted_orbit_members
-
-
-@deprecated(
-    _cmc2003_fit,
-    "refine(orbit, observations, propagator) (rejection='cmc2003'), or "
-    "cmc2003_fit_detailed for the loop diagnostics",
-)
-def cmc2003_fit(*args, **kwargs):  # pragma: no cover - replaced by the alias
-    """Deprecated alias of `_cmc2003_fit`."""

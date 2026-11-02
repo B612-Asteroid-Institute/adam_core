@@ -1,14 +1,24 @@
 # adam-core Rust Packaging Notes
 
-Last updated: 2026-08-31.
+Last updated: 2026-10-21.
 
 ## Supported Build Path
 
-- `pdm run wheel-build` is the authoritative local and CI wheel build command.
-- `pdm run wheel-build` runs `pdm run wheel-version`, then `pdm build --no-sdist --dest dist`.
-- `pdm run wheel-inspect` must pass before uploading or using `dist/*.whl` as a release artifact. It rejects build-only runtime dependencies and packaged test modules as well as version/native-extension errors.
-- `pdm run rust-build` is an alias for `pdm run wheel-build`.
-- Direct Maturin manylinux jobs must run `migration/scripts/write_maturin_version.py` before building and `migration/scripts/check_wheel_artifacts.py` on the produced Core wheel before artifact upload. Clean-room acceptance also compares runtime package versions with installed distribution metadata.
+- `pdm run wheel-build` is the authoritative local and CI Core-wheel command.
+  It invokes `migration/scripts/build_release_wheel.py`; direct release
+  `maturin build`, `pdm build`, or a hand-assembled release environment is not
+  a supported release path.
+- The wrapper mirrors the Cargo version, creates a unique per-invocation source
+  digest and nonce immediately before Maturin, builds, and runs
+  `check_wheel_artifacts.py` before returning success.
+- `pdm run wheel-inspect` may be run again before upload. It rejects build-only
+  runtime dependencies, packaged tests, version/native-extension errors, a
+  missing release attestation, or any packaged Python file/hash not present in
+  that attestation.
+- `pdm run rust-build` is an alias for `pdm run wheel-build`. For explicit
+  manylinux arguments call the same wrapper, for example
+  `python migration/scripts/build_release_wheel.py --out wheelhouse -- --zig
+  --target aarch64-unknown-linux-gnu --manylinux 2_17 -i python3.12`.
 
 ## Version Source
 
@@ -16,6 +26,7 @@ Last updated: 2026-08-31.
 - This is intentional because maturin uses that Cargo version for wheel metadata when `project.version` is dynamic.
 - `migration/scripts/write_maturin_version.py` mirrors the Cargo version into `src/adam_core/_version.py` before build.
 - Stable versions are identical in both systems. Supported Cargo prereleases are normalized explicitly, for example `0.5.6-rc.1` to PEP 440 `0.5.6rc1`.
+- The current breaking source line is Python/Cargo `0.7.0` for the wheel implementation and all six public Rust crates, with exact `=0.7.0` internal requirements. Released `0.6.1` remains incompatible with the propagation-only v2 provider contract.
 - `pyproject.toml` does not declare `[tool.pdm.version]`; PDM SCM versioning is not part of the native wheel path.
 - If the checkout is exactly on a `vX.Y.Z` or prerelease tag, `write_maturin_version.py` fails when the normalized tag and Cargo versions differ.
 - `migration/scripts/verify_preview_versions.py` enforces explicit preview/stable channel semantics and exact public-crate pins. Stable version, tag, protected-environment, resumable-publication, and release-order policy is canonical in `docs/source/getting_started/releasing.rst`.
@@ -34,3 +45,27 @@ Last updated: 2026-08-31.
 - Dedicated benchmark jobs execute every benchmark row. The release-candidate workflow runs all six profile-marked scientific fixtures, both live Rust kernel-data integrations, and the three live Horizons/NEOCC/Scout/SBDB integration tests after wheel acceptance.
 - No expected xfail remains in the rotation-period confidence suite: every committed standard-candle fixture enforces the strict confidence contract.
 - To inspect skip reasons, run `pdm run test-rust-full -- -rs`.
+
+
+## Source inventory and native identity
+
+Bare `cargo`, Clippy, and Rust test builds identify the current commit and watch
+Git refs plus exact tracked inputs. They do **not** watch a nonexistent
+sentinel, so repeated unchanged developer builds can reach `Fresh`.
+
+Every official release invocation instead uses the audited wrapper. Immediately
+before Cargo it requires a clean tracked checkout; enumerates tracked inputs and
+all package/Rust source directly (including ignored files); writes a full source
+digest, unique nonce, and exact Python-file hashes; and passes those values to
+Cargo. The build script verifies and consumes that single-use attestation. A
+second direct release build cannot reuse it. The packaged JSON attestation is
+then checked against the wheel's exact Python file set and content hashes.
+Missing, mismatched, reused, or stale attestations fail closed.
+
+Source-overlay `run_od` performs an independent runtime check: checkout `HEAD`
+must equal the embedded native commit, tracked/staged runtime source must be
+clean, and no untracked or ignored package Python/Rust source may be present.
+Generated `_version.py`, native-extension artifacts, tests, caches, `target/`,
+wheelhouse, and the independently pinned nested `adam-assist/` checkout are
+excluded where appropriate. Installed wheels have no checkout and rely on the
+embedded exact release identity and packaged attestation.

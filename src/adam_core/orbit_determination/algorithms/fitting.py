@@ -7,25 +7,22 @@ import numpy.typing as npt
 import pyarrow as pa
 import pyarrow.compute as pc
 
-from .. import _rust_native
-from ..coordinates.cartesian import CartesianCoordinates
-from ..coordinates.covariances import CoordinateCovariances
-from ..coordinates.origin import Origin, OriginCodes
-from ..coordinates.residuals import Residuals
-from ..coordinates.transform import transform_coordinates
-from ..orbits.orbits import Orbits
-from ..propagator.propagator import Propagator
-from ..time.time import Timestamp
-from ..utils.spice import get_perturber_state
-from ._native_dispatch import (
+from ... import _rust_native
+from ...coordinates.cartesian import CartesianCoordinates
+from ...coordinates.covariances import CoordinateCovariances
+from ...coordinates.origin import Origin, OriginCodes
+from ...coordinates.residuals import Residuals
+from ...coordinates.transform import transform_coordinates
+from ...orbits.orbits import Orbits
+from ...propagator.propagator import Propagator
+from ...time.time import Timestamp
+from ...utils.spice import get_perturber_state
+from .._native_dispatch import (
     _warn_if_analytic_jacobian_mismatches,
-    deprecated,
     native_propagator,
-    native_work_unit,
 )
-from .evaluate import OrbitDeterminationObservations, evaluate_orbits
-from .fitted_orbits import FittedOrbitMembers, FittedOrbits
-from .observation_uncertainty import ObservationUncertaintyModel
+from ..evaluate import OrbitDeterminationObservations
+from ..fitted_orbits import FittedOrbitMembers, FittedOrbits
 
 # Acceptance window for the weak-direction consistency check: the measured
 # delta-chi2 at a 1-sigma displacement along the covariance's widest axis
@@ -36,19 +33,11 @@ _DELTA_CHI2_WINDOW = (0.1, 10.0)
 # weighted least squares (the cost is chi2); "huber" is Huber's M-estimator.
 LossType = Literal["linear", "huber"]
 
-# Huber transition point in units of whitened (1-sigma) residual components:
-# residuals within +/- f_scale are treated quadratically, larger residuals
-# linearly. 1.345 is the classical constant giving 95% asymptotic efficiency
-# for Gaussian errors (Huber 1981; Huber & Ronchetti 2009, sec. 4.5); the
-# value is Rust's ``HUBER_F_SCALE_DEFAULT``.
-HUBER_F_SCALE_DEFAULT = _rust_native.iod_defaults()["huber_f_scale"]
-
 #: The refinement defaults, read once from Rust's config types: ``fit``
 #: (`WhitenedFitConfig`), ``worst_residual`` (`IterativeFitConfig`),
 #: ``cmc2003`` (`Cmc2003FitConfig`, OrbFit's ``reject.def``) and
-#: ``refinement`` (the default loop). The signature defaults of
-#: `fit_least_squares`, `iterative_fit`, `cmc2003_fit_detailed` and
-#: `NativeOrbitFitter` are these values.
+#: ``refinement`` (the default loop). These defaults belong only to the
+#: lower-level algorithm functions; canonical workflows use typed configs.
 OD_DEFAULTS = MappingProxyType(
     {
         key: MappingProxyType(value) if isinstance(value, dict) else value
@@ -56,15 +45,17 @@ OD_DEFAULTS = MappingProxyType(
     }
 )
 
-# Fused native fitter kwargs (bead personal-cmy.7 / personal-dqk): the Rust
-# Gauss-Newton work units accept only these tuning parameters.
+# Huber transition point in units of whitened residual components. The value
+# remains Rust-owned through the low-level fit defaults above.
+HUBER_F_SCALE_DEFAULT = OD_DEFAULTS["fit"]["f_scale"]
+
+# Rust Gauss-Newton solver keyword set used by lower-level algorithm helpers.
 _NATIVE_FIT_KWARGS = {"xtol", "ftol", "max_iterations"}
 
-# Solver settings understood by a propagator's fused whitened work unit
-# (``fit_least_squares_whitened``).
+# Solver settings understood by adam-core's native whitened-fit driver.
 _FUSED_WHITENED_KWARGS = {"xtol", "ftol", "gtol", "max_nfev", "max_iterations"}
 # Keyword arguments the rejection loops forward to `fit_least_squares` that
-# their fused work units (``iterative_fit`` / ``cmc2003_fit``) understand.
+# adam-core's native drivers understand.
 _FUSED_LOOP_KWARGS = _FUSED_WHITENED_KWARGS | {"jacobian", "validate_covariance"}
 
 
@@ -76,7 +67,7 @@ def _fit_settings(
     kwargs: dict,
 ) -> dict:
     """
-    The ``fit_settings`` dict of a propagator's fused whitened work units:
+    The ``fit_settings`` dict for adam-core's native whitened-fit driver:
     the `fit_least_squares` options, tolerances, and independent iteration and
     residual-evaluation budgets. None leaves the evaluation count uncapped.
     """
@@ -369,8 +360,8 @@ def _native_problem(
 ) -> tuple[bytes, bytes, bytes]:
     """The orbit, observed coordinates and observers as the nested Arrow IPC
     bytes the Rust OD drivers decode, with the SPICE backend ready."""
-    from .._rust.arrow import ensure_spice_backend
-    from ..orbits.arrow_bridge import (
+    from ..._rust.arrow import ensure_spice_backend
+    from ...orbits.arrow_bridge import (
         coordinates_to_ipc,
         observers_to_ipc,
         orbits_to_ipc,
@@ -412,8 +403,7 @@ def _probe_covariance(
     loss: str,
     f_scale: float,
 ) -> dict:
-    """Run the Rust covariance probe over ``propagator`` (its own Rust work
-    unit, or the callback route) and return its dict."""
+    """Run adam-core's Rust covariance probe over the provider capsule."""
     from adam_core import _rust_native
 
     method = "2-point" if jacobian_method == "solver" else jacobian_method
@@ -522,7 +512,7 @@ def _fitted_tables_from_native_output(
     weights: npt.NDArray[np.float64],
 ) -> Tuple[FittedOrbits, FittedOrbitMembers]:
     """
-    Wrap the dict a propagator's fused Rust fit work unit returns (state,
+    Wrap the dict adam-core's native Rust fit driver returns (state,
     covariance, solver diagnostics and the evaluation over the full
     observation set) into `FittedOrbits` / `FittedOrbitMembers` without
     further computation. ``weights`` are the members' effective weights in
@@ -530,10 +520,12 @@ def _fitted_tables_from_native_output(
     """
     state = np.asarray(output["state"], dtype=np.float64)
     covariance_matrix = np.asarray(output["covariance"], dtype=np.float64)
-    converged = bool(output["converged"])
+    success = bool(output["success"])
     fitted_orbit = FittedOrbits.from_kwargs(
         orbit_id=orbit.orbit_id,
         object_id=orbit.object_id,
+        physical_parameters=orbit.physical_parameters,
+        non_gravitational_parameters=orbit.non_gravitational_parameters,
         coordinates=CartesianCoordinates.from_kwargs(
             x=state[0:1],
             y=state[1:2],
@@ -553,8 +545,9 @@ def _fitted_tables_from_native_output(
         chi2=[output["chi2"]],
         reduced_chi2=[output["reduced_chi2"]],
         iterations=[output["iterations"]],
-        success=[converged],
-        status_code=[int(output.get("status_code", 1 if converged else 0))],
+        optimizer_iterations=[output["optimizer_iterations"]],
+        success=[success],
+        status_code=[int(output["status_code"])],
     )
     residuals = Residuals.from_kwargs(
         values=np.asarray(output["residual_values"], dtype=np.float64).tolist(),
@@ -567,149 +560,18 @@ def _fitted_tables_from_native_output(
         orbit_id=np.full(len(observations), orbit.orbit_id[0].as_py(), dtype="object"),
         obs_id=observations.id,
         residuals=residuals,
-        solution=~outlier,
+        solution=output["solution"],
         outlier=outlier,
         weight=np.asarray(weights, dtype=np.float64),
     )
     return fitted_orbit, fitted_orbit_members
 
 
-def _fused_whitened_fit(
-    orbit: Orbits,
-    observations: OrbitDeterminationObservations,
-    propagator: Propagator,
-    mask: Optional[pa.Array],
-    jacobian: str,
-    validate_covariance: bool,
-    loss: str,
-    f_scale: float,
-    kwargs: dict,
-) -> Optional[Tuple[FittedOrbits, FittedOrbitMembers]]:
-    """
-    The complete whitened fit as one crossing of a Rust-backed propagator's
-    ``fit_least_squares_whitened`` work unit: solver, Jacobian (analytic /
-    central / 2-point), robust loss, validated covariance and the final
-    evaluation over the full observation set all run natively; the veneer
-    only marshals tables and re-emits the work unit's diagnostics as
-    `RuntimeWarning`s. Returns None when the propagator exposes no such work
-    unit.
-    """
-    fused = native_work_unit(propagator, "fit_least_squares_whitened")
-    if fused is None:
-        return None
-    ignore_mask = (
-        [False] * len(observations) if mask is None else pc.invert(mask).to_pylist()
-    )
-    output = fused(
-        orbit,
-        observations,
-        ignore_mask,
-        fit_settings=_fit_settings(
-            loss, f_scale, jacobian, validate_covariance, kwargs
-        ),
-    )
-    _emit_native_warnings(output)
-    return _fitted_tables_from_native_output(
-        orbit, observations, output, np.asarray(output["weights"], dtype=np.float64)
-    )
-
-
-def _native_fit_least_squares(
-    orbit: Orbits,
-    observations: OrbitDeterminationObservations,
-    observations_to_include: OrbitDeterminationObservations,
-    propagator: Propagator,
-    ignore: Optional[List[str]],
-    mask: Optional[pa.Array],
-    kwargs: dict,
-) -> Optional[Tuple[FittedOrbits, FittedOrbitMembers]]:
-    """
-    Rust-backed Gauss-Newton fit behind a propagator's fused
-    ``fit_least_squares_evaluated`` (one crossing) or composed
-    ``fit_least_squares`` (fit + `evaluate_orbits`) work units (beads
-    personal-cmy.7 / personal-dqk). Returns None when the propagator exposes
-    neither. Only reachable for the legacy forward-difference Jacobian with
-    the linear loss; see `fit_least_squares`.
-    """
-    fused_fit = native_work_unit(propagator, "fit_least_squares_evaluated")
-    if fused_fit is not None:
-        ignore_mask = (
-            pc.is_in(observations.id, pa.array(ignore)).to_pylist()
-            if ignore is not None
-            else [False] * len(observations)
-        )
-        output = fused_fit(orbit, observations, ignore_mask, **kwargs)
-        outlier = np.asarray(output["outlier"], dtype=bool)
-        return _fitted_tables_from_native_output(
-            orbit, observations, output, (~outlier).astype(np.float64)
-        )
-
-    native_fit = native_work_unit(propagator, "fit_least_squares")
-    if native_fit is not None:
-        fitted, _chi2, iterations, converged = native_fit(
-            orbit, observations_to_include, **kwargs
-        )
-        fitted_orbit, fitted_orbit_members = evaluate_orbits(
-            fitted,
-            observations,
-            propagator,
-            parameters=6,
-            ignore=ignore,
-        )
-        fitted_orbit = (
-            fitted_orbit.set_column("iterations", [iterations])
-            .set_column("success", [converged])
-            .set_column("status_code", [1 if converged else 0])
-        )
-        fitted_orbit_members = fitted_orbit_members.set_column(
-            "solution", pc.invert(fitted_orbit_members.outlier)
-        ).set_column(
-            "weight",
-            _member_weights(observations, mask, np.ones(len(observations_to_include))),
-        )
-        return fitted_orbit, fitted_orbit_members
-
-    return None
-
-
-def _validate_native_covariance(
-    fitted_orbit: FittedOrbits,
-    observations_to_include: OrbitDeterminationObservations,
-    propagator: Propagator,
-) -> None:
-    """
-    Run the weak-direction consistency check on the covariance returned by a
-    propagator's legacy fused ``fit_least_squares_evaluated`` work unit (the
-    forward-difference ``inv(J^T J)`` of its Gauss-Newton fitter). The fit is
-    left unchanged: a failed check emits a `RuntimeWarning` instead of
-    replacing the covariance.
-    """
-    covariance_matrix = fitted_orbit.coordinates.covariance.to_matrix()[0]
-    if not np.all(np.isfinite(covariance_matrix)):
-        return
-    state_vector = fitted_orbit.coordinates.values[0]
-    mjd_tdb = float(
-        fitted_orbit.coordinates.time.rescale("tdb")
-        .mjd()
-        .to_numpy(zero_copy_only=False)[0]
-    )
-    _validated_covariance(
-        covariance_matrix,
-        "2-point",
-        state_vector,
-        mjd_tdb,
-        observations_to_include,
-        propagator,
-        0.0,
-    )
-
-
-def _fit_least_squares(
+def fit_least_squares(
     orbit: Orbits,
     observations: OrbitDeterminationObservations,
     propagator: Propagator,
     ignore: Optional[List[str]] = None,
-    observatory_bias_model: Optional[ObservationUncertaintyModel] = None,
     jacobian: Literal[
         "auto", "analytic", "propagator", "central", "2-point"
     ] = OD_DEFAULTS["fit"]["jacobian"],
@@ -732,11 +594,6 @@ def _fit_least_squares(
     ignore : list of str
         List of observation IDs to ignore when fitting the orbit with least squares.
         These observations will be marked as outliers in the fitted orbit members.
-    observatory_bias_model : `~adam_core.orbit_determination.ObservationUncertaintyModel`, optional
-        Observation uncertainty model applied to the observations before fitting
-        (e.g. inflating per-station sigmas from an observatory bias table). Default
-        None leaves the observations unchanged. The model is applied once at this
-        entry point and is not forwarded to nested calls.
     jacobian : {"auto", "analytic", "propagator", "central", "2-point"}, optional
         How the residual Jacobian is obtained for both the solver and the
         solution covariance.
@@ -753,29 +610,24 @@ def _fit_least_squares(
         - ``"analytic"``: the observation partials (topocentric
           spherical projection including light time) chained with the 2-body
           state transition matrix, computed by forward-mode automatic
-          differentiation in the Rust backend and passed to
-          `scipy.optimize.least_squares` as an exact Jacobian callable.
+          differentiation inside adam-core's native trust-region solver.
           Residual values remain full N-body through `propagator`. This
           removes the finite-difference noise that fabricates curvature — and
           hence collapses the covariance — in weakly constrained
           (line-of-sight) directions, and improves convergence along flat
           chi2 valleys.
-        - ``"central"``: the solver uses its default forward differences, and
-          the covariance is recomputed after the fit from a central-difference
+        - ``"central"``: the solver and final covariance use a
+          central-difference
           Jacobian of the whitened residual vector through the full residual
           pipeline. Use this when the arc contains dynamics the 2-body state
           transition matrix cannot represent (e.g. a deep planetary
           encounter).
         - ``"2-point"``: legacy behavior; the covariance is taken from the
           solver's forward-difference Jacobian. Retained for comparison; its
-          covariance is untrustworthy in weakly constrained directions. With
-          ``loss="linear"`` and no scipy-specific ``**kwargs`` this is also the
-          only path that dispatches to a propagator's fused Rust
-          ``fit_least_squares_evaluated`` / ``fit_least_squares`` work units
-          (the Gauss-Newton fitter of the Rust adam-assist backend).
+          covariance is untrustworthy in weakly constrained directions. The
+          canonical adam-core Rust solver implements this path over the same
+          selected propagation capsule as every other Jacobian mode.
 
-        Passing an explicit ``jac`` in ``**kwargs`` overrides this parameter
-        and computes the covariance from the solver-reported Jacobian.
     validate_covariance : bool, optional
         If True (default), measure the actual chi2 change at a 1-sigma
         displacement along the covariance's weakest direction (two extra
@@ -783,10 +635,8 @@ def _fit_least_squares(
         path falls back to the central-difference covariance; other paths
         emit a `RuntimeWarning`. This also serves as the guard against
         planetary encounters inside the arc invalidating the 2-body state
-        transition matrix. On the fused Rust path (``jacobian="2-point"``
-        with a Rust-backed propagator) the check adds three residual
-        evaluations to the single native crossing and warns on failure; pass
-        ``False`` to keep that path to one crossing.
+        transition matrix. The check remains inside the single adam-core
+        native workflow call; pass ``False`` to omit the extra predictions.
     loss : {"linear", "huber"}, optional
         Loss applied to the whitened residual components.
 
@@ -799,8 +649,7 @@ def _fit_least_squares(
           growing with its residual. No observation is removed: every
           observation stays in the solution with an iteratively-reweighted
           least-squares weight of ``min(1, f_scale / |r|)`` per component,
-          reported on the members (see Notes). Requires
-          ``method='trf'`` (default) or ``'dogbox'``.
+          reported on the members (see Notes).
     f_scale : float, optional
         Huber transition point in units of whitened (1-sigma) residual
         components. Default `HUBER_F_SCALE_DEFAULT` (1.345), the classical
@@ -808,15 +657,16 @@ def _fit_least_squares(
         Ignored for ``loss="linear"``.
     **kwargs
         Solver settings forwarded to the Rust driver: ``xtol``, ``ftol``,
-        ``gtol`` (default 1e-12 each, scipy's stopping rules), ``max_iterations``
+        ``gtol`` (default 1e-12 each, using the documented native stopping rules),
+        ``max_iterations``
         (positive integer, default 100: optimizer iterations, one Jacobian
         each), and ``max_nfev`` (positive integer or None, default None:
-        scipy's ``nfev``, the initial residual vector plus every trial step,
-        accepted or rejected). Residual evaluations spent on finite-difference
-        Jacobians (six forward or twelve central per iteration) are not
-        budget, as in ``scipy.optimize.least_squares(method="trf")``; they
-        are still reported in the ``iterations`` column. Final covariance
-        calculation/validation and fit reporting are outside both limits.
+        every residual-vector evaluation: the initial state, each accepted or
+        rejected trial, and finite-difference Jacobian columns (six forward or
+        twelve central per iteration). The ``iterations`` column reports that
+        count and ``optimizer_iterations`` reports completed Jacobian/step
+        iterations. Final covariance calculation/validation and fit reporting
+        are outside both limits.
         Any other keyword raises a `ValueError`: the fit runs natively and no
         longer forwards arguments to `scipy.optimize.least_squares`.
 
@@ -832,9 +682,8 @@ def _fit_least_squares(
 
     Notes
     -----
-    **Solver contract.** The optimizer is the trust-region Gauss-Newton
-    method of ``scipy.optimize.least_squares(method="trf", x_scale="jac")``
-    without bounds, run natively: parameters are scaled by their Jacobian
+    **Solver contract.** The optimizer is adam-core's native unbounded
+    trust-region Gauss-Newton method. Parameters are scaled by their Jacobian
     column norms, each iteration takes the exact trust-region step of the
     scaled Gauss-Newton model, a step is accepted when the cost decreases,
     and the region shrinks fourfold on a poor actual-to-predicted reduction
@@ -854,8 +703,10 @@ def _fit_least_squares(
     minimum (see `Propagator.two_body_dynamics`); ``jacobian="central"`` is
     exact for any propagator. The legacy ``iterations`` output column records
     every solver residual-vector evaluation, including numerical Jacobians,
-    rather than optimizer iterations. Rejection loops receive a fresh budget
-    for each fit.
+    rather than optimizer iterations; ``optimizer_iterations`` reports the
+    latter. Approximate/exact propagator-Jacobian phases and analytic-to-central
+    fallback share the remaining budgets. Rejection loops receive a fresh
+    budget for each distinct fit.
 
     With ``loss="huber"`` the reported ``chi2`` / ``reduced_chi2`` remain the
     plain (unweighted) chi2 of the included observations, so they stay
@@ -867,6 +718,8 @@ def _fit_least_squares(
     weak-direction consistency check probes the robust cost instead of chi2.
     """
     assert len(orbit) == 1, "Only one orbit can be differentially corrected"
+    if np.isfinite(observations.coordinates.rho.to_numpy(zero_copy_only=False)).any():
+        raise ValueError("orbit determination requires angular observations")
     _validate_loss(loss, f_scale)
     if jacobian not in ("auto", "analytic", "propagator", "central", "2-point"):
         raise ValueError(
@@ -874,17 +727,13 @@ def _fit_least_squares(
             f"'2-point'; got {jacobian!r}"
         )
 
-    if observatory_bias_model is not None:
-        observations = observatory_bias_model.apply(observations)
-
     # TODO: Investigate whether we want to add fitting for the epoch as well
     # Set up least squares problem
-    if ignore is not None:
-        mask = pc.invert(pc.is_in(observations.id, pa.array(ignore)))
-        observations_to_include = observations.apply_mask(mask)
-    else:
-        mask = None
-        observations_to_include = observations
+    mask = (
+        pc.invert(pc.is_in(observations.id, pa.array(ignore)))
+        if ignore is not None
+        else None
+    )
 
     unsupported = set(kwargs) - _FUSED_WHITENED_KWARGS - _NATIVE_FIT_KWARGS
     if unsupported:
@@ -896,48 +745,8 @@ def _fit_least_squares(
 
     _warn_if_analytic_jacobian_mismatches(propagator, jacobian)
 
-    # Rust-backed propagators expose the complete whitened fit as one native
-    # crossing (``fit_least_squares_whitened``): every Jacobian option, both
-    # losses, the validated covariance and the final evaluation.
-    fused = _fused_whitened_fit(
-        orbit,
-        observations,
-        propagator,
-        mask,
-        jacobian,
-        validate_covariance,
-        loss,
-        f_scale,
-        kwargs,
-    )
-    if fused is not None:
-        return fused
-
-    # Legacy forward-difference path on a Rust-backed propagator that exposes
-    # only the older ``fit_least_squares_evaluated`` / ``fit_least_squares``
-    # work units (beads personal-cmy.7 / personal-dqk). The default
-    # analytic-Jacobian and robust-loss paths deliberately bypass it: those
-    # work units use the same forward-difference Jacobian whose covariance the
-    # analytic path exists to correct.
-    if jacobian == "2-point" and loss == "linear" and set(kwargs) <= _NATIVE_FIT_KWARGS:
-        native = _native_fit_least_squares(
-            orbit,
-            observations,
-            observations_to_include,
-            propagator,
-            ignore,
-            mask,
-            kwargs,
-        )
-        if native is not None:
-            if validate_covariance:
-                _validate_native_covariance(
-                    native[0], observations_to_include, propagator
-                )
-            return native
-
-    # Every other propagator: the same Rust driver, driving the propagator's
-    # own ``generate_ephemeris`` through the callback route.
+    # adam-core owns the complete native fit.  The backend contributes only
+    # its capsule-backed propagation and optional derivative capabilities.
     from adam_core import _rust_native
 
     ignore_mask = (
@@ -957,7 +766,7 @@ def _fit_least_squares(
     )
 
 
-def _iterative_fit(
+def iterative_fit(
     orbit: Orbits,
     observations: OrbitDeterminationObservations,
     propagator: Propagator,
@@ -967,7 +776,6 @@ def _iterative_fit(
     contamination_percentage: float = OD_DEFAULTS["worst_residual"][
         "contamination_percentage"
     ],
-    observatory_bias_model: Optional[ObservationUncertaintyModel] = None,
     loss: LossType = OD_DEFAULTS["fit"]["loss"],
     f_scale: float = HUBER_F_SCALE_DEFAULT,
     **kwargs,
@@ -1001,11 +809,6 @@ def _iterative_fit(
     contamination_percentage : float, optional
         Maximum percentage of observations that may be rejected as outliers.
         Range is [0, 100]. Default is 20.0.
-    observatory_bias_model : `~adam_core.orbit_determination.ObservationUncertaintyModel`, optional
-        Observation uncertainty model applied to the observations before fitting
-        (e.g. inflating per-station sigmas from an observatory bias table). Default
-        None leaves the observations unchanged. The model is applied once at this
-        entry point and is not forwarded to nested calls.
     loss : {"linear", "huber"}, optional
         Loss used by every `fit_least_squares` call. ``"huber"`` bounds the
         influence of large residuals by downweighting them instead of (or in
@@ -1034,11 +837,6 @@ def _iterative_fit(
     """
     assert len(orbit) == 1, "Only one orbit can be iteratively fitted"
 
-    if observatory_bias_model is not None:
-        # Applied once here; the inflated observations (not the model) are
-        # passed to the nested fit_least_squares calls below.
-        observations = observatory_bias_model.apply(observations)
-
     unsupported = set(kwargs) - _FUSED_LOOP_KWARGS - _NATIVE_FIT_KWARGS
     if unsupported:
         raise ValueError(
@@ -1062,38 +860,20 @@ def _iterative_fit(
         contamination_percentage=contamination_percentage,
     )
 
-    # Rust-backed propagators run the whole rejection loop in one crossing
-    # (``iterative_fit`` work unit); every other propagator runs the same Rust
-    # loop through the callback route. The facade only wraps the selected pass.
-    fused = native_work_unit(propagator, "iterative_fit")
-    if fused is not None:
-        output = fused(orbit, observations, fit_settings=fit_settings, **loop_settings)
-    else:
-        from adam_core import _rust_native
+    from adam_core import _rust_native
 
-        output = _rust_native.iterative_fit_ipc(
-            native_propagator(propagator),
-            *_native_problem(orbit, observations),
-            fit_settings=fit_settings,
-            **loop_settings,
-        )
+    output = _rust_native.iterative_fit_ipc(
+        native_propagator(propagator),
+        *_native_problem(orbit, observations),
+        fit_settings=fit_settings,
+        **loop_settings,
+    )
     _emit_native_warnings(output)
     return _fitted_tables_from_native_output(
         orbit, observations, output, np.asarray(output["weights"], dtype=np.float64)
     )
 
 
-@deprecated(
-    _fit_least_squares,
-    "refine(orbit, observations, propagator, rejection='none')",
-)
-def fit_least_squares(*args, **kwargs):  # pragma: no cover - replaced by the alias
-    """Deprecated alias of `_fit_least_squares`."""
-
-
-@deprecated(
-    _iterative_fit,
-    "refine(orbit, observations, propagator, rejection='worst_residual')",
-)
-def iterative_fit(*args, **kwargs):  # pragma: no cover - replaced by the alias
-    """Deprecated alias of `_iterative_fit`."""
+# Private implementation aliases retained only for Core's internal stage code.
+_fit_least_squares = fit_least_squares
+_iterative_fit = iterative_fit

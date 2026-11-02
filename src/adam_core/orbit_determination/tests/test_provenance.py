@@ -1,135 +1,75 @@
-"""Run-level OD provenance (`OdProvenance`) on both run_od routes."""
+"""Rust-owned configuration identity and result-schema provenance contracts."""
 
 import json
 
-import pytest
-
-import adam_core
-from adam_core.orbit_determination import NativeOrbitFitter, OdProvenance
-from adam_core.orbit_determination.observation_uncertainty import (
-    PerformanceWeightedModel,
+from ..config import (
+    EvaluationConfig,
+    IodRunConfig,
+    OdConfig,
+    RefinementRunConfig,
+    ResourceBindings,
 )
-from adam_core.orbit_determination.od_orchestration import run_od
-from adam_core.orbit_determination.provenance import (
-    backend_identity,
-    model_descriptor,
-)
-from adam_core.orbit_determination.tests.test_differential_correction import (
-    NativeTwoBodyPropagator,
-    TwoBodyPropagator,
-    make_synthetic_observations,
-)
-from adam_core.orbit_determination.tests.test_observation_uncertainty import (
-    make_bias_table,
-)
+from ..fitted_orbits import OdProvenance, OrbitDeterminationFailures
+from ..observation_pipeline import ObservationPipeline
 
 
-def _record(orbits) -> dict:
-    assert len(orbits) == 1
-    return {
-        name: orbits.provenance.column(name)[0].as_py()
-        for name in OdProvenance.schema.names
-    }
-
-
-@pytest.mark.parametrize(
-    "propagator_class, route",
-    [(TwoBodyPropagator, "composed"), (NativeTwoBodyPropagator, "fused")],
-)
-def test_run_od_records_provenance(propagator_class, route):
-    observations = make_synthetic_observations()
-    model = PerformanceWeightedModel(
-        make_bias_table([{"obs_code": "500", "chi2_per_obs": 1.0}])
-    )
-    orbits, members = run_od(
-        observations,
-        NativeOrbitFitter(propagator_class()),
-        [model],
-        propagator=propagator_class(),
-    )
-    record = _record(orbits)
-    assert record["adam_core_version"] == adam_core.__version__
-    assert record["route"] == route
-    assert record["fitter"].endswith("NativeOrbitFitter")
-    assert record["refinement_backend"] == backend_identity(propagator_class())
-    assert record["iod_backend"] == record["refinement_backend"]
-    settings = json.loads(record["settings"])
-    assert set(settings) == {"iod", "refinement", "fit"}
-    assert settings["iod"]["acceptance"] == "corrected"
-    (descriptor,) = json.loads(record["models"])
-    assert descriptor["type"].endswith("PerformanceWeightedModel")
-    assert all(len(h) == 64 for h in descriptor["tables_sha256"].values())
-    # The IOD's ambiguity reaches the final orbit on both routes.
-    assert record["iod_ambiguous"] is False and record["iod_alternatives"] == 0
-    rejected = sum(members.outlier.to_pylist())
-    assert record["num_rejected"] == rejected
-    assert record["rejected_fraction"] == pytest.approx(rejected / len(members))
-
-
-def test_backend_identity_names_declared_and_python_backends():
-    assert backend_identity(NativeTwoBodyPropagator()) == (
-        "adam_core.tests.native_two_body 0"
-    )
-    assert backend_identity(NativeTwoBodyPropagator) == backend_identity(
-        NativeTwoBodyPropagator()
-    )
-    python = backend_identity(TwoBodyPropagator())
-    assert python.startswith("python:") and "TwoBodyPropagator" in python
-    assert backend_identity(None) is None
-
-
-def test_model_descriptor_hashes_table_content():
-    same = model_descriptor(
-        PerformanceWeightedModel(
-            make_bias_table([{"obs_code": "500", "chi2_per_obs": 4.0}])
-        )
-    )
-    again = model_descriptor(
-        PerformanceWeightedModel(
-            make_bias_table([{"obs_code": "500", "chi2_per_obs": 4.0}])
-        )
-    )
-    other = model_descriptor(
-        PerformanceWeightedModel(
-            make_bias_table([{"obs_code": "500", "chi2_per_obs": 9.0}])
-        )
-    )
-    assert same == again
-    assert same["tables_sha256"] != other["tables_sha256"]
-
-
-def test_other_entry_points_leave_provenance_null():
-    from adam_core.orbit_determination import fit_least_squares
-    from adam_core.orbit_determination.tests.test_differential_correction import (
-        make_initial_guess,
+def config() -> OdConfig:
+    return OdConfig.explicit(
+        observation_pipeline=ObservationPipeline.as_supplied(),
+        iod=IodRunConfig.core_v1(),
+        refinement=RefinementRunConfig.core_v1(),
+        evaluation=EvaluationConfig.six_dimensional(),
+        resources=ResourceBindings({}),
     )
 
-    orbits, _ = fit_least_squares(
-        make_initial_guess(), make_synthetic_observations(), TwoBodyPropagator()
-    )
-    assert orbits.table.column("provenance").null_count == len(orbits)
+
+def test_complete_configuration_provenance_is_canonical_and_path_free() -> None:
+    value = config().provenance
+    encoded = json.dumps(dict(value), sort_keys=True, separators=(",", ":"))
+    assert value["transforms"] == []
+    assert "configuration_sha256" in value
+    assert "/Users/" not in encoded and "/tmp/" not in encoded
 
 
-def test_ambiguous_iod_survives_refinement():
-    from adam_core.orbit_determination.provenance import (
-        carry_iod_provenance,
-        with_iod_provenance,
-    )
+def test_runtime_provenance_schema_contains_complete_identity_fields() -> None:
+    names = set(OdProvenance.schema.names)
+    assert {
+        "adam_core_version",
+        "adam_core_build",
+        "input_fingerprint",
+        "state_fingerprint",
+        "provenance_fingerprint",
+        "route",
+        "iod_provider",
+        "iod_diagnostics",
+        "refinement_provider",
+        "refinement_diagnostics",
+        "evaluation_provider",
+        "evaluation_diagnostics",
+        "configuration",
+        "num_rejected",
+        "rejected_fraction",
+    } <= names
 
-    observations = make_synthetic_observations()
-    orbits, _ = run_od(
-        observations,
-        NativeOrbitFitter(TwoBodyPropagator()),
-        None,
-        propagator=TwoBodyPropagator(),
-    )
-    iod = with_iod_provenance(orbits, [4, 9])
-    assert _record(iod)["iod_ambiguous"] is True
-    assert _record(iod)["iod_alternatives"] == 2
-    refined = orbits.set_column("provenance", OdProvenance.nulls(len(orbits)))
-    carried = carry_iod_provenance(iod, refined)
-    assert _record(carried)["iod_ambiguous"] is True
-    assert _record(carried)["iod_alternatives"] == 2
-    # A refinement that recorded its own IOD fields keeps them.
-    assert carry_iod_provenance(iod, orbits) is orbits
-    assert _record(orbits)["iod_ambiguous"] is False
+
+def test_batch_scientific_failure_schema_is_typed_and_not_opaque() -> None:
+    assert OrbitDeterminationFailures.schema.names == [
+        "group_id",
+        "orbit_id",
+        "input_orbit_id",
+        "stage",
+        "code",
+        "message",
+        "recoverable",
+        "num_obs",
+        "arc_length",
+        "triplets_tried",
+        "candidates_evaluated",
+        "candidates_failed",
+        "corrections_run",
+        "passes",
+        "n_rejected",
+        "n_recovered",
+        "status_code",
+        "best_state_retained",
+    ]

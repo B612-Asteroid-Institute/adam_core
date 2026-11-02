@@ -22,19 +22,21 @@ implementation; musllinux is deliberately unsupported.
 Stable release line
 -------------------
 
-The current published baseline is ``adam-core==0.6.0``. The patch release is
-``adam-core==0.6.1`` for Python and ``0.6.1`` for all six public Rust crates.
-Release ``0.6.1`` restores fresh Rust 1.87 consumer resolution after the
-upstream ``zip`` project yanked every pre-9 release: kernel wheel extraction
-now uses ``rawzip`` plus the existing pure-Rust ``flate2`` backend. The
-immutable ``v0.6.0`` tag must never be moved or reused; the patch release uses
-``v0.6.1``.
+The current published baseline is ``adam-core==0.6.1``. The next source
+candidate is the breaking ``adam-core==0.7.0`` release for Python and ``0.7.0``
+for all six public Rust crates. Released ``0.6.1`` does not implement the
+propagation-only v2 provider contract and is not compatible with this source
+line. Release ``0.6.1`` remains the immutable Rust 1.87 packaging repair that
+replaced the yanked pre-9 ``zip`` line with ``rawzip`` plus ``flate2``. Neither
+``v0.6.0`` nor ``v0.6.1`` may be moved or reused; ``v0.7.0`` is created only at
+the separately approved stable-publication boundary.
 
-All internal public Rust dependencies use exact ``=0.6.1`` requirements.
-``adam_core_py`` remains an unpublished wheel implementation crate. Rust 1.87
-is the authoritative MSRV; latest stable is compatibility-only. The Python
-wheel contains the Python veneer and compiled ``adam_core._rust_native``
-extension, so Python consumers do not install the component crates directly.
+All internal public Rust dependencies use exact ``=0.7.0`` requirements.
+``adam_core_py`` is also versioned ``0.7.0`` but remains an unpublished wheel
+implementation crate. Rust 1.87 is the authoritative MSRV; latest stable is
+compatibility-only. The Python wheel contains the Python veneer and compiled
+``adam_core._rust_native`` extension, so Python consumers do not install the
+component crates directly.
 
 Trusted publishing
 ------------------
@@ -66,17 +68,20 @@ Release order
 Stable promotion remains separately approval-gated and proceeds in dependency
 order:
 
-#. prepare an unpublished, science-code-unchanged ``adam-assist 0.5.0`` source
-   candidate declaring compatibility with Core ``>=0.6,<0.7``. Its preliminary
-   Cargo lock may select the path-patched, unpublished Core ``0.6.1`` crates
-   solely for paired acceptance; it is not a publication candidate;
-#. accept the exact Core ``0.6.1`` six-crate set and paired 12-wheel matrix;
+#. prepare and review the compatible ``adam-assist 0.6.0`` source candidate,
+   declaring compatibility with Core ``>=0.7,<0.8`` and implementing the exact
+   propagation-only v2 contract. Its final commit is not yet available and
+   must not be guessed or added to Core CI. A preliminary Cargo lock may select
+   the path-patched, unpublished Core ``0.7.0`` crates solely for paired
+   acceptance; it is not a publication candidate;
+#. accept the exact Core ``0.7.0`` six-crate set and paired 12-wheel matrix
+   using that reviewed, exact ASSIST commit;
 #. publish and verify the six Core crates in dependency order;
 #. publish and verify the exact Core Python wheel set;
 #. finalize the ASSIST Python/Rust requirements and frozen registry-only locks
-   selected at public Core ``0.6.1``;
-#. accept, publish, and verify ``adam_assist 0.5.0`` and the exact
-   ``adam-assist==0.5.0`` wheel set; and
+   selected at public Core ``0.7.0``;
+#. accept, publish, and verify ``adam_assist 0.6.0`` and the exact
+   ``adam-assist==0.6.0`` wheel set; and
 #. run clean no-lock Cargo 1.87/latest-stable and clean pip/current-uv
    propagation smoke tests from registry-only environments.
 

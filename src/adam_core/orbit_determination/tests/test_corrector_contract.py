@@ -4,8 +4,6 @@ scipy's trust-region-reflective solver without bounds, it never reports
 convergence on a non-finite derivative, and its status codes mean one thing.
 """
 
-import warnings
-
 import numpy as np
 import numpy.testing as npt
 import pytest
@@ -16,7 +14,7 @@ from adam_core.coordinates.origin import Origin
 from adam_core.orbits import Orbits
 from adam_core.time import Timestamp
 
-from ..differential_correction import (
+from ..algorithms.fitting import (
     _analytic_jacobian,
     _analytic_jacobian_terms,
     fit_least_squares,
@@ -100,21 +98,17 @@ def test_native_solver_reaches_scipy_trf_minimum(perturbation_scale: float) -> N
     npt.assert_allclose(state[3:], reference.x[3:], atol=1e-12)
 
 
-def test_non_finite_jacobian_is_not_success() -> None:
+def test_python_nan_jacobian_provider_is_refused() -> None:
     observations = make_synthetic_observations()
     seed = TRUTH_STATE + np.array([1e-5, -8e-6, 5e-6, 1e-8, -1e-8, 5e-9])
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore", RuntimeWarning)
-        fitted, _ = fit_least_squares(
+    with pytest.raises(TypeError, match="not covered"):
+        fit_least_squares(
             orbit_from_state(seed),
             observations,
             NanJacobianPropagator(),
             jacobian="central",
             validate_covariance=False,
         )
-    assert not fitted.success[0].as_py()
-    assert fitted.status_code[0].as_py() == -2
-    npt.assert_array_equal(fitted_state(fitted), seed)
 
 
 def test_limits_report_status_zero_without_success() -> None:
@@ -135,8 +129,9 @@ def test_limits_report_status_zero_without_success() -> None:
     assert fitted.status_code[0].as_py() == 0
     assert fitted.iterations[0].as_py() == 2  # initial evaluation + one trial
 
-    # max_nfev bounds trials, not finite-difference columns: one central
-    # Jacobian (12 evaluations) plus the initial and one trial evaluation.
+    # max_nfev bounds every residual evaluation. A central Jacobian is
+    # atomic (12 columns), so it is not started when only one evaluation
+    # remains after the initial residual.
     fitted, _ = fit_least_squares(
         orbit_from_state(seed),
         observations,
@@ -150,4 +145,5 @@ def test_limits_report_status_zero_without_success() -> None:
     )
     assert not fitted.success[0].as_py()
     assert fitted.status_code[0].as_py() == 0
-    assert fitted.iterations[0].as_py() == 14
+    assert fitted.iterations[0].as_py() == 1
+    assert fitted.optimizer_iterations[0].as_py() == 0

@@ -39,9 +39,10 @@
 //! source; the Python signature defaults are read from these (`IOD_DEFAULTS`).
 //!
 //! * **Ordering.** Observations are searched in a canonical order (epoch,
-//!   then station code, then input row), whatever order the caller supplies;
-//!   every output array keeps the caller's order. Identical inputs give
-//!   identical results.
+//!   station code, complete observed/observer physical row content, then the
+//!   input index only for physically identical ties), whatever order the
+//!   caller supplies. Every output array and candidate row index is mapped
+//!   back to the caller's order.
 //! * **Inputs.** Gauss takes equatorial directions and heliocentric
 //!   ecliptic observer positions; ecliptic observations and equatorial
 //!   observers are rotated, observers not centred on the Sun are refused.
@@ -60,7 +61,9 @@
 //!   search visits windows (densest 10 d, densest 30 d, last 30 d, first
 //!   30 d, whole arc) and in each walks (first, last) pairs by distance of
 //!   their span from 6 days, one triplet per pair and per pair of nights,
-//!   lazily, up to 32 triplets.
+//!   lazily, stopping at the explicit `max_triplets` budget (when omitted,
+//!   exactly `3 * (max_outliers + 1)`)
+//!   without materializing or globally sorting all `C(n, 3)` combinations.
 //! * **Velocity** ([`VelocityMethod`]). `Auto` by default:
 //!   Herrick-Gibbs when consecutive position vectors are within 5 degrees
 //!   (Vallado 2013, sec. 7.5.2), Gibbs otherwise.
@@ -69,7 +72,8 @@
 //!   Gronchi 2009): real to a relative 1e-6 (so a near-double root is kept),
 //!   de-duplicated, with all three topocentric ranges at least 1e-4 au (the
 //!   spurious zero-range root and negative ranges are dropped). When one
-//!   converges, its sibling roots are corrected too.
+//!   converges, every sibling root is corrected too, including siblings for
+//!   which `Auto` independently resolved a different velocity method.
 //! * **Acceptance** ([`IodAcceptance::Corrected`], [`CorrectionConfig`]).
 //!   Candidates are corrected in increasing prefit reduced chi2, each raw
 //!   Gauss orbit scored on the observations of its first stage
@@ -100,9 +104,15 @@
 //!   Micheli 2015) instead of an orbit; when no Gauss candidate converges,
 //!   the 3 best ranging orbits are corrected like Gauss candidates. Ranging
 //!   runs on arcs of at most 5 days (`RangingConfig::max_arc_days`).
-//! * **Continuation and failure.** A candidate whose prediction fails is
-//!   counted and skipped; caller errors propagate. When nothing is accepted
-//!   the result says why (`not_found_reason`), naming the last stall.
+//! * **Continuation and failure.** Zero contamination disables rejection,
+//!   not search: later roots and triplets still run. Candidate-local row
+//!   failures are skipped and retained as typed `candidate_failures`; fatal
+//!   request/backend/protocol errors propagate. When nothing is accepted the
+//!   result summarizes the bounded search and all typed diagnostics remain
+//!   available.
+//! * **Legacy prefit.** When selected explicitly, roots and triplets use the
+//!   same canonical bounded traversal; the first candidate satisfying both
+//!   reduced-chi2 and `min_arc_length` (after any bounded rejection) wins.
 //! * **Evidence.** On the first solutions of 126 walk-forward objects
 //!   (ASSIST, MPC observations, 2026-10-14) this policy seeded 116 of 122
 //!   against 16 for the legacy `combinations` + prefit gate and 114 for the
@@ -197,7 +207,7 @@ where
         config,
         predict,
     )
-    .map_err(PropagationError::Backend)
+    .map_err(PropagationError::RowFailure)
 }
 
 /// Final `evaluate_orbits`-style statistics for one fitted state against the
@@ -280,18 +290,19 @@ pub fn evaluate_orbit(
     }
     let observed_flat = spherical_flat(observed, "observed")?;
     let observed_cov = observed_covariance_flat(observed)?;
-    let times_mjd = observed_times_mjd(observed)?;
+    let times_mjd = predictor.dynamical_times_mjd(observed)?;
     let geometry = OrbitGeometry::from_orbit(orbit)?;
     let predicted = predictor
         .predict_spherical(&[state], &geometry, observers)?
-        .map_err(PropagationError::Backend)?;
+        .map_err(PropagationError::RowFailure)?;
     let residuals = full_residuals(&observed_flat, &observed_cov, &predicted, n)?;
     let included: Vec<bool> = ignore.iter().map(|&flag| !flag).collect();
     let num_included = included.iter().filter(|&&keep| keep).count();
     if num_included == 0 {
-        return Err(PropagationError::InvalidRequest(
-            "zero-size array to reduction operation maximum which has no identity".to_string(),
-        ));
+        return Err(PropagationError::GroupScientific {
+            code: super::GroupScientificFailureCode::NoIncludedObservations,
+            message: "orbit evaluation requires at least one included observation".to_string(),
+        });
     }
     let (arc_length, _, _) = masked_arc_length(&times_mjd, &included);
     let mut chi2_total = 0.0;
@@ -377,13 +388,15 @@ where
 // ---------------------------------------------------------------------------
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum OdMethod {
+#[allow(dead_code)]
+pub(crate) enum OdMethod {
     Central,
     Finite,
 }
 
 #[derive(Debug, Clone, Copy)]
-pub struct OdConfig {
+#[allow(dead_code)]
+pub(crate) struct OdConfig {
     pub rchi2_threshold: f64,
     pub min_obs: usize,
     pub min_arc_length: f64,
@@ -395,8 +408,38 @@ pub struct OdConfig {
 
 /// Full `od()` product for one orbit. When `found` is false the public
 /// veneer emits empty `FittedOrbits`/`FittedOrbitMembers` tables.
+#[allow(dead_code)]
+impl OdConfig {
+    pub fn validate(&self) -> Result<(), String> {
+        if !self.rchi2_threshold.is_finite() || self.rchi2_threshold <= 0.0 {
+            return Err("rchi2_threshold must be positive and finite".to_string());
+        }
+        if self.min_obs < 3 {
+            return Err("min_obs must be at least 3".to_string());
+        }
+        if !self.min_arc_length.is_finite() || self.min_arc_length < 0.0 {
+            return Err("min_arc_length must be finite and non-negative".to_string());
+        }
+        if !self.contamination_percentage.is_finite()
+            || !(0.0..=100.0).contains(&self.contamination_percentage)
+        {
+            return Err(
+                "contamination_percentage must be finite and between 0 and 100".to_string(),
+            );
+        }
+        if !self.delta.is_finite() || self.delta <= 0.0 {
+            return Err("delta must be positive and finite".to_string());
+        }
+        if self.max_iter == 0 {
+            return Err("max_iter must be positive".to_string());
+        }
+        Ok(())
+    }
+}
+
 #[derive(Debug, Clone)]
-pub struct OdOutput {
+#[allow(dead_code)]
+pub(crate) struct OdOutput {
     pub found: bool,
     pub state: [f64; 6],
     pub covariance: [f64; 36],
@@ -415,6 +458,7 @@ pub struct OdOutput {
     pub outlier: Vec<bool>,
 }
 
+#[allow(dead_code)]
 impl OdOutput {
     fn not_found(n: usize, iterations: usize) -> Self {
         Self {
@@ -436,8 +480,43 @@ impl OdOutput {
     }
 }
 
+#[allow(dead_code)]
 const OD_DELTA_INCREASE_FACTOR: f64 = 5.0;
+#[allow(dead_code)]
 const OD_DELTA_DECREASE_FACTOR: f64 = 100.0;
+
+#[allow(dead_code)]
+fn prefit_step_is_acceptable(improved: bool, arc_length: f64, min_arc_length: f64) -> bool {
+    improved && arc_length >= min_arc_length
+}
+
+#[allow(dead_code)]
+fn retained_arc_allows_retry(times: &[f64], included: &[bool], min_arc_length: f64) -> bool {
+    let (arc_length, _, _) = masked_arc_length(times, included);
+    arc_length >= min_arc_length
+}
+
+fn prefit_outlier_arc_length(
+    times: &[f64],
+    time_order: &[usize],
+    first_kept: usize,
+    last_kept: usize,
+) -> f64 {
+    if first_kept < time_order.len() {
+        times[time_order[last_kept]] - times[time_order[first_kept]]
+    } else {
+        0.0
+    }
+}
+
+fn prefit_outlier_is_acceptable(
+    reduced_chi2: f64,
+    threshold: f64,
+    arc_length: f64,
+    min_arc_length: f64,
+) -> bool {
+    reduced_chi2 <= threshold && arc_length >= min_arc_length
+}
 
 /// The legacy `adam_core.orbit_determination.od` differential-correction
 /// loop for one orbit, executed entirely in Rust over the backend-generic
@@ -447,7 +526,8 @@ const OD_DELTA_DECREASE_FACTOR: f64 = 100.0;
 /// the weight/RHS rows are the first `num_obs` unmasked rows while the
 /// partials use mask-filtered rows.
 #[allow(clippy::too_many_arguments)]
-pub fn od_fit_barycentric<P, T>(
+#[allow(dead_code)]
+pub(crate) fn od_fit_barycentric<P, T>(
     propagator: &P,
     orbit: &OrbitBatch,
     observed: &CoordinateBatch,
@@ -461,6 +541,27 @@ where
     P: Propagator,
     T: OriginTranslationProvider,
 {
+    let predictor = PropagatorPredictor {
+        propagator,
+        options,
+        provider,
+        translation_provider,
+    };
+    od_fit_with(&predictor, orbit, observed, observers, config)
+}
+
+#[allow(dead_code)]
+fn od_fit_with(
+    predictor: &dyn SphericalPredictor,
+    orbit: &OrbitBatch,
+    observed: &CoordinateBatch,
+    observers: &ObserverBatch,
+    config: &OdConfig,
+) -> PropagationResultValue<OdOutput> {
+    config
+        .validate()
+        .map_err(PropagationError::InvalidRequest)?;
+    validate_od_observations(observed, observers, true)?;
     let n_all = observed.len();
     if observers.len() != n_all {
         return Err(PropagationError::InvalidRequest(
@@ -470,7 +571,7 @@ where
     let geometry = OrbitGeometry::from_orbit(orbit)?;
     let observed_flat = spherical_flat(observed, "observed")?;
     let observed_cov = observed_covariance_flat(observed)?;
-    let times_mjd = observed_times_mjd(observed)?;
+    let times_mjd = predictor.dynamical_times_mjd(observed)?;
     // sigmas[:, 1:3]: sqrt of covariance diagonal entries 1 and 2.
     let sigma_lon_lat: Vec<[f64; 2]> = (0..n_all)
         .map(|row| {
@@ -503,16 +604,9 @@ where
     let mut outliers_tried = 0_usize;
 
     // Initial residuals for the input orbit.
-    let initial_predicted = predict_spherical(
-        propagator,
-        &[geometry.state],
-        &geometry,
-        observers,
-        options,
-        provider,
-        translation_provider,
-    )?
-    .map_err(PropagationError::Backend)?;
+    let initial_predicted = predictor
+        .predict_spherical(&[geometry.state], &geometry, observers)?
+        .map_err(PropagationError::RowFailure)?;
     let initial_residuals =
         full_residuals(&observed_flat, &observed_cov, &initial_predicted, n_all)?;
     // Legacy quirk: the normal-equation RHS uses these initial residual
@@ -557,16 +651,9 @@ where
 
         // Nominal ephemeris (legacy computes it every iteration; the finite
         // branch consumes it).
-        let nominal = predict_spherical(
-            propagator,
-            &[current_state],
-            &geometry,
-            observers,
-            options,
-            provider,
-            translation_provider,
-        )?
-        .map_err(PropagationError::Backend)?;
+        let nominal = predictor
+            .predict_spherical(&[current_state], &geometry, observers)?
+            .map_err(PropagationError::RowFailure)?;
 
         // Batched perturbed candidates: plus block, then minus block.
         let mut deltas_diag = [0.0_f64; 6];
@@ -587,16 +674,9 @@ where
                 pert_states.push(state);
             }
         }
-        let perturbed = predict_spherical(
-            propagator,
-            &pert_states,
-            &geometry,
-            observers,
-            options,
-            provider,
-            translation_provider,
-        )?
-        .map_err(PropagationError::Backend)?;
+        let perturbed = predictor
+            .predict_spherical(&pert_states, &geometry, observers)?
+            .map_err(PropagationError::RowFailure)?;
 
         // Partial derivatives: (num_obs, 2, 6) with mask-filtered rows.
         let masked_rows: Vec<usize> = (0..n_all).filter(|&row| ids_mask[row]).collect();
@@ -710,16 +790,9 @@ where
             continue;
         }
 
-        let predicted_iter = predict_spherical(
-            propagator,
-            &[state_iter],
-            &geometry,
-            observers,
-            options,
-            provider,
-            translation_provider,
-        )?
-        .map_err(PropagationError::Backend)?;
+        let predicted_iter = predictor
+            .predict_spherical(&[state_iter], &geometry, observers)?
+            .map_err(PropagationError::RowFailure)?;
         let residuals_iter = full_residuals(&observed_flat, &observed_cov, &predicted_iter, n_all)?;
         let chi2_total_iter: f64 = (0..n_all)
             .filter(|&row| ids_mask[row])
@@ -729,7 +802,11 @@ where
         let included = ids_mask.clone();
         let (arc_length, _, _) = masked_arc_length(&times_mjd, &included);
 
-        if (rchi2_iter < rchi2_prev || first_solution) && arc_length >= config.min_arc_length {
+        if prefit_step_is_acceptable(
+            rchi2_iter < rchi2_prev || first_solution,
+            arc_length,
+            config.min_arc_length,
+        ) {
             first_solution = false;
             current_state = state_iter;
             current_cov = covariance_matrix;
@@ -766,9 +843,10 @@ where
             for (row, slot) in ids_mask.iter_mut().enumerate() {
                 *slot = !outlier_indices.contains(&row);
             }
-            let (arc_length_outlier, _, _) = masked_arc_length(&times_mjd, &ids_mask);
+            let retained_arc_is_long_enough =
+                retained_arc_allows_retry(&times_mjd, &ids_mask, config.min_arc_length);
             outliers_tried += 1;
-            if arc_length_outlier >= config.min_arc_length {
+            if retained_arc_is_long_enough {
                 max_iter_i = config.max_iter * (outliers_tried + 1);
             }
         }
@@ -908,7 +986,7 @@ where
         translation_provider,
     )? {
         Ok(values) => values,
-        Err(message) => return Err(PropagationError::Backend(message)),
+        Err(message) => return Err(PropagationError::RowFailure(message)),
     };
     let mut residual_cols = residual_lon_lat_columns(&observed_flat, &nominal, n);
     let mut rms_initial = weighted_rms(&residual_cols, &weights, n);
@@ -1002,16 +1080,18 @@ where
         let mut partials = vec![[[0.0_f64; 6]; 2]; n];
         for index in 0..6 {
             let plus = &perturbed[index * n * 6..(index + 1) * n * 6];
-            let columns;
-            let denom;
-            if config.use_central_difference {
+            let (columns, denom) = if config.use_central_difference {
                 let minus = &perturbed[(6 + index) * n * 6..(6 + index + 1) * n * 6];
-                columns = residual_lon_lat_columns(plus, minus, n);
-                denom = 2.0 * d_per_param[index];
+                (
+                    residual_lon_lat_columns(plus, minus, n),
+                    2.0 * d_per_param[index],
+                )
             } else {
-                columns = residual_lon_lat_columns(plus, &nominal, n);
-                denom = d_per_param[index];
-            }
+                (
+                    residual_lon_lat_columns(plus, &nominal, n),
+                    d_per_param[index],
+                )
+            };
             for row in 0..n {
                 partials[row][0][index] = columns[row * 2] / denom;
                 partials[row][1][index] = columns[row * 2 + 1] / denom;
@@ -1260,16 +1340,46 @@ pub struct SpanSearchConfig {
     /// Pairs spanning less than this are never used (0 = any two distinct
     /// epochs).
     pub min_span_days: f64,
-    /// Pairs spanning more than this are never used (infinite = no bound).
+    /// Pairs spanning more than this are never used (`f64::MAX` = no practical bound).
     pub max_span_days: f64,
     /// Lengths of the two densest-window searches, in this order.
     pub dense_window_days: [f64; 2],
     /// Length of the last- and first-window searches.
     pub edge_window_days: f64,
-    /// Triplet budget when `IodConfig::max_triplets` is None: the order of
-    /// the study ladder's candidate count (two triplets x two selections x
-    /// up to four windows, times the roots).
+    /// Historical span-search triplet budget. A run-level
+    /// `IodConfig::max_triplets` overrides it; otherwise span search uses this
+    /// value while combinations uses `3 * (max_outliers + 1)`.
     pub max_triplets: usize,
+}
+
+impl SpanSearchConfig {
+    pub fn validate(&self) -> Result<(), String> {
+        for (name, value) in [
+            ("target_span_days", self.target_span_days),
+            ("min_span_days", self.min_span_days),
+            ("max_span_days", self.max_span_days),
+            ("dense_window_days[0]", self.dense_window_days[0]),
+            ("dense_window_days[1]", self.dense_window_days[1]),
+            ("edge_window_days", self.edge_window_days),
+        ] {
+            if !value.is_finite() || value < 0.0 {
+                return Err(format!("spans.{name} must be finite and non-negative"));
+            }
+        }
+        if self.target_span_days == 0.0 {
+            return Err("spans.target_span_days must be positive".to_string());
+        }
+        if self.dense_window_days.contains(&0.0) || self.edge_window_days == 0.0 {
+            return Err("span window lengths must be positive".to_string());
+        }
+        if self.min_span_days > self.max_span_days {
+            return Err("spans.min_span_days must not exceed max_span_days".to_string());
+        }
+        if self.max_triplets == 0 {
+            return Err("spans.max_triplets must be positive".to_string());
+        }
+        Ok(())
+    }
 }
 
 impl Default for SpanSearchConfig {
@@ -1277,7 +1387,7 @@ impl Default for SpanSearchConfig {
         Self {
             target_span_days: 6.0,
             min_span_days: 0.0,
-            max_span_days: f64::INFINITY,
+            max_span_days: f64::MAX,
             dense_window_days: [10.0, 30.0],
             edge_window_days: 30.0,
             max_triplets: 32,
@@ -1401,6 +1511,30 @@ pub struct CorrectionConfig {
     pub prefit_scope: PrefitScope,
 }
 
+impl CorrectionConfig {
+    pub fn validate(&self) -> Result<(), String> {
+        for (name, value) in [
+            ("max_corrections", self.max_corrections),
+            ("max_converged", self.max_converged),
+            ("max_stages", self.max_stages),
+        ] {
+            if value == 0 {
+                return Err(format!("correction.{name} must be positive"));
+            }
+        }
+        if self.max_converged > self.max_corrections {
+            return Err("correction.max_converged must not exceed max_corrections".to_string());
+        }
+        if self.min_stage_obs < 3 {
+            return Err("correction.min_stage_obs must be at least 3".to_string());
+        }
+        if !self.growth.is_finite() || self.growth <= 1.0 {
+            return Err("correction.growth must be finite and greater than 1".to_string());
+        }
+        Ok(())
+    }
+}
+
 impl Default for CorrectionConfig {
     fn default() -> Self {
         Self {
@@ -1426,11 +1560,18 @@ pub struct IodConfig {
     pub mu: f64,
     pub speed_of_light: f64,
     /// Upper bound on the number of candidate triplets searched. `None`
-    /// keeps the legacy budget `3 * (max_outliers + 1)`, which couples the
-    /// search to `contamination_percentage`; `Some(k)` searches at most `k`
-    /// triplets whatever the contamination percentage (which then only
-    /// sets the outlier allowance).
+    /// keeps each method's historical default: `spans.max_triplets` for span
+    /// search and `3 * (max_outliers + 1)` for combinations. `Some(k)`
+    /// overrides either method and searches at most `k` triplets.
     pub max_triplets: Option<usize>,
+    /// Hard cap on useful distinct endpoint/night pairs inspected while
+    /// selecting triplets. Independent of contamination allowance.
+    pub max_pair_visits: usize,
+    /// Hard cap on raw endpoint candidates inspected by span traversal,
+    /// including candidates skipped for an already-used night pair.
+    pub max_raw_pair_visits: usize,
+    /// Hard cap on middle candidates inspected by combinations traversal.
+    pub max_middle_visits: usize,
     /// Velocity method of the Gauss candidates; `Auto` picks Gibbs or
     /// Herrick-Gibbs per root by the separation of its position vectors.
     pub velocity_method: VelocityMethod,
@@ -1449,6 +1590,50 @@ pub struct IodConfig {
     pub ranging: super::od_ranging::RangingConfig,
 }
 
+impl IodConfig {
+    /// Validate the complete IOD/search/correction/ranging policy.
+    pub fn validate(&self) -> Result<(), String> {
+        if self.min_obs < 3 {
+            return Err("min_obs must be at least 3".to_string());
+        }
+        if !self.min_arc_length.is_finite() || self.min_arc_length < 0.0 {
+            return Err("min_arc_length must be finite and non-negative".to_string());
+        }
+        if !self.contamination_percentage.is_finite()
+            || !(0.0..=100.0).contains(&self.contamination_percentage)
+        {
+            return Err(
+                "contamination_percentage must be finite and between 0 and 100".to_string(),
+            );
+        }
+        if !self.rchi2_threshold.is_finite() || self.rchi2_threshold <= 0.0 {
+            return Err("rchi2_threshold must be positive and finite".to_string());
+        }
+        if !self.mu.is_finite() || self.mu <= 0.0 {
+            return Err("mu must be positive and finite".to_string());
+        }
+        if !self.speed_of_light.is_finite() || self.speed_of_light <= 0.0 {
+            return Err("speed_of_light must be positive and finite".to_string());
+        }
+        if self.max_triplets == Some(0) {
+            return Err("max_triplets must be positive or None".to_string());
+        }
+        if self.max_pair_visits == 0 {
+            return Err("max_pair_visits must be positive".to_string());
+        }
+        if self.max_raw_pair_visits == 0 {
+            return Err("max_raw_pair_visits must be positive".to_string());
+        }
+        if self.max_middle_visits == 0 {
+            return Err("max_middle_visits must be positive".to_string());
+        }
+        self.spans.validate()?;
+        self.correction.validate()?;
+        self.ranging.validate()?;
+        Ok(())
+    }
+}
+
 impl Default for IodConfig {
     /// `NativeOrbitFitter`'s IOD settings: at least six observations over a
     /// day, 20 % contamination, reduced chi2 200, span-bounded triplets with
@@ -1464,6 +1649,9 @@ impl Default for IodConfig {
             mu: IOD_DEFAULT_MU,
             speed_of_light: IOD_DEFAULT_SPEED_OF_LIGHT,
             max_triplets: None,
+            max_pair_visits: 4096,
+            max_raw_pair_visits: 1_048_576,
+            max_middle_visits: 16_384,
             // Herrick-Gibbs where the positions are within 5 degrees
             // (Vallado 2013, sec. 7.5.2), Gibbs otherwise; Herrick-Gibbs beat
             // Gibbs at every span of the 2026-07-28 sweep, often 100x in chi2.
@@ -1649,6 +1837,9 @@ pub struct IodCandidate {
     /// Row-major 6x6 covariance of `corrected_state` from the whole-arc fit
     /// (NaN when singular); used to tell distinct solutions apart.
     pub corrected_covariance: Option<[f64; 36]>,
+    /// Finite symmetric positive-definite covariance retained only for
+    /// multiple-solution comparison. It is never exposed or reused as a seed.
+    pub(super) ambiguity_covariance: Option<[f64; 36]>,
     /// Correction stages run (0 when not corrected).
     pub stages: usize,
     /// Why the correction stopped short of the whole arc, if it did.
@@ -1680,6 +1871,15 @@ impl CandidateSource {
     }
 }
 
+/// One candidate-local prediction failure retained without aborting the IOD
+/// linkage. Row indices are in the caller's observation order.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IodCandidateFailure {
+    pub triplet: [usize; 3],
+    pub root_index: usize,
+    pub message: String,
+}
+
 /// Product of [`run_iod`]: every scored candidate, which one was accepted,
 /// the search counters and the reason when none was.
 #[derive(Debug, Clone)]
@@ -1695,6 +1895,13 @@ pub struct IodResult {
     pub candidates_evaluated: usize,
     /// Candidates skipped because their prediction failed.
     pub candidates_failed: usize,
+    /// Typed, deterministic diagnostics for every skipped candidate.
+    pub candidate_failures: Vec<IodCandidateFailure>,
+    /// Triplet-selection work and whether an explicit cap ended traversal.
+    pub pair_visits: usize,
+    pub raw_pair_visits: usize,
+    pub middle_visits: usize,
+    pub search_cap_exhausted: bool,
     /// Bounded corrections run on candidates (0 until bead a6w.4).
     pub corrections_run: usize,
     /// Why no orbit was accepted; `None` when one was.
@@ -1756,6 +1963,11 @@ impl IodResult {
             triplets_tried: 0,
             candidates_evaluated: 0,
             candidates_failed: 0,
+            candidate_failures: Vec::new(),
+            pair_visits: 0,
+            raw_pair_visits: 0,
+            middle_visits: 0,
+            search_cap_exhausted: false,
             corrections_run: 0,
             not_found_reason: Some(reason),
             ambiguous_with: Vec::new(),
@@ -1767,6 +1979,11 @@ impl IodResult {
         self.triplets_tried = counters.triplets_tried;
         self.candidates_evaluated = counters.candidates_evaluated;
         self.candidates_failed = counters.candidates_failed;
+        self.candidate_failures = counters.candidate_failures.clone();
+        self.pair_visits = counters.pair_visits;
+        self.raw_pair_visits = counters.raw_pair_visits;
+        self.middle_visits = counters.middle_visits;
+        self.search_cap_exhausted = counters.search_cap_exhausted;
         self
     }
 
@@ -1849,6 +2066,11 @@ struct SearchCounters {
     triplets_tried: usize,
     candidates_evaluated: usize,
     candidates_failed: usize,
+    candidate_failures: Vec<IodCandidateFailure>,
+    pair_visits: usize,
+    raw_pair_visits: usize,
+    middle_visits: usize,
+    search_cap_exhausted: bool,
     /// Message of the last candidate prediction failure.
     last_failure: Option<String>,
     /// Lowest reduced chi2 among the scored candidates (before outlier
@@ -1859,8 +2081,9 @@ struct SearchCounters {
 /// Complete legacy `iod()` work unit: triplet selection, fused Gauss
 /// candidate generation, backend ephemeris/residual scoring, outlier trials,
 /// and first-acceptable-candidate selection. Observations are searched in a
-/// canonical order (epoch, then station code, then input row) whatever
-/// order the caller supplies them in; all output member arrays keep the
+/// canonical order (epoch, station, then physical row content) whatever
+/// order the caller supplies them in; the input index only breaks ties between
+/// physically identical rows, and all output member arrays keep the
 /// caller's order.
 #[allow(clippy::too_many_arguments)]
 pub fn iod_fit_barycentric<P, T>(
@@ -1887,16 +2110,17 @@ where
 
 /// [`iod_fit_barycentric`] over any [`SphericalPredictor`].
 ///
-/// The search is deterministic in the caller's row order: observations are
-/// sorted by epoch (integer days and nanoseconds), then station code, then
-/// input row before triplets are selected, and every member array of the
+/// The search is deterministic independently of the caller's row order: observations are
+/// sorted by epoch (integer days and nanoseconds), station code, and complete
+/// physical row content before triplets are selected; input row only breaks
+/// physically identical ties, and every member array of the
 /// output is mapped back to the input order. A zero contamination
 /// percentage only disables outlier removal; a rejected candidate is
 /// followed by the next candidate and the next triplet. A candidate whose
-/// prediction fails (`PropagationError::Backend`, `BackendProtocol`,
-/// `ThreadPool`, including a per-row numerical failure) is counted in
-/// `candidates_failed` and skipped; `InvalidRequest` and `Schema` errors
-/// are caller errors and propagate. When every candidate failed the result
+/// prediction reports an in-band `PropagationError::RowFailure` it is counted
+/// in `candidates_failed` and skipped. Request, protocol, provider-panic,
+/// thread-pool and schema errors are fatal and propagate. When every candidate
+/// had an in-band row failure the result
 /// is not found with the last failure message as `not_found_reason`.
 ///
 /// The product is the typed candidate set [`IodResult`]: every scored
@@ -1912,6 +2136,10 @@ pub fn run_iod(
     observers: &ObserverBatch,
     config: &IodConfig,
 ) -> PropagationResultValue<IodResult> {
+    config
+        .validate()
+        .map_err(PropagationError::InvalidRequest)?;
+    validate_od_observations(observed, observers, true)?;
     let n = observed.len();
     if observers.len() != n {
         return Err(PropagationError::InvalidRequest(
@@ -1923,6 +2151,15 @@ pub fn run_iod(
         return Ok(IodResult::not_found(
             epoch_scale,
             format!("{n} observations, fewer than min_obs = {}", config.min_obs),
+        ));
+    }
+    let distinct_epochs = distinct_observation_epochs(observed)?;
+    if distinct_epochs < 3 {
+        return Ok(IodResult::not_found(
+            epoch_scale,
+            format!(
+                "rank-deficient arc: {distinct_epochs} distinct observation epochs; at least 3 are required"
+            ),
         ));
     }
     let order = iod_observation_order(observed, observers)?;
@@ -1948,6 +2185,10 @@ pub(super) fn iod_candidate_pool(
     observers: &ObserverBatch,
     config: &IodConfig,
 ) -> PropagationResultValue<IodResult> {
+    config
+        .validate()
+        .map_err(PropagationError::InvalidRequest)?;
+    validate_od_observations(observed, observers, true)?;
     let n = observed.len();
     if observers.len() != n {
         return Err(PropagationError::InvalidRequest(
@@ -1961,10 +2202,19 @@ pub(super) fn iod_candidate_pool(
             format!("{n} observations, fewer than min_obs = {}", config.min_obs),
         ));
     }
+    let distinct_epochs = distinct_observation_epochs(observed)?;
+    if distinct_epochs < 3 {
+        return Ok(IodResult::not_found(
+            epoch_scale,
+            format!(
+                "rank-deficient arc: {distinct_epochs} distinct observation epochs; at least 3 are required"
+            ),
+        ));
+    }
     // A short arc does not determine an orbit (a night cannot fix six
     // parameters); the prefit gate checks this per candidate, the corrected
     // acceptance here and again after rejection.
-    let times = observed_times_mjd(observed)?;
+    let times = iod_predictor.dynamical_times_mjd(observed)?;
     let arc = times.iter().copied().fold(f64::NEG_INFINITY, f64::max)
         - times.iter().copied().fold(f64::INFINITY, f64::min);
     if arc < config.min_arc_length {
@@ -2014,23 +2264,80 @@ fn observation_time_scale(observed: &CoordinateBatch) -> PropagationResultValue<
         .scale)
 }
 
-/// Permutation putting the observations in the canonical IOD search order:
-/// epoch (days, then nanoseconds), station code, input row.
+/// Permutation putting observations in the canonical IOD search order.
+/// Epoch and station are followed by the complete physical row content:
+/// observed direction/state and covariance, observed origin, observer state
+/// and origin. The caller's row index is only the final tie-break for rows
+/// that are physically identical, so exchanging equal epoch+station rows with
+/// distinct measurements cannot alter triplets, candidates, or acceptance.
+/// [`restore_input_order`] still maps all externally meaningful row indices
+/// and member arrays back to the caller's order.
 pub(super) fn iod_observation_order(
     observed: &CoordinateBatch,
     observers: &ObserverBatch,
 ) -> PropagationResultValue<Vec<usize>> {
+    use std::cmp::Ordering;
+
     let times = observed.times.as_ref().ok_or_else(|| {
         PropagationError::InvalidRequest(
             "orbit determination requires observation times".to_string(),
         )
     })?;
+    let compare_values = |left: &[f64], right: &[f64]| {
+        left.iter()
+            .zip(right)
+            .map(|(a, b)| a.total_cmp(b))
+            .find(|ordering| *ordering != Ordering::Equal)
+            .unwrap_or(Ordering::Equal)
+    };
+    let compare_covariance = |left: usize, right: usize| match &observed.covariance {
+        None => Ordering::Equal,
+        Some(covariance) => covariance
+            .is_row_valid(left)
+            .cmp(&covariance.is_row_valid(right))
+            .then_with(|| {
+                compare_values(covariance.row_values(left), covariance.row_values(right))
+            }),
+    };
+    let observed_values = observed.values.raw_values();
+    let observer_values = observers.coordinates.values.raw_values();
+    let compare_observer_covariance =
+        |left: usize, right: usize| match &observers.coordinates.covariance {
+            None => Ordering::Equal,
+            Some(covariance) => covariance
+                .is_row_valid(left)
+                .cmp(&covariance.is_row_valid(right))
+                .then_with(|| {
+                    compare_values(covariance.row_values(left), covariance.row_values(right))
+                }),
+        };
     let mut order: Vec<usize> = (0..observed.len()).collect();
     order.sort_by(|&a, &b| {
         let (ea, eb) = (times.epochs[a], times.epochs[b]);
         (ea.days, ea.nanos)
             .cmp(&(eb.days, eb.nanos))
             .then_with(|| observers.code[a].0.cmp(&observers.code[b].0))
+            .then_with(|| compare_values(&observed_values[a], &observed_values[b]))
+            .then_with(|| compare_covariance(a, b))
+            .then_with(|| {
+                observed.origins.origins[a]
+                    .code()
+                    .cmp(&observed.origins.origins[b].code())
+            })
+            .then_with(|| match &observers.coordinates.times {
+                None => Ordering::Equal,
+                Some(observer_times) => {
+                    let (ta, tb) = (observer_times.epochs[a], observer_times.epochs[b]);
+                    (ta.days, ta.nanos).cmp(&(tb.days, tb.nanos))
+                }
+            })
+            .then_with(|| compare_values(&observer_values[a], &observer_values[b]))
+            .then_with(|| compare_observer_covariance(a, b))
+            .then_with(|| {
+                observers.coordinates.origins.origins[a]
+                    .code()
+                    .cmp(&observers.coordinates.origins.origins[b].code())
+            })
             .then(a.cmp(&b))
     });
     Ok(order)
@@ -2050,6 +2357,9 @@ pub(super) fn restore_input_order(mut result: IodResult, order: &[usize]) -> Iod
                 .clone_from_slice(&sorted[k * width..(k + 1) * width]);
         }
         out
+    }
+    for failure in result.candidate_failures.iter_mut() {
+        failure.triplet = std::array::from_fn(|slot| order[failure.triplet[slot]]);
     }
     for candidate in result.candidates.iter_mut() {
         candidate.window = (order[candidate.window.0], order[candidate.window.1]);
@@ -2167,16 +2477,14 @@ fn run_iod_sorted(
 ) -> PropagationResultValue<IodResult> {
     let n = observed.len();
     let (gauss_directions, gauss_observers) = gauss_geometry(observed, observers)?;
-    let times = observed_times_mjd(observed)?;
+    let times = predictor.dynamical_times_mjd(observed)?;
+    let civil_times = predictor.civil_times_mjd(observed)?;
     let epoch_scale = observation_time_scale(observed)?;
 
-    let nights = observation_nights(&times, Some(&observers.code));
+    let nights = observation_nights(&civil_times, Some(&observers.code));
     let max_outliers =
         (((n as f64) * (config.contamination_percentage / 100.0)) as usize).min(n - config.min_obs);
-    // The legacy `iod()` loop tries `3 * (max_outliers + 1)` triplets
-    // (`obs_ids[: (3 * (max_outliers + 1))]` on the (k, 3) selection):
-    // three candidate triplets per allowed outlier. `max_triplets`
-    // decouples the search budget from the outlier allowance.
+    // Search work is bounded independently of the contamination allowance.
     let budget = match config.max_triplets {
         Some(0) => {
             return Err(PropagationError::InvalidRequest(
@@ -2185,15 +2493,41 @@ fn run_iod_sorted(
         }
         Some(budget) => budget,
         None if config.observation_selection_method == ObservationSelectionMethod::Spans => {
-            config.spans.max_triplets.max(1)
+            config.spans.max_triplets
         }
         None => 3 * (max_outliers + 1),
     };
+    let mut selection_stats = TripletSearchStats::default();
     let triplets: Vec<([usize; 3], (usize, usize))> =
         if config.observation_selection_method == ObservationSelectionMethod::Spans {
-            span_triplets(&times, &nights, &config.spans, budget)
+            span_triplets_with_limits(
+                &times,
+                &nights,
+                &config.spans,
+                budget,
+                config.max_pair_visits,
+                config.max_raw_pair_visits,
+                config.max_middle_visits,
+                &mut selection_stats,
+            )
         } else {
-            select_observation_triplets_bounded(&times, config.observation_selection_method, budget)
+            let selected = match config.observation_selection_method {
+                ObservationSelectionMethod::Combinations => combination_triplets_with_stats(
+                    &times,
+                    budget,
+                    config.max_pair_visits,
+                    config.max_middle_visits,
+                    &mut selection_stats,
+                ),
+                method => select_observation_triplets_bounded_with_limits(
+                    &times,
+                    method,
+                    budget,
+                    config.max_pair_visits,
+                    config.max_middle_visits,
+                ),
+            };
+            selected
                 .into_iter()
                 .map(|triplet| (triplet, (0, n - 1)))
                 .collect()
@@ -2206,6 +2540,10 @@ fn run_iod_sorted(
     }
 
     let mut counters = SearchCounters {
+        pair_visits: selection_stats.pair_visits,
+        raw_pair_visits: selection_stats.raw_pair_visits,
+        middle_visits: selection_stats.middle_visits,
+        search_cap_exhausted: selection_stats.exhausted(),
         best_reduced_chi2: f64::INFINITY,
         ..SearchCounters::default()
     };
@@ -2257,7 +2595,7 @@ fn run_iod_sorted(
                 continue;
             }
             let velocity_method = VelocityMethod::from_code(root.velocity_method);
-            let epoch = mjd_epoch(root.epoch);
+            let epoch = predictor.dynamical_epoch_in_scale(root.epoch, epoch_scale)?;
             let candidate_coordinates = CoordinateBatch::cartesian(
                 vec![state],
                 Frame::Ecliptic,
@@ -2280,14 +2618,16 @@ fn run_iod_sorted(
                 6,
             ) {
                 Ok(evaluation) => evaluation,
-                // A failed prediction is local to this candidate.
-                Err(
-                    err @ (PropagationError::Backend(_)
-                    | PropagationError::BackendProtocol(_)
-                    | PropagationError::ThreadPool(_)),
-                ) => {
+                // Only an in-band failed row is local to this candidate.
+                Err(err @ PropagationError::RowFailure(_)) => {
+                    let message = err.to_string();
                     counters.candidates_failed += 1;
-                    counters.last_failure = Some(err.to_string());
+                    counters.last_failure = Some(message.clone());
+                    counters.candidate_failures.push(IodCandidateFailure {
+                        triplet,
+                        root_index: candidate,
+                        message,
+                    });
                     continue;
                 }
                 Err(err) => return Err(err),
@@ -2315,6 +2655,7 @@ fn run_iod_sorted(
                 converged: false,
                 corrected_state: None,
                 corrected_covariance: None,
+                ambiguity_covariance: None,
                 stages: 0,
                 correction_note: None,
                 accepted: false,
@@ -2327,7 +2668,9 @@ fn run_iod_sorted(
                 candidates.push(record);
                 continue;
             }
-            if evaluation.reduced_chi2 <= config.rchi2_threshold {
+            if evaluation.reduced_chi2 <= config.rchi2_threshold
+                && evaluation.arc_length >= config.min_arc_length
+            {
                 record.accepted = true;
                 record.evaluation = Some(evaluation);
                 candidates.push(record);
@@ -2338,6 +2681,11 @@ fn run_iod_sorted(
                     triplets_tried: 0,
                     candidates_evaluated: 0,
                     candidates_failed: 0,
+                    candidate_failures: Vec::new(),
+                    pair_visits: 0,
+                    raw_pair_visits: 0,
+                    middle_visits: 0,
+                    search_cap_exhausted: false,
                     corrections_run: 0,
                     ambiguous_with: Vec::new(),
                     ranging: None,
@@ -2360,16 +2708,36 @@ fn run_iod_sorted(
                     .total_cmp(&evaluation.chi2[right])
                     .then(left.cmp(&right))
             });
+            let mut removed_mask = vec![false; n];
+            let mut time_order: Vec<usize> = (0..n).collect();
+            time_order.sort_by(|&left, &right| {
+                times[left].total_cmp(&times[right]).then(left.cmp(&right))
+            });
+            let mut first_kept = 0_usize;
+            let mut last_kept = n - 1;
+            let mut removed_chi2 = 0.0_f64;
             for count in 1..=max_outliers.min(removable.len()) {
-                let removed = removable[removable.len() - count..].to_vec();
-                let removed_chi2: f64 = removed.iter().map(|&row| evaluation.chi2[row]).sum();
-                let num_obs = n - removed.len();
+                let row = removable[removable.len() - count];
+                removed_mask[row] = true;
+                removed_chi2 += evaluation.chi2[row];
+                while first_kept < n && removed_mask[time_order[first_kept]] {
+                    first_kept += 1;
+                }
+                while last_kept > first_kept && removed_mask[time_order[last_kept]] {
+                    last_kept -= 1;
+                }
+                let num_obs = n - count;
                 let chi2 = evaluation.orbit_chi2 - removed_chi2;
                 let reduced = chi2 / (2 * num_obs - 6) as f64;
-                let keep: Vec<bool> = (0..n).map(|row| !removed.contains(&row)).collect();
-                let (arc_length, _, _) = masked_arc_length(&times, &keep);
-                if reduced <= config.rchi2_threshold && arc_length >= config.min_arc_length {
-                    record.removed = removed;
+                let arc_length =
+                    prefit_outlier_arc_length(&times, &time_order, first_kept, last_kept);
+                if prefit_outlier_is_acceptable(
+                    reduced,
+                    config.rchi2_threshold,
+                    arc_length,
+                    config.min_arc_length,
+                ) {
+                    record.removed = removable[removable.len() - count..].to_vec();
                     record.chi2_total = chi2;
                     record.reduced_chi2 = reduced;
                     record.num_obs = num_obs;
@@ -2384,6 +2752,11 @@ fn run_iod_sorted(
                         triplets_tried: 0,
                         candidates_evaluated: 0,
                         candidates_failed: 0,
+                        candidate_failures: Vec::new(),
+                        pair_visits: 0,
+                        raw_pair_visits: 0,
+                        middle_visits: 0,
+                        search_cap_exhausted: false,
                         corrections_run: 0,
                         ambiguous_with: Vec::new(),
                         ranging: None,
@@ -2426,64 +2799,17 @@ fn run_iod_sorted(
         triplets_tried: 0,
         candidates_evaluated: 0,
         candidates_failed: 0,
+        candidate_failures: Vec::new(),
+        pair_visits: 0,
+        raw_pair_visits: 0,
+        middle_visits: 0,
+        search_cap_exhausted: false,
         corrections_run: 0,
         ambiguous_with: Vec::new(),
         ranging: None,
         not_found_reason: Some(reason),
     }
     .with_search_counters(&counters))
-}
-
-/// Batch the legacy IOD work unit ([`iod_fit_barycentric`]) across linkage
-/// row selections. `chunk_size` is a scheduling control owned by Rust;
-/// output order always matches `linkage_rows`.
-#[deprecated(
-    since = "0.6.0",
-    note = "the legacy IOD policy over linkages; use run_iod_linkages_barycentric \
-            (the run_iod stage, corrected acceptance by default)"
-)]
-#[allow(clippy::too_many_arguments)]
-pub fn iod_fit_linkages_barycentric<P, T>(
-    propagator: &P,
-    observed: &CoordinateBatch,
-    observers: &ObserverBatch,
-    linkage_rows: &[Vec<usize>],
-    chunk_size: usize,
-    config: &IodConfig,
-    options: &EphemerisOptions,
-    provider: &dyn TimeScaleProvider,
-    translation_provider: &T,
-) -> PropagationResultValue<Vec<IodOutput>>
-where
-    P: Propagator,
-    T: OriginTranslationProvider,
-{
-    let chunk_size = chunk_size.max(1);
-    let mut outputs = Vec::with_capacity(linkage_rows.len());
-    for chunk in linkage_rows.chunks(chunk_size) {
-        for rows in chunk {
-            for &row in rows {
-                if row >= observed.len() {
-                    return Err(PropagationError::InvalidRequest(format!(
-                        "linkage observation row {row} is out of bounds for {} observations",
-                        observed.len()
-                    )));
-                }
-            }
-            let linkage_observed = take_coordinate_batch(observed, rows)?;
-            let linkage_observers = take_observer_batch(observers, rows)?;
-            outputs.push(iod_fit_barycentric(
-                propagator,
-                &linkage_observed,
-                &linkage_observers,
-                config,
-                options,
-                provider,
-                translation_provider,
-            )?);
-        }
-    }
-    Ok(outputs)
 }
 
 pub(super) fn mjd_epoch(mjd: f64) -> crate::Epoch {
@@ -2507,11 +2833,23 @@ fn select_observation_triplets(
 /// order, restricted to three distinct epochs. `Combinations` is
 /// enumerated lazily (see [`combination_triplets`]), never as the full
 /// `C(n, 3)` list.
+#[cfg(test)]
 fn select_observation_triplets_bounded(
     times: &[f64],
     method: ObservationSelectionMethod,
     budget: usize,
 ) -> Vec<[usize; 3]> {
+    select_observation_triplets_bounded_with_limits(times, method, budget, usize::MAX, usize::MAX)
+}
+
+fn select_observation_triplets_bounded_with_limits(
+    times: &[f64],
+    method: ObservationSelectionMethod,
+    budget: usize,
+    max_pair_visits: usize,
+    max_middle_visits: usize,
+) -> Vec<[usize; 3]> {
+    let mut stats = TripletSearchStats::default();
     let mut triplets: Vec<[usize; 3]> = match method {
         ObservationSelectionMethod::FirstMiddleLast => {
             percentile_triplet(times, [0.0, 50.0, 100.0])
@@ -2523,12 +2861,22 @@ fn select_observation_triplets_bounded(
                 .into_iter()
                 .collect()
         }
-        ObservationSelectionMethod::Combinations => combination_triplets(times, budget),
-        ObservationSelectionMethod::Spans => span_triplets(
+        ObservationSelectionMethod::Combinations => combination_triplets_with_stats(
+            times,
+            budget,
+            max_pair_visits,
+            max_middle_visits,
+            &mut stats,
+        ),
+        ObservationSelectionMethod::Spans => span_triplets_with_limits(
             times,
             &observation_nights(times, None),
             &SpanSearchConfig::default(),
             budget,
+            max_pair_visits,
+            max_pair_visits.saturating_mul(256),
+            max_middle_visits,
+            &mut stats,
         )
         .into_iter()
         .map(|(triplet, _)| triplet)
@@ -2554,12 +2902,46 @@ fn select_observation_triplets_bounded(
 /// non-increasing arc order; only the pairs sharing the current arc have
 /// their middle observations enumerated and sorted, and the walk stops as
 /// soon as the budget is met. Each pair is visited once.
-fn combination_triplets(times: &[f64], budget: usize) -> Vec<[usize; 3]> {
+/// Search-priority resolution, not a time-scale conversion. The retained
+/// TT/TDB model differs from external high-order models by at most tens of
+/// microseconds over the documented interval. Quantize metrics to nearest
+/// millisecond before deterministic tie-breaking so equivalent external labels
+/// cannot discontinuously select another bounded-search branch.
+const TRIPLET_PRIORITY_RESOLUTION_DAYS: f64 = 1.0e-3 / 86_400.0;
+
+fn triplet_priority_key(days: f64) -> i64 {
+    (days / TRIPLET_PRIORITY_RESOLUTION_DAYS).round() as i64
+}
+
+#[derive(Debug, Default)]
+struct TripletSearchStats {
+    pair_visits: usize,
+    raw_pair_visits: usize,
+    middle_visits: usize,
+    pair_cap_exhausted: bool,
+    raw_pair_cap_exhausted: bool,
+    middle_cap_exhausted: bool,
+}
+
+impl TripletSearchStats {
+    fn exhausted(&self) -> bool {
+        self.pair_cap_exhausted || self.raw_pair_cap_exhausted || self.middle_cap_exhausted
+    }
+}
+
+fn combination_triplets_with_stats(
+    times: &[f64],
+    budget: usize,
+    max_pair_visits: usize,
+    max_middle_visits: usize,
+    stats: &mut TripletSearchStats,
+) -> Vec<[usize; 3]> {
     use std::cmp::Ordering;
     use std::collections::{BinaryHeap, HashSet};
 
     #[derive(PartialEq)]
     struct Pair {
+        arc_key: i64,
         arc: f64,
         first: usize,
         last: usize,
@@ -2567,8 +2949,8 @@ fn combination_triplets(times: &[f64], budget: usize) -> Vec<[usize; 3]> {
     impl Eq for Pair {}
     impl Ord for Pair {
         fn cmp(&self, other: &Self) -> Ordering {
-            self.arc
-                .total_cmp(&other.arc)
+            self.arc_key
+                .cmp(&other.arc_key)
                 .then_with(|| other.first.cmp(&self.first))
                 .then_with(|| other.last.cmp(&self.last))
         }
@@ -2584,53 +2966,74 @@ fn combination_triplets(times: &[f64], budget: usize) -> Vec<[usize; 3]> {
     if n < 3 || budget == 0 {
         return out;
     }
-    // Positions in time order (stable, so ties keep index order): the
-    // driver already sorts its observations, and the legacy index order
-    // of a sorted input is the time order.
     let mut order: Vec<usize> = (0..n).collect();
-    order.sort_by(|&a, &b| times[a].total_cmp(&times[b]));
+    order.sort_by(|&a, &b| times[a].total_cmp(&times[b]).then(a.cmp(&b)));
     let t = |position: usize| times[order[position]];
-
     let mut heap = BinaryHeap::new();
-    let mut seen: HashSet<(usize, usize)> = HashSet::new();
+    let mut seen = HashSet::new();
     let mut visit = |heap: &mut BinaryHeap<Pair>, first: usize, last: usize| {
         if first < last && seen.insert((first, last)) {
+            let arc = t(last) - t(first);
             heap.push(Pair {
-                arc: t(last) - t(first),
+                arc_key: triplet_priority_key(arc),
+                arc,
                 first,
                 last,
             });
         }
     };
     visit(&mut heap, 0, n - 1);
-
     while let Some(top) = heap.pop() {
+        if stats.pair_visits == max_pair_visits {
+            stats.pair_cap_exhausted = true;
+            break;
+        }
+        stats.pair_visits += 1;
+        stats.raw_pair_visits += 1;
         let arc = top.arc;
         let mut group = vec![(top.first, top.last)];
         visit(&mut heap, top.first + 1, top.last);
         visit(&mut heap, top.first, top.last - 1);
-        while heap.peek().is_some_and(|next| next.arc == arc) {
+        while heap.peek().is_some_and(|next| next.arc_key == top.arc_key) {
+            if stats.pair_visits == max_pair_visits {
+                stats.pair_cap_exhausted = true;
+                break;
+            }
             let next = heap.pop().expect("peeked");
+            stats.pair_visits += 1;
+            stats.raw_pair_visits += 1;
             group.push((next.first, next.last));
             visit(&mut heap, next.first + 1, next.last);
             visit(&mut heap, next.first, next.last - 1);
         }
         if arc == 0.0 {
-            // Every remaining pair has coincident epochs.
             break;
         }
-        let mut candidates: Vec<(f64, usize, usize, usize)> = Vec::new();
+        let mut candidates = Vec::new();
         for (first, last) in group {
             let midpoint = (t(last) + t(first)) / 2.0;
             for middle in first + 1..last {
+                if stats.middle_visits == max_middle_visits {
+                    stats.middle_cap_exhausted = true;
+                    break;
+                }
+                stats.middle_visits += 1;
                 if t(middle) == t(first) || t(middle) == t(last) {
                     continue;
                 }
-                candidates.push(((midpoint - t(middle)).abs(), first, middle, last));
+                candidates.push((
+                    triplet_priority_key((midpoint - t(middle)).abs()),
+                    first,
+                    middle,
+                    last,
+                ));
+            }
+            if stats.middle_cap_exhausted {
+                break;
             }
         }
         candidates.sort_by(|a, b| {
-            a.0.total_cmp(&b.0)
+            a.0.cmp(&b.0)
                 .then(a.1.cmp(&b.1))
                 .then(a.2.cmp(&b.2))
                 .then(a.3.cmp(&b.3))
@@ -2640,6 +3043,9 @@ fn combination_triplets(times: &[f64], budget: usize) -> Vec<[usize; 3]> {
             if out.len() == budget {
                 return out;
             }
+        }
+        if stats.middle_cap_exhausted {
+            break;
         }
     }
     out
@@ -2700,8 +3106,8 @@ pub(super) fn observation_nights(
         let t = times[row];
         let (start, id) = match last_seen.get(&key) {
             Some(&(start, last, id))
-                if t - last <= OBSERVING_NIGHT_GAP_DAYS
-                    && t - start <= OBSERVING_NIGHT_MAX_DAYS =>
+                if t - last <= OBSERVING_NIGHT_GAP_DAYS + TRIPLET_PRIORITY_RESOLUTION_DAYS
+                    && t - start <= OBSERVING_NIGHT_MAX_DAYS + TRIPLET_PRIORITY_RESOLUTION_DAYS =>
             {
                 (start, id)
             }
@@ -2716,15 +3122,146 @@ pub(super) fn observation_nights(
     nights
 }
 
+#[cfg(test)]
 fn span_triplets(
     times: &[f64],
     nights: &[usize],
     config: &SpanSearchConfig,
     budget: usize,
 ) -> Vec<([usize; 3], (usize, usize))> {
+    let mut stats = TripletSearchStats::default();
+    span_triplets_with_limits(
+        times,
+        nights,
+        config,
+        budget,
+        usize::MAX,
+        usize::MAX,
+        usize::MAX,
+        &mut stats,
+    )
+}
+
+/// Best endpoint row for every distinct observing-night pair in one window.
+/// Dense nights are collapsed before any global raw-pair budget is charged,
+/// so repeated rows from one night cannot starve later night geometry.
+fn grouped_span_pairs(
+    times: &[f64],
+    order: &[usize],
+    nights: &[usize],
+    lo: usize,
+    hi: usize,
+    config: &SpanSearchConfig,
+) -> Vec<(i64, usize, usize, (usize, usize))> {
+    use std::collections::BTreeMap;
+
+    let mut groups: BTreeMap<usize, Vec<usize>> = BTreeMap::new();
+    for position in lo..=hi {
+        groups
+            .entry(nights[order[position]])
+            .or_default()
+            .push(position);
+    }
+    let groups: Vec<(usize, Vec<usize>)> = groups.into_iter().collect();
+    let mut pairs = Vec::new();
+    for left in 0..groups.len() {
+        for right in left..groups.len() {
+            let (left_night, firsts) = &groups[left];
+            let (right_night, lasts) = &groups[right];
+            let mut best: Option<(i64, usize, usize)> = None;
+            for &first in firsts {
+                let start = lasts.partition_point(|&last| {
+                    let span = times[order[last]] - times[order[first]];
+                    last <= first
+                        || span <= 0.0
+                        || span + TRIPLET_PRIORITY_RESOLUTION_DAYS < config.min_span_days
+                });
+                let end = lasts.partition_point(|&last| {
+                    times[order[last]] - times[order[first]]
+                        <= config.max_span_days + TRIPLET_PRIORITY_RESOLUTION_DAYS
+                });
+                if start >= end {
+                    continue;
+                }
+                // An endpoint pair is useful only when at least one strictly
+                // interior, distinct epoch exists. For adjacent night blocks
+                // the closest-to-target endpoints can be adjacent rows; move
+                // the right endpoint far enough into its block before ranking
+                // this night pair instead of dropping the pair outright.
+                let first_time = times[order[first]];
+                let middle = first
+                    + 1
+                    + order[first + 1..=hi].partition_point(|&row| times[row] == first_time);
+                if middle >= hi {
+                    continue;
+                }
+                let middle_time = times[order[middle]];
+                let valid_start = start
+                    + lasts[start..end].partition_point(|&last| {
+                        last <= middle || times[order[last]] <= middle_time
+                    });
+                if valid_start >= end {
+                    continue;
+                }
+                let target_time = first_time + config.target_span_days;
+                let split = valid_start
+                    + lasts[valid_start..end]
+                        .partition_point(|&last| times[order[last]] < target_time);
+                for candidate in [split.checked_sub(1), (split < end).then_some(split)]
+                    .into_iter()
+                    .flatten()
+                    .filter(|&candidate| candidate >= valid_start && candidate < end)
+                {
+                    let selected_last = lasts[candidate];
+                    let canonical = start
+                        + lasts[start..=candidate].partition_point(|&last| {
+                            times[order[last]] < times[order[selected_last]]
+                        });
+                    let last = lasts[canonical];
+                    let deviation = triplet_priority_key(
+                        ((times[order[last]] - times[order[first]]) - config.target_span_days)
+                            .abs(),
+                    );
+                    let value = (deviation, first, last);
+                    if best.is_none_or(|current| {
+                        value
+                            .0
+                            .cmp(&current.0)
+                            .then(value.1.cmp(&current.1))
+                            .then(value.2.cmp(&current.2))
+                            .is_lt()
+                    }) {
+                        best = Some(value);
+                    }
+                }
+            }
+            if let Some((deviation, first, last)) = best {
+                pairs.push((deviation, first, last, (*left_night, *right_night)));
+            }
+        }
+    }
+    pairs.sort_by(|left, right| {
+        left.0
+            .cmp(&right.0)
+            .then(left.1.cmp(&right.1))
+            .then(left.2.cmp(&right.2))
+            .then(left.3.cmp(&right.3))
+    });
+    pairs
+}
+
+fn span_triplets_with_limits(
+    times: &[f64],
+    nights: &[usize],
+    config: &SpanSearchConfig,
+    budget: usize,
+    max_pair_visits: usize,
+    max_raw_pair_visits: usize,
+    max_middle_visits: usize,
+    stats: &mut TripletSearchStats,
+) -> Vec<([usize; 3], (usize, usize))> {
     use std::cmp::{Ordering, Reverse};
     use std::collections::{BinaryHeap, HashSet};
-
     let n = times.len();
     let mut out = Vec::new();
     if n < 3 || budget == 0 {
@@ -2732,10 +3269,8 @@ fn span_triplets(
     }
     let mut order: Vec<usize> = (0..n).collect();
     order.sort_by(|&a, &b| times[a].total_cmp(&times[b]).then(a.cmp(&b)));
-    let t: Vec<f64> = order.iter().map(|&row| times[row]).collect();
-
-    // Windows as inclusive position ranges over the time-sorted view.
-    let densest = |length: f64| -> (usize, usize) {
+    let t: Vec<f64> = order.iter().map(|&r| times[r]).collect();
+    let densest = |length: f64| {
         let mut best = (0, 0);
         let mut best_count = 0;
         let mut hi = 0;
@@ -2743,7 +3278,7 @@ fn span_triplets(
             if hi < lo {
                 hi = lo;
             }
-            while hi + 1 < n && t[hi + 1] - t[lo] <= length {
+            while hi + 1 < n && t[hi + 1] - t[lo] <= length + TRIPLET_PRIORITY_RESOLUTION_DAYS {
                 hi += 1;
             }
             if hi - lo + 1 > best_count {
@@ -2753,84 +3288,147 @@ fn span_triplets(
         }
         best
     };
-    let last_from = t.partition_point(|&value| value < t[n - 1] - config.edge_window_days);
-    let first_to = t.partition_point(|&value| value <= t[0] + config.edge_window_days) - 1;
-    let mut windows: Vec<(usize, usize)> = Vec::new();
-    for window in [
+    let last_from = t.partition_point(|&v| {
+        v < t[n - 1] - config.edge_window_days - TRIPLET_PRIORITY_RESOLUTION_DAYS
+    });
+    let first_to = t
+        .partition_point(|&v| {
+            v <= t[0] + config.edge_window_days + TRIPLET_PRIORITY_RESOLUTION_DAYS
+        })
+        .saturating_sub(1);
+    let mut windows = Vec::new();
+    for w in [
         densest(config.dense_window_days[0]),
         densest(config.dense_window_days[1]),
         (last_from, n - 1),
         (0, first_to),
         (0, n - 1),
     ] {
-        if !windows.contains(&window) {
-            windows.push(window);
+        if !windows.contains(&w) {
+            windows.push(w);
         }
     }
-
     #[derive(PartialEq)]
-    struct Key(f64, usize, usize);
+    struct Key(i64, usize, usize);
     impl Eq for Key {}
     impl Ord for Key {
-        fn cmp(&self, other: &Self) -> Ordering {
+        fn cmp(&self, o: &Self) -> Ordering {
             self.0
-                .total_cmp(&other.0)
-                .then(self.1.cmp(&other.1))
-                .then(self.2.cmp(&other.2))
+                .cmp(&o.0)
+                .then(self.1.cmp(&o.1))
+                .then(self.2.cmp(&o.2))
         }
     }
     impl PartialOrd for Key {
-        fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-            Some(self.cmp(other))
+        fn partial_cmp(&self, o: &Self) -> Option<Ordering> {
+            Some(self.cmp(o))
         }
     }
-
     let target = config.target_span_days;
-    let span_ok = |first: usize, last: usize| {
-        let span = t[last] - t[first];
-        span > 0.0 && span >= config.min_span_days && span <= config.max_span_days
+    let span_ok = |f: usize, l: usize| {
+        let d = t[l] - t[f];
+        d > 0.0
+            && d + TRIPLET_PRIORITY_RESOLUTION_DAYS >= config.min_span_days
+            && d <= config.max_span_days + TRIPLET_PRIORITY_RESOLUTION_DAYS
     };
-    let deviation = |first: usize, last: usize| ((t[last] - t[first]) - target).abs();
-
-    let mut seen: HashSet<(usize, usize)> = HashSet::new();
-    for (lo, hi) in windows {
+    let deviation = |f: usize, l: usize| triplet_priority_key(((t[l] - t[f]) - target).abs());
+    let mut used_night_pairs = HashSet::new();
+    'windows: for (lo, hi) in windows {
         if hi < lo + 2 {
             continue;
         }
-        // Per first position: the lower side as (current, end of its run of
-        // equal epochs), walked upwards within each run so that ties come
-        // out in position order, and the next higher last; `None` once a
-        // side is exhausted.
+        let distinct_nights = order[lo..=hi]
+            .iter()
+            .map(|&row| nights[row])
+            .collect::<HashSet<_>>()
+            .len();
+        // For dense arcs the number of observing nights is tiny compared
+        // with the row count. Traverse night pairs directly; for sparse
+        // arcs retain the lazy row frontier so a million one-row nights do
+        // not imply an O(n^2) night-pair materialization.
+        if distinct_nights <= 64 {
+            for (_, first, last, night_pair) in
+                grouped_span_pairs(times, &order, nights, lo, hi, config)
+            {
+                if used_night_pairs.contains(&night_pair) {
+                    continue;
+                }
+                if stats.raw_pair_visits == max_raw_pair_visits {
+                    stats.raw_pair_cap_exhausted = true;
+                    break 'windows;
+                }
+                stats.raw_pair_visits += 1;
+                let begin = first + 1 + t[first + 1..last].partition_point(|&v| v == t[first]);
+                let end = first + 1 + t[first + 1..last].partition_point(|&v| v < t[last]);
+                if begin >= end {
+                    continue;
+                }
+                let midpoint = (t[first] + t[last]) / 2.0;
+                let split = begin + t[begin..end].partition_point(|&v| v < midpoint);
+                let canonical_run_start = |middle: usize| {
+                    begin + t[begin..=middle].partition_point(|&value| value < t[middle])
+                };
+                let Some(middle) = [
+                    split
+                        .checked_sub(1)
+                        .filter(|&middle| middle >= begin)
+                        .map(canonical_run_start),
+                    (split < end).then_some(split).map(canonical_run_start),
+                ]
+                .into_iter()
+                .flatten()
+                .min_by(|&a, &b| {
+                    triplet_priority_key((t[a] - midpoint).abs())
+                        .cmp(&triplet_priority_key((t[b] - midpoint).abs()))
+                        .then(a.cmp(&b))
+                }) else {
+                    continue;
+                };
+                if stats.pair_visits == max_pair_visits {
+                    stats.pair_cap_exhausted = true;
+                    break 'windows;
+                }
+                if stats.middle_visits == max_middle_visits {
+                    stats.middle_cap_exhausted = true;
+                    break 'windows;
+                }
+                stats.pair_visits += 1;
+                stats.middle_visits += 1;
+                used_night_pairs.insert(night_pair);
+                out.push((
+                    [order[first], order[middle], order[last]],
+                    (order[lo], order[hi]),
+                ));
+                if out.len() == budget {
+                    return out;
+                }
+            }
+            continue;
+        }
         type Down = Option<(usize, usize)>;
-        let run_start = |first: usize, k: usize| {
-            first + 1 + t[first + 1..=k].partition_point(|&value| value < t[k])
-        };
+        let run_start =
+            |first: usize, k: usize| first + 1 + t[first + 1..=k].partition_point(|&v| v < t[k]);
         let down_run = |first: usize, k: usize| -> Down {
             if k <= first || !span_ok(first, k) {
-                return None;
+                None
+            } else {
+                Some((run_start(first, k), k))
             }
-            Some((run_start(first, k), k))
         };
         let mut cursors: Vec<(Down, Option<usize>)> = vec![(None, None); hi + 1];
         let mut heap: BinaryHeap<Reverse<Key>> = BinaryHeap::new();
-        let next_of = |first: usize, cursor: &(Down, Option<usize>)| -> Option<usize> {
-            match (cursor.0.map(|(current, _)| current), cursor.1) {
-                (Some(down), Some(up)) => {
-                    if deviation(first, down) <= deviation(first, up) {
-                        Some(down)
-                    } else {
-                        Some(up)
-                    }
-                }
-                (Some(down), None) => Some(down),
-                (None, Some(up)) => Some(up),
-                (None, None) => None,
-            }
+        let next_of = |first: usize, c: &(Down, Option<usize>)| match (c.0.map(|x| x.0), c.1) {
+            (Some(d), Some(u)) => Some(if deviation(first, d) <= deviation(first, u) {
+                d
+            } else {
+                u
+            }),
+            (Some(d), None) => Some(d),
+            (None, Some(u)) => Some(u),
+            (None, None) => None,
         };
         for first in lo..hi {
-            // Split point: the first last with span >= target.
-            let split =
-                first + 1 + t[first + 1..=hi].partition_point(|&value| value - t[first] < target);
+            let split = first + 1 + t[first + 1..=hi].partition_point(|&v| v - t[first] < target);
             let down = down_run(first, split - 1);
             let up = (split <= hi && span_ok(first, split)).then_some(split);
             cursors[first] = (down, up);
@@ -2839,7 +3437,11 @@ fn span_triplets(
             }
         }
         while let Some(Reverse(Key(_, first, last))) = heap.pop() {
-            // Advance this first's stream past `last`.
+            if stats.raw_pair_visits == max_raw_pair_visits {
+                stats.raw_pair_cap_exhausted = true;
+                break 'windows;
+            }
+            stats.raw_pair_visits += 1;
             let (down, up) = cursors[first];
             if let Some((current, end)) = down.filter(|&(current, _)| current == last) {
                 cursors[first].0 = if current < end {
@@ -2853,23 +3455,54 @@ fn span_triplets(
             if let Some(next) = next_of(first, &cursors[first]) {
                 heap.push(Reverse(Key(deviation(first, next), first, next)));
             }
-
+            let night_pair = (nights[order[first]], nights[order[last]]);
+            if used_night_pairs.contains(&night_pair) {
+                continue;
+            }
+            // Only the two neighbors around the midpoint can minimize the
+            // distance in a sorted slice; inspect them deterministically.
+            let begin = first + 1 + t[first + 1..last].partition_point(|&v| v == t[first]);
+            let end = first + 1 + t[first + 1..last].partition_point(|&v| v < t[last]);
+            if begin >= end {
+                continue;
+            }
             let midpoint = (t[first] + t[last]) / 2.0;
-            let middle = (first + 1..last)
-                .filter(|&m| t[m] != t[first] && t[m] != t[last])
-                .min_by(|&a, &b| {
-                    (t[a] - midpoint)
-                        .abs()
-                        .total_cmp(&(t[b] - midpoint).abs())
-                        .then(a.cmp(&b))
-                });
-            let Some(middle) = middle else { continue };
-            let triplet = [order[first], order[middle], order[last]];
-            if seen.insert((nights[order[first]], nights[order[last]])) {
-                out.push((triplet, (order[lo], order[hi])));
-                if out.len() == budget {
-                    return out;
-                }
+            let split = begin + t[begin..end].partition_point(|&v| v < midpoint);
+            let canonical_run_start = |middle: usize| {
+                begin + t[begin..=middle].partition_point(|&value| value < t[middle])
+            };
+            let middle = [
+                split
+                    .checked_sub(1)
+                    .filter(|&middle| middle >= begin)
+                    .map(canonical_run_start),
+                (split < end).then_some(split).map(canonical_run_start),
+            ]
+            .into_iter()
+            .flatten()
+            .min_by(|&a, &b| {
+                triplet_priority_key((t[a] - midpoint).abs())
+                    .cmp(&triplet_priority_key((t[b] - midpoint).abs()))
+                    .then(a.cmp(&b))
+            })
+            .expect("middle");
+            if stats.pair_visits == max_pair_visits {
+                stats.pair_cap_exhausted = true;
+                break 'windows;
+            }
+            if stats.middle_visits == max_middle_visits {
+                stats.middle_cap_exhausted = true;
+                break 'windows;
+            }
+            stats.pair_visits += 1;
+            stats.middle_visits += 1;
+            used_night_pairs.insert(night_pair);
+            out.push((
+                [order[first], order[middle], order[last]],
+                (order[lo], order[hi]),
+            ));
+            if out.len() == budget {
+                return out;
             }
         }
     }
@@ -2919,6 +3552,9 @@ pub struct OrbitGeometry {
     pub scale: crate::TimeScale,
     pub frame: Frame,
     pub origin: crate::OriginId,
+    pub physical_parameters: Option<crate::PhysicalParametersBatch>,
+    pub non_gravitational_source: Option<String>,
+    pub non_gravitational_parameters: Option<crate::NonGravitationalParametersRow>,
 }
 
 impl OrbitGeometry {
@@ -2938,13 +3574,32 @@ impl OrbitGeometry {
                 "orbit determination requires an orbit epoch".to_string(),
             )
         })?;
+        let non_gravitational_parameters = orbit
+            .non_gravitational_parameters
+            .as_ref()
+            .map(|parameters| parameters.row(0));
         Ok(Self {
             state,
             epoch: times.epochs[0],
             scale: times.scale,
             frame: orbit.coordinates.frame,
             origin: orbit.coordinates.origins.origins[0].clone(),
+            physical_parameters: orbit.physical_parameters.clone(),
+            non_gravitational_source: orbit
+                .non_gravitational_parameters
+                .as_ref()
+                .and_then(|parameters| parameters.source[0].clone()),
+            non_gravitational_parameters,
         })
+    }
+
+    /// The fixed non-gravitational row when it changes dynamics. The complete
+    /// row remains on `self` so source and Marsden metadata survive fitting.
+    pub fn active_non_gravitational_parameters(
+        &self,
+    ) -> Option<crate::NonGravitationalParametersRow> {
+        self.non_gravitational_parameters
+            .filter(crate::NonGravitationalParametersRow::is_active)
     }
 }
 
@@ -2964,8 +3619,149 @@ pub(super) fn spherical_flat(
 /// remedy for observations without reported uncertainties.
 pub(super) const MISSING_COVARIANCE_REMEDY: &str = "orbit determination requires an \
 observed covariance with finite, positive lon/lat variances; observations without \
-reported uncertainties need a SigmaFillModel among the run_od observation models to \
-supply them";
+reported uncertainties require FillMissingAstrometricUncertainty in the explicit \
+ObservationPipeline with its station_catalog_uncertainty_table resource bound";
+
+pub(super) fn distinct_observation_epochs(
+    observed: &CoordinateBatch,
+) -> PropagationResultValue<usize> {
+    let times = observed.times.as_ref().ok_or_else(|| {
+        PropagationError::InvalidRequest(
+            "orbit determination requires observation times".to_string(),
+        )
+    })?;
+    let mut epochs = times
+        .epochs
+        .iter()
+        .map(|epoch| (epoch.days, epoch.nanos))
+        .collect::<Vec<_>>();
+    epochs.sort_unstable();
+    epochs.dedup();
+    Ok(epochs.len())
+}
+
+pub(super) fn validate_od_observations(
+    observed: &CoordinateBatch,
+    observers: &ObserverBatch,
+    require_covariance: bool,
+) -> PropagationResultValue<()> {
+    if observed.len() != observers.len() {
+        return Err(PropagationError::InvalidRequest(
+            "observed and observers must have equal length".to_string(),
+        ));
+    }
+    let values = observed.values.spherical().ok_or_else(|| {
+        PropagationError::InvalidRequest(
+            "orbit determination requires spherical observed coordinates".to_string(),
+        )
+    })?;
+    for (row, value) in values.iter().enumerate() {
+        if !value[1].is_finite() || !(0.0..360.0).contains(&value[1]) {
+            return Err(PropagationError::InvalidRequest(format!(
+                "observation row {row} longitude must be finite and within [0, 360) degrees"
+            )));
+        }
+        if !value[2].is_finite() || !(-90.0..=90.0).contains(&value[2]) {
+            return Err(PropagationError::InvalidRequest(format!(
+                "observation row {row} latitude must be finite and within [-90, 90] degrees"
+            )));
+        }
+        for (dimension, item) in value.iter().enumerate() {
+            if item.is_infinite() {
+                return Err(PropagationError::InvalidRequest(format!(
+                    "observation row {row} dimension {dimension} must not be infinite"
+                )));
+            }
+        }
+    }
+    let observer_values = observers.coordinates.values.cartesian().ok_or_else(|| {
+        PropagationError::InvalidRequest(
+            "orbit determination requires Cartesian observer coordinates".to_string(),
+        )
+    })?;
+    for (row, value) in observer_values.iter().enumerate() {
+        if let Some(dimension) = value.iter().position(|item| !item.is_finite()) {
+            return Err(PropagationError::InvalidRequest(format!(
+                "observer row {row} dimension {dimension} must be finite"
+            )));
+        }
+    }
+    if observed
+        .times
+        .as_ref()
+        .is_some_and(|times| times.len() != observed.len())
+        || observers
+            .coordinates
+            .times
+            .as_ref()
+            .is_some_and(|times| times.len() != observers.len())
+    {
+        return Err(PropagationError::InvalidRequest(
+            "orbit determination time arrays must match their coordinate rows".to_string(),
+        ));
+    }
+    if require_covariance {
+        let covariance = observed_covariance_flat(observed)?;
+        for (row, value) in values.iter().enumerate() {
+            let block = &covariance[row * 36..(row + 1) * 36];
+            for dimension in [1_usize, 2] {
+                let variance = block[dimension * 6 + dimension];
+                if !variance.is_finite() || variance <= 0.0 {
+                    return Err(PropagationError::InvalidRequest(format!(
+                        "observation row {row} angular variance must be finite and positive"
+                    )));
+                }
+            }
+            let cross_left = block[8];
+            let cross_right = block[2 * 6 + 1];
+            let angular_cross = if cross_left.is_nan() && cross_right.is_nan() {
+                // CovarianceBatch uses paired NaNs for a null, unreported
+                // correlation. Its documented numerical meaning is zero.
+                0.0
+            } else if cross_left.is_finite() && cross_right.is_finite() && cross_left == cross_right
+            {
+                cross_left
+            } else {
+                return Err(PropagationError::InvalidRequest(format!(
+                    "observation row {row} angular cross-covariance must be symmetric finite values or both null for zero"
+                )));
+            };
+            let longitude_variance = block[7];
+            let latitude_variance = block[14];
+            if longitude_variance * latitude_variance - angular_cross * angular_cross <= 0.0 {
+                return Err(PropagationError::InvalidRequest(format!(
+                    "observation row {row} angular covariance must be positive definite"
+                )));
+            }
+            for dimension in [0_usize, 3, 4, 5] {
+                let variance = block[dimension * 6 + dimension];
+                if value[dimension].is_finite() && (!variance.is_finite() || variance <= 0.0) {
+                    return Err(PropagationError::InvalidRequest(format!(
+                        "observation row {row} dimension {dimension} requires a finite positive variance"
+                    )));
+                }
+                if variance.is_finite() && variance < 0.0 {
+                    return Err(PropagationError::InvalidRequest(format!(
+                        "observation row {row} dimension {dimension} variance must not be negative"
+                    )));
+                }
+            }
+            if value[0].is_finite() && value[3].is_finite() {
+                for (left, right) in [(0_usize, 3_usize), (3, 0)] {
+                    if !block[left * 6 + right].is_finite() {
+                        return Err(PropagationError::InvalidRequest(format!(
+                            "observation row {row} range/range-rate covariance must be explicit"
+                        )));
+                    }
+                }
+            }
+        }
+        let latitude: Vec<f64> = values.iter().map(|row| row[2]).collect();
+        crate::differential_correction::observation_whitening_matrices(&covariance, &latitude)
+            .map_err(|error| PropagationError::InvalidRequest(error.to_string()))?;
+    }
+    Ok(())
+}
 
 pub(super) fn observed_covariance_flat(
     observed: &CoordinateBatch,
@@ -2978,6 +3774,7 @@ pub(super) fn observed_covariance_flat(
         .clone())
 }
 
+#[cfg(test)]
 pub(super) fn observed_times_mjd(observed: &CoordinateBatch) -> PropagationResultValue<Vec<f64>> {
     Ok(observed
         .times
@@ -2987,6 +3784,24 @@ pub(super) fn observed_times_mjd(observed: &CoordinateBatch) -> PropagationResul
                 "orbit determination requires observation times".to_string(),
             )
         })?
+        .mjd_values())
+}
+
+/// Observation epochs on the authoritative dynamical scale. Input epoch
+/// labels remain untouched for identity/output; only dynamics use TDB.
+pub(super) fn observed_times_mjd_tdb(
+    observed: &CoordinateBatch,
+    provider: &dyn TimeScaleProvider,
+) -> PropagationResultValue<Vec<f64>> {
+    Ok(observed
+        .times
+        .as_ref()
+        .ok_or_else(|| {
+            PropagationError::InvalidRequest(
+                "orbit determination requires observation times".to_string(),
+            )
+        })?
+        .rescale_with_provider(crate::TimeScale::Tdb, provider)?
         .mjd_values())
 }
 
@@ -3080,7 +3895,7 @@ pub fn candidate_orbit_batch(
         )?),
         None,
     )?;
-    OrbitBatch::new(
+    let mut candidates = OrbitBatch::new(
         // Zero-padded ids: backends honoring the public sorted-output
         // contract (the ASSIST propagator sorts blocks lexicographically by
         // orbit id) must return candidate blocks in input order, otherwise
@@ -3091,15 +3906,42 @@ pub fn candidate_orbit_batch(
             .collect(),
         vec![None::<ObjectId>; states.len()],
         coordinates,
-    )
-    .map_err(Into::into)
+    )?;
+    if let Some(parameters) = &geometry.physical_parameters {
+        let repeat = |value: Option<f64>| vec![value; states.len()];
+        candidates = candidates.with_physical_parameters(crate::PhysicalParametersBatch {
+            h_v: repeat(parameters.h_v[0]),
+            h_v_sigma: repeat(parameters.h_v_sigma[0]),
+            g: repeat(parameters.g[0]),
+            g_sigma: repeat(parameters.g_sigma[0]),
+            sigma_eff: repeat(parameters.sigma_eff[0]),
+            chi2_red: repeat(parameters.chi2_red[0]),
+        })?;
+    }
+    if let Some(parameters) = geometry.non_gravitational_parameters {
+        let repeat = |value: Option<f64>| vec![value; states.len()];
+        candidates = candidates.with_non_gravitational_parameters(
+            crate::NonGravitationalParametersBatch {
+                source: vec![geometry.non_gravitational_source.clone(); states.len()],
+                a1: repeat(parameters.a1),
+                a2: repeat(parameters.a2),
+                a3: repeat(parameters.a3),
+                aln: repeat(parameters.aln),
+                nk: repeat(parameters.nk),
+                nm: repeat(parameters.nm),
+                nn: repeat(parameters.nn),
+                r0: repeat(parameters.r0),
+            },
+        )?;
+    }
+    Ok(candidates)
 }
 
 /// Source of predicted topocentric spherical coordinates for candidate
 /// states: the one operation every orbit-determination driver needs from a
 /// backend. [`PropagatorPredictor`] implements it for any Rust
-/// [`Propagator`] through the barycentric ephemeris workflow; a Python
-/// propagator is wrapped by a callback implementation in the binding layer.
+/// [`Propagator`] through the barycentric ephemeris workflow. Python bindings
+/// can provide only a native propagation capsule, never a prediction callback.
 pub trait SphericalPredictor {
     /// Predict `(M * N, 6)` row-major spherical coordinates (candidate-major,
     /// observer order within each candidate) for `states` at the epoch,
@@ -3112,6 +3954,49 @@ pub trait SphericalPredictor {
         observers: &ObserverBatch,
     ) -> PropagationResultValue<Result<Vec<f64>, String>>;
 
+    /// Observation epochs on UTC for civil observing-night grouping.
+    fn civil_times_mjd(&self, observed: &CoordinateBatch) -> PropagationResultValue<Vec<f64>> {
+        Ok(observed
+            .times
+            .as_ref()
+            .ok_or_else(|| {
+                PropagationError::InvalidRequest(
+                    "orbit determination requires observation times".to_string(),
+                )
+            })?
+            .rescale(crate::TimeScale::Utc)?
+            .mjd_values())
+    }
+
+    /// Observation epochs in TDB for dynamical interval arithmetic. Input
+    /// labels remain unchanged; only dynamics use this uniform scale.
+    fn dynamical_times_mjd(&self, observed: &CoordinateBatch) -> PropagationResultValue<Vec<f64>> {
+        Ok(observed
+            .times
+            .as_ref()
+            .ok_or_else(|| {
+                PropagationError::InvalidRequest(
+                    "orbit determination requires observation times".to_string(),
+                )
+            })?
+            .rescale(crate::TimeScale::Tdb)?
+            .mjd_values())
+    }
+
+    /// Convert a TDB Gauss root epoch through the shared typed time service
+    /// before labelling it with the caller's input scale.
+    fn dynamical_epoch_in_scale(
+        &self,
+        mjd_tdb: f64,
+        scale: crate::TimeScale,
+    ) -> PropagationResultValue<crate::Epoch> {
+        Ok(
+            crate::TimeArray::new(crate::TimeScale::Tdb, vec![mjd_epoch(mjd_tdb)])?
+                .rescale(scale)?
+                .epochs[0],
+        )
+    }
+
     /// Whether the backend behind the predictions supplies state-transition
     /// matrices (see [`Propagator::propagate_stm`]).
     fn supports_stm(&self) -> bool {
@@ -3123,6 +4008,7 @@ pub trait SphericalPredictor {
     fn propagate_stm(
         &self,
         _state: [f64; 6],
+        _non_gravitational_parameters: Option<crate::NonGravitationalParametersRow>,
         _epoch_tdb: crate::Epoch,
         _times_tdb: &[crate::Epoch],
     ) -> PropagationResultValue<Vec<super::StmRow>> {
@@ -3156,6 +4042,35 @@ where
     P: Propagator,
     T: OriginTranslationProvider,
 {
+    fn civil_times_mjd(&self, observed: &CoordinateBatch) -> PropagationResultValue<Vec<f64>> {
+        Ok(observed
+            .times
+            .as_ref()
+            .ok_or_else(|| {
+                PropagationError::InvalidRequest(
+                    "orbit determination requires observation times".to_string(),
+                )
+            })?
+            .rescale_with_provider(crate::TimeScale::Utc, self.provider)?
+            .mjd_values())
+    }
+
+    fn dynamical_times_mjd(&self, observed: &CoordinateBatch) -> PropagationResultValue<Vec<f64>> {
+        observed_times_mjd_tdb(observed, self.provider)
+    }
+
+    fn dynamical_epoch_in_scale(
+        &self,
+        mjd_tdb: f64,
+        scale: crate::TimeScale,
+    ) -> PropagationResultValue<crate::Epoch> {
+        Ok(
+            crate::TimeArray::new(crate::TimeScale::Tdb, vec![mjd_epoch(mjd_tdb)])?
+                .rescale_with_provider(scale, self.provider)?
+                .epochs[0],
+        )
+    }
+
     fn backend(&self) -> super::BackendIdentity {
         self.propagator.backend()
     }
@@ -3167,10 +4082,12 @@ where
     fn propagate_stm(
         &self,
         state: [f64; 6],
+        non_gravitational_parameters: Option<crate::NonGravitationalParametersRow>,
         epoch_tdb: crate::Epoch,
         times_tdb: &[crate::Epoch],
     ) -> PropagationResultValue<Vec<super::StmRow>> {
-        self.propagator.propagate_stm(state, epoch_tdb, times_tdb)
+        self.propagator
+            .propagate_stm(state, non_gravitational_parameters, epoch_tdb, times_tdb)
     }
 
     fn predict_spherical(
@@ -3298,6 +4215,7 @@ pub(super) fn masked_arc_length(values: &[f64], mask: &[bool]) -> (f64, f64, f64
 /// Non-finite input yields NaN, mirroring `np.linalg.cond` failing over to
 /// the legacy NaN branch.
 #[allow(clippy::needless_range_loop)]
+#[allow(dead_code)]
 fn symmetric_condition_number(a: &[[f64; 6]; 6]) -> f64 {
     if a.iter().flatten().any(|value| !value.is_finite()) {
         return f64::NAN;
@@ -3344,6 +4262,7 @@ fn symmetric_condition_number(a: &[[f64; 6]; 6]) -> f64 {
 
 /// `np.linalg.cond` of an `(6, 1)` matrix: the single singular value is the
 /// vector norm, so the ratio is 1 unless the vector is zero (NaN).
+#[allow(dead_code)]
 fn vector_condition_number(b: &[f64; 6]) -> f64 {
     if b.iter().any(|value| !value.is_finite()) {
         return f64::NAN;
@@ -3623,7 +4542,14 @@ mod tests {
         for index in 0..6 {
             assert!((output.fit.state[index] - TRUTH_STATE[index]).abs() < 5e-5);
         }
-        assert!(output.evaluation.orbit_chi2 < 1e-2);
+        // The cross-platform Gauss-Newton finite-difference floor is about
+        // 1.1e-2 on musl/aarch64 and remains negligible relative to one dof.
+        assert!(
+            output.evaluation.orbit_chi2 < 1e-2,
+            "orbit chi2 {} state {:?}",
+            output.evaluation.orbit_chi2,
+            output.fit.state
+        );
         assert_eq!(output.evaluation.num_obs, NUM_OBS);
         assert_eq!(output.evaluation.outlier, vec![false; NUM_OBS]);
         assert!((output.evaluation.arc_length - 21.0).abs() < 1e-9);
@@ -3705,6 +4631,94 @@ mod tests {
     }
 
     #[test]
+    fn od_fit_arc_is_scale_invariant_across_a_utc_leap() {
+        let mut observer_rows = observers();
+        let tdb_times = TimeArray::new(
+            TimeScale::Tdb,
+            (0..NUM_OBS)
+                .map(|row| Epoch::new(57_753 + 3 * row as i64, 70_000_000_000))
+                .collect(),
+        )
+        .unwrap();
+        observer_rows.coordinates.times = Some(tdb_times.clone());
+        let generated = generate_ephemeris_barycentric(
+            &TwoBodyPropagator::default(),
+            &truth_orbit(TRUTH_STATE),
+            &observer_rows,
+            &ephemeris_options(),
+            &NoopProvider,
+            &ZeroTranslationProvider,
+        )
+        .unwrap()
+        .ephemeris
+        .coordinates;
+        let sigma = 1.0 / 3600.0;
+        let mut covariance = vec![0.0_f64; NUM_OBS * 36];
+        for row in 0..NUM_OBS {
+            covariance[row * 36] = 1.0;
+            covariance[row * 36 + 7] = sigma * sigma;
+            covariance[row * 36 + 14] = sigma * sigma;
+            covariance[row * 36 + 21] = 1.0;
+            covariance[row * 36 + 28] = 1.0;
+            covariance[row * 36 + 35] = 1.0;
+        }
+        let observed = CoordinateBatch::new(
+            generated.values,
+            generated.frame,
+            generated.origins,
+            Some(tdb_times.clone()),
+            Some(
+                CovarianceBatch::new(
+                    NUM_OBS,
+                    6,
+                    covariance,
+                    CovarianceUnits::Coordinate(crate::CoordinateRepresentation::Spherical),
+                )
+                .unwrap(),
+            ),
+        )
+        .unwrap();
+        let config = OdConfig {
+            rchi2_threshold: 10.0,
+            min_obs: 5,
+            min_arc_length: 1.0,
+            contamination_percentage: 0.0,
+            delta: 1e-6,
+            max_iter: 20,
+            method: OdMethod::Central,
+        };
+        let run = |observed: &CoordinateBatch, observers: &ObserverBatch| {
+            od_fit_barycentric(
+                &TwoBodyPropagator::default(),
+                &perturbed_start(),
+                observed,
+                observers,
+                &config,
+                &ephemeris_options(),
+                &NoopProvider,
+                &ZeroTranslationProvider,
+            )
+            .unwrap()
+        };
+        let tdb = run(&observed, &observer_rows);
+        assert!(tdb.found);
+
+        let utc_times = tdb_times.rescale(TimeScale::Utc).unwrap();
+        let mut utc_observed = observed;
+        let mut utc_observers = observer_rows;
+        utc_observed.times = Some(utc_times.clone());
+        utc_observers.coordinates.times = Some(utc_times);
+        let utc = run(&utc_observed, &utc_observers);
+        assert!(utc.found);
+        assert!((utc.arc_length - tdb.arc_length).abs() < 1.0e-10);
+        assert!(utc
+            .state
+            .iter()
+            .zip(tdb.state)
+            .all(|(left, right)| (left - right).abs() < 1.0e-10));
+    }
+
+    #[test]
     fn od_fit_below_min_obs_is_not_found() {
         let observed = synthetic_observations();
         let observers = observers();
@@ -3748,6 +4762,9 @@ mod tests {
             mu: crate::types::origin_mu_au3_day2(&OriginId::from_code("SUN")).unwrap(),
             speed_of_light: 173.144_632_674_240_3,
             max_triplets: None,
+            max_pair_visits: 20_000,
+            max_raw_pair_visits: 200_000,
+            max_middle_visits: 200_000,
             velocity_method: VelocityMethod::Gibbs,
             spans: SpanSearchConfig::default(),
             acceptance: IodAcceptance::Prefit,
@@ -3768,10 +4785,86 @@ mod tests {
         }
     }
 
+    struct LegacyLinearPredictor {
+        base: Vec<[f64; 6]>,
+        truth: [f64; 6],
+    }
+
+    impl SphericalPredictor for LegacyLinearPredictor {
+        fn predict_spherical(
+            &self,
+            states: &[[f64; 6]],
+            _geometry: &OrbitGeometry,
+            observers: &ObserverBatch,
+        ) -> PropagationResultValue<Result<Vec<f64>, String>> {
+            let mut output = Vec::with_capacity(states.len() * observers.len() * 6);
+            for state in states {
+                for (row, base) in self.base.iter().enumerate() {
+                    let mut predicted = *base;
+                    for component in 0..2 {
+                        let axis = (2 * row + component) % 6;
+                        predicted[1 + component] += state[axis] - self.truth[axis];
+                    }
+                    output.extend_from_slice(&predicted);
+                }
+            }
+            Ok(Ok(output))
+        }
+
+        fn dynamical_times_mjd(
+            &self,
+            observed: &CoordinateBatch,
+        ) -> PropagationResultValue<Vec<f64>> {
+            observed_times_mjd(observed)
+        }
+    }
+
     /// Fault injection around a predictor: `fail_calls` prediction calls
     /// (counting from the first) return `failure`; `garbage_calls` return
     /// the inner prediction displaced by half a degree in longitude (a
     /// finite but hopeless candidate).
+    struct TimeRoutingPredictor<'a> {
+        inner: &'a dyn SphericalPredictor,
+        civil_calls: std::cell::Cell<usize>,
+        dynamical_calls: std::cell::Cell<usize>,
+        civil_override: Option<Vec<f64>>,
+    }
+
+    impl SphericalPredictor for TimeRoutingPredictor<'_> {
+        fn predict_spherical(
+            &self,
+            states: &[[f64; 6]],
+            geometry: &OrbitGeometry,
+            observers: &ObserverBatch,
+        ) -> PropagationResultValue<Result<Vec<f64>, String>> {
+            self.inner.predict_spherical(states, geometry, observers)
+        }
+
+        fn civil_times_mjd(&self, observed: &CoordinateBatch) -> PropagationResultValue<Vec<f64>> {
+            self.civil_calls.set(self.civil_calls.get() + 1);
+            match &self.civil_override {
+                Some(times) => Ok(times.clone()),
+                None => self.inner.civil_times_mjd(observed),
+            }
+        }
+
+        fn dynamical_times_mjd(
+            &self,
+            observed: &CoordinateBatch,
+        ) -> PropagationResultValue<Vec<f64>> {
+            self.dynamical_calls.set(self.dynamical_calls.get() + 1);
+            self.inner.dynamical_times_mjd(observed)
+        }
+
+        fn dynamical_epoch_in_scale(
+            &self,
+            mjd_tdb: f64,
+            scale: crate::TimeScale,
+        ) -> PropagationResultValue<crate::Epoch> {
+            self.inner.dynamical_epoch_in_scale(mjd_tdb, scale)
+        }
+    }
+
     struct FaultyPredictor<'a> {
         inner: &'a dyn SphericalPredictor,
         calls: std::cell::Cell<usize>,
@@ -3878,6 +4971,312 @@ mod tests {
     }
 
     #[test]
+    fn iod_observation_order_canonicalizes_equal_epoch_station_rows_by_content() {
+        let times = TimeArray::new(
+            TimeScale::Tdb,
+            vec![
+                Epoch::new(60_000, 0),
+                Epoch::new(60_000, 0),
+                Epoch::new(60_001, 0),
+            ],
+        )
+        .unwrap();
+        let mut values = vec![[0.0; 6]; 3];
+        values[0][1] = 20.0;
+        values[1][1] = 10.0;
+        values[2][1] = 30.0;
+        let observed = CoordinateBatch::spherical(
+            values,
+            Frame::Equatorial,
+            OriginArray::repeat(OriginId::Named("SUN".to_string()), 3),
+            Some(times.clone()),
+            None,
+        )
+        .unwrap();
+        let observers = ObserverBatch::new(
+            vec![ObservatoryCode("500".to_string()); 3],
+            CoordinateBatch::cartesian(
+                vec![[0.0; 6]; 3],
+                Frame::Ecliptic,
+                OriginArray::repeat(OriginId::Named("SUN".to_string()), 3),
+                Some(times),
+                None,
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        let canonical = iod_observation_order(&observed, &observers).unwrap();
+        assert_eq!(canonical, vec![1, 0, 2]);
+
+        let permutation = [1_usize, 0, 2];
+        let shuffled_observed = take_coordinate_batch(&observed, &permutation).unwrap();
+        let shuffled_observers = take_observer_batch(&observers, &permutation).unwrap();
+        let shuffled = iod_observation_order(&shuffled_observed, &shuffled_observers).unwrap();
+        let physical_rows: Vec<usize> = shuffled.iter().map(|&row| permutation[row]).collect();
+        assert_eq!(physical_rows, canonical);
+    }
+
+    #[test]
+    fn iod_observation_order_uses_every_observer_content_tie_break() {
+        let observed_times =
+            TimeArray::new(TimeScale::Tdb, vec![Epoch::new(60_000, 0); 2]).unwrap();
+        let observed = CoordinateBatch::spherical(
+            vec![[f64::NAN, 10.0, 20.0, f64::NAN, f64::NAN, f64::NAN]; 2],
+            Frame::Equatorial,
+            OriginArray::repeat(OriginId::Named("SUN".to_string()), 2),
+            Some(observed_times),
+            None,
+        )
+        .unwrap();
+        let assert_invariant = |observers: ObserverBatch| {
+            let canonical = iod_observation_order(&observed, &observers).unwrap();
+            assert_eq!(canonical, vec![0, 1]);
+            let permutation = [1_usize, 0];
+            let shuffled_observed = take_coordinate_batch(&observed, &permutation).unwrap();
+            let shuffled_observers = take_observer_batch(&observers, &permutation).unwrap();
+            let shuffled = iod_observation_order(&shuffled_observed, &shuffled_observers).unwrap();
+            let physical_rows: Vec<usize> = shuffled.iter().map(|&row| permutation[row]).collect();
+            assert_eq!(physical_rows, canonical);
+        };
+        let codes = vec![ObservatoryCode("500".to_string()); 2];
+        let origins = OriginArray::repeat(OriginId::Named("SUN".to_string()), 2);
+        let same_times = TimeArray::new(TimeScale::Tdb, vec![Epoch::new(60_000, 0); 2]).unwrap();
+
+        let distinct_times = TimeArray::new(
+            TimeScale::Tdb,
+            vec![Epoch::new(60_000, 0), Epoch::new(60_000, 1)],
+        )
+        .unwrap();
+        assert_invariant(
+            ObserverBatch::new(
+                codes.clone(),
+                CoordinateBatch::cartesian(
+                    vec![[0.0; 6]; 2],
+                    Frame::Ecliptic,
+                    origins.clone(),
+                    Some(distinct_times),
+                    None,
+                )
+                .unwrap(),
+            )
+            .unwrap(),
+        );
+
+        let mut states = vec![[0.0; 6]; 2];
+        states[1][0] = 1.0;
+        assert_invariant(
+            ObserverBatch::new(
+                codes.clone(),
+                CoordinateBatch::cartesian(
+                    states,
+                    Frame::Ecliptic,
+                    origins.clone(),
+                    Some(same_times.clone()),
+                    None,
+                )
+                .unwrap(),
+            )
+            .unwrap(),
+        );
+
+        let mut covariance = vec![0.0; 2 * 36];
+        covariance[36] = 1.0;
+        assert_invariant(
+            ObserverBatch::new(
+                codes,
+                CoordinateBatch::cartesian(
+                    vec![[0.0; 6]; 2],
+                    Frame::Ecliptic,
+                    origins,
+                    Some(same_times),
+                    Some(
+                        CovarianceBatch::new(
+                            2,
+                            6,
+                            covariance,
+                            CovarianceUnits::Coordinate(crate::CoordinateRepresentation::Cartesian),
+                        )
+                        .unwrap(),
+                    ),
+                )
+                .unwrap(),
+            )
+            .unwrap(),
+        );
+    }
+
+    #[test]
+    fn iod_settings_validation_rejects_every_invalid_family() {
+        let invalid = [
+            IodConfig {
+                min_obs: 2,
+                ..IodConfig::default()
+            },
+            IodConfig {
+                min_arc_length: -1.0,
+                ..IodConfig::default()
+            },
+            IodConfig {
+                contamination_percentage: f64::NAN,
+                ..IodConfig::default()
+            },
+            IodConfig {
+                contamination_percentage: 101.0,
+                ..IodConfig::default()
+            },
+            IodConfig {
+                rchi2_threshold: f64::INFINITY,
+                ..IodConfig::default()
+            },
+            IodConfig {
+                mu: 0.0,
+                ..IodConfig::default()
+            },
+            IodConfig {
+                speed_of_light: f64::NAN,
+                ..IodConfig::default()
+            },
+            IodConfig {
+                max_triplets: Some(0),
+                ..IodConfig::default()
+            },
+            IodConfig {
+                max_pair_visits: 0,
+                ..IodConfig::default()
+            },
+            IodConfig {
+                max_raw_pair_visits: 0,
+                ..IodConfig::default()
+            },
+            IodConfig {
+                max_middle_visits: 0,
+                ..IodConfig::default()
+            },
+            IodConfig {
+                spans: SpanSearchConfig {
+                    max_triplets: 0,
+                    ..SpanSearchConfig::default()
+                },
+                ..IodConfig::default()
+            },
+            IodConfig {
+                spans: SpanSearchConfig {
+                    min_span_days: 2.0,
+                    max_span_days: 1.0,
+                    ..SpanSearchConfig::default()
+                },
+                ..IodConfig::default()
+            },
+            IodConfig {
+                correction: CorrectionConfig {
+                    max_corrections: 0,
+                    ..CorrectionConfig::default()
+                },
+                ..IodConfig::default()
+            },
+            IodConfig {
+                correction: CorrectionConfig {
+                    growth: 1.0,
+                    ..CorrectionConfig::default()
+                },
+                ..IodConfig::default()
+            },
+            IodConfig {
+                correction: CorrectionConfig {
+                    max_corrections: 1,
+                    max_converged: 2,
+                    ..CorrectionConfig::default()
+                },
+                ..IodConfig::default()
+            },
+            IodConfig {
+                ranging: super::super::od_ranging::RangingConfig {
+                    n_rho: 0,
+                    ..super::super::od_ranging::RangingConfig::default()
+                },
+                ..IodConfig::default()
+            },
+            IodConfig {
+                ranging: super::super::od_ranging::RangingConfig {
+                    max_arc_days: f64::INFINITY,
+                    ..super::super::od_ranging::RangingConfig::default()
+                },
+                ..IodConfig::default()
+            },
+            IodConfig {
+                ranging: super::super::od_ranging::RangingConfig {
+                    rho_min_au: 1.0,
+                    rho_max_au: 0.5,
+                    ..super::super::od_ranging::RangingConfig::default()
+                },
+                ..IodConfig::default()
+            },
+        ];
+        for config in invalid {
+            assert!(config.validate().is_err(), "accepted {config:?}");
+        }
+        assert!(IodConfig::default().validate().is_ok());
+
+        let bad = IodConfig {
+            min_obs: 2,
+            ..IodConfig::default()
+        };
+        let error = iod_fit_barycentric(
+            &TwoBodyPropagator::default(),
+            &synthetic_observations(),
+            &observers(),
+            &bad,
+            &ephemeris_options(),
+            &NoopProvider,
+            &ZeroTranslationProvider,
+        )
+        .unwrap_err();
+        assert!(matches!(error, PropagationError::InvalidRequest(_)));
+    }
+
+    #[test]
+    fn iod_routes_nights_to_civil_time_and_intervals_to_dynamical_time() {
+        let propagator = TwoBodyPropagator::default();
+        let options = ephemeris_options();
+        let inner = two_body_predictor(&propagator, &options);
+        let predictor = TimeRoutingPredictor {
+            inner: &inner,
+            civil_calls: std::cell::Cell::new(0),
+            dynamical_calls: std::cell::Cell::new(0),
+            // Deliberately place every epoch in one civil observing night.
+            // Dynamical epochs remain the multi-night physical intervals.
+            civil_override: Some(
+                (0..NUM_OBS)
+                    .map(|row| 60_000.0 + row as f64 / 1000.0)
+                    .collect(),
+            ),
+        };
+        let mut same_station = observers();
+        same_station.code = vec![ObservatoryCode("T00".to_string()); NUM_OBS];
+        let result = run_iod(
+            &predictor,
+            &synthetic_observations(),
+            &same_station,
+            &IodConfig {
+                observation_selection_method: ObservationSelectionMethod::Spans,
+                acceptance: IodAcceptance::Prefit,
+                rchi2_threshold: 1.0e-300,
+                contamination_percentage: 0.0,
+                ..IodConfig::default()
+            },
+        )
+        .unwrap();
+        assert!(!result.found());
+        // One civil night has one useful grouped night pair. If night labels
+        // are accidentally derived from TDB, this multi-night arc exposes
+        // many pairs instead and tries more than one triplet.
+        assert_eq!(result.triplets_tried, 1);
+        assert_eq!(result.pair_visits, 1);
+        assert_eq!(predictor.civil_calls.get(), 1);
+        assert!(predictor.dynamical_calls.get() >= 1);
+    }
+
+    #[test]
     fn iod_fit_accepts_the_noise_free_arc_in_input_order() {
         let output = iod_fit_barycentric(
             &TwoBodyPropagator::default(),
@@ -3943,6 +5342,183 @@ mod tests {
     }
 
     #[test]
+    fn prefit_trial_acceptance_and_retry_use_the_retained_time_arc() {
+        assert!(!prefit_step_is_acceptable(true, 0.99, 1.0));
+        assert!(prefit_step_is_acceptable(true, 1.0, 1.0));
+        assert!(!prefit_step_is_acceptable(false, 2.0, 1.0));
+
+        // Rows are deliberately not in time order and both temporal
+        // endpoints are excluded. Row-index endpoints would claim 100 days;
+        // the retained time arc is only one day.
+        let times = [0.0, 100.0, 50.0, 51.0];
+        assert!(!retained_arc_allows_retry(
+            &times,
+            &[false, false, true, true],
+            2.0,
+        ));
+        let order = [0, 2, 3, 1];
+        let retained_arc = prefit_outlier_arc_length(&times, &order, 1, 2);
+        assert_eq!(retained_arc, 1.0);
+        assert!(!prefit_outlier_is_acceptable(0.5, 1.0, retained_arc, 2.0));
+        assert!(prefit_outlier_is_acceptable(0.5, 1.0, retained_arc, 1.0));
+    }
+
+    #[test]
+    fn legacy_od_fit_validates_config_before_predictor_work() {
+        let observed = synthetic_observations();
+        let predictor = LegacyLinearPredictor {
+            base: observed.values.spherical().unwrap().to_vec(),
+            truth: TRUTH_STATE,
+        };
+        let error = od_fit_with(
+            &predictor,
+            &perturbed_start(),
+            &observed,
+            &observers(),
+            &OdConfig {
+                rchi2_threshold: 1.0,
+                min_arc_length: 0.0,
+                contamination_percentage: 0.0,
+                method: OdMethod::Central,
+                min_obs: 6,
+                delta: 1.0e-6,
+                max_iter: 0,
+            },
+        )
+        .expect_err("invalid legacy OD config must fail before fitting");
+        assert!(error.to_string().contains("max_iter must be positive"));
+    }
+
+    #[test]
+    fn prefit_linear_fit_cannot_accept_below_minimum_arc() {
+        let observed = synthetic_observations();
+        let base = observed.values.spherical().unwrap().to_vec();
+        let predictor = LegacyLinearPredictor {
+            base,
+            truth: TRUTH_STATE,
+        };
+        let output = od_fit_with(
+            &predictor,
+            &perturbed_start(),
+            &observed,
+            &observers(),
+            &OdConfig {
+                rchi2_threshold: f64::MAX,
+                min_arc_length: 1_000_000.0,
+                contamination_percentage: 0.0,
+                method: OdMethod::Central,
+                min_obs: 6,
+                delta: 1.0e-6,
+                max_iter: 20,
+            },
+        )
+        .unwrap();
+        assert!(!output.found);
+    }
+
+    #[test]
+    fn prefit_acceptance_enforces_minimum_arc_before_every_acceptance() {
+        let config = IodConfig {
+            min_arc_length: 1_000_000.0,
+            rchi2_threshold: f64::MAX,
+            acceptance: IodAcceptance::Prefit,
+            ..iod_config(0.0)
+        };
+        let result = iod_fit_barycentric(
+            &TwoBodyPropagator::default(),
+            &synthetic_observations(),
+            &observers(),
+            &config,
+            &ephemeris_options(),
+            &NoopProvider,
+            &ZeroTranslationProvider,
+        )
+        .unwrap();
+        assert!(!result.found);
+        assert!(result.candidates_evaluated > 0);
+        assert!(result.arc_length.is_nan());
+    }
+
+    #[test]
+    fn prefit_outlier_call_site_uses_the_retained_arc_and_configured_minimum() {
+        struct LastRowOutlierPredictor {
+            perfect: Vec<f64>,
+        }
+        impl SphericalPredictor for LastRowOutlierPredictor {
+            fn predict_spherical(
+                &self,
+                _states: &[[f64; 6]],
+                _geometry: &OrbitGeometry,
+                _observers: &ObserverBatch,
+            ) -> PropagationResultValue<Result<Vec<f64>, String>> {
+                let mut predicted = self.perfect.clone();
+                predicted[(NUM_OBS - 1) * 6 + 1] += 1.0;
+                Ok(Ok(predicted))
+            }
+        }
+
+        let observed = synthetic_observations();
+        let predictor = LastRowOutlierPredictor {
+            perfect: spherical_flat(&observed, "observed").unwrap(),
+        };
+        let result = run_iod(
+            &predictor,
+            &observed,
+            &observers(),
+            &IodConfig {
+                acceptance: IodAcceptance::Prefit,
+                observation_selection_method: ObservationSelectionMethod::Spans,
+                contamination_percentage: 20.0,
+                rchi2_threshold: 1.0e-12,
+                min_arc_length: 20.0,
+                max_triplets: Some(1),
+                ..IodConfig::default()
+            },
+        )
+        .unwrap();
+        assert!(
+            !result.found(),
+            "a retained 18-day arc must not pass 20 days"
+        );
+        assert!(result.candidates_evaluated >= 1);
+        assert!(result
+            .candidates
+            .iter()
+            .all(|candidate| !candidate.triplet.contains(&(NUM_OBS - 1))));
+    }
+
+    #[test]
+    fn prefit_outlier_removal_rechecks_the_retained_time_arc() {
+        let mut observed = synthetic_observations();
+        let values = match &mut observed.values {
+            CoordinateValues::Spherical(values) => values,
+            _ => panic!("synthetic observations are spherical"),
+        };
+        values[0][1] += 10.0;
+        let config = IodConfig {
+            acceptance: IodAcceptance::Prefit,
+            observation_selection_method: ObservationSelectionMethod::Thirds,
+            contamination_percentage: 20.0,
+            rchi2_threshold: 1.0e-6,
+            min_arc_length: 20.0,
+            max_triplets: Some(1),
+            ..IodConfig::default()
+        };
+        let result = iod_fit_barycentric(
+            &TwoBodyPropagator::default(),
+            &observed,
+            &observers(),
+            &config,
+            &ephemeris_options(),
+            &NoopProvider,
+            &ZeroTranslationProvider,
+        )
+        .unwrap();
+        assert!(!result.found);
+        assert!(result.candidates_evaluated >= 1);
+    }
+
+    #[test]
     fn iod_fit_zero_contamination_continues_past_a_rejected_triplet() {
         let observed = synthetic_observations();
         let observers = observers();
@@ -3991,38 +5567,81 @@ mod tests {
     }
 
     #[test]
-    fn iod_fit_skips_a_candidate_whose_prediction_fails() {
+    fn iod_fit_skips_only_an_inband_row_failure() {
+        let observed = synthetic_observations();
+        let observers = observers();
+        let propagator = TwoBodyPropagator::default();
+        let options = ephemeris_options();
+        let inner = two_body_predictor(&propagator, &options);
+        let predictor = FaultyPredictor {
+            inner: &inner,
+            calls: std::cell::Cell::new(0),
+            fail_calls: 1,
+            failure: None,
+            garbage_calls: 0,
+        };
+        let result = run_iod(&predictor, &observed, &observers, &iod_config(0.0)).unwrap();
+        assert!(result.found(), "{:?}", result.not_found_reason);
+        assert_eq!(result.candidates_failed, 1);
+        assert_eq!(result.candidate_failures.len(), 1);
+        assert!(result.candidate_failures[0].message.contains("row failure"));
+        let output = result.to_output(observed.len());
+        assert!(output.candidates_evaluated >= 2);
+        assert_eq!(output.outlier, vec![false; NUM_OBS]);
+
+        let permutation = [5_usize, 2, 7, 0, 3, 6, 1, 4];
+        let shuffled_observed = take_coordinate_batch(&observed, &permutation).unwrap();
+        let shuffled_observers = take_observer_batch(&observers, &permutation).unwrap();
+        let shuffled_predictor = FaultyPredictor {
+            inner: &inner,
+            calls: std::cell::Cell::new(0),
+            fail_calls: 1,
+            failure: None,
+            garbage_calls: 0,
+        };
+        let shuffled = run_iod(
+            &shuffled_predictor,
+            &shuffled_observed,
+            &shuffled_observers,
+            &iod_config(0.0),
+        )
+        .unwrap();
+        assert_eq!(shuffled.candidate_failures.len(), 1);
+        let mapped = shuffled.candidate_failures[0]
+            .triplet
+            .map(|row| permutation[row]);
+        assert_eq!(mapped, result.candidate_failures[0].triplet);
+    }
+
+    #[test]
+    fn iod_fit_propagates_fatal_backend_protocol_and_thread_failures() {
         let observed = synthetic_observations();
         let observers = observers();
         let propagator = TwoBodyPropagator::default();
         let options = ephemeris_options();
         let inner = two_body_predictor(&propagator, &options);
         for failure in [
-            Some(PropagationError::Backend(
-                "backend refused the candidate".to_string(),
-            )),
-            Some(PropagationError::BackendProtocol("short batch".to_string())),
-            Some(PropagationError::ThreadPool("no threads".to_string())),
-            None, // in-band per-row failure
+            PropagationError::Backend("backend refused the request".to_string()),
+            PropagationError::BackendProtocol("short ABI request".to_string()),
+            PropagationError::ThreadPool("no threads".to_string()),
         ] {
             let predictor = FaultyPredictor {
                 inner: &inner,
                 calls: std::cell::Cell::new(0),
                 fail_calls: 1,
-                failure,
+                failure: Some(failure.clone()),
                 garbage_calls: 0,
             };
-            let output = iod_fit(&predictor, &observed, &observers, &iod_config(20.0)).unwrap();
-            assert!(output.found, "{:?}", output.not_found_reason);
-            assert_eq!(output.candidates_failed, 1);
-            assert!(output.candidates_evaluated >= 1);
-            assert_eq!(output.outlier, vec![false; NUM_OBS]);
+            assert_eq!(
+                iod_fit(&predictor, &observed, &observers, &iod_config(20.0)).unwrap_err(),
+                failure
+            );
         }
     }
 
-    /// The materialized legacy selection: every combination, sorted by
-    /// (arc descending, midpoint offset ascending) with a stable sort, then
-    /// filtered to distinct epochs.
+    /// The materialized selection oracle: every combination, sorted by
+    /// robust search-priority arc descending, midpoint offset ascending and
+    /// canonical index, then filtered to distinct epochs.
     fn legacy_combination_triplets(times: &[f64]) -> Vec<[usize; 3]> {
         let n = times.len();
         let mut rows = Vec::new();
@@ -4038,7 +5657,10 @@ mod tests {
             let arc_b = times[b[2]] - times[b[0]];
             let mid_a = ((times[a[2]] + times[a[0]]) / 2.0 - times[a[1]]).abs();
             let mid_b = ((times[b[2]] + times[b[0]]) / 2.0 - times[b[1]]).abs();
-            arc_b.total_cmp(&arc_a).then(mid_a.total_cmp(&mid_b))
+            triplet_priority_key(arc_b)
+                .cmp(&triplet_priority_key(arc_a))
+                .then(triplet_priority_key(mid_a).cmp(&triplet_priority_key(mid_b)))
+                .then(a.cmp(b))
         });
         rows.retain(|row| {
             times[row[0]] != times[row[1]]
@@ -4078,6 +5700,121 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    #[ignore = "explicit 1e3-to-1e6 scaling gate"]
+    fn million_row_combination_walk_remains_within_independent_caps() {
+        for n in [1_000_usize, 10_000, 100_000, 1_000_000] {
+            let times: Vec<f64> = (0..n).map(|row| row as f64 * 0.01).collect();
+            let mut stats = TripletSearchStats::default();
+            let triplets = combination_triplets_with_stats(&times, 10_000, 4, 32, &mut stats);
+            assert!(triplets.len() <= 32, "n={n}");
+            assert!(stats.pair_visits <= 4, "n={n}");
+            assert!(stats.middle_visits <= 32, "n={n}");
+            assert!(stats.exhausted(), "n={n}");
+        }
+    }
+
+    #[test]
+    fn independent_combination_work_caps_stop_before_triplet_budget() {
+        let times: Vec<f64> = (0..10_000).map(|row| row as f64).collect();
+        let mut stats = TripletSearchStats::default();
+        let triplets = combination_triplets_with_stats(&times, 1_000, 2, 3, &mut stats);
+        assert_eq!(stats.pair_visits, 1);
+        assert_eq!(stats.raw_pair_visits, 1);
+        assert_eq!(stats.middle_visits, 3);
+        assert!(stats.middle_cap_exhausted);
+        assert!(stats.exhausted());
+        assert_eq!(triplets.len(), 3);
+
+        let times: Vec<f64> = (0..100).map(|row| row as f64).collect();
+        let mut stats = TripletSearchStats::default();
+        let triplets = combination_triplets_with_stats(&times, 10_000, 2, 10_000, &mut stats);
+        assert_eq!(stats.pair_visits, 2);
+        assert_eq!(stats.raw_pair_visits, 2);
+        assert_eq!(triplets.len(), 195);
+        assert!(stats.pair_cap_exhausted);
+        assert!(!stats.middle_cap_exhausted);
+    }
+
+    #[test]
+    fn dense_grouped_span_caps_pair_and_middle_work_independently() {
+        let times: Vec<f64> = (0..8)
+            .flat_map(|night| (0..50).map(move |row| night as f64 + row as f64 / 200.0))
+            .collect();
+        let nights = observation_nights(&times, None);
+        for (pair_cap, middle_cap, expected_pair, expected_middle) in [(2, 99, 2, 2), (99, 3, 3, 3)]
+        {
+            let mut stats = TripletSearchStats::default();
+            let triplets = span_triplets_with_limits(
+                &times,
+                &nights,
+                &SpanSearchConfig::default(),
+                32,
+                pair_cap,
+                100,
+                middle_cap,
+                &mut stats,
+            );
+            assert_eq!(stats.pair_visits, expected_pair);
+            assert_eq!(stats.middle_visits, expected_middle);
+            assert_eq!(triplets.len(), expected_pair.min(expected_middle));
+            assert_eq!(stats.pair_cap_exhausted, pair_cap <= middle_cap);
+            assert_eq!(stats.middle_cap_exhausted, middle_cap < pair_cap);
+            assert!(stats.exhausted());
+        }
+    }
+
+    #[test]
+    fn independent_span_raw_pair_cap_bounds_sparse_scans() {
+        let times: Vec<f64> = (0..10_000).map(|row| row as f64 * 100.0).collect();
+        let nights = observation_nights(&times, None);
+        let mut stats = TripletSearchStats::default();
+        let triplets = span_triplets_with_limits(
+            &times,
+            &nights,
+            &SpanSearchConfig::default(),
+            1_000,
+            7,
+            11,
+            13,
+            &mut stats,
+        );
+        assert!(triplets.is_empty());
+        assert!(stats.raw_pair_visits <= 11);
+        assert!(stats.raw_pair_cap_exhausted);
+        assert!(stats.exhausted());
+    }
+
+    #[test]
+    fn sparse_span_useful_pair_count_excludes_duplicate_night_pairs() {
+        let times: Vec<f64> = (0..66)
+            .flat_map(|night| [night as f64 + 0.1, night as f64 + 0.2])
+            .collect();
+        let nights = observation_nights(&times, None);
+        assert!(
+            nights
+                .iter()
+                .copied()
+                .collect::<std::collections::HashSet<_>>()
+                .len()
+                > 64
+        );
+        let mut stats = TripletSearchStats::default();
+        let triplets = span_triplets_with_limits(
+            &times,
+            &nights,
+            &SpanSearchConfig::default(),
+            1_000,
+            1_000,
+            10_000,
+            1_000,
+            &mut stats,
+        );
+        assert!(!triplets.is_empty());
+        assert_eq!(stats.pair_visits, triplets.len());
+        assert_eq!(stats.middle_visits, triplets.len());
     }
 
     #[test]
@@ -4232,6 +5969,79 @@ mod tests {
     }
 
     #[test]
+    fn iod_is_invariant_for_same_physical_epochs_in_utc_tai_tt_and_tdb() {
+        let mut base_observed = synthetic_observations();
+        let mut base_observers = observers();
+        // Shift the synthetic arc onto the 2016 leap-second boundary while
+        // retaining its physical intervals and geometry.
+        let shifted_tdb = TimeArray::new(
+            TimeScale::Tdb,
+            base_observed
+                .times
+                .as_ref()
+                .unwrap()
+                .epochs
+                .iter()
+                .map(|epoch| Epoch::new(epoch.days - 2_249, epoch.nanos))
+                .collect(),
+        )
+        .unwrap();
+        base_observed.times = Some(shifted_tdb.clone());
+        base_observers.coordinates.times = Some(shifted_tdb);
+
+        let propagator = TwoBodyPropagator::default();
+        let options = ephemeris_options();
+        let predictor = two_body_predictor(&propagator, &options);
+        let config = iod_config(0.0);
+        let mut baseline: Option<(Vec<[f64; 6]>, Vec<f64>)> = None;
+        for scale in [
+            TimeScale::Utc,
+            TimeScale::Tai,
+            TimeScale::Tt,
+            TimeScale::Tdb,
+        ] {
+            let mut observed = base_observed.clone();
+            let mut observers = base_observers.clone();
+            observed.times = Some(observed.times.as_ref().unwrap().rescale(scale).unwrap());
+            observers.coordinates.times = Some(
+                observers
+                    .coordinates
+                    .times
+                    .as_ref()
+                    .unwrap()
+                    .rescale(scale)
+                    .unwrap(),
+            );
+            let result = run_iod(&predictor, &observed, &observers, &config).unwrap();
+            assert!(result.found(), "{scale:?}: {:?}", result.not_found_reason);
+            let states: Vec<[f64; 6]> = result
+                .candidates
+                .iter()
+                .map(|candidate| candidate.state)
+                .collect();
+            let scores: Vec<f64> = result
+                .candidates
+                .iter()
+                .map(|candidate| candidate.prefit_reduced_chi2)
+                .collect();
+            if let Some((expected_states, expected_scores)) = &baseline {
+                assert_eq!(states.len(), expected_states.len());
+                for (actual, expected) in states.iter().zip(expected_states) {
+                    assert!(actual
+                        .iter()
+                        .zip(expected)
+                        .all(|(left, right)| (left - right).abs() < 1.0e-10));
+                }
+                for (actual, expected) in scores.iter().zip(expected_scores) {
+                    assert!((actual - expected).abs() < 1.0e-6);
+                }
+            } else {
+                baseline = Some((states, scores));
+            }
+        }
+    }
+
+    #[test]
     fn predictors_report_the_propagator_behind_them() {
         let propagator = TwoBodyPropagator::default();
         let identity = propagator.backend();
@@ -4370,6 +6180,35 @@ mod tests {
     }
 
     #[test]
+    fn triplet_order_is_stable_within_external_tt_tdb_model_difference() {
+        // This is an ordering policy only: the physical epochs passed to
+        // Gauss remain untouched. Forty microseconds brackets the documented
+        // leading-term-vs-external-model difference in the 1900--2100 probe.
+        let times: Vec<f64> = (0..24).map(|day| 60_000.0 + day as f64).collect();
+        let delta = 40.0e-6 / 86_400.0;
+        let shifted: Vec<f64> = times
+            .iter()
+            .enumerate()
+            .map(|(row, &time)| time + if row % 2 == 0 { delta } else { -delta })
+            .collect();
+        let config = SpanSearchConfig::default();
+        let base_spans = span_triplets(&times, &observation_nights(&times, None), &config, 12);
+        let shifted_spans =
+            span_triplets(&shifted, &observation_nights(&shifted, None), &config, 12);
+        assert_eq!(shifted_spans, base_spans);
+
+        let mut base_stats = TripletSearchStats::default();
+        let mut shifted_stats = TripletSearchStats::default();
+        let base_combinations =
+            combination_triplets_with_stats(&times, 12, 256, 4096, &mut base_stats);
+        let shifted_combinations =
+            combination_triplets_with_stats(&shifted, 12, 256, 4096, &mut shifted_stats);
+        assert_eq!(shifted_combinations, base_combinations);
+        assert!(base_stats.pair_visits <= 256 && shifted_stats.pair_visits <= 256);
+        assert!(base_stats.middle_visits <= 4096 && shifted_stats.middle_visits <= 4096);
+    }
+
+    #[test]
     fn span_triplets_prefer_the_target_span_in_the_densest_window() {
         // 3000 observations every six hours: the first triplet spans the
         // target exactly, its middle at the pair's midpoint, inside the
@@ -4424,7 +6263,7 @@ mod tests {
                 .all(|&row| mjd[row] >= mjd[lo] && mjd[row] <= mjd[hi]));
         }
         assert_near_truth(&result.to_output(observed.len()));
-        // Budget: the spans default when max_triplets is None.
+        // Spans retain their historical method-specific default budget.
         let none = run_iod(
             &predictor,
             &observed,
@@ -4436,7 +6275,60 @@ mod tests {
         )
         .unwrap();
         assert!(!none.found());
-        assert!(none.triplets_tried <= config.spans.max_triplets);
+        let available = span_triplets(
+            &mjd,
+            &observation_nights(&mjd, None),
+            &config.spans,
+            config.spans.max_triplets,
+        )
+        .len();
+        assert_eq!(none.triplets_tried, available);
+    }
+
+    #[test]
+    fn spans_prefit_is_continuous_for_external_equivalent_label_offsets() {
+        let config = IodConfig {
+            observation_selection_method: ObservationSelectionMethod::Spans,
+            acceptance: IodAcceptance::Prefit,
+            velocity_method: VelocityMethod::Auto,
+            ..iod_config(0.0)
+        };
+        let propagator = TwoBodyPropagator::default();
+        let options = ephemeris_options();
+        let predictor = two_body_predictor(&propagator, &options);
+        let observed = synthetic_observations();
+        let observer_rows = observers();
+        let base = run_iod(&predictor, &observed, &observer_rows, &config).unwrap();
+        let base = base.accepted_candidate().expect("base arc accepted");
+
+        let mut shifted_observed = observed.clone();
+        let mut shifted_observers = observer_rows.clone();
+        for times in [
+            shifted_observed.times.as_mut().unwrap(),
+            shifted_observers.coordinates.times.as_mut().unwrap(),
+        ] {
+            for (row, epoch) in times.epochs.iter_mut().enumerate() {
+                let offset = if row % 2 == 0 { 40_000 } else { -40_000 };
+                *epoch = crate::Epoch::new(epoch.days, epoch.nanos + offset);
+            }
+        }
+        let shifted = run_iod(&predictor, &shifted_observed, &shifted_observers, &config).unwrap();
+        let shifted = shifted
+            .accepted_candidate()
+            .expect("externally shifted arc accepted");
+        assert_eq!(shifted.triplet, base.triplet);
+        assert_eq!(shifted.root_index, base.root_index);
+        assert_eq!(shifted.velocity_method, base.velocity_method);
+        assert!(
+            shifted
+                .state
+                .iter()
+                .zip(base.state)
+                .take(3)
+                .map(|(a, b)| (a - b).abs())
+                .fold(0.0_f64, f64::max)
+                < 1.0e-3
+        );
     }
 
     #[test]
@@ -4635,21 +6527,40 @@ mod tests {
         assert_eq!(control.state, roots[0]);
 
         // The first root's prediction made hopeless: the second root of the
-        // same triplet is scored before any other triplet is tried.
-        let predictor = FaultyPredictor {
-            inner: &inner,
+        // same triplet is scored before any other triplet is tried. Use exact
+        // observed coordinates after the injected rejection so acceptance is
+        // independent of numerical margins in the synthetic two-body fixture.
+        struct RejectThenPerfectPredictor {
+            calls: std::cell::Cell<usize>,
+            perfect: Vec<f64>,
+        }
+        impl SphericalPredictor for RejectThenPerfectPredictor {
+            fn predict_spherical(
+                &self,
+                _states: &[[f64; 6]],
+                _geometry: &OrbitGeometry,
+                _observers: &ObserverBatch,
+            ) -> PropagationResultValue<Result<Vec<f64>, String>> {
+                let call = self.calls.get();
+                self.calls.set(call + 1);
+                let mut predicted = self.perfect.clone();
+                if call == 0 {
+                    for row in predicted.chunks_exact_mut(6) {
+                        row[1] += 0.5;
+                    }
+                }
+                Ok(Ok(predicted))
+            }
+        }
+        let predictor = RejectThenPerfectPredictor {
             calls: std::cell::Cell::new(0),
-            fail_calls: 0,
-            failure: None,
-            garbage_calls: 1,
+            perfect: spherical_flat(&observed, "observed").unwrap(),
         };
         let output = iod_fit(&predictor, &observed, &observers, &config).unwrap();
         assert!(output.found, "{:?}", output.not_found_reason);
         assert!(output.candidates_evaluated >= 2);
-        assert_ne!(output.state, roots[0]);
-        if output.triplets_tried == 1 {
-            assert_eq!(output.state, roots[1]);
-        }
+        assert_eq!(output.triplets_tried, 1);
+        assert_eq!(output.state, roots[1]);
     }
 
     #[test]
@@ -4663,9 +6574,7 @@ mod tests {
             inner: &inner,
             calls: std::cell::Cell::new(0),
             fail_calls: usize::MAX,
-            failure: Some(PropagationError::Backend(
-                "the Python propagator raised an exception: boom".to_string(),
-            )),
+            failure: None,
             garbage_calls: 0,
         };
         let output = iod_fit(&predictor, &observed, &observers, &iod_config(20.0)).unwrap();
@@ -4680,7 +6589,31 @@ mod tests {
             reason.contains("every candidate prediction failed"),
             "{reason}"
         );
-        assert!(reason.contains("boom"), "{reason}");
+        assert!(reason.contains("light-time iteration failed"), "{reason}");
+    }
+
+    #[test]
+    fn iod_result_reports_exhausted_search_caps() {
+        let observed = synthetic_observations();
+        let observers = observers();
+        let propagator = TwoBodyPropagator::default();
+        let options = ephemeris_options();
+        let inner = two_body_predictor(&propagator, &options);
+        let predictor = FaultyPredictor {
+            inner: &inner,
+            calls: std::cell::Cell::new(0),
+            fail_calls: usize::MAX,
+            failure: None,
+            garbage_calls: 0,
+        };
+        let config = IodConfig {
+            max_triplets: Some(100),
+            max_pair_visits: 1,
+            ..iod_config(20.0)
+        };
+        let result = run_iod(&predictor, &observed, &observers, &config).unwrap();
+        assert!(result.search_cap_exhausted);
+        assert_eq!(result.pair_visits, 1);
     }
 
     #[test]
@@ -4823,3 +6756,7 @@ mod tests {
         assert!(output.covariance.iter().all(|value| value.is_finite()));
     }
 }
+
+#[cfg(test)]
+#[path = "od_contract_tests.rs"]
+mod contract_tests;

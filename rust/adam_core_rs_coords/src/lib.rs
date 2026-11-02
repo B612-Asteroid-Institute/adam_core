@@ -36,19 +36,50 @@ pub use efcc18::{
     EFCC18_N_COMPONENTS, EFCC18_N_TILES, MPC_ASTCAT_TO_EFCC18,
 };
 
-pub mod observation_uncertainty;
-pub use observation_uncertainty::{
-    assert_positions_unchanged, BiasTable, BiasTableRow, CompositeModel, Efcc18DebiasModel,
-    EmpiricalCovarianceMode, EmpiricalCovarianceModel, IdentityModel, NightBatchDeweightingModel,
-    ObservationUncertaintyModel, OrbitDeterminationAstrometry, PerformanceWeightedModel,
-    SigmaFloorModel, ARCSEC_PER_DEG,
+mod observation_uncertainty;
+mod od_batch;
+mod od_config;
+mod od_workflows;
+
+/// Rust-owned Core 0.7 orbit-determination configuration boundary.
+pub mod od {
+    pub use crate::od_batch::{
+        plan_associations, plan_orbit_members, AssociationGroup, OrbitMemberGroup,
+    };
+    pub use crate::od_config::{
+        EvaluationConfig, IodRunConfig, ObservationPipeline, ObservationTransform, OdConfig,
+        OdConfigError, RefinementRunConfig, ResidualCovarianceOperation, ResourceBindings,
+        ResourceProblem, ResourceRequirement, ResourceSlot, ResourceValidationError,
+        ValidatedResourceIdentity,
+    };
+    pub use crate::propagation::apply_configured_observation_pipeline;
+
+    /// Focused predictor-level building blocks used by the canonical batch API.
+    pub mod algorithms {
+        pub use crate::od_workflows::{
+            prepare_observations, refine_with_predictor, run_iod_with_predictor,
+            run_od_with_predictors, ConfiguredRunOdOutput, PreparedObservations,
+        };
+    }
+
+    /// Immutable predefined complete configurations.
+    pub mod profiles {
+        pub use crate::od_config::{
+            OdProfile, ProfileIdentity, ASTEROID_INSTITUTE_OD_V1, CORE_OD_V1, EFCC18_BIAS_RESOURCE,
+            V2_FULL_RESOURCE, V2_SIGMA_FILL_RESOURCE,
+        };
+    }
+}
+
+pub use od_config::{
+    EvaluationConfig, IodRunConfig, ObservationPipeline, ObservationTransform, OdConfig,
+    OdConfigError, OdProfile, ProfileIdentity, RefinementRunConfig, ResidualCovarianceOperation,
+    ResourceBindings, ResourceProblem, ResourceRequirement, ResourceSlot, ResourceValidationError,
+    ValidatedResourceIdentity, ASTEROID_INSTITUTE_OD_V1, CORE_OD_V1, EFCC18_BIAS_RESOURCE,
+    V2_FULL_RESOURCE, V2_SIGMA_FILL_RESOURCE,
 };
 
-pub mod veres2017;
-pub use veres2017::{
-    SigmaFillModel, VeresFloorModel, VeresReplaceModel, VeresSigmaLookup, VeresSigmaRow,
-    VERES2017_FALLBACK_SIGMA_ARCSEC,
-};
+mod veres2017;
 
 pub mod cmc2003;
 pub use cmc2003::{
@@ -121,11 +152,10 @@ pub mod propagate;
 pub mod propagation;
 pub use propagation::{
     candidate_orbit_batch, cmc2003_fit_barycentric, evaluate_orbit, fit_orbit_whitened_barycentric,
-    full_od_barycentric, iod_fit, iterative_fit_barycentric, max_outliers, run_od_barycentric,
-    symmetric_eigen_6x6, AstrometrySnapshot, Cmc2003FitConfig, Cmc2003FitOutput,
-    CovarianceValidation, FullOdConfig, FullOdOutput, IterativeFitConfig, IterativeFitOutput,
-    JacobianMethod, OrbitGeometry, RefinedOutput, RefinementConfig, RunOdOutput, WhitenedFitConfig,
-    WhitenedFitOutput, DELTA_CHI2_WINDOW,
+    iod_fit, iterative_fit_barycentric, max_outliers, symmetric_eigen_6x6, AstrometrySnapshot,
+    Cmc2003FitConfig, Cmc2003FitOutput, CovarianceValidation, IodCandidateFailure,
+    IterativeFitConfig, IterativeFitOutput, JacobianMethod, OrbitGeometry, RefinedOutput,
+    RefinementConfig, WhitenedFitConfig, WhitenedFitOutput, DELTA_CHI2_WINDOW,
 };
 pub use propagation::{
     generate_ephemeris, generate_ephemeris_barycentric, generate_ephemeris_translated,

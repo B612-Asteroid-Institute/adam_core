@@ -1,9 +1,9 @@
 """
-IOD is deterministic in the caller's row order (PR #217 review round 2,
-phase 1, item 4): the Rust driver sorts observations by epoch, station and
-original index before searching triplets and maps every member array back
-to the input order, so a shuffled copy of the observations yields the same
-accepted orbit and the same per-observation flags.
+IOD is deterministic independently of the caller's row order (PR #217
+review round 2, phase 1, item 4): the Rust driver sorts observations by exact
+epoch, station, and complete physical row content, using the original index
+only for physically identical ties. It maps every member array back to input
+order, so a shuffled copy yields the same accepted orbit and flags.
 """
 
 from __future__ import annotations
@@ -16,8 +16,10 @@ import quivr as qv
 
 from adam_core import _rust_native
 
-from ..differential_correction import _native_problem
-from ..iod import _placeholder_orbit, iod, run_iod
+from .._native_dispatch import native_propagator
+from ..algorithms.fitting import _native_problem
+from ..algorithms.iod import _placeholder_orbit
+from ._focused import explicit_config, run_iod_qualified, run_prefit_iod_qualified
 from .test_differential_correction import TwoBodyPropagator
 from .test_run_od_null_covariance import two_body_arc  # noqa: F401
 
@@ -40,14 +42,18 @@ def test_iod_is_invariant_to_observation_order(
         rchi2_threshold=1e4,
         contamination_percentage=contamination_percentage,
     )
-    fitted, members = iod(two_body_arc, TwoBodyPropagator, **settings)
+    fitted, members = run_prefit_iod_qualified(
+        two_body_arc, TwoBodyPropagator, **settings
+    )
     assert len(fitted) == 1
     assert members.obs_id.to_pylist() == two_body_arc.id.to_pylist()
 
     permutation = np.random.default_rng(123).permutation(len(two_body_arc))
     shuffled = two_body_arc.take(permutation)
     assert shuffled.id.to_pylist() != two_body_arc.id.to_pylist()
-    fitted_shuffled, members_shuffled = iod(shuffled, TwoBodyPropagator, **settings)
+    fitted_shuffled, members_shuffled = run_prefit_iod_qualified(
+        shuffled, TwoBodyPropagator, **settings
+    )
 
     assert len(fitted_shuffled) == 1
     npt.assert_array_equal(
@@ -75,7 +81,9 @@ def test_iod_uses_a_duplicated_epoch_at_most_once_per_triplet(
     with_twin = qv.concatenate([two_body_arc, twin])
     assert with_twin.coordinates.time[-1].equals(with_twin.coordinates.time[-2])
 
-    fitted, members = iod(with_twin, TwoBodyPropagator, min_obs=6, rchi2_threshold=1e4)
+    fitted, members = run_prefit_iod_qualified(
+        with_twin, TwoBodyPropagator, min_obs=6, rchi2_threshold=1e4
+    )
     assert len(fitted) == 1
     assert len(members) == len(with_twin)
     flags = flags_by_id(members)
@@ -93,10 +101,21 @@ def test_iod_search_budget_is_a_separate_setting(two_body_arc) -> None:  # noqa:
     )
 
     def run(**overrides):
-        settings = dict(min_obs=6, rchi2_threshold=1e-30, contamination_percentage=20.0)
+        settings = dict(
+            min_obs=6,
+            rchi2_threshold=1e-30,
+            contamination_percentage=20.0,
+            observation_selection_method="combinations",
+            acceptance="prefit",
+            velocity_method="gibbs",
+        )
         settings.update(overrides)
-        return _rust_native.iod_fit_ipc(
-            TwoBodyPropagator(), observed_ipc, observers_ipc, iod_settings=settings
+        config = explicit_config(**settings).for_iod()._native
+        return _rust_native.run_iod_config_ipc(
+            native_propagator(TwoBodyPropagator()),
+            observed_ipc,
+            observers_ipc,
+            config,
         )
 
     # Nothing passes a reduced chi2 threshold of 1e-30, so the search runs
@@ -131,10 +150,20 @@ def test_iod_epoch_crosses_as_exact_days_and_nanoseconds(
     )
 
     def run(**overrides):
-        settings = dict(min_obs=6, rchi2_threshold=1e4)
+        settings = dict(
+            min_obs=6,
+            rchi2_threshold=1e4,
+            observation_selection_method="combinations",
+            acceptance="prefit",
+            velocity_method="gibbs",
+        )
         settings.update(overrides)
-        return _rust_native.iod_fit_ipc(
-            TwoBodyPropagator(), observed_ipc, observers_ipc, iod_settings=settings
+        config = explicit_config(**settings).for_iod()._native
+        return _rust_native.run_iod_config_ipc(
+            native_propagator(TwoBodyPropagator()),
+            observed_ipc,
+            observers_ipc,
+            config,
         )
 
     output = run()
@@ -145,7 +174,13 @@ def test_iod_epoch_crosses_as_exact_days_and_nanoseconds(
     assert 0 <= output["epoch_nanos"] < 86_400_000_000_000
     assert output["epoch_scale"] == two_body_arc.coordinates.time.scale
 
-    fitted, _ = iod(two_body_arc, TwoBodyPropagator, min_obs=6, rchi2_threshold=1e4)
+    fitted, _ = run_prefit_iod_qualified(
+        two_body_arc,
+        TwoBodyPropagator,
+        min_obs=6,
+        rchi2_threshold=1e4,
+        observation_selection_method="combinations",
+    )
     assert fitted.coordinates.time.scale == output["epoch_scale"]
     assert fitted.coordinates.time.days[0].as_py() == output["epoch_days"]
     assert fitted.coordinates.time.nanos[0].as_py() == output["epoch_nanos"]
@@ -161,7 +196,7 @@ def test_run_iod_reports_every_scored_candidate(two_body_arc) -> None:  # noqa: 
     """`run_iod` returns the accepted orbit plus the typed candidate set:
     one record per scored candidate with its triplet rows, root and
     statistics, the accepted index, and counters that agree with the list."""
-    orbit, members, report = run_iod(
+    orbit, members, report = run_iod_qualified(
         two_body_arc,
         TwoBodyPropagator(),
         min_obs=6,
@@ -205,7 +240,7 @@ def test_run_iod_reports_every_scored_candidate(two_body_arc) -> None:  # noqa: 
             assert candidate.chi2 == candidate.prefit_chi2
 
     # A not-found search still reports every candidate and the reason.
-    _, _, none = run_iod(
+    _, _, none = run_iod_qualified(
         two_body_arc,
         TwoBodyPropagator(),
         min_obs=6,
@@ -233,8 +268,8 @@ def test_run_iod_candidate_set_is_invariant_to_observation_order(
         observation_selection_method="combinations",
         acceptance="prefit",
     )
-    _, _, report = run_iod(two_body_arc, TwoBodyPropagator(), **legacy)
-    _, _, report_shuffled = run_iod(shuffled, TwoBodyPropagator(), **legacy)
+    _, _, report = run_iod_qualified(two_body_arc, TwoBodyPropagator(), **legacy)
+    _, _, report_shuffled = run_iod_qualified(shuffled, TwoBodyPropagator(), **legacy)
     # shuffled row j holds input row permutation[j]: map rows back.
     inverse = {int(permutation[j]): j for j in range(n)}
     assert report.accepted == report_shuffled.accepted
