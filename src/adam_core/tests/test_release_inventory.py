@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import subprocess
 from pathlib import Path
@@ -11,6 +12,7 @@ import pytest
 
 from migration.scripts import release_inventory
 from migration.scripts.check_wheel_artifacts import (
+    _inspect_wheel,
     _validated_wheel_filename,
     _verify_release_inventory,
 )
@@ -49,13 +51,56 @@ def _inventory_repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     return repo
 
 
-def test_wheel_checker_rejects_malformed_evidence_filename(tmp_path: Path) -> None:
+def _write_inspectable_wheel(path: Path) -> None:
+    python_files = {
+        "adam_core/__init__.py": b"VALUE = 1\n",
+        "adam_core/_version.py": b"__version__ = '0.7.0'\n",
+    }
+    inventory = {
+        "format": release_inventory.FORMAT,
+        "commit": "1" * 40,
+        "digest": "2" * 64,
+        "python_files": {
+            name: hashlib.sha256(contents).hexdigest()
+            for name, contents in python_files.items()
+        },
+    }
+    with ZipFile(path, "w") as archive:
+        for name, contents in python_files.items():
+            archive.writestr(name, contents)
+        archive.writestr(
+            "adam_core/_release_inventory.json",
+            json.dumps(inventory, sort_keys=True),
+        )
+        archive.writestr(
+            "adam_core/_rust_native.cpython-312-aarch64-linux-gnu.so", b"ELF"
+        )
+        archive.writestr(
+            "adam_core-0.7.0.dist-info/METADATA",
+            "Metadata-Version: 2.4\nName: adam-core\nVersion: 0.7.0\n",
+        )
+
+
+def test_wheel_checker_rejects_malformed_or_misnamed_evidence(tmp_path: Path) -> None:
     canonical = tmp_path / "adam_core-0.7.0-cp312-cp312-manylinux_2_39_aarch64.whl"
+    _write_inspectable_wheel(canonical)
     assert _validated_wheel_filename(canonical) == ("adam-core", "0.7.0")
+    assert _inspect_wheel(canonical) == "0.7.0"
 
     malformed = tmp_path / "adam_core-0.7.0-18e230cd-cp312-manylinux_2_39_aarch64.whl"
+    malformed.write_bytes(canonical.read_bytes())
     with pytest.raises(SystemExit, match="invalid wheel filename"):
-        _validated_wheel_filename(malformed)
+        _inspect_wheel(malformed)
+
+    wrong_version = tmp_path / "adam_core-0.7.1-cp312-cp312-manylinux_2_39_aarch64.whl"
+    wrong_version.write_bytes(canonical.read_bytes())
+    with pytest.raises(SystemExit, match="filename version.*METADATA version"):
+        _inspect_wheel(wrong_version)
+
+    wrong_name = tmp_path / "adam_kore-0.7.0-cp312-cp312-manylinux_2_39_aarch64.whl"
+    wrong_name.write_bytes(canonical.read_bytes())
+    with pytest.raises(SystemExit, match="filename distribution.*METADATA name"):
+        _inspect_wheel(wrong_name)
 
 
 def test_release_inventory_refuses_visible_and_ignored_package_python(
