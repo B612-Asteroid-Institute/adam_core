@@ -3,6 +3,16 @@
 Profile values are decoded only from Rust's canonical definition. Profile
 objects cannot be constructed or replaced by callers, and binding returns a
 configuration whose Python view is decoded back from the bound native state.
+
+``CORE_OD_V1`` applies the exact EFCC18 catalog correction and nightly cap-four
+deweighting, and intentionally does not fill missing uncertainty.
+``ASTEROID_INSTITUTE_OD_V1`` first fills missing uncertainty from its pinned
+station/catalog table, applies EFCC18, adds its pinned station residual
+covariance when at least 30 residuals support a row, and finally applies the
+same nightly cap. Both use the complete Core V1 IOD/refinement/evaluation
+settings, never select a propagator, and fail closed on missing, swapped,
+corrupt, or structurally invalid resources. Package/distribution details for
+separately supplied licensed resources are deliberately outside this module.
 """
 
 from __future__ import annotations
@@ -26,6 +36,8 @@ from .observation_pipeline import ObservationPipeline
 
 @dataclass(frozen=True, slots=True)
 class ResourceRequirement:
+    """Path-free Rust-owned identity required for one semantic resource slot."""
+
     slot: str
     product: str
     product_version: str
@@ -106,7 +118,11 @@ class OdProfile:
         return MappingProxyType(dict(self._payload["definition"]))
 
     def bind(self, resources: ResourceBindings) -> OdConfig:
-        """Validate every binding and expand through the native definition."""
+        """Validate all resource bytes/structure and expand natively.
+
+        Validation is aggregate and precedes pipeline/provider work. Absolute
+        paths select local files but are excluded from canonical provenance.
+        """
 
         if not isinstance(resources, ResourceBindings):
             raise TypeError("resources must be ResourceBindings")

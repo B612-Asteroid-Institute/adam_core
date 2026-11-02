@@ -23,6 +23,7 @@ overrides = [{ name = "adam-core", editable = "." }]
 name = "adam-core"
 source = { editable = "." }
 dependencies = [
+    { name = "jpl-debias-2018" },
     { name = "mpc-obscodes" },
     { name = "naif-de440" },
     { name = "naif-earth-itrf93" },
@@ -49,6 +50,7 @@ requires-dist = [
     { name = "geopandas", marker = "extra == 'plots'", specifier = ">=1.0.1" },
     { name = "healpy", marker = "extra == 'healpix'" },
     { name = "jax", marker = "extra == 'jax'" },
+    { name = "jpl-debias-2018", specifier = "==2023.3.1.1" },
     { name = "matplotlib", marker = "extra == 'docs'", specifier = ">=3.10.1" },
     { name = "matplotlib", marker = "extra == 'plots'", specifier = ">=3.10.1" },
     { name = "mpc-obscodes" },
@@ -199,6 +201,15 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/6f/6d/0703ccc57f3a7233505399edb88de3cbd678da106337b9fcde432b65ed60/idna-3.11.tar.gz", hash = "sha256:795dafcc9c04ed0c1fb032c2aa73654d8e8c5023a7df64a53f39190ada629902", size = 194582, upload_time = "2025-10-12T14:55:20.501Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/0e/61/66938bbb5fc52dbdf84594873d5b51fb1f7c7794e9c0f5bd885f30bc507b/idna-3.11-py3-none-any.whl", hash = "sha256:771a87f49d9defaf64091e6e6fe9c18d4833f140bd19464795bc32d966ca37ea", size = 71008, upload_time = "2025-10-12T14:55:18.883Z" },
+]
+
+[[package]]
+name = "jpl-debias-2018"
+version = "2023.3.1.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/a2/9a/781b647e91ca840321d4659acbf50dcadc38e636355211d69ffda195aeff/jpl_debias_2018-2023.3.1.1.tar.gz", hash = "sha256:5cc1419cd6472817c15e878d61269a3234e71ba156bfc83443ae63b5f636ed85", size = 9089877, upload_time = "2026-11-02T16:16:59.514Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/a2/77/4eebbffcfad3a776a0c7d37842102ceef7521e0f31db11a605ab8321b76c/jpl_debias_2018-2023.3.1.1-py3-none-any.whl", hash = "sha256:ebd00a5dfee68553c394a270b48ca84815de282d0b603b0cf8f9fbebb8acc6b9", size = 9573082, upload_time = "2026-11-02T16:16:56.266Z" },
 ]
 
 [[package]]

@@ -146,9 +146,9 @@ pub const V2_SIGMA_FILL_RESOURCE: ResourceRequirement = ResourceRequirement {
     product: "v2_sigma_fill",
     product_version: "v2_sigma_fill",
     schema_version: "adam-observatory-sigma-table/v1",
-    sha256: "333855b153da9bc5f53f172cf691df0d85e7cb289942708a34f9b2d855a3a6f0",
-    byte_size: 51_949,
-    row_count: Some(2_474),
+    sha256: "95a6d12c0dc1f6278a869e2e0d7d356b54683773d536d286f00326a3d868495b",
+    byte_size: 52_288,
+    row_count: Some(2_480),
     catalog_date: None,
     format: "application/vnd.apache.parquet",
 };
@@ -158,9 +158,9 @@ pub const V2_FULL_RESOURCE: ResourceRequirement = ResourceRequirement {
     product: "v2_full",
     product_version: "v2_full",
     schema_version: "adam-observatory-bias-table/v1",
-    sha256: "96846a0e9717e0328ad5830fbab3012eab00546dccd1e5587a95c5cc6c712356",
-    byte_size: 158_614,
-    row_count: Some(1_123),
+    sha256: "ed0083b041fe523e6cfbabd3bff80bb0688b3056982de48d7789e59fdf370bac",
+    byte_size: 158_965,
+    row_count: Some(1_126),
     catalog_date: Some("2026-06-23"),
     format: "application/vnd.apache.parquet",
 };
@@ -1317,7 +1317,9 @@ impl OdProfile {
 }
 
 /// Public path-free profile. Selection is always explicit; it is not a
-/// function-signature default.
+/// function-signature default. The ordered pipeline applies the exact EFCC18
+/// correction and cap-four nightly deweighting. It requires finite positive
+/// input astrometric variances and does not fill missing uncertainty.
 pub const CORE_OD_V1: OdProfile = OdProfile {
     identity: ProfileIdentity {
         name: "CORE_OD_V1",
@@ -1327,13 +1329,18 @@ pub const CORE_OD_V1: OdProfile = OdProfile {
     kind: OdProfileKind::Core,
 };
 
-/// Institute reference profile. Core documentation exposes only semantic
-/// slots; deployment/package details remain outside this crate.
+/// Institute reference profile. Its ordered pipeline fills missing uncertainty
+/// from the pinned station/catalog table, applies EFCC18, adds the pinned
+/// station residual covariance for rows supported by at least 30 residuals,
+/// then applies cap-four nightly deweighting. It shares Core V1 IOD,
+/// refinement, and evaluation settings and never selects a propagator. Public
+/// documentation exposes only semantic resource slots; deployment/package
+/// details remain outside this crate.
 pub const ASTEROID_INSTITUTE_OD_V1: OdProfile = OdProfile {
     identity: ProfileIdentity {
         name: "ASTEROID_INSTITUTE_OD_V1",
         version: 1,
-        definition_sha256: "47cf72508a4c593cd69aefa6f37f1f5d65991a9c76f72975e182c7592bc08b8c",
+        definition_sha256: "7cf341740994fc918f3d4186fdbe4db75e8860698c99d85407ab12dc448b60c9",
     },
     kind: OdProfileKind::AsteroidInstitute,
 };

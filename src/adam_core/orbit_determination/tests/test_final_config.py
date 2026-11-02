@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import dataclasses
+import hashlib
+import importlib.metadata
 import json
 import sys
 import types
@@ -170,6 +172,31 @@ def test_core_public_resource_binding_uses_installed_data_package(
     assert bindings.paths == {"efcc18_catalog_bias_table": bias_dat}
 
 
+def test_published_core_resource_binds_and_validates_natively() -> None:
+    import jpl_debias_2018
+
+    bias_dat = Path(jpl_debias_2018.bias_dat)
+    assert importlib.metadata.version("jpl-debias-2018") == "2023.3.1.1"
+    assert bias_dat.is_absolute() and bias_dat.is_file()
+    assert bias_dat.stat().st_size == 37_161_151
+    with bias_dat.open("rb") as stream:
+        assert (
+            hashlib.file_digest(stream, "sha256").hexdigest()
+            == "ef6a50830bb83d8b1161e7acb391eed988ea9708e9fbcccc0c834da6109476e3"
+        )
+
+    bindings = od.core_od_v1_resource_bindings()
+    assert bindings.paths == {"efcc18_catalog_bias_table": bias_dat}
+    config = od.CORE_OD_V1.bind(bindings)
+    assert config.profile_name == "CORE_OD_V1"
+    resource = config.provenance["transforms"][0]["resource"]  # type: ignore[index]
+    assert resource["actual_byte_size"] == 37_161_151
+    assert (
+        resource["actual_sha256"]
+        == "ef6a50830bb83d8b1161e7acb391eed988ea9708e9fbcccc0c834da6109476e3"
+    )
+
+
 def test_profiles_are_native_sourced_and_not_constructible_or_replaceable() -> None:
     assert (
         od.CORE_OD_V1.definition_sha256
@@ -177,12 +204,28 @@ def test_profiles_are_native_sourced_and_not_constructible_or_replaceable() -> N
     )
     assert (
         od.ASTEROID_INSTITUTE_OD_V1.definition_sha256
-        == "47cf72508a4c593cd69aefa6f37f1f5d65991a9c76f72975e182c7592bc08b8c"
+        == "7cf341740994fc918f3d4186fdbe4db75e8860698c99d85407ab12dc448b60c9"
     )
     with pytest.raises(TypeError):
         od.OdProfile({}, (), _token=object())
     with pytest.raises(TypeError):
         dataclasses.replace(od.CORE_OD_V1)  # type: ignore[type-var]
+    requirements = {
+        requirement.slot: requirement
+        for requirement in od.ASTEROID_INSTITUTE_OD_V1.requirements
+    }
+    sigma = requirements["station_catalog_uncertainty_table"]
+    assert (sigma.sha256, sigma.byte_size, sigma.row_count) == (
+        "95a6d12c0dc1f6278a869e2e0d7d356b54683773d536d286f00326a3d868495b",
+        52_288,
+        2_480,
+    )
+    residual = requirements["station_band_residual_covariance_table"]
+    assert (residual.sha256, residual.byte_size, residual.row_count) == (
+        "ed0083b041fe523e6cfbabd3bff80bb0688b3056982de48d7789e59fdf370bac",
+        158_965,
+        1_126,
+    )
     assert [
         type(value).__name__
         for value in od.ASTEROID_INSTITUTE_OD_V1.observation_pipeline.transforms
