@@ -37,6 +37,7 @@ from .observation_pipeline import (
     StationBandResidualCovarianceAdjustment,
 )
 from .profiles import ASTEROID_INSTITUTE_OD_V1, CORE_OD_V1, OdProfile
+from .resources import core_od_v1_resource_bindings
 from .workflows import evaluate_orbits, refine, run_iod, run_od
 
 __all__ = [
@@ -72,6 +73,7 @@ __all__ = [
     "WhitenedFitConfig",
     "WorstResidualRefinement",
     "algorithms",
+    "core_od_v1_resource_bindings",
     "drop_duplicate_orbits",
     "evaluate_orbits",
     "refine",

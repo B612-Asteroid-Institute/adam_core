@@ -39,6 +39,7 @@ dependencies = [
   "naif-eop-predict",
   "naif-eop-historical",
   "naif-earth-itrf93",
+  "jpl-debias-2018==2023.3.1.1",
 ]
 
 [project.optional-dependencies]

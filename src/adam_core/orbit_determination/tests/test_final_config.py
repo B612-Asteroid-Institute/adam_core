@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import dataclasses
 import json
+import sys
+import types
 from pathlib import Path
 
 import numpy as np
@@ -153,6 +155,19 @@ def test_pipeline_requires_explicit_as_supplied_and_efcc_declaration() -> None:
     supplied = od.ObservationPipeline.as_supplied()
     assert supplied.is_as_supplied
     assert supplied.transforms == ()
+
+
+def test_core_public_resource_binding_uses_installed_data_package(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    bias_dat = tmp_path / "bias.dat"
+    bias_dat.write_bytes(b"provisional-path-contract")
+    package = types.ModuleType("jpl_debias_2018")
+    package.bias_dat = str(bias_dat)  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "jpl_debias_2018", package)
+
+    bindings = od.core_od_v1_resource_bindings()
+    assert bindings.paths == {"efcc18_catalog_bias_table": bias_dat}
 
 
 def test_profiles_are_native_sourced_and_not_constructible_or_replaceable() -> None:
