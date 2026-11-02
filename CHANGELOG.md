@@ -49,8 +49,20 @@ This file contains notable changes in adam-core
   their negotiated native propagation capsule and do not own fitting,
   rejection, covariance, transforms, grouping, or OD policy.
 - ``CORE_OD_V1`` and ``ASTEROID_INSTITUTE_OD_V1`` expand in Rust and require
-  explicit local paths for their semantic resource slots. Core performs no
-  runtime download, data-package discovery, or fallback to another profile.
+  explicit local paths for their semantic resource slots. Profile execution
+  performs no runtime acquisition or fallback. Python depends exactly on
+  ``jpl-debias-2018==2023.3.1.1`` and the public helper resolves only its
+  exported ``bias_dat`` path; Rust still validates the exact file identity and
+  structure. Standalone Rust remains explicit-path-only.
+- The unreleased ``ASTEROID_INSTITUTE_OD_V1`` definition now pins the current
+  space-observatory-inclusive station tables (1,126 residual-covariance rows
+  and 2,480 uncertainty-fill rows). ``CORE_OD_V1`` is unchanged. Deployment
+  and distribution details for separately supplied licensed resources remain
+  outside adam-core.
+- ``orbit_to_oem(version="2.0")`` writes validated OEM 2.0 with ICRF, 16
+  significant digits, millisecond epochs, comments, and covariance blocks in
+  RSW/RTN/TNW. ``version=None`` retains legacy output; SANA orbit-relative
+  frames such as VNC_ROTATING remain an OEM 3.0 provision.
 - The accepted d21 numerical policy is represented explicitly, including
   light-time tolerance ``1e-12``, ephemeris maximum iterations ``1000``, and
   light-time maximum iterations ``10``. Fit evaluation and solver budgets are
@@ -75,6 +87,14 @@ This file contains notable changes in adam-core
   unkeyed consistency digest. Validated seed configuration JSON is re-emitted
   canonically before composed provenance, so equivalent whitespace and finite
   float spellings are representation-only.
+- SPICE state lookup now resolves each epoch across all furnished kernels
+  through spicekit's ``KernelPool`` rather than requiring one file to cover a
+  complete batch.
+- Weak-direction covariance validation now uses a second 0.1-sigma probe after
+  a failed 1-sigma probe. Approximately quadratic scaling identifies curvature;
+  a step-independent response is reported as evaluation noise with a provider
+  integration-tolerance hint. Backend prediction errors still propagate, and
+  the diagnostic tests fit-surface consistency rather than uncertainty realism.
 - A sliced Quivr table (for example ``orbits[i:i+1]`` with a nonzero Arrow
   offset) handed to a typed Rust record-batch crossing could be read from the
   parent table's first rows. The Python bridge now materializes offset arrays
@@ -93,6 +113,36 @@ This file contains notable changes in adam-core
 - Python prediction callbacks and provider-owned OD work units. Unsupported
   Python-only propagators now fail with migration guidance instead of being
   invoked per prediction.
+
+### Migration from pre-0.7 OD APIs
+
+- Replace ``initial_orbit_determination`` / ``iod`` with ``run_iod``;
+  ``od`` with ``run_od``; and ``differential_correction`` with ``refine``.
+  Replace direct residual evaluation with ``evaluate_orbits``. All four are
+  association/member-backed batch functions and all return
+  ``(FittedOrbits, FittedOrbitMembers, OrbitDeterminationFailures)``.
+- Replace ``NativeOrbitFitter``, ``OrbitFitter``, ``LeastSquares``, executable
+  observation models, ``CompositeModel``, ``models=``, and
+  ``observatory_bias_model=`` with a bound ``OdConfig`` or one of its stage
+  projections. Removed APIs have no compatibility aliases.
+- Construct raw IOD/OD input as ``SourceCatalog`` plus explicit
+  ``Associations``. Supply ``FittedOrbitMembers`` explicitly to refinement and
+  evaluation. One object uses the same batch route; linkage sorting and
+  alternate one-group orchestration are not public 0.7 APIs.
+- Bind every semantic resource slot explicitly. Use
+  ``core_od_v1_resource_bindings()`` for the public profile's installed EFCC18
+  path, or pass explicit ``ResourceBindings``. Standalone Rust always receives
+  paths directly. There is no runtime acquisition or resource/profile fallback.
+- Use ``ObservationPipeline.as_supplied()`` only for deliberate external
+  preprocessing; predefined profiles are ineligible for that provenance.
+  Transform declaration order and repetition are significant.
+- Legacy fitted-member artifacts without complete original/used astrometry,
+  memberships, source fingerprints, configuration, and orbit-state identity
+  cannot be refined or evaluated canonically. Rerun IOD/OD to create the 0.7
+  handoff rather than translating incomplete provenance.
+- Tests should compare NaN-bearing results by canonical IPC bytes/bit patterns,
+  assert typed failure columns and original group IDs, and verify exact
+  ``run_od == run_iod + refine`` composition instead of Python callback order.
 
 ### Compatibility
 

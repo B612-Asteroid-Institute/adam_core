@@ -36,6 +36,34 @@ Python exposes typed immutable declarations such as ``IodSearchConfig``,
 re-emitted by Rust; Python does not maintain a second validation/default path.
 There is no implicit scientific ``Default`` at the high-level boundary.
 
+Python batch example
+~~~~~~~~~~~~~~~~~~~~
+
+The public Core profile uses the installed public EFCC18 data package only to
+obtain an explicit path; Rust validates that file before adopting a propagation
+provider::
+
+   from adam_core.orbit_determination import (
+       CORE_OD_V1,
+       core_od_v1_resource_bindings,
+       run_od,
+   )
+
+   # source_catalog is a SourceCatalog and associations is an Associations
+   # table. The propagator supplies propagation only.
+   config = CORE_OD_V1.bind(core_od_v1_resource_bindings())
+   fitted_orbits, fitted_members, failures = run_od(
+       source_catalog,
+       associations,
+       propagator,
+       config,
+   )
+
+Use ``config.for_iod()``, ``config.for_refinement()``, and
+``config.for_evaluation()`` for the corresponding standalone stage. Never omit
+``config`` and never pass a profile itself where a bound stage configuration is
+required.
+
 Observation pipelines
 ---------------------
 
@@ -91,6 +119,53 @@ The profiles preserve the accepted d21 effective numerical constants:
 ``lt_tol=1e-12``, ephemeris maximum iterations 1000, and light-time maximum
 iterations 10. Changing settings, transform order, resource bytes, or schemas
 requires a new version/fingerprint decision.
+
+Choose ``CORE_OD_V1`` when observations already carry finite positive
+astrometric uncertainty and the public EFCC18 correction plus nightly
+batch-deweighting policy is appropriate. Choose
+``ASTEROID_INSTITUTE_OD_V1`` only when the separately supplied, licensed
+station resources are available and its fill/add/deweight policy is appropriate
+for the data. The names do not establish comparative accuracy, and Core 0.7
+does not make a profile-superiority claim.
+
+Standalone Rust resource validation
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Rust does not import Python packages or discover resources. Pass absolute paths
+through semantic slots::
+
+   use adam_core::coords::{ResourceBindings, ResourceSlot, CORE_OD_V1};
+
+   let bindings = ResourceBindings::new().bind(
+       ResourceSlot::Efcc18CatalogBiasTable,
+       "/absolute/path/to/bias.dat",
+   );
+   let config = CORE_OD_V1.bind(&bindings)?;
+
+The repository includes the complete runnable example
+``rust/adam_core/examples/validate_core_od_resource.rs``::
+
+   cargo run -p adam_core --example validate_core_od_resource -- \
+       /absolute/path/to/bias.dat
+
+It validates bytes and structure without downloading, caching, or falling back
+to another source.
+
+Propagation integration tolerance
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Profiles never select or configure a propagator. When ASSIST is the negotiated
+propagation-only provider, its ordinary ``epsilon=1e-6`` propagation default
+can produce evaluation noise under sub-metre perturbations on some long,
+heavily observed main-belt arcs. Existing qualification found ``epsilon=1e-8``
+to be converged and faster than tighter settings on a 30-object sample; use it
+as an evidence-based starting point for that workload and re-qualify other
+workloads. Avoid assuming that ``1e-12`` is safer: ASSIST state-transition
+integration stalled at that setting in the qualification. Core's two-scale
+weak-direction covariance diagnostic distinguishes approximately quadratic
+curvature from step-independent evaluation noise and reports an integration-
+tolerance hint; it checks consistency with the fit's own chi-square surface,
+not physical uncertainty realism.
 
 Canonical batch workflows
 -------------------------

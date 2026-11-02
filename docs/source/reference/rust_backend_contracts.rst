@@ -27,10 +27,11 @@ Boundary Selection Rule
 Complete Surface Status
 -----------------------
 
-The authoritative latest-main inventory is
-``migration/public_surface/manifest.json`` (595 symbols / 67 constants at
-upstream ``9b756803ab3afbe11e33df9e57d30a28e7976b92``). The
-selected parity registry is a benchmark set, not the public-surface count.
+The authoritative inventory for this source tree is
+``migration/public_surface/manifest.json`` (734 symbols / 101 constants).
+Its frozen-upstream reconciliation records the independently classified
+retirements. The selected parity registry is a benchmark set, not the
+public-surface count.
 Every adam-core-owned non-plotting operation is either Rust-backed, a thin
 single-crossing compatibility veneer, or an explicitly documented provider
 boundary. The API examples below describe boundary contracts; they are not an
@@ -203,6 +204,18 @@ Current Migrated APIs
     predictor for all observations. Selected rows form the covariance; all
     rows supply rejection/recovery projections. Huber plus CMC2003 remains a
     heuristic combination without calibrated rejection statistics.
+  - Weak-direction covariance validation first probes both signs at 1 sigma.
+    After a failed probe it repeats at 0.1 sigma: a curvature signal scales by
+    about 0.01, while propagation/evaluation noise does not. The latter is
+    reported with an integration-tolerance hint and does not trigger the
+    analytic-Jacobian central-difference fallback. Provider errors propagate;
+    only in-band rejected/non-finite probe outcomes become diagnostic warnings.
+    This is a fit-surface consistency check, not an uncertainty-realism claim.
+  - Python may resolve the installed public EFCC18 package's exported path, but
+    passes that path explicitly. The standalone Rust route receives explicit
+    ``ResourceBindings`` and performs the identical byte/schema/structure
+    validation. Neither Rust route downloads, discovers packages, or falls back.
+    See ``rust/adam_core/examples/validate_core_od_resource.rs``.
 
 - ``orbit_determination.algorithms.cmc2003_fit_detailed``
   - Boundary: the whole loop is the adam-core ``cmc2003_fit_ipc`` driver
