@@ -1,6 +1,7 @@
 """Closed observation-pipeline declaration and validation regressions."""
 
 from dataclasses import FrozenInstanceError
+from pathlib import Path
 
 import pytest
 
@@ -21,7 +22,10 @@ from ..observation_pipeline import (
 )
 
 
-def _explicit(pipeline, resources=ResourceBindings({})):
+def _explicit(
+    pipeline: ObservationPipeline,
+    resources: ResourceBindings = ResourceBindings({}),
+) -> OdConfig:
     return OdConfig.explicit(
         observation_pipeline=pipeline,
         iod=IodRunConfig.core_v1(),
@@ -48,6 +52,8 @@ def test_order_and_repetition_are_authoritative() -> None:
     )
     config = _explicit(pipeline)
     transforms = config.provenance["transforms"]
+    assert isinstance(transforms, list)
+    assert all(isinstance(item, dict) for item in transforms)
     assert [item["effective_observation_cap"] for item in transforms] == [4, 2, 4]
 
 
@@ -83,7 +89,7 @@ def test_unused_binding_is_rejected_before_file_access() -> None:
     with pytest.raises(Exception, match="unused|bogus"):
         _explicit(
             ObservationPipeline.ordered([NightlyBatchDeweighting(4)]),
-            ResourceBindings({"bogus": "/does/not/exist"}),
+            ResourceBindings({"bogus": Path("/does/not/exist")}),
         )
 
 

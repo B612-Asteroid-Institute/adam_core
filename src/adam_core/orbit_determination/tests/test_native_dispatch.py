@@ -2,6 +2,7 @@
 
 import pytest
 
+from ...orbits import Ephemeris, Orbits, VariantOrbits
 from ...propagator import Propagator
 from .._native_dispatch import native_propagator
 from .test_differential_correction import NativeTwoBodyPropagator, TwoBodyPropagator
@@ -10,18 +11,20 @@ from .test_differential_correction import NativeTwoBodyPropagator, TwoBodyPropag
 class RecordingNativePropagator(NativeTwoBodyPropagator):
     """Provider OD-shaped methods are never part of the capsule contract."""
 
-    def run_od(self, *args, **kwargs):  # pragma: no cover
+    def run_od(self, *args: object, **kwargs: object) -> None:  # pragma: no cover
         raise AssertionError("provider-owned run_od was dispatched")
 
-    def full_od(self, *args, **kwargs):  # pragma: no cover
+    def full_od(self, *args: object, **kwargs: object) -> None:  # pragma: no cover
         raise AssertionError("provider-owned full_od was dispatched")
 
 
 class PythonOnly(Propagator):
-    def propagate_orbits(self, *args, **kwargs):
+    def propagate_orbits(
+        self, *args: object, **kwargs: object
+    ) -> Orbits | VariantOrbits:
         raise AssertionError("Python propagation must not run")
 
-    def generate_ephemeris(self, *args, **kwargs):
+    def generate_ephemeris(self, *args: object, **kwargs: object) -> Ephemeris:
         raise AssertionError("Python ephemeris must not run")
 
 

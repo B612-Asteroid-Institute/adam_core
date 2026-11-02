@@ -16,8 +16,9 @@ from typing import Any
 
 import numpy as np
 import numpy.testing as npt
-import pyarrow as pa
 import pytest
+
+from adam_core._rust.arrow import pa
 
 from ...coordinates.cartesian import CartesianCoordinates
 from ...coordinates.origin import Origin
@@ -93,10 +94,10 @@ class TestRobustLossHelpers:
         assert _robust_cost(np.array([K]), "huber", K) == pytest.approx(K**2)
 
     def test_huber_cost_is_twice_scipy_cost(self) -> None:
-        from scipy.optimize import least_squares
+        from ._scipy import scipy_least_squares
 
         r0 = np.array([0.2, -1.0, 2.5, -4.0])
-        result = least_squares(
+        result = scipy_least_squares()(
             lambda x: r0 + x, np.zeros(4), loss="huber", f_scale=K, max_nfev=1
         )
         assert _robust_cost(np.asarray(result.fun), "huber", K) == pytest.approx(

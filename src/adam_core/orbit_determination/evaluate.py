@@ -3,10 +3,10 @@ from typing import List, Optional, Tuple, Union
 
 import numpy as np
 import numpy.typing as npt
-import pyarrow as pa
-import pyarrow.compute as pc
 import quivr as qv
 from typing_extensions import Self
+
+from adam_core._rust.arrow import pa, pc
 
 from ..coordinates.covariances import CoordinateCovariances
 from ..coordinates.origin import Origin

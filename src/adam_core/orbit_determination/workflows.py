@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-from typing import Any
+from collections.abc import Callable, Sequence
+from typing import Any, TypeVar
 
 import numpy as np
-import pyarrow as pa
 import quivr as qv
 
 from adam_core import _rust_native
+from adam_core._rust.arrow import pa
 from adam_core.coordinates.residuals import Residuals
 from adam_core.observations import Associations, SourceCatalog
 from adam_core.observations.arrow_bridge import observations_to_ipc
@@ -19,7 +20,7 @@ from adam_core.orbits.arrow_bridge import (
 )
 from adam_core.propagator.propagator import Propagator
 
-from ._native_dispatch import native_propagator
+from ._native_dispatch import NativeProvider, native_propagator
 from .algorithms.fitting import _fitted_tables_from_native_output
 from .algorithms.iod import _tables_from_iod_output
 from .config import (
@@ -39,9 +40,12 @@ from .fitted_orbits import (
 )
 
 _RESULT = tuple[FittedOrbits, FittedOrbitMembers, OrbitDeterminationFailures]
+_TableT = TypeVar("_TableT", bound=qv.Table)
 
 
-def _deferred_native_propagator(propagator: Propagator | None):
+def _deferred_native_propagator(
+    propagator: Propagator | None,
+) -> Callable[[], NativeProvider | None] | None:
     """Resolve and bind a provider only after Rust static preflight.
 
     The outer callable is retained by PyO3 without invocation. Empty and
@@ -167,12 +171,17 @@ def _failure(value: dict[str, Any]) -> OrbitDeterminationFailures:
     )
 
 
-def _concat(tables: list[qv.Table], cls: type[qv.Table]) -> qv.Table:
+def _concat(tables: Sequence[_TableT], cls: type[_TableT]) -> _TableT:
     if not tables:
         return cls.empty()
     if len(tables) == 1:
         return tables[0]
-    return qv.concatenate(tables)
+    concatenated = qv.concatenate(list(tables))
+    if not isinstance(concatenated, cls):
+        raise TypeError(
+            f"concatenating {cls.__name__} produced {type(concatenated).__name__}"
+        )
+    return concatenated
 
 
 def _decorate_group(
@@ -255,7 +264,7 @@ def _assemble(
         _concat(orbit_tables, FittedOrbits),
         _concat(member_tables, FittedOrbitMembers),
         _concat(failures, OrbitDeterminationFailures),
-    )  # type: ignore[return-value]
+    )
 
 
 def run_iod(
@@ -423,7 +432,7 @@ def refine(
         _concat(orbit_tables, FittedOrbits),
         _concat(member_tables, FittedOrbitMembers),
         _concat(failures, OrbitDeterminationFailures),
-    )  # type: ignore[return-value]
+    )
 
 
 def evaluate_orbits(
@@ -533,4 +542,4 @@ def evaluate_orbits(
         _concat(orbit_tables, FittedOrbits),
         _concat(member_tables, FittedOrbitMembers),
         _concat(failures, OrbitDeterminationFailures),
-    )  # type: ignore[return-value]
+    )

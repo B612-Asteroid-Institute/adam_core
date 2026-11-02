@@ -1,14 +1,19 @@
 import numpy as np
+import numpy.typing as npt
 
 from adam_core._rust import calc_gibbs_numpy
 from adam_core.constants import Constants as c
+
+from ._validation import three_position_vectors
 
 __all__ = ["calcGibbs"]
 
 MU = c.MU
 
 
-def calcGibbs(r1, r2, r3):
+def calcGibbs(
+    r1: npt.ArrayLike, r2: npt.ArrayLike, r3: npt.ArrayLike
+) -> npt.NDArray[np.float64]:
     r"""
     Calculates the velocity vector at the location of the second position vector (r2) using the
     Gibbs method.
@@ -44,11 +49,6 @@ def calcGibbs(r1, r2, r3):
     v2 : `~numpy.ndarray` (3)
         Velocity of object at position r2 at time t2 in units of AU per day.
     """
-    r1_np = np.ascontiguousarray(np.asarray(r1, dtype=np.float64))
-    r2_np = np.ascontiguousarray(np.asarray(r2, dtype=np.float64))
-    r3_np = np.ascontiguousarray(np.asarray(r3, dtype=np.float64))
-    if r1_np.shape != (3,) or r2_np.shape != (3,) or r3_np.shape != (3,):
-        raise ValueError("r1, r2, and r3 must each have shape (3,)")
-
+    r1_np, r2_np, r3_np = three_position_vectors(r1, r2, r3)
     rust_out = calc_gibbs_numpy(r1_np, r2_np, r3_np, MU)
-    return rust_out
+    return np.asarray(rust_out, dtype=np.float64)

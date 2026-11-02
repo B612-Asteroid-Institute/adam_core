@@ -1,21 +1,24 @@
 """Numerical qualification of the focused native refinement route."""
 
 import numpy as np
-import pyarrow.compute as pc
 import pytest
 
-from ...coordinates import CartesianCoordinates, CoordinateCovariances
+from adam_core._rust.arrow import pc
+
+from ...coordinates.cartesian import CartesianCoordinates
+from ...coordinates.covariances import CoordinateCovariances
 from ...coordinates.origin import Origin
 from ...coordinates.residuals import Residuals, calculate_reduced_chi2
 from ...observers import Observers
 from ...orbits import Orbits
+from ...propagator import Propagator
 from ...time import Timestamp
 from ..evaluate import OrbitDeterminationObservations
 from ._focused import refine_qualified
 
 
 @pytest.fixture
-def real_data():
+def real_data() -> tuple[Observers, Orbits]:
     # Subset of actual observers for "2023 CL3".
     obstimes = Timestamp.from_kwargs(
         days=[59989, 59989, 59989, 59989, 59990, 59990],
@@ -64,7 +67,11 @@ def real_data():
     return observers, orbit
 
 
-def _rchi2(orbit, observations, propagator) -> float:
+def _rchi2(
+    orbit: Orbits,
+    observations: OrbitDeterminationObservations,
+    propagator: Propagator,
+) -> float:
     ephemeris = propagator.generate_ephemeris(
         orbit, observations.observers, chunk_size=1, max_processes=1
     )
@@ -73,7 +80,9 @@ def _rchi2(orbit, observations, propagator) -> float:
     )
 
 
-def test_refinement_adjusts_and_improves_chi2(real_data) -> None:
+def test_refinement_adjusts_and_improves_chi2(
+    real_data: tuple[Observers, Orbits],
+) -> None:
     ASSISTPropagator = pytest.importorskip("adam_assist").ASSISTPropagator
     observers, orbit = real_data
     propagator = ASSISTPropagator()
@@ -98,7 +107,9 @@ def test_refinement_adjusts_and_improves_chi2(real_data) -> None:
     )
 
 
-def test_refinement_handles_zero_state_component(real_data) -> None:
+def test_refinement_handles_zero_state_component(
+    real_data: tuple[Observers, Orbits],
+) -> None:
     ASSISTPropagator = pytest.importorskip("adam_assist").ASSISTPropagator
     observers, orbit = real_data
     propagator = ASSISTPropagator()

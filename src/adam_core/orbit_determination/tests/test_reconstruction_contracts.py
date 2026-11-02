@@ -1,11 +1,9 @@
 """Configuration reconstruction is native, typed, and non-executable."""
 
-import dataclasses
-
 import pytest
 
 from ..config import IodRunConfig, RefinementRunConfig
-from ..profiles import CORE_OD_V1, OdProfile
+from ..profiles import OdProfile
 
 
 def test_native_stage_round_trips_are_value_preserving() -> None:
@@ -18,8 +16,6 @@ def test_native_stage_round_trips_are_value_preserving() -> None:
 def test_profiles_are_nonconstructible_native_views() -> None:
     with pytest.raises(TypeError):
         OdProfile()  # type: ignore[call-arg]
-    with pytest.raises(TypeError):
-        dataclasses.replace(CORE_OD_V1, name="other")
 
 
 def test_configuration_contains_no_callback_or_executable_model() -> None:

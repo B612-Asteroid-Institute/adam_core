@@ -2,9 +2,9 @@ import uuid
 from typing import Literal, Optional
 
 import numpy as np
-import pyarrow as pa
-import pyarrow.compute as pc
 import quivr as qv
+
+from adam_core._rust.arrow import pa, pc
 
 from .._rust.api import add_light_time_numpy
 from ..constants import Constants as c

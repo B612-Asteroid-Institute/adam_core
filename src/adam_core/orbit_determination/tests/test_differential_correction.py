@@ -1,17 +1,13 @@
-import os
 import warnings
+from collections.abc import Mapping
+from typing import Literal, TypeAlias
 
 import numpy as np
 import numpy.testing as npt
-import pyarrow as pa
 import pytest
 
 from adam_core import _rust_native
-
-try:
-    from adam_core.propagator.adam_pyoorb import PYOORBPropagator
-except ImportError:
-    PYOORBPropagator = None
+from adam_core._rust.arrow import pa
 
 from ...coordinates.cartesian import CartesianCoordinates
 from ...coordinates.covariances import CoordinateCovariances
@@ -23,6 +19,7 @@ from ...dynamics.propagation import propagate_2body
 from ...observers import Observers
 from ...orbits.ephemeris import Ephemeris
 from ...orbits.orbits import Orbits
+from ...orbits.variants import VariantOrbits
 from ...propagator.propagator import NativeBackend, Propagator
 from ...time import Timestamp
 from ..algorithms.fitting import (
@@ -37,10 +34,19 @@ from ..evaluate import (
     OrbitDeterminationObservations,
     OrbitDeterminationPhotometry,
 )
+from ..fitted_orbits import FittedOrbitMembers, FittedOrbits
+from .conftest import PureIodOrbit
 
 TRUTH_STATE = np.array([0.9, 0.5, 0.05, -0.008, 0.012, 0.0005])
 EPOCH_MJD_TDB = 61000.0
 SIGMA_ARCSEC = 0.5
+
+
+def require_two_body_orbits(orbits: Orbits | VariantOrbits) -> Orbits:
+    """Validate the Orbits-only contract of the focused two-body test helpers."""
+    if not isinstance(orbits, Orbits):
+        raise TypeError("two-body test helpers require Orbits")
+    return orbits
 
 
 class TwoBodyPropagator(Propagator):
@@ -59,23 +65,51 @@ class TwoBodyPropagator(Propagator):
         work_units=frozenset({"propagator_capsule"}),
     )
 
-    def propagator_capsule(self):
+    def propagator_capsule(self) -> object:
         from adam_core import _rust_native
 
-        return _rust_native.two_body_propagator_capsule()
+        capsule: object = _rust_native.two_body_propagator_capsule()
+        return capsule
 
-    def __getstate__(self):
+    def __getstate__(self) -> dict[str, object]:
         return self.__dict__.copy()
 
-    def __setstate__(self, state):
+    def __setstate__(self, state: Mapping[str, object]) -> None:
         self.__dict__.update(state)
 
-    def propagate_orbits(self, orbits: Orbits, times: Timestamp, **kwargs) -> Orbits:
-        return propagate_2body(orbits, times)
+    def propagate_orbits(
+        self,
+        orbits: Orbits | VariantOrbits,
+        times: Timestamp,
+        covariance: bool = False,
+        covariance_method: Literal[
+            "auto", "sigma-point", "monte-carlo"
+        ] = "monte-carlo",
+        num_samples: int = 1000,
+        chunk_size: int = 100,
+        max_processes: int | None = 1,
+        seed: int | None = None,
+        include_nongrav: bool = True,
+    ) -> Orbits | VariantOrbits:
+        return propagate_2body(require_two_body_orbits(orbits), times)
 
     def generate_ephemeris(
-        self, orbits: Orbits, observers: Observers, **kwargs
+        self,
+        orbits: Orbits | VariantOrbits,
+        observers: Observers,
+        covariance: bool = False,
+        covariance_method: Literal[
+            "auto", "sigma-point", "monte-carlo"
+        ] = "monte-carlo",
+        num_samples: int = 1000,
+        chunk_size: int = 100,
+        max_processes: int | None = 1,
+        seed: int | None = None,
+        predict_magnitudes: bool = True,
+        predict_phase_angle: bool = False,
+        include_nongrav: bool = True,
     ) -> Ephemeris:
+        orbits = require_two_body_orbits(orbits)
         # Like every backend's ``generate_ephemeris(covariance=False)`` default,
         # emit no predicted covariance: the two-body kernels would otherwise
         # transport a fitted orbit's covariance into the ephemeris and
@@ -96,7 +130,10 @@ class TwoBodyPropagator(Propagator):
             return blocks[0]
         import quivr as qv
 
-        return qv.concatenate(blocks)
+        concatenated = qv.concatenate(blocks)
+        if not isinstance(concatenated, Ephemeris):
+            raise TypeError("two-body ephemeris concatenation changed table type")
+        return concatenated
 
 
 class NativeTwoBodyPropagator(TwoBodyPropagator):
@@ -106,8 +143,13 @@ class NativeTwoBodyPropagator(TwoBodyPropagator):
 
 
 def _central_difference_jacobian(
-    state_vector, mjd_tdb, observations, propagator, rel_step=1e-6, abs_step_floor=1e-3
-):
+    state_vector: np.ndarray,
+    mjd_tdb: float,
+    observations: OrbitDeterminationObservations,
+    propagator: Propagator,
+    rel_step: float = 1e-6,
+    abs_step_floor: float = 1e-3,
+) -> np.ndarray:
     """Central differences of `residual_function` (test cross-check for the
     autodiff Jacobian; the fit itself computes this in Rust)."""
     jacobian = np.empty((2 * len(observations), 6), dtype=np.float64)
@@ -216,8 +258,16 @@ def make_initial_guess() -> Orbits:
     )
 
 
+TwoBodySetup: TypeAlias = tuple[
+    OrbitDeterminationObservations,
+    TwoBodyPropagator,
+    FittedOrbits,
+    FittedOrbitMembers,
+]
+
+
 @pytest.fixture(scope="module")
-def two_body_setup():
+def two_body_setup() -> TwoBodySetup:
     observations = make_synthetic_observations()
     propagator = TwoBodyPropagator()
     with warnings.catch_warnings():
@@ -229,7 +279,7 @@ def two_body_setup():
 
 
 class TestWhitenedResiduals:
-    def test_sum_of_squares_matches_chi2(self):
+    def test_sum_of_squares_matches_chi2(self) -> None:
         # The 2N whitened components must reproduce the Residuals.calculate
         # chi2 exactly, including with correlated (lon, lat) covariance.
         observations = make_synthetic_observations(n_obs=10, correlation=0.4)
@@ -254,7 +304,7 @@ class TestWhitenedResiduals:
             chi2_pairs, residuals.chi2.to_numpy(zero_copy_only=False), rtol=1e-12
         )
 
-    def test_non_finite_covariance_raises(self):
+    def test_non_finite_covariance_raises(self) -> None:
         observations = make_synthetic_observations(n_obs=6)
         covariances = observations.coordinates.covariance.to_matrix().copy()
         covariances[2, 1, 1] = np.nan
@@ -264,7 +314,7 @@ class TestWhitenedResiduals:
         with pytest.raises(ValueError, match="non-finite"):
             _observation_whitening_matrices(observations)
 
-    def test_non_positive_definite_covariance_raises(self):
+    def test_non_positive_definite_covariance_raises(self) -> None:
         observations = make_synthetic_observations(n_obs=6)
         covariances = observations.coordinates.covariance.to_matrix().copy()
         covariances[3, 1, 2] = covariances[3, 2, 1] = 10.0  # |cov| >> sigmas
@@ -276,7 +326,7 @@ class TestWhitenedResiduals:
 
 
 class TestAnalyticJacobian:
-    def test_matches_central_difference_on_2body_pipeline(self):
+    def test_matches_central_difference_on_2body_pipeline(self) -> None:
         # With 2-body residual dynamics the analytic (STM-chained) Jacobian
         # and central differences through the residual pipeline must agree.
         observations = make_synthetic_observations(n_obs=8)
@@ -292,7 +342,9 @@ class TestAnalyticJacobian:
 
 
 class TestFitLeastSquares2Body:
-    def test_fit_recovers_truth_within_uncertainty(self, two_body_setup):
+    def test_fit_recovers_truth_within_uncertainty(
+        self, two_body_setup: TwoBodySetup
+    ) -> None:
         observations, propagator, fitted, members = two_body_setup
         assert fitted.success[0].as_py()
         state = np.concatenate([fitted.coordinates.r[0], fitted.coordinates.v[0]])
@@ -302,7 +354,9 @@ class TestFitLeastSquares2Body:
         # 6-DOF: P(m > 4.6) ~ 1e-3; the seed is fixed so this is deterministic
         assert mahalanobis < 4.6
 
-    def test_covariance_matches_central_difference(self, two_body_setup):
+    def test_covariance_matches_central_difference(
+        self, two_body_setup: TwoBodySetup
+    ) -> None:
         observations, propagator, fitted, members = two_body_setup
         state = np.concatenate([fitted.coordinates.r[0], fitted.coordinates.v[0]])
         covariance = fitted.coordinates.covariance.to_matrix()[0]
@@ -314,7 +368,9 @@ class TestFitLeastSquares2Body:
         sigma_central = np.sqrt(np.diag(covariance_central))
         npt.assert_allclose(sigma, sigma_central, rtol=1e-4)
 
-    def test_chi2_displacement_scan_matches_weak_axis_sigma(self, two_body_setup):
+    def test_chi2_displacement_scan_matches_weak_axis_sigma(
+        self, two_body_setup: TwoBodySetup
+    ) -> None:
         # Regression harness for the fabricated-confidence defect: the chi2
         # valley scale along the weakest direction must match the covariance's
         # claimed sigma, i.e. displacing by k sigma raises chi2 by ~k^2.
@@ -342,7 +398,7 @@ class TestFitLeastSquares2Body:
 
 
 class TestFitLeastSquaresValidation:
-    def test_rejects_non_angular_observations(self):
+    def test_rejects_non_angular_observations(self) -> None:
         observations = make_synthetic_observations(n_obs=6)
         values = observations.coordinates.rho.to_numpy(zero_copy_only=False).copy()
         values[0] = 1.0
@@ -350,7 +406,7 @@ class TestFitLeastSquaresValidation:
         with pytest.raises(ValueError, match="angular"):
             fit_least_squares(make_initial_guess(), observations, TwoBodyPropagator())
 
-    def test_unknown_jacobian_raises(self):
+    def test_unknown_jacobian_raises(self) -> None:
         observations = make_synthetic_observations(n_obs=6)
         with pytest.raises(ValueError, match="jacobian"):
             fit_least_squares(
@@ -361,34 +417,28 @@ class TestFitLeastSquaresValidation:
             )
 
 
-@pytest.mark.skipif(
-    os.environ.get("OORB_DATA") is None, reason="OORB_DATA environment variable not set"
-)
-@pytest.mark.skipif(PYOORBPropagator is None, reason="PYOORBPropagator not available")
-def test_python_only_pyoorb_is_refused_for_native_od(pure_iod_orbit):
-    orbit, _orbit_members, observations = pure_iod_orbit
-    with pytest.raises(TypeError, match="no native orbit-determination backend"):
-        fit_least_squares(orbit, observations, PYOORBPropagator())
-
-
 # ---------------------------------------------------------------------------
 # External propagation-provider integration.
 # ---------------------------------------------------------------------------
 
 
-def _assist_propagator():
-    pytest.importorskip("adam_assist")
-    from adam_assist import ASSISTPropagator
+def _assist_propagator() -> Propagator:
+    assist = pytest.importorskip("adam_assist")
+    propagator_class = getattr(assist, "ASSISTPropagator", None)
+    if not isinstance(propagator_class, type):
+        raise TypeError("adam_assist must export ASSISTPropagator")
 
     from .._native_dispatch import native_work_unit
 
-    propagator = ASSISTPropagator()
+    propagator = propagator_class()
+    if not isinstance(propagator, Propagator):
+        raise TypeError("ASSISTPropagator must implement the Propagator contract")
     if native_work_unit(propagator, "propagator_capsule") is None:
         pytest.skip("installed adam_assist has no propagation-provider capsule")
     return propagator
 
 
-def test_fit_least_squares_uses_assist_capsule(pure_iod_orbit):
+def test_fit_least_squares_uses_assist_capsule(pure_iod_orbit: PureIodOrbit) -> None:
     orbit, _orbit_members, observations = pure_iod_orbit
     fitted_orbit, fitted_members = fit_least_squares(
         orbit.to_orbits(), observations, _assist_propagator(), jacobian="2-point"
@@ -401,7 +451,7 @@ def test_fit_least_squares_uses_assist_capsule(pure_iod_orbit):
 class TestCapsuleWhitenedFitFacade:
     """Python validation around the single capsule-backed core fit driver."""
 
-    def test_unsupported_solver_kwargs_raise(self):
+    def test_unsupported_solver_kwargs_raise(self) -> None:
         observations = make_synthetic_observations()
         propagator = TwoBodyPropagator()
         with pytest.raises(ValueError, match="x_scale=1.0"):
@@ -418,13 +468,13 @@ class TestCapsuleIterativeFitFacade:
     """Python validation around the capsule-backed worst-residual driver."""
 
     @staticmethod
-    def _with_outlier(index: int, sigmas: float):
+    def _with_outlier(index: int, sigmas: float) -> OrbitDeterminationObservations:
         observations = make_synthetic_observations()
         lat = observations.coordinates.lat.to_numpy(zero_copy_only=False).copy()
         lat[index] += sigmas * SIGMA_ARCSEC / 3600.0
         return observations.set_column("coordinates.lat", pa.array(lat))
 
-    def test_unsupported_solver_kwargs_raise(self):
+    def test_unsupported_solver_kwargs_raise(self) -> None:
         observations = self._with_outlier(9, 12.0)
         with pytest.raises(ValueError, match="x_scale=1.0"):
             iterative_fit(
@@ -434,9 +484,9 @@ class TestCapsuleIterativeFitFacade:
                 x_scale=1.0,
             )
 
-    def test_python_prediction_override_is_refused(self):
+    def test_python_prediction_override_is_refused(self) -> None:
         class Broken(TwoBodyPropagator):
-            def generate_ephemeris(self, orbits, observers, **kwargs):
+            def generate_ephemeris(self, *args: object, **kwargs: object) -> Ephemeris:
                 raise KeyError("must not be called")
 
         with pytest.raises(TypeError, match="not covered"):

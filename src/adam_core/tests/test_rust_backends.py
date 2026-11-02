@@ -1,9 +1,9 @@
 import numpy as np
 import numpy.testing as npt
-import pyarrow as pa
 import pytest
 
 from adam_core._rust import api as rust_api
+from adam_core._rust.arrow import pa
 from adam_core.coordinates.cartesian import CartesianCoordinates
 from adam_core.coordinates.cometary import CometaryCoordinates
 from adam_core.coordinates.covariances import CoordinateCovariances
@@ -196,7 +196,9 @@ def test_standalone_data_model_schema_metadata_matches_python_adapter_contract()
     assert orbit_metadata["adam_core_schema"] == "OrbitBatch.cartesian.flat.v1"
 
 
-def test_cartesian_to_spherical_prefers_rust_when_available(monkeypatch):
+def test_cartesian_to_spherical_prefers_rust_when_available(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setattr(rust_api, "_native", _FakeRustNative())
 
     coords = np.array([[1.0, 0.0, 0.0, 0.0, 0.0, 0.0]], dtype=np.float64)
@@ -207,7 +209,9 @@ def test_cartesian_to_spherical_prefers_rust_when_available(monkeypatch):
     )
 
 
-def test_calc_mean_motion_rust_wrapper_when_available(monkeypatch):
+def test_calc_mean_motion_rust_wrapper_when_available(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setattr(rust_api, "_native", _FakeRustNative())
 
     a = np.array([2.0], dtype=np.float64)
@@ -217,7 +221,9 @@ def test_calc_mean_motion_rust_wrapper_when_available(monkeypatch):
     npt.assert_allclose(got, np.array([1.0]), rtol=0.0, atol=1e-15)
 
 
-def test_spherical_to_cartesian_prefers_rust_when_available(monkeypatch):
+def test_spherical_to_cartesian_prefers_rust_when_available(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setattr(rust_api, "_native", _FakeRustNative())
 
     coords = np.array([[1.0, 0.0, 0.0, 0.0, 0.0, 0.0]], dtype=np.float64)
@@ -228,7 +234,9 @@ def test_spherical_to_cartesian_prefers_rust_when_available(monkeypatch):
     )
 
 
-def test_cartesian_to_geodetic_prefers_rust_when_available(monkeypatch):
+def test_cartesian_to_geodetic_prefers_rust_when_available(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setattr(rust_api, "_native", _FakeRustNative())
 
     coords = np.array([[1.0, 0.0, 0.0, 0.0, 0.0, 0.0]], dtype=np.float64)
@@ -242,7 +250,9 @@ def test_cartesian_to_geodetic_prefers_rust_when_available(monkeypatch):
     )
 
 
-def test_cartesian_to_keplerian_prefers_rust_when_available(monkeypatch):
+def test_cartesian_to_keplerian_prefers_rust_when_available(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setattr(rust_api, "_native", _FakeRustNative())
 
     coords = np.array([[1.0, 0.0, 0.0, 0.0, 0.0, 0.0]], dtype=np.float64)
@@ -258,7 +268,9 @@ def test_cartesian_to_keplerian_prefers_rust_when_available(monkeypatch):
     )
 
 
-def test_keplerian_to_cartesian_prefers_rust_when_available(monkeypatch):
+def test_keplerian_to_cartesian_prefers_rust_when_available(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setattr(rust_api, "_native", _FakeRustNative())
 
     coords = np.array([[1.0, 0.1, 0.0, 0.0, 0.0, 0.0]], dtype=np.float64)
@@ -336,8 +348,8 @@ def test_transform_coordinates_with_covariance_requires_rep_parameters() -> None
 
 
 def test_transform_coordinates_uses_single_rust_crossing_for_supported_path(
-    monkeypatch,
-):
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setattr(
         "adam_core.coordinates.transform.ensure_spice_backend", lambda: None
     )
@@ -391,10 +403,10 @@ def test_transform_coordinates_uses_single_rust_crossing_for_supported_path(
         frame="itrf93",
     )
 
-    def forbidden_values(_self):
+    def forbidden_values(_self: object) -> None:
         raise AssertionError("input values must stay in the Arrow RecordBatch")
 
-    def forbidden_from_kwargs(*_args, **_kwargs):
+    def forbidden_from_kwargs(*_args: object, **_kwargs: object) -> None:
         raise AssertionError("output must wrap the returned RecordBatch directly")
 
     monkeypatch.setattr(SphericalCoordinates, "values", property(forbidden_values))
@@ -416,7 +428,9 @@ def test_transform_coordinates_uses_single_rust_crossing_for_supported_path(
     )
 
 
-def test_transform_coordinates_uses_single_rust_crossing_for_frame_change(monkeypatch):
+def test_transform_coordinates_uses_single_rust_crossing_for_frame_change(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setattr(
         "adam_core.coordinates.transform.ensure_spice_backend", lambda: None
     )
@@ -491,8 +505,8 @@ def test_transform_coordinates_uses_single_rust_crossing_for_frame_change(monkey
 
 
 def test_transform_coordinates_uses_single_rust_crossing_for_keplerian_input(
-    monkeypatch,
-):
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setattr(
         "adam_core.coordinates.transform.ensure_spice_backend", lambda: None
     )
@@ -624,7 +638,7 @@ def test_rust_transform_unsupported_paths_return_none(
     representation_out,
     frame_out,
     origin_out,
-):
+) -> None:
     """Cases the native single-crossing path does not cover (non-Cartesian
     input into an ITRF93 frame change) must return None from the try-function
     so the public transform_coordinates uses the thin Python fallthrough."""
@@ -637,7 +651,7 @@ def test_rust_transform_unsupported_paths_return_none(
     ), f"{case_id}: try-function returned a value for a natively-uncovered path"
 
 
-def test_rust_transform_covariance_present_uses_native_single_crossing():
+def test_rust_transform_covariance_present_uses_native_single_crossing() -> None:
     """The native path propagates covariance via forward-mode AD in Rust, so a
     covariance-carrying transform returns a non-null covariance without leaving
     Rust."""
@@ -649,7 +663,7 @@ def test_rust_transform_covariance_present_uses_native_single_crossing():
     assert not result.covariance.is_all_nan()
 
 
-def test_rust_transform_covers_cometary_natively():
+def test_rust_transform_covers_cometary_natively() -> None:
     """Native coverage now includes Cometary in either direction (previously a
     legacy-only branch)."""
     assert (

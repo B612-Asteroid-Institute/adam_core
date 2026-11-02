@@ -7,21 +7,24 @@ explicit native propagation capsules for both stages.
 
 import numpy as np
 import numpy.testing as npt
-import pyarrow as pa
 import pytest
+
+from adam_core._rust.arrow import pa
 
 from ..algorithms.iod import (
     IodCandidateFailure,
     RangingSample,
     _report_from_iod_output,
 )
+from ..evaluate import OrbitDeterminationObservations
 from ._focused import (
     explicit_config,
     run_iod_qualified,
     run_prefit_iod_qualified,
 )
 from .test_differential_correction import TwoBodyPropagator
-from .test_run_od_null_covariance import two_body_arc  # noqa: F401
+
+pytest_plugins = ("adam_core.orbit_determination.tests.test_run_od_null_covariance",)
 
 
 def test_run_iod_on_empty_observations() -> None:
@@ -33,15 +36,13 @@ def test_run_iod_on_empty_observations() -> None:
     assert report.not_found_reason == "no observations"
 
 
-def two_body_arc_empty():
-    from ..evaluate import OrbitDeterminationObservations
-
+def two_body_arc_empty() -> OrbitDeterminationObservations:
     return OrbitDeterminationObservations.empty()
 
 
 @pytest.mark.parametrize("velocity_method", ["gibbs", "herrick+gibbs", "auto"])
 def test_spans_search_finds_the_arc(
-    two_body_arc, velocity_method  # noqa: F811
+    two_body_arc: OrbitDeterminationObservations, velocity_method: str  # noqa: F811
 ) -> None:
     orbit, members, report = run_iod_qualified(
         two_body_arc,
@@ -60,7 +61,9 @@ def test_spans_search_finds_the_arc(
         assert methods == {velocity_method}
 
 
-def test_spans_settings_reach_the_search(two_body_arc) -> None:  # noqa: F811
+def test_spans_settings_reach_the_search(
+    two_body_arc: OrbitDeterminationObservations,
+) -> None:  # noqa: F811
     _, _, report = run_iod_qualified(
         two_body_arc,
         TwoBodyPropagator(),
@@ -114,7 +117,9 @@ def test_spans_settings_reach_the_search(two_body_arc) -> None:  # noqa: F811
         )
 
 
-def test_run_iod_defaults_to_corrected_acceptance(two_body_arc) -> None:  # noqa: F811
+def test_run_iod_defaults_to_corrected_acceptance(
+    two_body_arc: OrbitDeterminationObservations,
+) -> None:  # noqa: F811
     """The default `run_iod` corrects candidates in stages and returns the
     corrected whole-arc orbit of the best converged one; `iod()` keeps the
     legacy prefit gate."""
@@ -124,8 +129,10 @@ def test_run_iod_defaults_to_corrected_acceptance(two_body_arc) -> None:  # noqa
     assert report.found and report.corrections_run >= 1
     assert not report.ambiguous and report.ambiguous_with == ()
     accepted = report.accepted_candidate
+    assert accepted is not None
     assert accepted.converged and accepted.stages >= 1
     assert accepted.corrected_state is not None
+    assert accepted.postfit_reduced_chi2 is not None
     npt.assert_array_equal(
         np.concatenate([orbit.coordinates.r[0], orbit.coordinates.v[0]]),
         np.asarray(accepted.corrected_state),
@@ -135,6 +142,7 @@ def test_run_iod_defaults_to_corrected_acceptance(two_body_arc) -> None:  # noqa
     # Lowest final reduced chi2, ties (relative 1e-6) to the lowest index.
     for candidate in report.candidates:
         if candidate.converged:
+            assert candidate.postfit_reduced_chi2 is not None
             assert candidate.postfit_reduced_chi2 >= accepted.postfit_reduced_chi2 * (
                 1 - 1e-6
             )
@@ -149,7 +157,7 @@ def test_run_iod_defaults_to_corrected_acceptance(two_body_arc) -> None:  # noqa
 
 
 def test_corrected_acceptance_reports_why_nothing_converged(
-    two_body_arc,  # noqa: F811
+    two_body_arc: OrbitDeterminationObservations,  # noqa: F811
 ) -> None:
     _, _, report = run_iod_qualified(
         two_body_arc,
@@ -161,12 +169,15 @@ def test_corrected_acceptance_reports_why_nothing_converged(
     )
     assert not report.found
     assert report.corrections_run == 2
+    assert report.not_found_reason is not None
     assert "all roots failed correction" in report.not_found_reason
     assert "none reached the whole arc" in report.not_found_reason
     assert sum(c.correction_note is not None for c in report.candidates) == 2
 
 
-def test_stage_loss_toggle(two_body_arc) -> None:  # noqa: F811
+def test_stage_loss_toggle(
+    two_body_arc: OrbitDeterminationObservations,
+) -> None:  # noqa: F811
     """``stage_loss`` selects the partial-stage loss: Huber (default) and
     linear both seed a clean arc; anything else is rejected."""
     for stage_loss in ("huber", "linear"):
@@ -187,7 +198,7 @@ def test_stage_loss_toggle(two_body_arc) -> None:  # noqa: F811
 
 
 def test_corrected_acceptance_is_invariant_to_observation_order(
-    two_body_arc,  # noqa: F811
+    two_body_arc: OrbitDeterminationObservations,  # noqa: F811
 ) -> None:
     permutation = np.random.default_rng(11).permutation(len(two_body_arc))
     orbit, _, report = run_iod_qualified(two_body_arc, TwoBodyPropagator(), min_obs=6)
@@ -199,7 +210,9 @@ def test_corrected_acceptance_is_invariant_to_observation_order(
     npt.assert_array_equal(shuffled.coordinates.values, orbit.coordinates.values)
 
 
-def test_ranging_for_short_arcs_and_gauss_failures(two_body_arc) -> None:  # noqa: F811
+def test_ranging_for_short_arcs_and_gauss_failures(
+    two_body_arc: OrbitDeterminationObservations,
+) -> None:  # noqa: F811
     """Corrected IOD routes arcs Gauss cannot handle to systematic ranging:
     a too-short arc returns the ranging sample instead of an orbit, and a
     search with no Gauss candidate accepts a corrected ranging orbit."""
@@ -220,6 +233,7 @@ def test_ranging_for_short_arcs_and_gauss_failures(two_body_arc) -> None:  # noq
     assert sample.best == int(np.argmin(sample.chi2))
     variants = sample.to_variant_orbits("arc")
     assert len(variants) == len(sample.weight)
+    assert short.not_found_reason is not None
     assert "ranging sample attached" in short.not_found_reason
 
     no_gauss_settings = {"span_max_days": 1e-3}
@@ -230,7 +244,9 @@ def test_ranging_for_short_arcs_and_gauss_failures(two_body_arc) -> None:  # noq
         span_settings=no_gauss_settings,
         ranging_settings=long_ranging,
     )
-    assert report.found and report.accepted_candidate.source == "ranging"
+    assert report.found
+    assert report.accepted_candidate is not None
+    assert report.accepted_candidate.source == "ranging"
     # The same orbit Gauss finds, compared at the Gauss orbit's epoch.
     from adam_core.dynamics.propagation import propagate_2body
 
@@ -254,7 +270,9 @@ def test_ranging_for_short_arcs_and_gauss_failures(two_body_arc) -> None:  # noq
     assert explicit_config().for_iod().search_correction_ranging.ranging.enabled
 
 
-def test_prefit_acceptance_enforces_minimum_arc(two_body_arc) -> None:  # noqa: F811
+def test_prefit_acceptance_enforces_minimum_arc(
+    two_body_arc: OrbitDeterminationObservations,
+) -> None:  # noqa: F811
     orbit, _, report = run_iod_qualified(
         two_body_arc,
         TwoBodyPropagator(),
@@ -271,7 +289,7 @@ def test_prefit_acceptance_enforces_minimum_arc(two_body_arc) -> None:  # noqa: 
 
 
 def test_zero_contamination_still_searches_later_triplets(
-    two_body_arc,  # noqa: F811
+    two_body_arc: OrbitDeterminationObservations,  # noqa: F811
 ) -> None:
     _, _, report = run_iod_qualified(
         two_body_arc,
@@ -288,7 +306,7 @@ def test_zero_contamination_still_searches_later_triplets(
 
 
 def test_equal_epoch_station_rows_are_canonicalized_by_content(
-    two_body_arc,  # noqa: F811
+    two_body_arc: OrbitDeterminationObservations,  # noqa: F811
 ) -> None:
     # Make rows 0 and 1 share epoch and station while retaining distinct
     # astrometry and observer states. Their canonical order must therefore be
@@ -355,6 +373,8 @@ def test_candidate_failure_diagnostics_are_public_and_typed() -> None:
         ({"fit_settings": {"prop_tol": 0.0}}, "propagation_tol"),
     ],
 )
-def test_run_iod_validates_all_settings_before_empty_exit(kwargs, message) -> None:
+def test_run_iod_validates_all_settings_before_empty_exit(
+    kwargs: dict[str, object], message: str
+) -> None:
     with pytest.raises(ValueError, match=message):
         run_iod_qualified(two_body_arc_empty(), TwoBodyPropagator(), **kwargs)

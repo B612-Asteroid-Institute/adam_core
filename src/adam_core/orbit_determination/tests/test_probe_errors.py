@@ -6,6 +6,7 @@ import warnings
 
 import pytest
 
+from ...orbits import Ephemeris
 from ..algorithms.fitting import _fit_least_squares as fit_least_squares
 from .test_differential_correction import (
     TwoBodyPropagator,
@@ -17,7 +18,7 @@ from .test_differential_correction import (
 class PythonPredictionOverride(TwoBodyPropagator):
     called = False
 
-    def generate_ephemeris(self, orbits, observers, **kwargs):
+    def generate_ephemeris(self, *args: object, **kwargs: object) -> Ephemeris:
         type(self).called = True
         raise AssertionError("Python prediction callback ran")
 

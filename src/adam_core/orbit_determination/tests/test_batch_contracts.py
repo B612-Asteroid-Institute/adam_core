@@ -6,14 +6,16 @@ import re
 import struct
 import subprocess
 
-import pyarrow as pa
 import pytest
 
 from adam_core import _rust_native
+from adam_core._rust.arrow import pa
 from adam_core.observations import Associations, SourceCatalog
 
-from .. import evaluate_orbits, refine, run_iod, run_od
+from .. import FittedOrbits, evaluate_orbits, refine, run_iod, run_od
+from .conftest import PureIodOrbit
 from .test_batch_workflows import (
+    BatchResult,
     _assert_exact_results,
     _config,
     _non_roundtripping_float_config,
@@ -42,7 +44,7 @@ def _put_optional_digest_string(digest: "hashlib._Hash", value: str | None) -> N
 
 
 def _public_v2_consistency_digest(
-    orbit,
+    orbit: FittedOrbits,
     *,
     configuration: str,
 ) -> str:
@@ -82,11 +84,11 @@ def _public_v2_consistency_digest(
 
 
 @pytest.fixture
-def provider_counter(monkeypatch):
+def provider_counter(monkeypatch: pytest.MonkeyPatch) -> type[_Counter]:
     original = TwoBodyPropagator.propagator_capsule
     _Counter.calls = 0
 
-    def counted(self):
+    def counted(self: TwoBodyPropagator) -> object:
         _Counter.calls += 1
         return original(self)
 
@@ -104,13 +106,17 @@ def test_native_build_identity_is_exact_clean_head() -> None:
     assert _rust_native.build_identity() == ("0.7.0", head)
 
 
-def _source_and_ids(pure_iod_orbit):
+def _source_and_ids(pure_iod_orbit: PureIodOrbit) -> tuple[SourceCatalog, list[str]]:
     source = _two_body_source(pure_iod_orbit)
-    return source, source.id.to_pylist()
+    raw_ids = source.id.to_pylist()
+    ids = [value for value in raw_ids if isinstance(value, str)]
+    if len(ids) != len(raw_ids):
+        raise TypeError("source identifiers must be non-null strings")
+    return source, ids
 
 
 def test_overlap_first_appearance_source_order_and_no_iod_placeholder(
-    pure_iod_orbit, provider_counter
+    pure_iod_orbit: PureIodOrbit, provider_counter: type[_Counter]
 ) -> None:
     source, ids = _source_and_ids(pure_iod_orbit)
     n = len(ids)
@@ -127,7 +133,7 @@ def test_overlap_first_appearance_source_order_and_no_iod_placeholder(
     assert failures.group_id.to_pylist() == ["small"]
     assert failures.orbit_id.to_pylist() == [None]
     assert failures.code.to_pylist() == ["no_solution"]
-    by_orbit = {}
+    by_orbit: dict[str, list[str]] = {}
     for orbit_id, obs_id in zip(
         members.orbit_id.to_pylist(), members.obs_id.to_pylist(), strict=True
     ):
@@ -148,11 +154,13 @@ def test_overlap_first_appearance_source_order_and_no_iod_placeholder(
     ],
 )
 def test_malformed_associations_abort_before_factory(
-    pure_iod_orbit, provider_counter, mutation
+    pure_iod_orbit: PureIodOrbit, provider_counter: type[_Counter], mutation: str
 ) -> None:
     source, ids = _source_and_ids(pure_iod_orbit)
     detections = list(ids) + list(ids)
-    groups = ["g1"] * len(ids) + ["g2"] * len(ids)
+    groups: list[str | None] = []
+    groups.extend(["g1"] * len(ids))
+    groups.extend(["g2"] * len(ids))
     if mutation == "null_group":
         groups[-1] = None
     elif mutation == "empty_group":
@@ -183,7 +191,10 @@ def test_malformed_associations_abort_before_factory(
     ],
 )
 def test_malformed_members_abort_before_factory(
-    pure_iod_orbit, provider_counter, route, mutation
+    pure_iod_orbit: PureIodOrbit,
+    provider_counter: type[_Counter],
+    route: str,
+    mutation: str,
 ) -> None:
     source, ids = _source_and_ids(pure_iod_orbit)
     config = _config()
@@ -221,7 +232,7 @@ def test_malformed_members_abort_before_factory(
         )
     if route == "refine":
 
-        def call():
+        def call() -> BatchResult:
             return refine(
                 orbits,
                 members,
@@ -232,7 +243,7 @@ def test_malformed_members_abort_before_factory(
 
     else:
 
-        def call():
+        def call() -> BatchResult:
             return evaluate_orbits(
                 orbits,
                 members,
@@ -247,7 +258,7 @@ def test_malformed_members_abort_before_factory(
 
 
 def test_input_fingerprint_is_independent_of_arrow_chunk_layout(
-    pure_iod_orbit,
+    pure_iod_orbit: PureIodOrbit,
 ) -> None:
     source, ids = _source_and_ids(pure_iod_orbit)
     split = len(source) // 2
@@ -265,7 +276,7 @@ def test_input_fingerprint_is_independent_of_arrow_chunk_layout(
 
 
 def test_provider_factory_counts_and_external_exact_composition(
-    pure_iod_orbit, provider_counter
+    pure_iod_orbit: PureIodOrbit, provider_counter: type[_Counter]
 ) -> None:
     source, ids = _source_and_ids(pure_iod_orbit)
     associations = Associations.from_kwargs(
@@ -302,7 +313,7 @@ def test_provider_factory_counts_and_external_exact_composition(
 
 
 def test_direct_iod_output_is_statically_valid_for_evaluation(
-    pure_iod_orbit, provider_counter
+    pure_iod_orbit: PureIodOrbit, provider_counter: type[_Counter]
 ) -> None:
     source, ids = _source_and_ids(pure_iod_orbit)
     associations = Associations.from_kwargs(
@@ -323,7 +334,9 @@ def test_direct_iod_output_is_statically_valid_for_evaluation(
     assert provider_counter.calls == 1
 
 
-def test_explicit_evaluation_subset_and_stage_provenance(pure_iod_orbit) -> None:
+def test_explicit_evaluation_subset_and_stage_provenance(
+    pure_iod_orbit: PureIodOrbit,
+) -> None:
     source, ids = _source_and_ids(pure_iod_orbit)
     associations = Associations.from_kwargs(
         detection_id=ids, object_id=["g"] * len(ids)
@@ -352,7 +365,7 @@ def test_explicit_evaluation_subset_and_stage_provenance(pure_iod_orbit) -> None
 
 
 def test_membership_and_seed_group_fingerprints_are_enforced_before_factory(
-    pure_iod_orbit, provider_counter
+    pure_iod_orbit: PureIodOrbit, provider_counter: type[_Counter]
 ) -> None:
     source, ids = _source_and_ids(pure_iod_orbit)
     associations = Associations.from_kwargs(
@@ -392,7 +405,7 @@ def test_membership_and_seed_group_fingerprints_are_enforced_before_factory(
 
 @pytest.mark.parametrize("mutation", ["route", "configuration", "input"])
 def test_route_configuration_and_input_provenance_have_a_validated_consistency_digest(
-    pure_iod_orbit, provider_counter, mutation
+    pure_iod_orbit: PureIodOrbit, provider_counter: type[_Counter], mutation: str
 ) -> None:
     source, ids = _source_and_ids(pure_iod_orbit)
     associations = Associations.from_kwargs(
@@ -440,7 +453,7 @@ def test_route_configuration_and_input_provenance_have_a_validated_consistency_d
     ],
 )
 def test_composed_seed_fields_have_a_validated_consistency_digest(
-    pure_iod_orbit, provider_counter, field
+    pure_iod_orbit: PureIodOrbit, provider_counter: type[_Counter], field: str
 ) -> None:
     source, ids = _source_and_ids(pure_iod_orbit)
     associations = Associations.from_kwargs(
@@ -502,7 +515,7 @@ def test_composed_seed_fields_have_a_validated_consistency_digest(
 
 @pytest.mark.parametrize("route", ["refine", "evaluate"])
 def test_seed_configuration_content_must_match_its_science_sha_before_provider(
-    pure_iod_orbit, provider_counter, route
+    pure_iod_orbit: PureIodOrbit, provider_counter: type[_Counter], route: str
 ) -> None:
     """A recomputed public digest cannot bless stale configuration_sha256."""
 
@@ -538,7 +551,7 @@ def test_seed_configuration_content_must_match_its_science_sha_before_provider(
 
     if route == "refine":
 
-        def call():
+        def call() -> BatchResult:
             return refine(
                 forged,
                 members,
@@ -549,7 +562,7 @@ def test_seed_configuration_content_must_match_its_science_sha_before_provider(
 
     else:
 
-        def call():
+        def call() -> BatchResult:
             return evaluate_orbits(
                 forged,
                 members,
@@ -564,7 +577,7 @@ def test_seed_configuration_content_must_match_its_science_sha_before_provider(
 
 
 def test_equivalent_seed_json_is_canonicalized_before_composed_provenance(
-    pure_iod_orbit,
+    pure_iod_orbit: PureIodOrbit,
 ) -> None:
     source, ids = _source_and_ids(pure_iod_orbit)
     associations = Associations.from_kwargs(
@@ -608,7 +621,7 @@ def test_equivalent_seed_json_is_canonicalized_before_composed_provenance(
 
 
 def test_nonconverged_failure_carries_output_and_input_orbit_identity(
-    pure_iod_orbit,
+    pure_iod_orbit: PureIodOrbit,
 ) -> None:
     source, ids = _source_and_ids(pure_iod_orbit)
     associations = Associations.from_kwargs(
@@ -623,7 +636,7 @@ def test_nonconverged_failure_carries_output_and_input_orbit_identity(
 
 
 def test_orbit_state_and_provenance_mutations_abort_before_factory(
-    pure_iod_orbit, provider_counter
+    pure_iod_orbit: PureIodOrbit, provider_counter: type[_Counter]
 ) -> None:
     source, ids = _source_and_ids(pure_iod_orbit)
     associations = Associations.from_kwargs(

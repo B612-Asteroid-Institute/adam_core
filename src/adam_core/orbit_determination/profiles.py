@@ -22,7 +22,7 @@ from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Any, Mapping, cast
 
-from adam_core import _rust_native as _rust  # type: ignore[attr-defined]
+from adam_core import _rust_native as _rust
 
 from .config import (
     EvaluationConfig,

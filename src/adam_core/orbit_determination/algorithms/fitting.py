@@ -4,8 +4,8 @@ from typing import Any, List, Literal, Optional, Tuple
 
 import numpy as np
 import numpy.typing as npt
-import pyarrow as pa
-import pyarrow.compute as pc
+
+from adam_core._rust.arrow import pa, pc
 
 from ... import _rust_native
 from ...coordinates.cartesian import CartesianCoordinates
@@ -64,8 +64,8 @@ def _fit_settings(
     f_scale: float,
     jacobian: str,
     validate_covariance: bool,
-    kwargs: dict,
-) -> dict:
+    kwargs: dict[str, Any],
+) -> dict[str, Any]:
     """
     The ``fit_settings`` dict for adam-core's native whitened-fit driver:
     the `fit_least_squares` options, tolerances, and independent iteration and
@@ -91,7 +91,7 @@ def _fit_settings(
     return settings
 
 
-def _emit_native_warnings(output: dict) -> None:
+def _emit_native_warnings(output: dict[str, Any]) -> None:
     for message in output.get("warnings", ()):
         warnings.warn(message, category=RuntimeWarning)
 
@@ -409,12 +409,12 @@ def _probe_covariance(
     propagator: Propagator,
     loss: str,
     f_scale: float,
-) -> dict:
+) -> dict[str, Any]:
     """Run adam-core's Rust covariance probe over the provider capsule."""
     from adam_core import _rust_native
 
     method = "2-point" if jacobian_method == "solver" else jacobian_method
-    return _rust_native.validate_fit_covariance_ipc(
+    output = _rust_native.validate_fit_covariance_ipc(
         native_propagator(propagator),
         *_native_problem(_orbit_at(state_vector, mjd_tdb), observations),
         [False] * len(observations),
@@ -422,6 +422,14 @@ def _probe_covariance(
         jacobian=method,
         fit_settings={"loss": loss, "f_scale": f_scale},
     )
+    if not isinstance(output, dict):
+        raise TypeError("native covariance probe must return a dictionary")
+    typed_output: dict[str, Any] = {}
+    for key, value in output.items():
+        if not isinstance(key, str):
+            raise TypeError("native covariance probe keys must be strings")
+        typed_output[key] = value
+    return typed_output
 
 
 def _weak_direction_delta_chi2(
@@ -515,7 +523,7 @@ def _member_weights(
 def _fitted_tables_from_native_output(
     orbit: Orbits,
     observations: OrbitDeterminationObservations,
-    output: dict,
+    output: dict[str, Any],
     weights: npt.NDArray[np.float64],
 ) -> Tuple[FittedOrbits, FittedOrbitMembers]:
     """
@@ -579,13 +587,11 @@ def fit_least_squares(
     observations: OrbitDeterminationObservations,
     propagator: Propagator,
     ignore: Optional[List[str]] = None,
-    jacobian: Literal[
-        "auto", "analytic", "propagator", "central", "2-point"
-    ] = OD_DEFAULTS["fit"]["jacobian"],
+    jacobian: str = OD_DEFAULTS["fit"]["jacobian"],
     validate_covariance: bool = OD_DEFAULTS["fit"]["validate_covariance"],
     loss: LossType = OD_DEFAULTS["fit"]["loss"],
     f_scale: float = HUBER_F_SCALE_DEFAULT,
-    **kwargs,
+    **kwargs: object,
 ) -> Tuple[FittedOrbits, FittedOrbitMembers]:
     """
     Differentially correct an orbit using (optionally robust) least squares.
@@ -791,7 +797,7 @@ def iterative_fit(
     ],
     loss: LossType = OD_DEFAULTS["fit"]["loss"],
     f_scale: float = HUBER_F_SCALE_DEFAULT,
-    **kwargs,
+    **kwargs: object,
 ) -> Tuple[FittedOrbits, FittedOrbitMembers]:
     """
     Iteratively fit an orbit using least squares with outlier rejection.
@@ -858,11 +864,17 @@ def iterative_fit(
             "max_iterations; got "
             + ", ".join(f"{key}={kwargs[key]!r}" for key in sorted(unsupported))
         )
+    jacobian = kwargs.get("jacobian", OD_DEFAULTS["fit"]["jacobian"])
+    validate_covariance = kwargs.get("validate_covariance", True)
+    if not isinstance(jacobian, str):
+        raise TypeError("jacobian must be a string")
+    if not isinstance(validate_covariance, bool):
+        raise TypeError("validate_covariance must be bool")
     fit_settings = _fit_settings(
         loss,
         f_scale,
-        kwargs.get("jacobian", OD_DEFAULTS["fit"]["jacobian"]),
-        kwargs.get("validate_covariance", True),
+        jacobian,
+        validate_covariance,
         kwargs,
     )
     _warn_if_analytic_jacobian_mismatches(propagator, fit_settings["jacobian"])

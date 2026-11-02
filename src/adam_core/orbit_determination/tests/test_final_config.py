@@ -56,7 +56,7 @@ def test_empty_batch_returns_three_typed_empty_tables_without_provider_binding()
     fitted, members, failures = od.run_iod(
         SourceCatalog.empty(),
         Associations.empty(),
-        object(),
+        None,
         _as_supplied().for_iod(),
     )
     assert isinstance(fitted, od.FittedOrbits)

@@ -1,7 +1,9 @@
+from pathlib import Path
+
 import numpy as np
-import pyarrow as pa
-import pyarrow.compute as pc
 import pytest
+
+from adam_core._rust.arrow import pa, pc
 
 from ...coordinates.origin import OriginCodes
 from ...time import Timestamp
@@ -222,7 +224,7 @@ def test_ObservatoryParallaxCoefficients_timezone_validity_and_timing() -> None:
     assert all(sample[0] >= 0.0 for sample in samples)
 
 
-def test_origincode_observer():
+def test_origincode_observer() -> None:
     """Test getting observer state using an OriginCodes enum."""
     test_time = Timestamp.from_iso8601(["2022-01-01T00:00:00Z"])
 
@@ -245,7 +247,7 @@ def test_origincode_observer():
     )
 
 
-def test_mpc_observatory_code():
+def test_mpc_observatory_code() -> None:
     """Test getting observer state using an MPC observatory code."""
     test_time = Timestamp.from_iso8601(["2022-01-01T00:00:00Z"])
 
@@ -285,7 +287,7 @@ def test_mpc_observatory_code():
         assert 1e-6 < earth_distance < 1e-4
 
 
-def test_invalid_code():
+def test_invalid_code() -> None:
     """Test that using an invalid code raises the correct error."""
     test_time = Timestamp.from_iso8601(["2022-01-01T00:00:00Z"])
 
@@ -305,7 +307,7 @@ def test_invalid_code():
         )
 
 
-def test_mpc_vs_spice_precedence(tmp_path):
+def test_mpc_vs_spice_precedence(tmp_path: Path) -> None:
     """Test that MPC observatory codes take precedence over a SPICE body
     binding sharing the same name. We register a temporary text kernel
     that aliases an unused MPC code to Mars, then verify the resolver

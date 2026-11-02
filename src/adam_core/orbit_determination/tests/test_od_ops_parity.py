@@ -1,16 +1,17 @@
 """Parity and native-timing coverage for the Rust-owned OD utility kernels."""
 
 import numpy as np
-import pyarrow as pa
 import pytest
 import quivr as qv
+
+from adam_core._rust.arrow import pa
 
 from ...coordinates.origin import Origin
 from ...dynamics.lambert import calculate_c3
 from ...time.time import Timestamp
 
 
-def test_calculate_c3_matches_legacy_expression():
+def test_calculate_c3_matches_legacy_expression() -> None:
     rng = np.random.default_rng(42)
     v1 = rng.normal(scale=0.02, size=(64, 3))
     body_v = rng.normal(scale=0.02, size=(64, 3))
@@ -18,7 +19,7 @@ def test_calculate_c3_matches_legacy_expression():
     np.testing.assert_array_equal(calculate_c3(v1, body_v), expected)
 
 
-def test_calculate_c3_native_timing_returns_samples():
+def test_calculate_c3_native_timing_returns_samples() -> None:
     from adam_core import _rust_native
 
     rng = np.random.default_rng(7)
@@ -31,7 +32,7 @@ def test_calculate_c3_native_timing_returns_samples():
 
 
 def _legacy_assign_duplicate_observations(orbits, orbit_members):
-    import pyarrow.compute as pc
+    from adam_core._rust.arrow import pc
 
     orbits = orbits.sort_by(
         [
@@ -61,7 +62,7 @@ def _legacy_assign_duplicate_observations(orbits, orbit_members):
     return orbits.apply_mask(orbits_mask), orbit_members
 
 
-def test_assign_duplicate_observations_matches_legacy():
+def test_assign_duplicate_observations_matches_legacy() -> None:
     from ...coordinates.cartesian import CartesianCoordinates
     from ..fitted_orbits import (
         FittedOrbitMembers,

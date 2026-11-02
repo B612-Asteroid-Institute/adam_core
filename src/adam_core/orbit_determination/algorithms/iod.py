@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, Any, Optional, Tuple
 
 import numpy as np
 
-from ... import _rust_native  # type: ignore[attr-defined]
+from ... import _rust_native
 from ...coordinates.cartesian import CartesianCoordinates
 from ...coordinates.origin import Origin
 from ...coordinates.residuals import Residuals

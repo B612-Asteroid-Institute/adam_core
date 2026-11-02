@@ -6,7 +6,7 @@ from ..covariances import CoordinateCovariances
 from ..origin import Origin
 
 
-def test_CartesianCoordinates_rotate():
+def test_CartesianCoordinates_rotate() -> None:
     # Test rotation of Cartesian coordinates. Rotating coordinates and their
     # covariances with an identity matrix should return the same coordinates and covariances.
     N, D = 1000, 6
@@ -91,7 +91,7 @@ def _nonidentity_xy_rotation() -> np.ndarray:
     return matrix
 
 
-def test_cartesian_rotate_6d_nonidentity_preserves_ieee_infinity_policy():
+def test_cartesian_rotate_6d_nonidentity_preserves_ieee_infinity_policy() -> None:
     covariance = np.zeros((3, 6, 6), dtype=np.float64)
     covariance[0, 0, 0], covariance[0, 1, 1] = np.inf, -np.inf
     covariance[1, 0, 0], covariance[1, 1, 1] = -np.inf, np.inf
@@ -129,7 +129,9 @@ def test_cartesian_rotate_6d_nonidentity_preserves_ieee_infinity_policy():
     np.testing.assert_array_equal(actual, expected)
 
 
-def test_cartesian_rotate_9d_nonidentity_normalizes_infinities_before_rotation():
+def test_cartesian_rotate_9d_nonidentity_normalizes_infinities_before_rotation() -> (
+    None
+):
     covariance = np.zeros((3, 9, 9), dtype=np.float64)
     covariance[0, 0, 0], covariance[0, 1, 1] = np.inf, -np.inf
     covariance[1, 0, 0], covariance[1, 1, 1] = -np.inf, np.inf
@@ -181,7 +183,7 @@ def test_cartesian_rotate_9d_nonidentity_normalizes_infinities_before_rotation()
     np.testing.assert_array_equal(actual, expected)
 
 
-def test_cartesian_rotate_extended_special_values_and_matrix_shapes():
+def test_cartesian_rotate_extended_special_values_and_matrix_shapes() -> None:
     covariance = np.zeros((1, 9, 9), dtype=np.float64)
     covariance[0, 0, 0] = np.inf
     covariance[0, 0, 1] = -np.inf
@@ -225,7 +227,9 @@ def test_cartesian_rotate_extended_special_values_and_matrix_shapes():
 
 
 @pytest.mark.parametrize("shape", [(36,), (5, 5), (2, 6, 6), (6, 6, 1)])
-def test_cartesian_rotate_rejects_noncanonical_matrix_shapes(shape):
+def test_cartesian_rotate_rejects_noncanonical_matrix_shapes(
+    shape: tuple[int, ...],
+) -> None:
     coordinates = CartesianCoordinates.from_kwargs(
         x=[1.0],
         y=[2.0],
@@ -244,7 +248,7 @@ def test_cartesian_rotate_rejects_noncanonical_matrix_shapes(shape):
         coordinates.rotate(np.zeros(shape), "invalid")
 
 
-def test_CartesianCoordinates_translate():
+def test_CartesianCoordinates_translate() -> None:
     # Test translation of Cartesian coordinates. Translating coordinates and their
     # covariances with a zero vector should return the same coordinates and covariances.
     N, D = 1000, 6
@@ -277,7 +281,7 @@ def test_CartesianCoordinates_translate():
     np.testing.assert_equal(coords_translated.covariance.to_matrix(), covariances)
 
 
-def test_CartesianCoordinates_attributes():
+def test_CartesianCoordinates_attributes() -> None:
     # Test that the correct position attributes are returned both for individual
     # dimensions but also multiple dimensions (as vectors)
     N, D = 1000, 6
@@ -344,7 +348,7 @@ def test_CartesianCoordinates_attributes():
     np.testing.assert_equal(coords.sigma_v_mag, sigma_v_mag)
 
 
-def test_CartesianCoordinates_ric():
+def test_CartesianCoordinates_ric() -> None:
     N, D, d = 500, 6, 3
     values = np.random.random((N, D)) * 10 - 5
     covariances = np.random.random((N, D, D))

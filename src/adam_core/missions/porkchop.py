@@ -4,10 +4,10 @@ from typing import List, Optional, Tuple, Union
 
 import numpy as np
 import numpy.typing as npt
-import pyarrow as pa
 import quivr as qv
 
 from adam_core._rust import generate_porkchop_data_arrow
+from adam_core._rust.arrow import pa
 from adam_core.coordinates import CartesianCoordinates
 from adam_core.coordinates.origin import Origin, OriginCodes
 from adam_core.coordinates.spherical import SphericalCoordinates

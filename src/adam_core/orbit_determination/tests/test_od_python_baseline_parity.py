@@ -14,9 +14,12 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
-import pyarrow as pa
+import numpy.typing as npt
 import pytest
 
+from adam_core._rust.arrow import pa
+
+from ...coordinates.cartesian import CartesianCoordinates
 from ...coordinates.covariances import CoordinateCovariances
 from ...coordinates.origin import Origin
 from ...coordinates.spherical import SphericalCoordinates
@@ -49,12 +52,20 @@ EPOCH_MJD_TDB = 61000.0
 @pytest.fixture(scope="module")
 def fixture() -> dict[str, Any]:
     with FIXTURE.open() as f:
-        return json.load(f)
+        payload = json.load(f)
+    if not isinstance(payload, dict):
+        raise TypeError("OD baseline fixture must be a dictionary")
+    typed_payload: dict[str, Any] = {}
+    for key, value in payload.items():
+        if not isinstance(key, str):
+            raise TypeError("OD baseline fixture keys must be strings")
+        typed_payload[key] = value
+    return typed_payload
 
 
-def CartesianCoordinatesFromState(state: np.ndarray):  # noqa: N802
-    from ...coordinates.cartesian import CartesianCoordinates
-
+def CartesianCoordinatesFromState(  # noqa: N802
+    state: np.ndarray,
+) -> CartesianCoordinates:
     return CartesianCoordinates.from_kwargs(
         x=state[0:1],
         y=state[1:2],
@@ -186,7 +197,7 @@ def _real_bias_path() -> Path:
         pytest.skip("EFCC18 bias.dat is not installed")
 
 
-def _real_bias_table():
+def _real_bias_table() -> npt.NDArray[np.float32]:
     return efcc18.load_efcc18_biases(_real_bias_path())
 
 

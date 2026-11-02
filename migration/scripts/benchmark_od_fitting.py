@@ -26,21 +26,22 @@ import sys
 import time
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from importlib import metadata
+from importlib import metadata as metadata
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Literal
 from urllib.parse import unquote, urlparse
 
 import numpy as np
 
-import adam_core
-from adam_core import _rust_native
-from adam_core.coordinates import CartesianCoordinates, CoordinateCovariances
+import adam_core as adam_core
+from adam_core import _rust_native as _rust_native
+from adam_core.coordinates.cartesian import CartesianCoordinates
+from adam_core.coordinates.covariances import CoordinateCovariances
 from adam_core.coordinates.origin import Origin
 from adam_core.dynamics.ephemeris import generate_ephemeris_2body
 from adam_core.dynamics.propagation import propagate_2body
-from adam_core.observers import Observers
 from adam_core.observations import Associations, SourceCatalog
+from adam_core.observers import Observers
 from adam_core.orbit_determination import (
     EvaluationConfig,
     IodRunConfig,
@@ -57,6 +58,7 @@ from adam_core.orbit_determination.workflows import _native_batch_inputs
 from adam_core.orbits.arrow_bridge import orbits_to_ipc
 from adam_core.orbits.ephemeris import Ephemeris
 from adam_core.orbits.orbits import Orbits
+from adam_core.orbits.variants import VariantOrbits
 from adam_core.propagator import NativeBackend, Propagator
 from adam_core.time import Timestamp
 
@@ -81,15 +83,49 @@ class BenchmarkTwoBodyPropagator(Propagator):
         work_units=frozenset({"propagator_capsule"}),
     )
 
-    def propagator_capsule(self):
-        return _rust_native.two_body_propagator_capsule()
+    def propagator_capsule(self) -> object:
+        capsule: object = _rust_native.two_body_propagator_capsule()
+        return capsule
 
-    def propagate_orbits(self, orbits: Orbits, times: Timestamp, **kwargs) -> Orbits:
-        return propagate_2body(orbits, times)
+    @staticmethod
+    def _require_orbits(orbits: Orbits | VariantOrbits) -> Orbits:
+        if not isinstance(orbits, Orbits):
+            raise TypeError("benchmark two-body provider requires Orbits")
+        return orbits
+
+    def propagate_orbits(
+        self,
+        orbits: Orbits | VariantOrbits,
+        times: Timestamp,
+        covariance: bool = False,
+        covariance_method: Literal[
+            "auto", "sigma-point", "monte-carlo"
+        ] = "monte-carlo",
+        num_samples: int = 1000,
+        chunk_size: int = 100,
+        max_processes: int | None = 1,
+        seed: int | None = None,
+        include_nongrav: bool = True,
+    ) -> Orbits | VariantOrbits:
+        return propagate_2body(self._require_orbits(orbits), times)
 
     def generate_ephemeris(
-        self, orbits: Orbits, observers: Observers, **kwargs
+        self,
+        orbits: Orbits | VariantOrbits,
+        observers: Observers,
+        covariance: bool = False,
+        covariance_method: Literal[
+            "auto", "sigma-point", "monte-carlo"
+        ] = "monte-carlo",
+        num_samples: int = 1000,
+        chunk_size: int = 100,
+        max_processes: int | None = 1,
+        seed: int | None = None,
+        predict_magnitudes: bool = True,
+        predict_phase_angle: bool = False,
+        include_nongrav: bool = True,
     ) -> Ephemeris:
+        orbits = self._require_orbits(orbits)
         orbits = orbits.sort_by(["orbit_id"]).set_column(
             "coordinates.covariance", CoordinateCovariances.nulls(len(orbits))
         )
@@ -105,7 +141,10 @@ class BenchmarkTwoBodyPropagator(Propagator):
             return blocks[0]
         import quivr as qv
 
-        return qv.concatenate(blocks)
+        concatenated = qv.concatenate(blocks)
+        if not isinstance(concatenated, Ephemeris):
+            raise TypeError("benchmark ephemeris concatenation changed table type")
+        return concatenated
 
 
 @dataclass(frozen=True)
@@ -265,8 +304,8 @@ def _benchmark_workload(
     if len(iod_orbits) != 1 or len(iod_failures):
         raise RuntimeError("benchmark IOD preflight did not produce one seed")
 
-    _, source_ipc, associations_ipc, observed_ipc, observers_ipc = (
-        _native_batch_inputs(workload.observations, workload.associations)
+    _, source_ipc, associations_ipc, observed_ipc, observers_ipc = _native_batch_inputs(
+        workload.observations, workload.associations
     )
     orbit_ipc = orbits_to_ipc(iod_orbits.to_orbits())
     propagator_descriptor = native_propagator(provider)

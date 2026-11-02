@@ -1,27 +1,42 @@
 """Keep native specifications paired with the Python behavior they describe."""
 
+from __future__ import annotations
+
 import functools
 import warnings
+from collections.abc import Callable
+from typing import ParamSpec, TypeVar
+
+from adam_core.propagator.propagator import NativeBackend
+
+P = ParamSpec("P")
+R = TypeVar("R")
+NativeWorkUnit = Callable[[], object]
+NativeProvider = tuple[NativeWorkUnit, str, str, bool]
 
 
-def deprecated(implementation, replacement: str):
+def deprecated(
+    implementation: Callable[P, R], replacement: str
+) -> Callable[[Callable[P, R]], Callable[P, R]]:
     """Decorator form of `deprecated_alias` for a public ``def`` stub (so the
     public-surface audit still lists the name): the stub's body is unused."""
 
-    def decorate(stub):
+    def decorate(stub: Callable[P, R]) -> Callable[P, R]:
         return deprecated_alias(implementation, stub.__name__, replacement)
 
     return decorate
 
 
-def deprecated_alias(implementation, name: str, replacement: str):
+def deprecated_alias(
+    implementation: Callable[P, R], name: str, replacement: str
+) -> Callable[P, R]:
     """The public, deprecated name of ``implementation``: same signature and
     docstring, plus a `DeprecationWarning` naming ``replacement`` (the
     canonical stage it converges on). Internal callers use the
     implementation and stay silent."""
 
     @functools.wraps(implementation)
-    def alias(*args, **kwargs):
+    def alias(*args: P.args, **kwargs: P.kwargs) -> R:
         warnings.warn(
             f"{name} is deprecated; use {replacement}.",
             DeprecationWarning,
@@ -72,7 +87,7 @@ _PROPAGATION_METHODS = (
 )
 
 
-def native_backend(propagator: object):
+def native_backend(propagator: object) -> NativeBackend | None:
     """
     The `NativeBackend` declared for ``propagator``, or None.
 
@@ -89,6 +104,10 @@ def native_backend(propagator: object):
         backend = cls.__dict__["native_backend"]
         if backend is None:
             return None
+        if not isinstance(backend, NativeBackend):
+            raise TypeError(
+                "native_backend declarations must be NativeBackend instances"
+            )
         names = _PROPAGATION_METHODS + tuple(sorted(backend.work_units))
         if any(name in getattr(propagator, "__dict__", {}) for name in names):
             return None
@@ -103,16 +122,21 @@ def native_backend(propagator: object):
     return None
 
 
-def native_work_unit(propagator: object, name: str):
+def native_work_unit(propagator: object, name: str) -> NativeWorkUnit | None:
     """The bound work unit ``name`` when ``propagator``'s `native_backend`
     declares it (see `native_backend`), else None."""
     backend = native_backend(propagator)
     if backend is None or name not in backend.work_units:
         return None
-    return getattr(propagator, name, None)
+    work_unit: object = getattr(propagator, name, None)
+    if work_unit is None:
+        return None
+    if not callable(work_unit):
+        raise TypeError(f"native work unit {name!r} must be callable")
+    return work_unit
 
 
-def native_propagator(propagator: object):
+def native_propagator(propagator: object) -> NativeProvider | None:
     """What the Rust drivers receive for ``propagator``: a lazy descriptor
     for the external-propagator capsule (``adam_core.propagator.v2``) when its
     `NativeBackend` declares the ``propagator_capsule`` work unit, so every OD stage runs

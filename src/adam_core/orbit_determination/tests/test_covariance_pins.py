@@ -23,27 +23,52 @@ The fits here are seeded from our own previously converged solutions (saved
 in the data directory), not from any external orbit.
 """
 
+import importlib
+import importlib.util
 import json
 import os
+from collections.abc import Sequence
 from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pytest
+import quivr as qv
 
-DATA_DIR = os.environ.get("ADAM_CORE_OD_PIN_DATA")
+from ...coordinates.covariances import CoordinateCovariances
+from ...coordinates.origin import Origin
+from ...coordinates.spherical import SphericalCoordinates
+from ...observers import Observers
+from ...orbits.orbits import Orbits
+from ...propagator import Propagator
+from ...time import Timestamp
+from .._pipeline import apply_pipeline_once
+from ..algorithms.fitting import fit_least_squares
+from ..config import OdConfig, ResourceBindings
+from ..evaluate import OrbitDeterminationObservations, OrbitDeterminationPhotometry
+from ..fitted_orbits import FittedOrbits
+from ..observation_pipeline import (
+    ObservationPipeline,
+    ResidualCovarianceOperation,
+    StationBandResidualCovarianceAdjustment,
+)
+from ._focused import explicit_config
 
-try:
-    import rebound  # noqa: F401
-    from adam_assist.propagator import ASSISTPropagator
-except ImportError:
-    ASSISTPropagator = None
+_DATA_DIR_VALUE = os.environ.get("ADAM_CORE_OD_PIN_DATA")
+DATA_DIR = Path(_DATA_DIR_VALUE) if _DATA_DIR_VALUE else None
+
+_ASSIST_AVAILABLE = (
+    importlib.util.find_spec("rebound") is not None
+    and importlib.util.find_spec("adam_assist") is not None
+)
 
 pytestmark = [
     pytest.mark.skipif(
-        DATA_DIR is None or not os.path.isdir(DATA_DIR),
+        DATA_DIR is None or not DATA_DIR.is_dir(),
         reason="ADAM_CORE_OD_PIN_DATA not set or not a directory",
     ),
-    pytest.mark.skipif(ASSISTPropagator is None, reason="adam-assist not available"),
+    pytest.mark.skipif(not _ASSIST_AVAILABLE, reason="adam-assist not available"),
 ]
 
 KM_P_AU = 149_597_870.7
@@ -51,17 +76,57 @@ S_P_DAY = 86400.0
 DEFAULT_SIGMA_ARCSEC = 1.0
 AC4_ENCOUNTER_MJD = 61148.0
 
+FitPair = tuple[FittedOrbits, FittedOrbits]
 
-def _build_observations(ids, mjds, codes, ra, dec, var_lon, var_lat, mag, rmsmag, band):
-    import quivr as qv
 
-    from ...coordinates.covariances import CoordinateCovariances
-    from ...coordinates.origin import Origin
-    from ...coordinates.spherical import SphericalCoordinates
-    from ...observers import Observers
-    from ...time import Timestamp
-    from ..evaluate import OrbitDeterminationObservations, OrbitDeterminationPhotometry
+def _data_path(name: str) -> Path:
+    if DATA_DIR is None:
+        raise RuntimeError("ADAM_CORE_OD_PIN_DATA is not configured")
+    return DATA_DIR / name
 
+
+def _read_parquet_rows(path: Path) -> list[dict[str, Any]]:
+    parquet = importlib.import_module("pyarrow.parquet")
+    parquet_file = getattr(parquet, "ParquetFile", None)
+    if not callable(parquet_file):
+        raise TypeError("pyarrow.parquet must export callable ParquetFile")
+    rows = parquet_file(path).read().to_pylist()
+    if not isinstance(rows, list) or not all(isinstance(row, dict) for row in rows):
+        raise TypeError("covariance pin parquet data must contain row dictionaries")
+    typed_rows: list[dict[str, Any]] = []
+    for row in rows:
+        typed_row: dict[str, Any] = {}
+        for key, value in row.items():
+            if not isinstance(key, str):
+                raise TypeError("covariance pin parquet keys must be strings")
+            typed_row[key] = value
+        typed_rows.append(typed_row)
+    return typed_rows
+
+
+def _assist_propagator() -> Propagator:
+    assist = importlib.import_module("adam_assist")
+    propagator_class = getattr(assist, "ASSISTPropagator", None)
+    if not isinstance(propagator_class, type):
+        raise TypeError("adam_assist must export ASSISTPropagator")
+    propagator = propagator_class()
+    if not isinstance(propagator, Propagator):
+        raise TypeError("ASSISTPropagator must implement the Propagator contract")
+    return propagator
+
+
+def _build_observations(
+    ids: Sequence[str],
+    mjds: Sequence[float],
+    codes: Sequence[str],
+    ra: Sequence[float],
+    dec: Sequence[float],
+    var_lon: Sequence[float],
+    var_lat: Sequence[float],
+    mag: Sequence[float | None],
+    rmsmag: Sequence[float | None],
+    band: Sequence[str | None],
+) -> OrbitDeterminationObservations:
     n = len(ids)
     times = Timestamp.from_mjd(np.array(mjds), scale="utc")
     cov = np.full((n, 6, 6), np.nan)
@@ -75,13 +140,16 @@ def _build_observations(ids, mjds, codes, ra, dec, var_lon, var_lat, mag, rmsmag
         origin=Origin.from_kwargs(code=codes),
         frame="equatorial",
     )
-    observers_parts, order = [], []
+    observers_parts: list[Observers] = []
+    order: list[int] = []
     codes_arr = np.array(codes)
     for code in np.unique(codes_arr):
         idx = np.flatnonzero(codes_arr == code)
         observers_parts.append(Observers.from_code(str(code), times.take(idx)))
         order.extend(idx.tolist())
     observers = qv.concatenate(observers_parts)
+    if not isinstance(observers, Observers):
+        raise TypeError("observer concatenation changed table type")
     inverse = np.argsort(np.array(order), kind="stable")
     observers = observers.take(inverse)
     obs = OrbitDeterminationObservations.from_kwargs(
@@ -100,8 +168,9 @@ def _build_observations(ids, mjds, codes, ra, dec, var_lon, var_lat, mag, rmsmag
     )
 
 
-def observations_from_ades(path, prefix):
-    rows = json.load(open(path))[0]["ADES_DF"]
+def observations_from_ades(path: Path, prefix: str) -> OrbitDeterminationObservations:
+    with path.open() as stream:
+        rows = json.load(stream)[0]["ADES_DF"]
     ids, mjds, codes = [], [], []
     ra, dec, var_lon, var_lat = [], [], [], []
     mag, rmsmag, band = [], [], []
@@ -132,10 +201,10 @@ def observations_from_ades(path, prefix):
     )
 
 
-def observations_from_precovery(path, prefix, obscode):
-    import pyarrow.parquet as pq
-
-    rows = pq.ParquetFile(path).read().to_pylist()
+def observations_from_precovery(
+    path: Path, prefix: str, obscode: str
+) -> OrbitDeterminationObservations:
+    rows = _read_parquet_rows(path)
     ids, mjds, codes = [], [], []
     ra, dec, var_lon, var_lat = [], [], [], []
     mag, rmsmag, band = [], [], []
@@ -163,64 +232,68 @@ def observations_from_precovery(path, prefix, obscode):
 
 
 @pytest.fixture(scope="module")
-def bias_model():
-    import pyarrow.parquet as pq
-
-    from ..observation_uncertainty import EmpiricalCovarianceModel
-
-    table = pq.ParquetFile(os.path.join(DATA_DIR, "v2_full.parquet")).read()
-    if "program_code" in table.column_names:
-        table = table.drop_columns(["program_code"])
-    return EmpiricalCovarianceModel(table)
-
-
-def _fit(prefix, precovery_file, precovery_code, bias_model):
-    import quivr as qv
-
-    from ...orbits.orbits import Orbits
-    from ..differential_correction import fit_least_squares
-    from ..fitted_orbits import FittedOrbits
-
-    mpc_obs = observations_from_ades(
-        os.path.join(DATA_DIR, f"{prefix}_obs.json"), prefix
-    )
-    prec_obs = observations_from_precovery(
-        os.path.join(DATA_DIR, precovery_file), prefix, precovery_code
-    )
-    observations = bias_model.apply(
-        qv.concatenate([mpc_obs, prec_obs]).sort_by(
+def covariance_config() -> OdConfig:
+    base = explicit_config()
+    return OdConfig.explicit(
+        observation_pipeline=ObservationPipeline.ordered(
             [
-                ("coordinates.time.days", "ascending"),
-                ("coordinates.time.nanos", "ascending"),
+                StationBandResidualCovarianceAdjustment(
+                    ResidualCovarianceOperation.ADD,
+                    minimum_residual_count=30,
+                )
             ]
-        )
+        ),
+        iod=base.for_iod(),
+        refinement=base.for_refinement(),
+        evaluation=base.for_evaluation(),
+        resources=ResourceBindings(
+            {"station_band_residual_covariance_table": _data_path("v2_full.parquet")}
+        ),
     )
-    saved = FittedOrbits.from_parquet(
-        os.path.join(DATA_DIR, f"{prefix}_after_fit.parquet")
+
+
+def _fit(
+    prefix: str,
+    precovery_file: str,
+    precovery_code: str,
+    config: OdConfig,
+) -> tuple[FittedOrbits, FittedOrbits]:
+    mpc_obs = observations_from_ades(_data_path(f"{prefix}_obs.json"), prefix)
+    prec_obs = observations_from_precovery(
+        _data_path(precovery_file), prefix, precovery_code
     )
+    combined = qv.concatenate([mpc_obs, prec_obs])
+    if not isinstance(combined, OrbitDeterminationObservations):
+        raise TypeError("observation concatenation changed table type")
+    ordered = combined.sort_by(
+        [
+            ("coordinates.time.days", "ascending"),
+            ("coordinates.time.nanos", "ascending"),
+        ]
+    )
+    observations, _pipeline_output = apply_pipeline_once(ordered, config)
+    saved = FittedOrbits.from_parquet(str(_data_path(f"{prefix}_after_fit.parquet")))
     initial = Orbits.from_kwargs(
         orbit_id=saved.orbit_id,
         object_id=saved.object_id,
         coordinates=saved.coordinates,
     )
-    fitted, members = fit_least_squares(initial, observations, ASSISTPropagator())
+    fitted, _members = fit_least_squares(initial, observations, _assist_propagator())
     return fitted, saved
 
 
 @pytest.fixture(scope="module")
-def ac4_fit(bias_model):
-    return _fit("ac4", "probably_2026_AC4.parquet", "I41", bias_model)
+def ac4_fit(covariance_config: OdConfig) -> tuple[FittedOrbits, FittedOrbits]:
+    return _fit("ac4", "probably_2026_AC4.parquet", "I41", covariance_config)
 
 
 @pytest.fixture(scope="module")
-def tf79_fit(bias_model):
-    return _fit("tf79", "probably_2012_TF79.parquet", "F51", bias_model)
+def tf79_fit(covariance_config: OdConfig) -> tuple[FittedOrbits, FittedOrbits]:
+    return _fit("tf79", "probably_2012_TF79.parquet", "F51", covariance_config)
 
 
-def _encounter_timing_sigma(fitted, target_mjd):
+def _encounter_timing_sigma(fitted: FittedOrbits, target_mjd: float) -> float:
     from ...dynamics.propagation import propagate_2body
-    from ...orbits.orbits import Orbits
-    from ...time import Timestamp
 
     orbits = Orbits.from_kwargs(
         orbit_id=fitted.orbit_id,
@@ -237,7 +310,7 @@ def _encounter_timing_sigma(fitted, target_mjd):
 
 
 class Test2026AC4:
-    def test_encounter_timing_sigma_order_of_magnitude(self, ac4_fit):
+    def test_encounter_timing_sigma_order_of_magnitude(self, ac4_fit: FitPair) -> None:
         fitted, _ = ac4_fit
         timing_sigma = _encounter_timing_sigma(fitted, AC4_ENCOUNTER_MJD)
         # Corrected value ~4 s (agencies 14.5-15.3 s). The broken covariance
@@ -245,7 +318,7 @@ class Test2026AC4:
         # defect is back.
         assert 2.0 < timing_sigma < 8.0, f"timing sigma {timing_sigma:.2f} s"
 
-    def test_weak_axis_scale(self, ac4_fit):
+    def test_weak_axis_scale(self, ac4_fit: FitPair) -> None:
         fitted, _ = ac4_fit
         covariance = fitted.coordinates.covariance.to_matrix()[0]
         weak_axis_km = float(
@@ -254,7 +327,7 @@ class Test2026AC4:
         # Corrected ~414 km at the converged solution (broken: 1.6 km).
         assert 250.0 < weak_axis_km < 700.0, f"weak axis {weak_axis_km:.1f} km"
 
-    def test_chi2_not_worse_than_saved_solution(self, ac4_fit):
+    def test_chi2_not_worse_than_saved_solution(self, ac4_fit: FitPair) -> None:
         # The analytic-Jacobian solver must reach at least as deep a minimum
         # as the saved fit (the legacy solver under-converged along the flat
         # valley: chi2 106.5 vs ~97.7 reachable).
@@ -263,7 +336,7 @@ class Test2026AC4:
 
 
 class Test2012TF79:
-    def test_position_sigma_matches_agencies(self, tf79_fit):
+    def test_position_sigma_matches_agencies(self, tf79_fit: FitPair) -> None:
         fitted, _ = tf79_fit
         covariance = fitted.coordinates.covariance.to_matrix()[0]
         pos_sigma_km = float(np.sqrt(np.trace(covariance[:3, :3])) * KM_P_AU)
@@ -271,6 +344,6 @@ class Test2012TF79:
         # (broken: 21 km).
         assert 200.0 < pos_sigma_km < 450.0, f"pos sigma {pos_sigma_km:.1f} km"
 
-    def test_chi2_not_worse_than_saved_solution(self, tf79_fit):
+    def test_chi2_not_worse_than_saved_solution(self, tf79_fit: FitPair) -> None:
         fitted, saved = tf79_fit
         assert fitted.chi2[0].as_py() <= saved.chi2[0].as_py() + 0.1

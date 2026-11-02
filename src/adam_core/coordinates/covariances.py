@@ -3,9 +3,9 @@ from typing import Callable, Optional, Tuple
 
 import numpy as np
 import numpy.typing as npt
-import pyarrow as pa
-import pyarrow.compute as pc
 import quivr as qv
+
+from adam_core._rust.arrow import pa, pc
 
 logger = logging.getLogger(__name__)
 

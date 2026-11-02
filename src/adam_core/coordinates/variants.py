@@ -3,8 +3,9 @@ from __future__ import annotations
 from typing import Generic, Literal, Optional, Protocol, TypeVar
 
 import numpy as np
-import pyarrow as pa
 import quivr as qv
+
+from adam_core._rust.arrow import pa
 
 from . import types
 from .cartesian import CartesianCoordinates

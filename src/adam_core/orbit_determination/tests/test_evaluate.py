@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+from typing import Literal
 
 import numpy as np
 import pytest
@@ -12,21 +13,49 @@ from adam_core.coordinates.spherical import SphericalCoordinates
 from adam_core.observers.observers import Observers
 from adam_core.orbits.ephemeris import Ephemeris
 from adam_core.orbits.orbits import Orbits
+from adam_core.orbits.variants import VariantOrbits
+from adam_core.propagator import Propagator
 from adam_core.time.time import Timestamp
 from adam_core.utils.helpers.orbits import make_real_orbits
 
 from ..evaluate import OrbitDeterminationObservations, _evaluate_orbits_prepared
 
 
-class FixedEphemerisPropagator:
+class FixedEphemerisPropagator(Propagator):
     def __init__(self, ephemeris: Ephemeris) -> None:
         self.ephemeris = ephemeris
 
+    def propagate_orbits(
+        self,
+        orbits: Orbits | VariantOrbits,
+        times: Timestamp,
+        covariance: bool = False,
+        covariance_method: Literal[
+            "auto", "sigma-point", "monte-carlo"
+        ] = "monte-carlo",
+        num_samples: int = 1000,
+        chunk_size: int = 100,
+        max_processes: int | None = 1,
+        seed: int | None = None,
+        include_nongrav: bool = True,
+    ) -> Orbits | VariantOrbits:
+        raise NotImplementedError
+
     def generate_ephemeris(
         self,
-        orbits: Orbits,
+        orbits: Orbits | VariantOrbits,
         observers: Observers,
-        max_processes: int = 1,
+        covariance: bool = False,
+        covariance_method: Literal[
+            "auto", "sigma-point", "monte-carlo"
+        ] = "monte-carlo",
+        num_samples: int = 1000,
+        chunk_size: int = 100,
+        max_processes: int | None = 1,
+        seed: int | None = None,
+        predict_magnitudes: bool = True,
+        predict_phase_angle: bool = False,
+        include_nongrav: bool = True,
     ) -> Ephemeris:
         return self.ephemeris
 
@@ -228,7 +257,7 @@ def test_evaluate_orbits_rust_native_timing() -> None:
 
 
 @pytest.mark.parametrize("indices", [[0, 1, 2, 3, 4], [3, 4, 5, 0, 1, 2]])
-def test_evaluate_orbits_requires_grouped_ephemeris_order(indices) -> None:
+def test_evaluate_orbits_requires_grouped_ephemeris_order(indices: list[int]) -> None:
     fixture_path = (
         Path(__file__).resolve().parents[4]
         / "migration"

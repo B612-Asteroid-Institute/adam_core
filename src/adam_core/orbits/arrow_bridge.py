@@ -20,16 +20,18 @@ lives here so callers exchange ordinary ``Orbits``/``VariantOrbits`` objects.
 
 from __future__ import annotations
 
-import pyarrow as pa
+import numpy as np
+import numpy.typing as npt
 
 from adam_core import _rust_native as _rn
-from adam_core._rust.arrow import contiguous_record_batch
+from adam_core._rust.arrow import contiguous_record_batch, pa
 from adam_core._rust.arrow import stamp_adam_core_metadata as _stamp_adam_core_metadata
 from adam_core._rust.arrow import to_quivr_metadata as _to_quivr_metadata
 from adam_core.coordinates.covariances import CoordinateCovariances
 from adam_core.observers import Observers
 from adam_core.orbits import Orbits
 from adam_core.orbits.variants import VariantOrbits
+from adam_core.time import Timestamp
 
 _NESTED_SCHEMA = "OrbitBatch.cartesian.nested.quivr.v1"
 _VARIANT_NESTED_SCHEMA = "OrbitVariantBatch.cartesian.nested.quivr.v1"
@@ -433,14 +435,14 @@ def _sample_orbit_variants_arrow(
 
 
 def _propagate_orbits_typed_arrow(
-    orbits,
-    times,
+    orbits: Orbits | VariantOrbits,
+    times: Timestamp,
     covariance: bool = False,
     max_iter: int = 1000,
     tol: float = 1e-14,
     chunk_size: int | None = None,
     thread_limit: int | None = None,
-):
+) -> tuple[Orbits | VariantOrbits, npt.NDArray[np.bool_]]:
     """Arrow-native typed propagation for ``Orbits`` or ``VariantOrbits``.
 
     Runs the table through the Rust-canonical ``TwoBodyPropagator``
@@ -453,11 +455,10 @@ def _propagate_orbits_typed_arrow(
     boundary. Returns ``(table, per_row_valid)``.
     """
     is_variants = isinstance(orbits, VariantOrbits)
-    orbit_batch = (
-        variants_to_record_batch(orbits)
-        if is_variants
-        else orbits_to_record_batch(orbits)
-    )
+    if isinstance(orbits, VariantOrbits):
+        orbit_batch = variants_to_record_batch(orbits)
+    else:
+        orbit_batch = orbits_to_record_batch(orbits)
     time_table = times.table.combine_chunks()
     metadata = dict(time_table.schema.metadata or {})
     metadata[b"adam_core_time_scale"] = times.scale.encode()
@@ -481,11 +482,15 @@ def _propagate_orbits_typed_arrow(
         if is_variants
         else orbits_from_record_batch(output)
     )
-    return table, valid
+    if not isinstance(valid, np.ndarray) or valid.dtype.kind != "b":
+        raise TypeError("typed propagation validity must be a boolean array")
+    if valid.ndim != 1:
+        raise TypeError("typed propagation validity must be one-dimensional")
+    return table, np.ascontiguousarray(valid, dtype=np.bool_)
 
 
 def _propagate_orbits_2body_ipc_candidate(
-    orbits: Orbits, time, max_iter: int = 100, tol: float = 1e-14
+    orbits: Orbits, time: Timestamp, max_iter: int = 100, tol: float = 1e-14
 ) -> Orbits:
     """Diagnostic Arrow-IPC candidate for ``dynamics.propagate_2body``.
 

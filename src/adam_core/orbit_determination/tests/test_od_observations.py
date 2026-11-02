@@ -1,10 +1,10 @@
 import pathlib
 
 import numpy as np
-import pyarrow as pa
-import pyarrow.compute as pc
 import pytest
 import quivr as qv
+
+from adam_core._rust.arrow import pa, pc
 
 from ...coordinates.covariances import CoordinateCovariances
 from ...coordinates.origin import Origin

@@ -2,10 +2,10 @@ import uuid
 from typing import List, Literal, Optional, Tuple
 
 import numpy as np
-import pyarrow as pa
-import pyarrow.compute as pc
 import quivr as qv
 from typing_extensions import Self
+
+from adam_core._rust.arrow import pa, pc
 
 from ..coordinates.cartesian import CartesianCoordinates
 from ..coordinates.residuals import Residuals

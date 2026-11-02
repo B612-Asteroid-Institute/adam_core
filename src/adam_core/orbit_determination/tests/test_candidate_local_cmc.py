@@ -3,7 +3,9 @@
 import numpy as np
 import pytest
 
-from adam_core.coordinates import CoordinateCovariances, Origin, SphericalCoordinates
+from adam_core.coordinates.covariances import CoordinateCovariances
+from adam_core.coordinates.origin import Origin
+from adam_core.coordinates.spherical import SphericalCoordinates
 from adam_core.observers import Observers
 from adam_core.orbit_determination.evaluate import (
     OrbitDeterminationObservations,
@@ -91,7 +93,9 @@ def _frozen_seed11_case(case: int) -> OrbitDeterminationObservations:
 
 
 @pytest.mark.parametrize(("seed", "case"), [(20261021, 43), (20261021, 70), (7, 36)])
-def test_corrected_iod_continues_after_candidate_local_cmc_refusal(seed, case):
+def test_corrected_iod_continues_after_candidate_local_cmc_refusal(
+    seed: int, case: int
+) -> None:
     fitted, members, report = run_iod_qualified(
         _random_case(seed, case),
         TwoBodyPropagator(),
@@ -108,7 +112,7 @@ def test_corrected_iod_continues_after_candidate_local_cmc_refusal(seed, case):
     )
 
 
-def test_frozen_2_04_day_arc_accepts_rank_deficient_whole_arc_seed():
+def test_frozen_2_04_day_arc_accepts_rank_deficient_whole_arc_seed() -> None:
     t0 = EPOCH_MJD_TDB + 5.0
     times = [t0 + day + row / 48 for day in range(3) for row in range(3)]
     iod, _, report = run_iod_qualified(
@@ -118,13 +122,13 @@ def test_frozen_2_04_day_arc_accepts_rank_deficient_whole_arc_seed():
     assert np.isfinite(np.asarray(iod.coordinates.values)).all()
 
 
-def test_frozen_seed11_partial_rank_deficient_stages_reach_whole_arc():
+def test_frozen_seed11_partial_rank_deficient_stages_reach_whole_arc() -> None:
     iod, _, report = run_iod_qualified(_frozen_seed11_case(5), TwoBodyPropagator())
     assert report.found and len(iod) == 1
     assert np.isfinite(np.asarray(iod.coordinates.values)).all()
 
 
-def test_short_whole_arc_iod_covariance_is_only_a_state_seed():
+def test_short_whole_arc_iod_covariance_is_only_a_state_seed() -> None:
     """Frozen 2.08-day arc: IOD may be rank deficient, final OD may not."""
     t0 = EPOCH_MJD_TDB + 5.0
     times = [t0 + day + row / 48 for day in range(3) for row in range(5)]

@@ -123,7 +123,7 @@ class NativeBackend:
 
     name: str
     version: str
-    work_units: frozenset = field(default_factory=frozenset)
+    work_units: frozenset[str] = field(default_factory=frozenset)
 
     def __post_init__(self) -> None:
         unsupported = self.work_units - {"propagator_capsule"}

@@ -6,6 +6,7 @@ itself is an optional test dependency used only as an independent oracle.
 
 from __future__ import annotations
 
+import importlib
 import io
 import os
 import sys
@@ -459,8 +460,7 @@ class TestLocateAndInstall:
             seen.update(url=url, stream=stream, timeout=timeout)
             return FakeResponse()
 
-        import requests
-
+        requests = importlib.import_module("requests")
         monkeypatch.setattr(requests, "get", fake_get)
         installed = download_efcc18_bias_table(verify_checksum=False, timeout_s=12.5)
         assert seen == {"url": EFCC18_ARCHIVE_URL, "stream": True, "timeout": 12.5}

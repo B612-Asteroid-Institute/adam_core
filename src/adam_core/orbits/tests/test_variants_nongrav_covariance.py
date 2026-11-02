@@ -1,8 +1,8 @@
 import numpy as np
-import pyarrow as pa
 import pytest
 import quivr as qv
 
+from adam_core._rust.arrow import pa
 from adam_core.coordinates.cartesian import CartesianCoordinates
 from adam_core.coordinates.covariances import CoordinateCovariances
 from adam_core.coordinates.origin import Origin
@@ -140,7 +140,7 @@ def test_strip_nongrav_covariance_is_rust_owned(
     orbit, _, covariance = _extended_orbit()
     variants = VariantOrbits.create(orbit, method="sigma-point")
 
-    def forbidden(*_args, **_kwargs):
+    def forbidden(*_args: object, **_kwargs: object) -> None:
         raise AssertionError("Python dense covariance conversion must not execute")
 
     with monkeypatch.context() as patch:

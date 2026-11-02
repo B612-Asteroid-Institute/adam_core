@@ -14,7 +14,7 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Any, Literal, Mapping, cast
 
-from adam_core import _rust_native as _rust  # type: ignore[attr-defined]
+from adam_core import _rust_native as _rust
 
 from .observation_pipeline import ObservationPipeline
 

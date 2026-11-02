@@ -7,8 +7,8 @@ from dataclasses import dataclass
 from typing import Literal, Optional
 
 import numpy as np
-import pyarrow as pa
-import pyarrow.compute as pc
+
+from adam_core._rust.arrow import pa, pc
 
 from .._rust import (
     cartesian_to_cometary_numpy,

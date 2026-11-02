@@ -4,14 +4,16 @@ import dataclasses
 import json
 
 import numpy as np
-import pyarrow as pa
 import pytest
+import quivr as qv
 
+from adam_core._rust.arrow import pa
 from adam_core.coordinates.covariances import CoordinateCovariances
 from adam_core.observations import Associations, SourceCatalog
 from adam_core.time import Timestamp
 
 from .. import (
+    Cmc2003Refinement,
     EvaluationConfig,
     FittedOrbitMembers,
     FittedOrbits,
@@ -28,7 +30,10 @@ from .. import (
     run_iod,
     run_od,
 )
+from .conftest import PureIodOrbit
 from .test_differential_correction import TwoBodyPropagator
+
+BatchResult = tuple[FittedOrbits, FittedOrbitMembers, OrbitDeterminationFailures]
 
 
 def _config() -> OdConfig:
@@ -41,7 +46,7 @@ def _config() -> OdConfig:
     )
 
 
-def _two_body_source(pure_iod_orbit) -> SourceCatalog:
+def _two_body_source(pure_iod_orbit: PureIodOrbit) -> SourceCatalog:
     orbit, _, observations = pure_iod_orbit
     ephemeris = TwoBodyPropagator().generate_ephemeris(
         orbit.to_orbits(), observations.observers, max_processes=1
@@ -77,22 +82,27 @@ def _two_body_source(pure_iod_orbit) -> SourceCatalog:
     )
 
 
-def _canonical_ipc(table) -> bytes:
+def _canonical_ipc(table: qv.Table) -> bytes:
     """Canonical Arrow IPC comparator preserving exact floating-point bits."""
 
     arrow = table.table.combine_chunks()
     sink = pa.BufferOutputStream()
     with pa.ipc.new_stream(sink, arrow.schema) as writer:
         writer.write_table(arrow)
-    return sink.getvalue().to_pybytes()
+    payload: object = sink.getvalue().to_pybytes()
+    if not isinstance(payload, bytes):
+        raise TypeError("canonical Arrow IPC serialization must produce bytes")
+    return payload
 
 
-def _assert_exact_results(left, right) -> None:
+def _assert_exact_results(left: BatchResult, right: BatchResult) -> None:
     for left_table, right_table in zip(left, right, strict=True):
         assert _canonical_ipc(left_table) == _canonical_ipc(right_table)
 
 
-def _concat_failures(*failures) -> OrbitDeterminationFailures:
+def _concat_failures(
+    *failures: OrbitDeterminationFailures,
+) -> OrbitDeterminationFailures:
     tables = [value.table for value in failures if len(value)]
     if not tables:
         return OrbitDeterminationFailures.empty()
@@ -117,7 +127,7 @@ def _assert_batch_evaluation_matches_singletons(
     members: FittedOrbitMembers,
     source: SourceCatalog,
     config: EvaluationConfig,
-):
+) -> BatchResult:
     batch = evaluate_orbits(orbits, members, source, None, config)
     evaluated, evaluated_members, failures = batch
     assert len(evaluated) == len(orbits)
@@ -182,6 +192,7 @@ def _non_roundtripping_float_config() -> OdConfig:
         iod_declaration.candidate_correction_fit,
     )
     refinement_declaration = base.for_refinement().refinement
+    assert isinstance(refinement_declaration, Cmc2003Refinement)
     refinement = RefinementRunConfig(
         dataclasses.replace(refinement_declaration, psd_floor_frac=1e-30)
     )
@@ -205,7 +216,7 @@ def _assert_non_roundtripping_values_in_provenance(orbits: FittedOrbits) -> None
 
 
 def test_non_roundtripping_config_floats_are_exact_across_every_route(
-    pure_iod_orbit,
+    pure_iod_orbit: PureIodOrbit,
 ) -> None:
     source = _two_body_source(pure_iod_orbit)
     associations = Associations.from_kwargs(
@@ -216,7 +227,9 @@ def test_non_roundtripping_config_floats_are_exact_across_every_route(
         config.for_iod().search_correction_ranging.ranging.rho_min_au.hex()
         == (1.8135371537546276e-10).hex()
     )
-    assert config.for_refinement().refinement.psd_floor_frac.hex() == (1e-30).hex()
+    refinement = config.for_refinement().refinement
+    assert isinstance(refinement, Cmc2003Refinement)
+    assert refinement.psd_floor_frac.hex() == (1e-30).hex()
 
     iod = run_iod(source, associations, None, config.for_iod())
     fused = run_od(source, associations, None, config)
@@ -241,7 +254,7 @@ def test_non_roundtripping_config_floats_are_exact_across_every_route(
         _assert_non_roundtripping_values_in_provenance(result[0])
 
 
-def test_run_od_is_exact_run_iod_then_refine(pure_iod_orbit) -> None:
+def test_run_od_is_exact_run_iod_then_refine(pure_iod_orbit: PureIodOrbit) -> None:
     source = _two_body_source(pure_iod_orbit)
     associations = Associations.from_kwargs(
         detection_id=source.id,
@@ -270,7 +283,7 @@ def test_run_od_is_exact_run_iod_then_refine(pure_iod_orbit) -> None:
 
 @pytest.mark.parametrize("force_failure", [False, True])
 def test_profile_shaped_deweighting_is_exact_across_fused_and_composed_routes(
-    pure_iod_orbit, force_failure
+    pure_iod_orbit: PureIodOrbit, force_failure: bool
 ) -> None:
     base_source = _two_body_source(pure_iod_orbit)
     # Repeat the same valid seven-epoch arc three times with distinct detection
@@ -375,7 +388,7 @@ def test_profile_shaped_deweighting_is_exact_across_fused_and_composed_routes(
 
 @pytest.mark.parametrize("force_failure", [False, True])
 def test_overlapping_multigroup_ordered_pipeline_exact_composition_and_evaluation(
-    pure_iod_orbit, force_failure
+    pure_iod_orbit: PureIodOrbit, force_failure: bool
 ) -> None:
     """Pin shared-row, multi-hypothesis composition and both former mutants."""
 
@@ -496,7 +509,7 @@ def test_overlapping_multigroup_ordered_pipeline_exact_composition_and_evaluatio
 
 
 def test_input_fingerprint_changes_when_pipeline_changes_only_used_astrometry(
-    pure_iod_orbit,
+    pure_iod_orbit: PureIodOrbit,
 ) -> None:
     base_source = _two_body_source(pure_iod_orbit)
     source = SourceCatalog.from_pyarrow(
@@ -543,7 +556,9 @@ def test_input_fingerprint_changes_when_pipeline_changes_only_used_astrometry(
     )
 
 
-def test_run_od_failure_is_exact_run_iod_then_refine(pure_iod_orbit) -> None:
+def test_run_od_failure_is_exact_run_iod_then_refine(
+    pure_iod_orbit: PureIodOrbit,
+) -> None:
     source = _two_body_source(pure_iod_orbit)
     associations = Associations.from_kwargs(
         detection_id=source.id,
@@ -561,7 +576,9 @@ def test_run_od_failure_is_exact_run_iod_then_refine(pure_iod_orbit) -> None:
     assert fused[2].best_state_retained.to_pylist() == [True]
 
 
-def test_worst_residual_provenance_counts_actual_rejections(pure_iod_orbit) -> None:
+def test_worst_residual_provenance_counts_actual_rejections(
+    pure_iod_orbit: PureIodOrbit,
+) -> None:
     source = _two_body_source(pure_iod_orbit)
     ra = source.ra.to_numpy(zero_copy_only=False).copy()
     ra[3] += 0.05
@@ -601,7 +618,7 @@ def test_worst_residual_provenance_counts_actual_rejections(pure_iod_orbit) -> N
 
 
 def test_refine_rejects_source_astrometry_changed_since_iod_before_provider_binding(
-    pure_iod_orbit,
+    pure_iod_orbit: PureIodOrbit,
 ) -> None:
     source = _two_body_source(pure_iod_orbit)
     associations = Associations.from_kwargs(
@@ -630,7 +647,7 @@ def test_refine_rejects_source_astrometry_changed_since_iod_before_provider_bind
 
 
 @pytest.mark.parametrize("route", ["run_iod", "run_od", "refine", "evaluate"])
-def test_empty_batches_are_rust_owned_and_never_bind_provider(route) -> None:
+def test_empty_batches_are_rust_owned_and_never_bind_provider(route: str) -> None:
     config = _config()
     if route == "run_iod":
         result = run_iod(
@@ -668,7 +685,7 @@ def test_empty_batches_are_rust_owned_and_never_bind_provider(route) -> None:
 @pytest.mark.parametrize("route", ["refine", "evaluate"])
 @pytest.mark.parametrize("mutation", ["time", "observatory", "filter", "id"])
 def test_member_source_identity_mutations_fail_before_provider_binding(
-    pure_iod_orbit, route, mutation
+    pure_iod_orbit: PureIodOrbit, route: str, mutation: str
 ) -> None:
     source = _two_body_source(pure_iod_orbit)
     associations = Associations.from_kwargs(
@@ -704,7 +721,7 @@ def test_member_source_identity_mutations_fail_before_provider_binding(
         mutated = source.set_column("id", pa.array(ids, type=source.id.type))
     if route == "refine":
 
-        def call():
+        def call() -> BatchResult:
             return refine(
                 orbits,
                 members,
@@ -715,7 +732,7 @@ def test_member_source_identity_mutations_fail_before_provider_binding(
 
     else:
 
-        def call():
+        def call() -> BatchResult:
             return evaluate_orbits(
                 orbits,
                 members,
@@ -728,7 +745,9 @@ def test_member_source_identity_mutations_fail_before_provider_binding(
         call()
 
 
-def test_evaluate_rejects_null_outlier_before_provider_binding(pure_iod_orbit) -> None:
+def test_evaluate_rejects_null_outlier_before_provider_binding(
+    pure_iod_orbit: PureIodOrbit,
+) -> None:
     source = _two_body_source(pure_iod_orbit)
     associations = Associations.from_kwargs(
         detection_id=source.id,
@@ -751,7 +770,7 @@ def test_evaluate_rejects_null_outlier_before_provider_binding(pure_iod_orbit) -
 
 
 def test_typed_mixed_group_evaluation_continues_without_placeholder(
-    pure_iod_orbit,
+    pure_iod_orbit: PureIodOrbit,
 ) -> None:
     source = _two_body_source(pure_iod_orbit)
     detection_ids = source.id.to_pylist()
@@ -781,7 +800,9 @@ def test_typed_mixed_group_evaluation_continues_without_placeholder(
     assert failures.input_orbit_id.to_pylist() == [orbits.orbit_id[0].as_py()]
 
 
-def test_local_refinement_error_emits_failure_only(pure_iod_orbit) -> None:
+def test_local_refinement_error_emits_failure_only(
+    pure_iod_orbit: PureIodOrbit,
+) -> None:
     source = _two_body_source(pure_iod_orbit)
     associations = Associations.from_kwargs(
         detection_id=source.id,

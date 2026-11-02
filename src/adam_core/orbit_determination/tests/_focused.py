@@ -1,20 +1,22 @@
 """Test-only builders for complete explicit focused-workflow configuration."""
 
 from dataclasses import fields, replace
-from typing import Any
+from typing import Any, TypeAlias
 
 import numpy as np
-import pyarrow as pa
 
 from adam_core import _rust_native
+from adam_core._rust.arrow import pa
 
+from ...orbits.orbits import Orbits
+from ...propagator.propagator import Propagator
 from .._native_dispatch import native_propagator
 from ..algorithms.fitting import (
     _emit_native_warnings,
     _fitted_tables_from_native_output,
     _native_problem,
 )
-from ..algorithms.iod import _run_iod_prepared
+from ..algorithms.iod import IodReport, _run_iod_prepared
 from ..config import (
     EvaluationConfig,
     IodRunConfig,
@@ -23,7 +25,13 @@ from ..config import (
     ResourceBindings,
     WorstResidualRefinement,
 )
+from ..evaluate import OrbitDeterminationObservations
+from ..fitted_orbits import FittedOrbitMembers, FittedOrbits
 from ..observation_pipeline import ObservationPipeline
+
+PropagatorInput: TypeAlias = Propagator | type[Propagator]
+IodResult: TypeAlias = tuple[FittedOrbits, FittedOrbitMembers, IodReport]
+FitResult: TypeAlias = tuple[FittedOrbits, FittedOrbitMembers]
 
 
 def explicit_config(**settings: Any) -> OdConfig:
@@ -108,18 +116,29 @@ def explicit_config(**settings: Any) -> OdConfig:
     )
 
 
-def _instance(propagator):
-    return propagator() if isinstance(propagator, type) else propagator
+def _instance(propagator: PropagatorInput) -> Propagator:
+    instance = propagator() if isinstance(propagator, type) else propagator
+    if not isinstance(instance, Propagator):
+        raise TypeError("test propagator must implement Propagator")
+    return instance
 
 
-def run_iod_qualified(observations, propagator, **settings):
+def run_iod_qualified(
+    observations: OrbitDeterminationObservations,
+    propagator: PropagatorInput,
+    **settings: Any,
+) -> IodResult:
     """Test-only numerical bridge; not a production configured workflow."""
     propagator = _instance(propagator)
     config = explicit_config(**settings)
     return _run_iod_prepared(observations, propagator, config.for_iod())
 
 
-def run_prefit_iod_qualified(observations, propagator, **settings):
+def run_prefit_iod_qualified(
+    observations: OrbitDeterminationObservations,
+    propagator: PropagatorInput,
+    **settings: Any,
+) -> FitResult:
     settings.setdefault("acceptance", "prefit")
     settings.setdefault("velocity_method", "gibbs")
     orbit, members, _ = run_iod_qualified(observations, propagator, **settings)
@@ -127,8 +146,13 @@ def run_prefit_iod_qualified(observations, propagator, **settings):
 
 
 def refine_qualified(
-    orbit, observations, propagator, *, _config: OdConfig | None = None, **settings
-):
+    orbit: FittedOrbits | Orbits,
+    observations: OrbitDeterminationObservations,
+    propagator: PropagatorInput,
+    *,
+    _config: OdConfig | None = None,
+    **settings: Any,
+) -> FitResult:
     """Test-only native refinement bridge without workflow provenance.
 
     ``_config`` lets the composition helper pass the exact configuration used
@@ -138,7 +162,7 @@ def refine_qualified(
     if _config is not None and settings:
         raise TypeError("settings cannot be combined with the prepared test config")
     config = _config if _config is not None else explicit_config(**settings)
-    seed = orbit.to_orbits() if hasattr(orbit, "to_orbits") else orbit
+    seed = orbit.to_orbits() if isinstance(orbit, FittedOrbits) else orbit
     output = _rust_native.refine_config_ipc(
         native_propagator(propagator),
         *_native_problem(seed, observations),
@@ -153,7 +177,13 @@ def refine_qualified(
     )
 
 
-def run_od_qualified(observations, propagator, *, object_id=None, **settings):
+def run_od_qualified(
+    observations: OrbitDeterminationObservations,
+    propagator: PropagatorInput,
+    *,
+    object_id: str | None = None,
+    **settings: Any,
+) -> FitResult:
     """Test-only IOD then refinement composition over as-supplied rows."""
     propagator = _instance(propagator)
     config = explicit_config(**settings)

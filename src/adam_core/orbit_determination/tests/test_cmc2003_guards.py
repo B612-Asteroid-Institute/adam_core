@@ -13,8 +13,9 @@ import warnings
 
 import numpy as np
 import numpy.testing as npt
-import pyarrow as pa
 import pytest
+
+from adam_core._rust.arrow import pa
 
 from ..algorithms.rejection import _expected_residual_chi2, cmc2003_fit_detailed
 from .test_cmc2003_rejection import select

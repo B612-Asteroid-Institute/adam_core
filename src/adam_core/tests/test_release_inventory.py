@@ -19,7 +19,7 @@ def _git(repo: Path, *args: str) -> str:
     ).stdout.strip()
 
 
-def _inventory_repo(tmp_path: Path, monkeypatch) -> Path:
+def _inventory_repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     repo = tmp_path / "repo"
     package = repo / "src/adam_core"
     (repo / "rust/example/src").mkdir(parents=True)
@@ -47,8 +47,8 @@ def _inventory_repo(tmp_path: Path, monkeypatch) -> Path:
 
 
 def test_release_inventory_refuses_visible_and_ignored_package_python(
-    tmp_path, monkeypatch
-):
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     repo = _inventory_repo(tmp_path, monkeypatch)
     generated_target = repo / "rust/example/target/generated/src/lib.rs"
     generated_target.parent.mkdir(parents=True)
@@ -80,7 +80,9 @@ def test_release_inventory_refuses_visible_and_ignored_package_python(
         release_inventory.create_release_inventory(nonce="4" * 64)
 
 
-def test_wheel_checker_rejects_python_set_or_hash_outside_attestation(tmp_path):
+def test_wheel_checker_rejects_python_set_or_hash_outside_attestation(
+    tmp_path: Path,
+) -> None:
     wheel = tmp_path / "probe.whl"
     inventory = {
         "format": release_inventory.FORMAT,
@@ -108,7 +110,9 @@ def test_wheel_checker_rejects_python_set_or_hash_outside_attestation(tmp_path):
             _verify_release_inventory(archive, wheel)
 
 
-def test_wheel_checker_requires_inventory_and_exact_attested_contents(tmp_path):
+def test_wheel_checker_requires_inventory_and_exact_attested_contents(
+    tmp_path: Path,
+) -> None:
     missing_inventory = tmp_path / "missing-inventory.whl"
     with ZipFile(missing_inventory, "w") as archive:
         archive.writestr("adam_core/__init__.py", b"VALUE = 1\n")
@@ -135,7 +139,9 @@ def test_wheel_checker_requires_inventory_and_exact_attested_contents(tmp_path):
             _verify_release_inventory(archive, bad_hash)
 
     missing_python = tmp_path / "missing-python.whl"
-    inventory["python_files"]["adam_core/missing.py"] = "3" * 64
+    python_files = inventory["python_files"]
+    assert isinstance(python_files, dict)
+    python_files["adam_core/missing.py"] = "3" * 64
     with ZipFile(missing_python, "w") as archive:
         archive.writestr("adam_core/__init__.py", b"VALUE = 1\n")
         archive.writestr(

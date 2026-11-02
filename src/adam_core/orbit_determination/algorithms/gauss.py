@@ -12,11 +12,14 @@ classical Gauss f/g approximation, computed in Rust.
 """
 
 import numpy as np
+import numpy.typing as npt
 
 from adam_core._rust import calc_gauss_numpy, gauss_iod_orbits_arrow
 from adam_core._rust.arrow import table_from_record_batch
 from adam_core.constants import Constants as c
 from adam_core.orbits import Orbits
+
+from ._validation import three_position_vectors
 
 __all__ = [
     "calcGauss",
@@ -27,7 +30,14 @@ MU = c.MU
 C = c.C
 
 
-def calcGauss(r1, r2, r3, t1, t2, t3):
+def calcGauss(
+    r1: npt.ArrayLike,
+    r2: npt.ArrayLike,
+    r3: npt.ArrayLike,
+    t1: float,
+    t2: float,
+    t3: float,
+) -> npt.NDArray[np.float64]:
     r"""
     Calculate the velocity vector at the middle position (r2) using Gauss's
     classical f/g Lagrange-coefficient approximation.
@@ -54,26 +64,21 @@ def calcGauss(r1, r2, r3, t1, t2, t3):
     v2 : ~numpy.ndarray (3,)
         Velocity at r2 / t2 in AU per day.
     """
-    r1_np = np.ascontiguousarray(np.asarray(r1, dtype=np.float64))
-    r2_np = np.ascontiguousarray(np.asarray(r2, dtype=np.float64))
-    r3_np = np.ascontiguousarray(np.asarray(r3, dtype=np.float64))
-    if r1_np.shape != (3,) or r2_np.shape != (3,) or r3_np.shape != (3,):
-        raise ValueError("r1, r2, and r3 must each have shape (3,)")
-
+    r1_np, r2_np, r3_np = three_position_vectors(r1, r2, r3)
     rust_out = calc_gauss_numpy(r1_np, r2_np, r3_np, t1, t2, t3, MU)
-    return rust_out
+    return np.asarray(rust_out, dtype=np.float64)
 
 
 def gaussIOD(
-    coords,
-    observation_times,
-    coords_obs,
-    velocity_method="gibbs",
-    light_time=True,
-    mu=MU,
-    max_iter=10,
-    tol=1e-15,
-):
+    coords: npt.NDArray[np.float64],
+    observation_times: npt.ArrayLike,
+    coords_obs: npt.ArrayLike,
+    velocity_method: str = "gibbs",
+    light_time: bool = True,
+    mu: float = MU,
+    max_iter: int = 10,
+    tol: float = 1e-15,
+) -> Orbits:
     """
     Compute up to three preliminary orbits using three observations in angular
     equatorial coordinates.

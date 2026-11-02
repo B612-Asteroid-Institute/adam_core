@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import numpy as np
-import pyarrow as pa
 import pytest
+
+from adam_core._rust.arrow import pa
 
 from ...coordinates.covariances import CoordinateCovariances
 from ..algorithms.fitting import fit_least_squares
@@ -20,6 +21,7 @@ from ..observation_pipeline import (
     FillMissingAstrometricUncertainty,
     ObservationPipeline,
 )
+from .conftest import PureIodOrbit
 from .test_differential_correction import TwoBodyPropagator, make_initial_guess
 
 FILL_SIGMA_ARCSEC = 0.3
@@ -27,7 +29,7 @@ SIGMA_DEG = 0.3 / 3600.0
 
 
 @pytest.fixture
-def two_body_arc(pure_iod_orbit) -> OrbitDeterminationObservations:
+def two_body_arc(pure_iod_orbit: PureIodOrbit) -> OrbitDeterminationObservations:
     """
     The pinned IOD arc (seven W84 observations over 21 days) re-observed
     with two-body dynamics, uniform 0.3" sigmas and 0.3-sigma noise, so the
@@ -58,13 +60,17 @@ def two_body_arc(pure_iod_orbit) -> OrbitDeterminationObservations:
 
 
 @pytest.fixture
-def null_covariance_arc(two_body_arc):
+def null_covariance_arc(
+    two_body_arc: OrbitDeterminationObservations,
+) -> OrbitDeterminationObservations:
     return two_body_arc.set_column(
         "coordinates.covariance", CoordinateCovariances.nulls(len(two_body_arc))
     )
 
 
-def test_without_a_fill_transform_the_fit_is_refused(null_covariance_arc) -> None:
+def test_without_a_fill_transform_the_fit_is_refused(
+    null_covariance_arc: OrbitDeterminationObservations,
+) -> None:
     with pytest.raises(ValueError, match="covariance|finite|uncertainty"):
         fit_least_squares(
             make_initial_guess(), null_covariance_arc, TwoBodyPropagator()

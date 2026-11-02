@@ -18,7 +18,8 @@ from __future__ import annotations
 from typing import Optional
 
 import numpy as np
-import pyarrow as pa
+
+from adam_core._rust.arrow import pa
 
 try:
     from adam_core import _rust_native as _native

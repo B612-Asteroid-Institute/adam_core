@@ -10,8 +10,9 @@ from typing import Optional, cast
 
 import numpy as np
 import numpy.typing as npt
-import pyarrow as pa
 import quivr as qv
+
+from adam_core._rust.arrow import pa
 
 from ..time import Timestamp
 from .orbits import Orbits

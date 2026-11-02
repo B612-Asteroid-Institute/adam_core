@@ -7,10 +7,12 @@ buffers, so the Python bridge materializes offset arrays
 """
 
 import numpy as np
-import pyarrow as pa
+
+from adam_core._rust.arrow import pa
 
 from ..._rust.arrow import contiguous_record_batch
-from ...coordinates import CartesianCoordinates, Origin
+from ...coordinates.cartesian import CartesianCoordinates
+from ...coordinates.origin import Origin
 from ...observers import Observers
 from ...orbits import Orbits
 from ...orbits.arrow_bridge import (

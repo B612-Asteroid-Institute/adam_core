@@ -40,7 +40,7 @@ def test_od_benchmark_timing_summary_preserves_raw_samples() -> None:
 
 
 def test_od_benchmark_artifact_binds_build_provider_and_timing_policy(
-    monkeypatch, tmp_path: Path
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     fake_workloads = [object(), object()]
     monkeypatch.setattr(
@@ -117,13 +117,18 @@ def test_od_benchmark_artifact_binds_build_provider_and_timing_policy(
         ("release", "3", "test-target", True),
     ],
 )
-def test_od_benchmark_rejects_nonoptimized_native_build(monkeypatch, profile) -> None:
+def test_od_benchmark_rejects_nonoptimized_native_build(
+    monkeypatch: pytest.MonkeyPatch,
+    profile: tuple[str, str, str, bool],
+) -> None:
     monkeypatch.setattr(benchmark._rust_native, "native_build_profile", lambda: profile)
     with pytest.raises(RuntimeError, match="optimized release native artifact"):
         benchmark._native_build_profile_identity()
 
 
-def test_od_benchmark_accepts_exact_release_native_build(monkeypatch) -> None:
+def test_od_benchmark_accepts_exact_release_native_build(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setattr(
         benchmark._rust_native,
         "native_build_profile",
@@ -138,7 +143,7 @@ def test_od_benchmark_accepts_exact_release_native_build(monkeypatch) -> None:
 
 
 def test_od_benchmark_rejects_package_imported_from_git_checkout(
-    monkeypatch, tmp_path: Path
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     checkout = tmp_path / "checkout"
     (checkout / ".git").mkdir(parents=True)
@@ -152,11 +157,11 @@ def test_od_benchmark_rejects_package_imported_from_git_checkout(
 
 
 def test_od_benchmark_rejects_identity_mismatch_before_work(
-    monkeypatch, tmp_path: Path
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     called = False
 
-    def forbidden_workload(*args):
+    def forbidden_workload(*args: object) -> None:
         nonlocal called
         called = True
         raise AssertionError("workload construction must follow identity validation")

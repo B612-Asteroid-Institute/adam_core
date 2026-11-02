@@ -8,34 +8,84 @@ order, so a shuffled copy yields the same accepted orbit and flags.
 
 from __future__ import annotations
 
+from typing import TypedDict
+
 import numpy as np
 import numpy.testing as npt
-import pyarrow as pa
 import pytest
 import quivr as qv
 
 from adam_core import _rust_native
+from adam_core._rust.arrow import pa
 
 from .._native_dispatch import native_propagator
 from ..algorithms.fitting import _native_problem
 from ..algorithms.iod import _placeholder_orbit
+from ..evaluate import OrbitDeterminationObservations
+from ..fitted_orbits import FittedOrbitMembers
 from ._focused import explicit_config, run_iod_qualified, run_prefit_iod_qualified
 from .test_differential_correction import TwoBodyPropagator
-from .test_run_od_null_covariance import two_body_arc  # noqa: F401
+
+pytest_plugins = ("adam_core.orbit_determination.tests.test_run_od_null_covariance",)
 
 
-def flags_by_id(members) -> dict[str, tuple[bool, bool]]:
-    return dict(
-        zip(
-            members.obs_id.to_pylist(),
-            zip(members.solution.to_pylist(), members.outlier.to_pylist()),
-        )
-    )
+class _IodNativeOutput(TypedDict):
+    found: bool
+    triplets_tried: int
+    not_found_reason: str | None
+    epoch_days: int | None
+    epoch_nanos: int | None
+    epoch_scale: str | None
+
+
+def flags_by_id(members: FittedOrbitMembers) -> dict[str, tuple[bool, bool]]:
+    ids = [value for value in members.obs_id.to_pylist() if isinstance(value, str)]
+    solutions = [
+        value for value in members.solution.to_pylist() if isinstance(value, bool)
+    ]
+    outliers = [
+        value for value in members.outlier.to_pylist() if isinstance(value, bool)
+    ]
+    if not (len(ids) == len(solutions) == len(outliers) == len(members)):
+        raise TypeError("IOD members must have non-null typed identifiers and flags")
+    return dict(zip(ids, zip(solutions, outliers), strict=True))
+
+
+def _iod_native_output(value: object) -> _IodNativeOutput:
+    if not isinstance(value, dict):
+        raise TypeError("native IOD output must be a mapping")
+    found = value.get("found")
+    triplets_tried = value.get("triplets_tried")
+    not_found_reason = value.get("not_found_reason")
+    epoch_days = value.get("epoch_days", 0)
+    epoch_nanos = value.get("epoch_nanos", 0)
+    epoch_scale = value.get("epoch_scale", "")
+    if not isinstance(found, bool):
+        raise TypeError("native IOD found flag must be bool")
+    if not isinstance(triplets_tried, int):
+        raise TypeError("native IOD triplet count must be integer")
+    if epoch_days is not None and not isinstance(epoch_days, int):
+        raise TypeError("native IOD epoch day must be an integer or None")
+    if epoch_nanos is not None and not isinstance(epoch_nanos, int):
+        raise TypeError("native IOD epoch nanoseconds must be an integer or None")
+    if not_found_reason is not None and not isinstance(not_found_reason, str):
+        raise TypeError("native IOD reason must be a string or None")
+    if epoch_scale is not None and not isinstance(epoch_scale, str):
+        raise TypeError("native IOD epoch scale must be a string or None")
+    return {
+        "found": found,
+        "triplets_tried": triplets_tried,
+        "not_found_reason": not_found_reason,
+        "epoch_days": epoch_days,
+        "epoch_nanos": epoch_nanos,
+        "epoch_scale": epoch_scale,
+    }
 
 
 @pytest.mark.parametrize("contamination_percentage", [0.0, 20.0])
 def test_iod_is_invariant_to_observation_order(
-    two_body_arc, contamination_percentage  # noqa: F811
+    two_body_arc: OrbitDeterminationObservations,
+    contamination_percentage: float,  # noqa: F811
 ) -> None:
     settings = dict(
         min_obs=6,
@@ -73,7 +123,7 @@ def test_iod_is_invariant_to_observation_order(
 
 
 def test_iod_uses_a_duplicated_epoch_at_most_once_per_triplet(
-    two_body_arc,  # noqa: F811
+    two_body_arc: OrbitDeterminationObservations,  # noqa: F811
 ) -> None:
     """A second observation at an existing epoch never completes a triplet
     with its twin, and the search still accepts the arc."""
@@ -93,15 +143,17 @@ def test_iod_uses_a_duplicated_epoch_at_most_once_per_triplet(
     assert not any(outlier for _, outlier in flags.values())
 
 
-def test_iod_search_budget_is_a_separate_setting(two_body_arc) -> None:  # noqa: F811
+def test_iod_search_budget_is_a_separate_setting(
+    two_body_arc: OrbitDeterminationObservations,
+) -> None:  # noqa: F811
     """``max_triplets`` bounds the triplet search on its own; the
     contamination percentage keeps setting only the outlier allowance."""
     _, observed_ipc, observers_ipc = _native_problem(
         _placeholder_orbit(two_body_arc), two_body_arc
     )
 
-    def run(**overrides):
-        settings = dict(
+    def run(**overrides: object) -> _IodNativeOutput:
+        settings: dict[str, object] = dict(
             min_obs=6,
             rchi2_threshold=1e-30,
             contamination_percentage=20.0,
@@ -111,11 +163,13 @@ def test_iod_search_budget_is_a_separate_setting(two_body_arc) -> None:  # noqa:
         )
         settings.update(overrides)
         config = explicit_config(**settings).for_iod()._native
-        return _rust_native.run_iod_config_ipc(
-            native_propagator(TwoBodyPropagator()),
-            observed_ipc,
-            observers_ipc,
-            config,
+        return _iod_native_output(
+            _rust_native.run_iod_config_ipc(
+                native_propagator(TwoBodyPropagator()),
+                observed_ipc,
+                observers_ipc,
+                config,
+            )
         )
 
     # Nothing passes a reduced chi2 threshold of 1e-30, so the search runs
@@ -126,7 +180,9 @@ def test_iod_search_budget_is_a_separate_setting(two_body_arc) -> None:  # noqa:
     legacy = run()
     assert not legacy["found"]
     assert legacy["triplets_tried"] == 3 * (max_outliers + 1)
-    assert "none within rchi2_threshold" in legacy["not_found_reason"]
+    legacy_reason = legacy["not_found_reason"]
+    assert legacy_reason is not None
+    assert "none within rchi2_threshold" in legacy_reason
 
     bounded = run(max_triplets=2)
     assert not bounded["found"]
@@ -140,7 +196,7 @@ def test_iod_search_budget_is_a_separate_setting(two_body_arc) -> None:  # noqa:
 
 
 def test_iod_epoch_crosses_as_exact_days_and_nanoseconds(
-    two_body_arc,  # noqa: F811
+    two_body_arc: OrbitDeterminationObservations,  # noqa: F811
 ) -> None:
     """The accepted orbit's epoch leaves Rust as integer days and
     nanoseconds in the observations' time scale, never as a float MJD, and
@@ -149,8 +205,8 @@ def test_iod_epoch_crosses_as_exact_days_and_nanoseconds(
         _placeholder_orbit(two_body_arc), two_body_arc
     )
 
-    def run(**overrides):
-        settings = dict(
+    def run(**overrides: object) -> _IodNativeOutput:
+        settings: dict[str, object] = dict(
             min_obs=6,
             rchi2_threshold=1e4,
             observation_selection_method="combinations",
@@ -159,11 +215,13 @@ def test_iod_epoch_crosses_as_exact_days_and_nanoseconds(
         )
         settings.update(overrides)
         config = explicit_config(**settings).for_iod()._native
-        return _rust_native.run_iod_config_ipc(
-            native_propagator(TwoBodyPropagator()),
-            observed_ipc,
-            observers_ipc,
-            config,
+        return _iod_native_output(
+            _rust_native.run_iod_config_ipc(
+                native_propagator(TwoBodyPropagator()),
+                observed_ipc,
+                observers_ipc,
+                config,
+            )
         )
 
     output = run()
@@ -192,7 +250,9 @@ def test_iod_epoch_crosses_as_exact_days_and_nanoseconds(
     assert not_found["epoch_scale"] == output["epoch_scale"]
 
 
-def test_run_iod_reports_every_scored_candidate(two_body_arc) -> None:  # noqa: F811
+def test_run_iod_reports_every_scored_candidate(
+    two_body_arc: OrbitDeterminationObservations,
+) -> None:  # noqa: F811
     """`run_iod` returns the accepted orbit plus the typed candidate set:
     one record per scored candidate with its triplet rows, root and
     statistics, the accepted index, and counters that agree with the list."""
@@ -253,11 +313,13 @@ def test_run_iod_reports_every_scored_candidate(two_body_arc) -> None:  # noqa: 
     assert none.triplets_tried == 2
     assert len(none.candidates) == none.candidates_evaluated > 0
     assert all(not candidate.accepted for candidate in none.candidates)
-    assert "none within rchi2_threshold" in none.not_found_reason
+    not_found_reason = none.not_found_reason
+    assert not_found_reason is not None
+    assert "none within rchi2_threshold" in not_found_reason
 
 
 def test_run_iod_candidate_set_is_invariant_to_observation_order(
-    two_body_arc,  # noqa: F811
+    two_body_arc: OrbitDeterminationObservations,  # noqa: F811
 ) -> None:
     n = len(two_body_arc)
     permutation = np.random.default_rng(3).permutation(n)

@@ -2,11 +2,12 @@
 
 import dataclasses
 import os
+from pathlib import Path
 
 import numpy as np
-import pyarrow as pa
 import pytest
 
+from adam_core._rust.arrow import pa
 from adam_core.observations import Associations, SourceCatalog
 
 from .. import (
@@ -20,6 +21,8 @@ from .. import (
     run_iod,
     run_od,
 )
+from ..profiles import OdProfile
+from .conftest import PureIodOrbit
 from .test_batch_workflows import _assert_exact_results, _two_body_source
 
 _RESOURCE_PATH_ENV = {
@@ -33,20 +36,22 @@ _RESOURCE_PATH_ENV = {
 }
 
 
-def _bindings(profile) -> ResourceBindings:
-    paths = {}
+def _bindings(profile: OdProfile) -> ResourceBindings:
+    paths: dict[str, Path] = {}
     for requirement in profile.requirements:
         env_name = _RESOURCE_PATH_ENV[requirement.slot]
         path = os.environ.get(env_name)
         if not path:
             pytest.skip(f"semantic resource path {env_name} is not supplied")
-        paths[requirement.slot] = path
+        paths[requirement.slot] = Path(path)
     # profile.bind below performs the exact Rust size/SHA/schema validation;
     # this helper performs no Python-side parsing or fallback discovery.
     return ResourceBindings(paths)
 
 
-def _profile_source(pure_iod_orbit, *, fill_missing: bool) -> SourceCatalog:
+def _profile_source(
+    pure_iod_orbit: PureIodOrbit, *, fill_missing: bool
+) -> SourceCatalog:
     base = _two_body_source(pure_iod_orbit)
     source = SourceCatalog.from_pyarrow(
         pa.concat_tables([base.table] * 3).combine_chunks()
@@ -100,7 +105,9 @@ def _forced_failure(config: OdConfig, bindings: ResourceBindings) -> OdConfig:
     ids=lambda profile: profile.name,
 )
 def test_shipped_profile_exact_composition_and_evaluation(
-    pure_iod_orbit, profile, force_failure
+    pure_iod_orbit: PureIodOrbit,
+    profile: OdProfile,
+    force_failure: bool,
 ) -> None:
     bindings = _bindings(profile)
     # This is the public Rust validation boundary: every required semantic slot

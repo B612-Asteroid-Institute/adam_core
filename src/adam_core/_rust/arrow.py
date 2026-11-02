@@ -32,12 +32,39 @@ bridge rather than being guessed here.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Type, TypeVar
+import importlib
+from types import ModuleType
+from typing import TYPE_CHECKING, Protocol, Type, TypeVar, runtime_checkable
 
 import pyarrow as pa
 
+__all__ = ["pa", "pc"]
+
+
+@runtime_checkable
+class _ComputeFunction(Protocol):
+    def __call__(self, *args: object, **kwargs: object) -> pa.Array: ...
+
+
+class _ComputeProxy:
+    """Typed, validated access to the untyped ``pyarrow.compute`` module."""
+
+    def __init__(self, module: ModuleType) -> None:
+        self._module = module
+
+    def __getattr__(self, name: str) -> _ComputeFunction:
+        function = getattr(self._module, name, None)
+        if not isinstance(function, _ComputeFunction):
+            raise AttributeError(f"pyarrow.compute has no callable {name!r}")
+        return function
+
+
+pc = _ComputeProxy(importlib.import_module("pyarrow.compute"))
+
 if TYPE_CHECKING:
     import quivr as qv
+
+    from ..utils.spice_backend import RustBackend
 
     _TableT = TypeVar("_TableT", bound=qv.Table)
 
@@ -132,7 +159,7 @@ def table_from_record_batch(
     return cls.from_pyarrow(to_quivr_metadata(table))
 
 
-def ensure_spice_backend():
+def ensure_spice_backend() -> "RustBackend":
     """Idempotent SPICE + MPC-obscodes setup; return the process-global backend.
 
     Centralizes the per-call ``setup_SPICE`` / ``get_backend`` / obscodes wiring
@@ -142,7 +169,8 @@ def ensure_spice_backend():
     Rust-side (lazy on first use) is tracked under personal-cmy.36.1; the kernel
     data provenance that blocks it is personal-3uy.
     """
-    from ..utils.spice import get_backend, setup_mpc_obscodes, setup_SPICE
+    from ..utils.spice import setup_mpc_obscodes, setup_SPICE
+    from ..utils.spice_backend import get_backend
 
     setup_SPICE()
     setup_mpc_obscodes()

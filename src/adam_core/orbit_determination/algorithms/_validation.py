@@ -4,9 +4,30 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
+import numpy as np
+import numpy.typing as npt
+
 from adam_core.orbits import Orbits
 
 from ..evaluate import OrbitDeterminationObservations
+
+
+def three_position_vectors(
+    r1: npt.ArrayLike, r2: npt.ArrayLike, r3: npt.ArrayLike
+) -> tuple[
+    npt.NDArray[np.float64],
+    npt.NDArray[np.float64],
+    npt.NDArray[np.float64],
+]:
+    """Normalize and validate the three position vectors used by IOD kernels."""
+
+    r1_array = np.ascontiguousarray(np.asarray(r1, dtype=np.float64))
+    r2_array = np.ascontiguousarray(np.asarray(r2, dtype=np.float64))
+    r3_array = np.ascontiguousarray(np.asarray(r3, dtype=np.float64))
+    vectors = (r1_array, r2_array, r3_array)
+    if any(vector.shape != (3,) for vector in vectors):
+        raise ValueError("r1, r2, and r3 must each have shape (3,)")
+    return r1_array, r2_array, r3_array
 
 
 def _require_unique_non_null(values: Sequence[str | None], label: str) -> None:

@@ -4,14 +4,16 @@ scipy's trust-region-reflective solver without bounds, it never reports
 convergence on a non-finite derivative, and its status codes mean one thing.
 """
 
+from typing import Literal
+
 import numpy as np
 import numpy.testing as npt
 import pytest
-from scipy.optimize import least_squares
 
-from adam_core.coordinates import CartesianCoordinates
+from adam_core.coordinates.cartesian import CartesianCoordinates
 from adam_core.coordinates.origin import Origin
-from adam_core.orbits import Orbits
+from adam_core.observers import Observers
+from adam_core.orbits import Ephemeris, Orbits, VariantOrbits
 from adam_core.time import Timestamp
 
 from ..algorithms.fitting import (
@@ -20,11 +22,14 @@ from ..algorithms.fitting import (
     fit_least_squares,
     residual_function,
 )
+from ..fitted_orbits import FittedOrbits
+from ._scipy import scipy_least_squares
 from .test_differential_correction import (
     EPOCH_MJD_TDB,
     TRUTH_STATE,
     TwoBodyPropagator,
     make_synthetic_observations,
+    require_two_body_orbits,
 )
 
 
@@ -46,7 +51,7 @@ def orbit_from_state(state: np.ndarray) -> Orbits:
     )
 
 
-def fitted_state(fitted) -> np.ndarray:
+def fitted_state(fitted: FittedOrbits) -> np.ndarray:
     return np.concatenate([fitted.coordinates.r[0], fitted.coordinates.v[0]])
 
 
@@ -54,8 +59,36 @@ class NanJacobianPropagator(TwoBodyPropagator):
     """Finite predictions for one orbit; NaN for any multi-orbit batch, which
     is what a finite-difference Jacobian asks for."""
 
-    def generate_ephemeris(self, orbits, observers, **kwargs):
-        ephemeris = super().generate_ephemeris(orbits, observers, **kwargs)
+    def generate_ephemeris(
+        self,
+        orbits: Orbits | VariantOrbits,
+        observers: Observers,
+        covariance: bool = False,
+        covariance_method: Literal[
+            "auto", "sigma-point", "monte-carlo"
+        ] = "monte-carlo",
+        num_samples: int = 1000,
+        chunk_size: int = 100,
+        max_processes: int | None = 1,
+        seed: int | None = None,
+        predict_magnitudes: bool = True,
+        predict_phase_angle: bool = False,
+        include_nongrav: bool = True,
+    ) -> Ephemeris:
+        orbits = require_two_body_orbits(orbits)
+        ephemeris = super().generate_ephemeris(
+            orbits,
+            observers,
+            covariance,
+            covariance_method,
+            num_samples,
+            chunk_size,
+            max_processes,
+            seed,
+            predict_magnitudes,
+            predict_phase_angle,
+            include_nongrav,
+        )
         if len(orbits) == 1:
             return ephemeris
         n = len(ephemeris)
@@ -74,7 +107,7 @@ def test_native_solver_reaches_scipy_trf_minimum(perturbation_scale: float) -> N
         [1e-5, -8e-6, 5e-6, 1e-8, -1e-8, 5e-9]
     )
     terms = _analytic_jacobian_terms(observations)
-    reference = least_squares(
+    reference = scipy_least_squares()(
         residual_function,
         seed,
         jac=lambda x, *_: _analytic_jacobian(x, EPOCH_MJD_TDB, terms),

@@ -9,13 +9,17 @@ orbit with injected gross outliers (from ``test_differential_correction``).
 from __future__ import annotations
 
 import warnings
-from typing import Any
+from typing import Any, Literal
 
 import numpy as np
 import numpy.testing as npt
-import pyarrow as pa
 import pytest
+from typing_extensions import TypedDict, Unpack
 
+from adam_core._rust.arrow import pa
+
+from ...orbits.orbits import Orbits
+from ...propagator.propagator import Propagator
 from ..algorithms.fitting import fit_least_squares
 from ..algorithms.rejection import (
     CMC2003_CHI2_FRAC,
@@ -28,7 +32,8 @@ from ..algorithms.rejection import (
     _expected_residual_chi2,
     cmc2003_fit_detailed,
 )
-from ..fitted_orbits import FittedOrbits
+from ..evaluate import OrbitDeterminationObservations
+from ..fitted_orbits import FittedOrbitMembers, FittedOrbits
 from .test_differential_correction import (
     TRUTH_STATE,
     TwoBodyPropagator,
@@ -37,8 +42,21 @@ from .test_differential_correction import (
 )
 
 
-def _cmc_tables(*args, **kwargs):
-    result = cmc2003_fit_detailed(*args, **kwargs)
+class _CmcOptions(TypedDict, total=False):
+    loss: Literal["linear", "huber"]
+    ignore: list[str]
+    max_iterations: int
+    max_nfev: int
+    validate_covariance: bool
+
+
+def _cmc_tables(
+    orbit: Orbits,
+    observations: OrbitDeterminationObservations,
+    propagator: Propagator,
+    **kwargs: Unpack[_CmcOptions],
+) -> tuple[FittedOrbits, FittedOrbitMembers]:
+    result = cmc2003_fit_detailed(orbit, observations, propagator, **kwargs)
     return result.fitted_orbit, result.fitted_orbit_members
 
 
@@ -46,7 +64,9 @@ def state_of(fitted: FittedOrbits) -> np.ndarray:
     return np.concatenate([fitted.coordinates.r[0], fitted.coordinates.v[0]])
 
 
-def with_outliers(sigmas_by_index: dict[int, float]) -> Any:
+def with_outliers(
+    sigmas_by_index: dict[int, float],
+) -> OrbitDeterminationObservations:
     """Synthetic observations with latitude offsets of k sigma injected."""
     observations = make_synthetic_observations()
     lat = observations.coordinates.lat.to_numpy(zero_copy_only=False).copy()
@@ -290,7 +310,10 @@ class TestCmc2003CapsuleDriver:
     """Behavioral checks of the single core-owned capsule CMC2003 driver."""
 
     @staticmethod
-    def _fit(observations, **kwargs):
+    def _fit(
+        observations: OrbitDeterminationObservations,
+        **kwargs: Unpack[_CmcOptions],
+    ) -> CMC2003Fit:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", RuntimeWarning)
             return cmc2003_fit_detailed(

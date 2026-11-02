@@ -7,7 +7,7 @@ from typing import Any
 import pyarrow as pa  # type: ignore[import-untyped]
 import pyarrow.compute as pc  # type: ignore[import-untyped]
 
-from adam_core import _rust_native as _rust  # type: ignore[attr-defined]
+from adam_core import _rust_native as _rust
 from adam_core.coordinates.spherical import SphericalCoordinates
 from adam_core.orbits.arrow_bridge import coordinates_from_ipc, coordinates_to_ipc
 

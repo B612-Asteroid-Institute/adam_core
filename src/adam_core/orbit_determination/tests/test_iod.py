@@ -4,8 +4,9 @@ import json
 from pathlib import Path
 
 import numpy as np
-import pyarrow.compute as pc
 import pytest
+
+from adam_core._rust.arrow import pc
 
 from ...coordinates import CoordinateCovariances, SphericalCoordinates
 from ...coordinates.origin import Origin
@@ -19,7 +20,7 @@ ASSISTPropagator = pytest.importorskip("adam_assist").ASSISTPropagator
 
 
 @pytest.fixture
-def real_data():
+def real_data() -> OrbitDeterminationObservations:
     exposures, detections, associations = make_observations()
     orbits = make_real_orbits(num_orbits=18)
     object_id = orbits.object_id[-1].as_py()
@@ -47,7 +48,9 @@ def real_data():
     )
 
 
-def test_focused_iod_returns_candidate_report(real_data) -> None:
+def test_focused_iod_returns_candidate_report(
+    real_data: OrbitDeterminationObservations,
+) -> None:
     fitted, members, report = run_iod_qualified(
         real_data[:10],
         ASSISTPropagator(),
@@ -61,7 +64,9 @@ def test_focused_iod_returns_candidate_report(real_data) -> None:
     assert report.accepted_candidate is not None
 
 
-def test_focused_iod_is_deterministic(real_data) -> None:
+def test_focused_iod_is_deterministic(
+    real_data: OrbitDeterminationObservations,
+) -> None:
     first = run_iod_qualified(real_data[:10], ASSISTPropagator(), min_obs=6)
     second = run_iod_qualified(real_data[:10], ASSISTPropagator(), min_obs=6)
     np.testing.assert_array_equal(
@@ -70,7 +75,9 @@ def test_focused_iod_is_deterministic(real_data) -> None:
     assert first[1].solution.to_pylist() == second[1].solution.to_pylist()
 
 
-def test_iod_fused_matches_pinned_legacy_fixture(real_data) -> None:
+def test_iod_fused_matches_pinned_legacy_fixture(
+    real_data: OrbitDeterminationObservations,
+) -> None:
     """Pin the accepted d21 single-arc ASSIST IOD numerical products."""
 
     fixture = json.loads(

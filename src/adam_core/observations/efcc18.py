@@ -87,7 +87,7 @@ import shutil
 import tarfile
 import tempfile
 from pathlib import Path
-from typing import Iterable, Optional, Sequence, Union
+from typing import Iterable, Optional, Protocol, Sequence, Union, runtime_checkable
 
 import numpy as np
 import numpy.typing as npt
@@ -177,6 +177,21 @@ MPC_ASTCAT_TO_EFCC18: dict[str, str] = {
 EFCC18_JPL_UNDEBIASED_ASTCATS: tuple[str, ...] = ("Gaia1", "ACT", "Tycho", "UCAC5")
 
 _EXPECTED_SHAPE = (EFCC18_N_TILES, EFCC18_N_CATALOGS, 4)
+
+
+class _StreamingResponse(Protocol):
+    def __enter__(self) -> "_StreamingResponse": ...
+
+    def __exit__(self, *exc: object) -> None: ...
+
+    def raise_for_status(self) -> None: ...
+
+    def iter_content(self, chunk_size: int) -> Iterable[bytes]: ...
+
+
+@runtime_checkable
+class _RequestsModule(Protocol):
+    def get(self, url: str, *, stream: bool, timeout: float) -> _StreamingResponse: ...
 
 
 # ---------------------------------------------------------------------------
@@ -406,7 +421,9 @@ def download_efcc18_bias_table(
     path : Path
         Path of the installed ``bias.dat``.
     """
-    import requests
+    requests = importlib.import_module("requests")
+    if not isinstance(requests, _RequestsModule):
+        raise TypeError("requests module does not provide the streaming HTTP contract")
 
     logger.info("Downloading EFCC18 archive from %s", url)
     with tempfile.TemporaryDirectory(prefix="efcc18_") as tmp_dir:

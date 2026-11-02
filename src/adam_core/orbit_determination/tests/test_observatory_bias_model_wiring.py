@@ -1,6 +1,10 @@
 """The Institute profile is a fixed ordered native resource pipeline."""
 
-from ..observation_pipeline import ResidualCovarianceOperation
+from ..observation_pipeline import (
+    NightlyBatchDeweighting,
+    ResidualCovarianceOperation,
+    StationBandResidualCovarianceAdjustment,
+)
 from ..profiles import ASTEROID_INSTITUTE_OD_V1
 
 
@@ -13,9 +17,12 @@ def test_institute_profile_pipeline_order_and_values() -> None:
         "NightlyBatchDeweighting",
     ]
     covariance = transforms[2]
+    deweighting = transforms[3]
+    assert isinstance(covariance, StationBandResidualCovarianceAdjustment)
+    assert isinstance(deweighting, NightlyBatchDeweighting)
     assert covariance.operation is ResidualCovarianceOperation.ADD
     assert covariance.minimum_residual_count == 30
-    assert transforms[3].effective_observation_cap == 4
+    assert deweighting.effective_observation_cap == 4
 
 
 def test_institute_profile_declares_all_resource_slots() -> None:
