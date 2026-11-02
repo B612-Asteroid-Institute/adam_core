@@ -178,12 +178,6 @@ excludes = [
   "**/.DS_Store",
 ]
 
-[tool.uv]
-override-dependencies = [
-  # Keep this checkout authoritative while resolving test-only dependents.
-  "adam-core",
-]
-
 [tool.uv.sources]
 adam-core = { workspace = true }
 

@@ -101,8 +101,8 @@ developer artifacts.
 
 .. code-block:: bash
 
-   # install runtime + test + docs dependency groups
-   pdm install -G test -G docs
+   # install runtime + test + docs + exact build-tool dependency groups
+   pdm install -G test -G docs -G build
 
 If an existing local ``pdm.lock`` was generated before the docs group was
 included, PDM may report ``Requested groups not in lockfile: docs``. Refresh the
@@ -110,8 +110,8 @@ ignored local lockfile for the requested groups, then retry the install:
 
 .. code-block:: bash
 
-   pdm lock -G test -G docs
-   pdm install -G test -G docs
+   pdm lock -G test -G docs -G build
+   pdm install -G test -G docs -G build
 
 Then run the documentation builds:
 

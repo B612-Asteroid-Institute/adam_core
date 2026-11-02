@@ -100,6 +100,7 @@ def _write_inspectable_wheel(path: Path) -> None:
         "adam_core-0.7.0-cp312-cp312-win_amd64.whl",
         "adam_core-0.7.0-cp312-cp312-cc873d7f.whl",
         "adam_core-0.7.0-cp312-cp312-manylinux_2_39_aarch64.zip.whl",
+        "adam_core-0.7.0-1-cp312-cp312-manylinux_2_39_aarch64.whl",
         "adam_core-0.7.0-18e230cd-cp312-manylinux_2_39_aarch64.whl",
         "adam_kore-0.7.0-cp312-cp312-manylinux_2_39_aarch64.whl",
     ],

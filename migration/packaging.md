@@ -33,7 +33,8 @@ Last updated: 2026-10-21.
 
 ## uv Status
 
-- `uv lock --check` is expected to pass with the workspace override for `adam-core`.
+- `uv lock --check` is expected to pass with the workspace source mapping for `adam-core`; test-only dependents must resolve the editable checkout, never the public distribution.
+- `uv export --frozen --only-group build` must contain exactly the three direct build-tool pins declared in `pyproject.toml`, including `packaging==25.0` from the public registry with hashes.
 - `pdm run wheel-build` remains the sole authoritative build command.
 - A clean-wheel validation with uv must run outside the repository and pass
   `--no-config`, for example `uv pip install --no-config --python <venv-python>

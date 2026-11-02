@@ -24,8 +24,8 @@ jobs:
         uses: pdm-project/setup-pdm@v4
         with:
           python-version: '3.12'
-      - name: Install build dependencies
-        run: pdm install -G test
+      - name: Install test and exact build dependencies
+        run: pdm install -G test -G build
       - name: Build Rust wheel
         run: pdm run rust-build
       - name: Verify native wheel artifact

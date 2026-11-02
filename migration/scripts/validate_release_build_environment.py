@@ -32,6 +32,9 @@ def declared_build_tools() -> list[str]:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--out", type=Path, help="retain the inspected wheel in this directory"
+    )
     parser.add_argument("maturin_args", nargs=argparse.REMAINDER)
     args = parser.parse_args()
     forwarded = list(args.maturin_args)
@@ -42,7 +45,11 @@ def main() -> None:
     with tempfile.TemporaryDirectory(prefix="adam-core-release-build-") as temporary:
         root = Path(temporary)
         environment = root / "venv"
-        wheelhouse = root / "wheelhouse"
+        wheelhouse = args.out or root / "wheelhouse"
+        if not wheelhouse.is_absolute():
+            wheelhouse = REPO_ROOT / wheelhouse
+        if wheelhouse.exists() and any(wheelhouse.iterdir()):
+            raise SystemExit(f"fresh build output is not empty: {wheelhouse}")
         subprocess.run([sys.executable, "-m", "venv", str(environment)], check=True)
         python = environment / (
             "Scripts/python.exe" if sys.platform == "win32" else "bin/python"
@@ -53,6 +60,8 @@ def main() -> None:
                 "-m",
                 "pip",
                 "install",
+                "--isolated",
+                "--no-deps",
                 "--only-binary=:all:",
                 *tools,
             ],

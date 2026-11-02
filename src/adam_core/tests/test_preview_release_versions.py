@@ -100,8 +100,32 @@ def test_release_builder_uses_declared_exact_tools_and_supported_targets() -> No
         "ziglang==0.17.0",
     ]
     assert project["dependency-groups"]["build"] == expected_tools
+    assert "override-dependencies" not in project["tool"]["uv"]
+    assert project["tool"]["uv"]["sources"]["adam-core"] == {"workspace": True}
     assert project["tool"]["pdm"]["scripts"]["release-build-environment-check"] == (
         "python migration/scripts/validate_release_build_environment.py"
+    )
+
+    with (ROOT / "uv.lock").open("rb") as source:
+        lock = tomllib.load(source)
+    packages = {package["name"]: package for package in lock["package"]}
+    assert packages["adam-core"]["source"] == {"editable": "."}
+    for name, version in (
+        ("maturin", "1.15.0"),
+        ("packaging", "25.0"),
+        ("ziglang", "0.17.0"),
+    ):
+        package = packages[name]
+        assert package["version"] == version
+        assert package["source"] == {"registry": "https://pypi.org/simple"}
+        artifacts = ([package["sdist"]] if "sdist" in package else []) + package[
+            "wheels"
+        ]
+        assert artifacts
+        assert all(artifact["hash"].startswith("sha256:") for artifact in artifacts)
+    assert any(
+        dependency["name"] == "adam-core"
+        for dependency in packages["mpcq"]["dependencies"]
     )
 
     workflow = (
@@ -115,10 +139,54 @@ def test_release_builder_uses_declared_exact_tools_and_supported_targets() -> No
         assert workflow.count(f'"{tool}"') == 1
         assert install_step < workflow.index(f'"{tool}"') < builder
     assert "--only-binary=:all: packaging" not in workflow
-    assert "target: x86_64-unknown-linux-gnu" in workflow
-    assert "target: aarch64-unknown-linux-gnu" in workflow
+    expected_cells = {
+        "manylinux-x86_64": (
+            "runner: ubuntu-latest",
+            "system: Linux-x86_64",
+            "target: x86_64-unknown-linux-gnu",
+            "wheel_tag: manylinux*x86_64",
+        ),
+        "manylinux-aarch64": (
+            "runner: ubuntu-24.04-arm",
+            "system: Linux-aarch64",
+            "target: aarch64-unknown-linux-gnu",
+            "wheel_tag: manylinux*aarch64",
+        ),
+    }
+    for name, entries in expected_cells.items():
+        block = workflow.split(f"- name: {name}", 1)[1].split("          - name:", 1)[0]
+        assert all(entry in block for entry in entries)
     assert "target: x86_64\n" not in workflow
     assert "target: aarch64\n" not in workflow
+
+    pip_ci = (ROOT / ".github/workflows/pip-build-lint-test-coverage.yml").read_text()
+    rust_job = pip_ci.split("  rust-smoke:", 1)[1].split("\n  benchmark:", 1)[0]
+    assert "pdm install -G test -G build" in rust_job
+    assert "pdm run release-build-environment-check --out dist" in rust_job
+    assert "pdm run rust-build" not in rust_job
+    assert (
+        rust_job.index("pdm install -G test -G build")
+        < rust_job.index("pdm run release-build-environment-check --out dist")
+        < rust_job.index("pdm run wheel-inspect")
+    )
+
+    tier1 = (ROOT / ".github/workflows/tier1-dependent-smoke.yml").read_text()
+    assert "pdm install -G test -G build" in tier1
+    assert (
+        tier1.index("pdm install -G test -G build")
+        < tier1.index("pdm run rust-build")
+        < tier1.index("pdm run wheel-inspect")
+    )
+
+    publish = (ROOT / ".github/workflows/publish.yml").read_text()
+    exact_parser = 'python -m pip install --only-binary=:all: "packaging==25.0"'
+    assert publish.count(exact_parser) == 1
+    assert publish.index(exact_parser) < publish.index(
+        "python migration/scripts/check_wheel_artifacts.py"
+    )
+
+    installation = (ROOT / "docs/source/getting_started/installation.rst").read_text()
+    assert "pdm install -G test -G docs -G build" in installation
 
 
 def test_kernel_data_constrains_icu_for_clean_rust_1_87_consumers() -> None:
