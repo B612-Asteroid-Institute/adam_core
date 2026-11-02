@@ -34,9 +34,9 @@ use adam_core_rs_coords::{
     validate_loss, AssociationBatch, CoordinateBatch as DataCoordinateBatch, CoordinateValues,
     CovarianceBatch, IntoNestedRecordBatch, ObserverBatch as DataObserverBatch, OdConfig,
     OrbitBatch as DataOrbitBatch, SourceCatalogBatch, TimeScale, TryFromNestedRecordBatch,
-    TwoBodyModelConfig, CMC2003_APPARITION_GAP_DAYS, CMC2003_CHI2_FRAC,
-    CMC2003_CHI2_RECOVER, CMC2003_CHI2_REJECT, CMC2003_MAX_ITERATIONS,
-    CMC2003_MAX_REJECTED_FRACTION, CMC2003_PSD_FLOOR_FRAC,
+    TwoBodyModelConfig, CMC2003_APPARITION_GAP_DAYS, CMC2003_CHI2_FRAC, CMC2003_CHI2_RECOVER,
+    CMC2003_CHI2_REJECT, CMC2003_MAX_ITERATIONS, CMC2003_MAX_REJECTED_FRACTION,
+    CMC2003_PSD_FLOOR_FRAC,
 };
 use numpy::{IntoPyArray, PyReadonlyArray2};
 use pyo3::exceptions::PyValueError;
@@ -46,7 +46,6 @@ use serde::Deserialize;
 use serde_json::json;
 use sha2::{Digest, Sha256};
 use std::hint::black_box;
-use std::sync::Arc;
 use std::time::Instant;
 
 fn value_error(message: impl Into<String>) -> PyErr {

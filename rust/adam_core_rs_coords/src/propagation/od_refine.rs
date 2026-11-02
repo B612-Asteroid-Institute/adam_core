@@ -2288,6 +2288,7 @@ fn cmc2003_fit_with_covariance_failure<T: OriginTranslationProvider>(
             &output.covariance,
             output.cost,
             &cmc_fit_config,
+            1.0,
         )?;
         let (lower, upper) = DELTA_CHI2_WINDOW;
         match probe {
@@ -4218,6 +4219,7 @@ mod tests {
             &expected,
             robust_cost(&residuals, LossType::Linear, config.f_scale),
             &config,
+            1.0,
         )
         .unwrap()
         .unwrap();
@@ -4239,7 +4241,7 @@ mod tests {
 
         for (method, message) in [
             (JacobianMethod::TwoPoint, "noise floor"),
-            (JacobianMethod::Central, "covariance may be unreliable"),
+            (JacobianMethod::Central, "covariance is overconfident"),
         ] {
             let mut warnings = Vec::new();
             let returned = validated_covariance(
@@ -4413,6 +4415,7 @@ mod tests {
             &fit.covariance,
             robust_cost(&residuals, config.loss, config.f_scale),
             &config,
+            1.0,
         )
         .unwrap()
         .unwrap();
