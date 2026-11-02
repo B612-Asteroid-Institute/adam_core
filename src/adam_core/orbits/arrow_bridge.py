@@ -20,9 +20,6 @@ lives here so callers exchange ordinary ``Orbits``/``VariantOrbits`` objects.
 
 from __future__ import annotations
 
-import numpy as np
-import numpy.typing as npt
-
 from adam_core import _rust_native as _rn
 from adam_core._rust.arrow import contiguous_record_batch, pa
 from adam_core._rust.arrow import stamp_adam_core_metadata as _stamp_adam_core_metadata
@@ -442,7 +439,7 @@ def _propagate_orbits_typed_arrow(
     tol: float = 1e-14,
     chunk_size: int | None = None,
     thread_limit: int | None = None,
-) -> tuple[Orbits | VariantOrbits, npt.NDArray[np.bool_]]:
+) -> tuple[Orbits | VariantOrbits, list[bool]]:
     """Arrow-native typed propagation for ``Orbits`` or ``VariantOrbits``.
 
     Runs the table through the Rust-canonical ``TwoBodyPropagator``
@@ -482,11 +479,14 @@ def _propagate_orbits_typed_arrow(
         if is_variants
         else orbits_from_record_batch(output)
     )
-    if not isinstance(valid, np.ndarray) or valid.dtype.kind != "b":
-        raise TypeError("typed propagation validity must be a boolean array")
-    if valid.ndim != 1:
-        raise TypeError("typed propagation validity must be one-dimensional")
-    return table, np.ascontiguousarray(valid, dtype=np.bool_)
+    if not isinstance(valid, list):
+        raise TypeError("typed propagation validity must be a list")
+    valid_flags: list[bool] = []
+    for item in valid:
+        if not isinstance(item, bool):
+            raise TypeError("typed propagation validity entries must be bool")
+        valid_flags.append(item)
+    return table, valid_flags
 
 
 def _propagate_orbits_2body_ipc_candidate(

@@ -150,10 +150,10 @@ def test_typed_adapter_reports_invalid_rows():
     orbits = _orbits(nan_row=True)
     times = _times()
     typed, valid = _propagate_orbits_typed_arrow(orbits, times)
-    valid = np.asarray(valid)
-    assert valid.shape == (len(orbits) * len(times),)
-    assert not valid.all()
-    assert valid.sum() == (len(orbits) - 1) * len(times)
+    valid_array = np.asarray(valid)
+    assert valid_array.shape == (len(orbits) * len(times),)
+    assert not valid_array.all()
+    assert valid_array.sum() == (len(orbits) - 1) * len(times)
 
 
 def test_typed_adapter_ut1_epochs_fail_loudly():

@@ -12301,7 +12301,7 @@
       "kind": "function",
       "domain": "orbits",
       "source": "src/adam_core/orbits/arrow_bridge.py",
-      "line": 117,
+      "line": 114,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -12329,7 +12329,7 @@
       "kind": "function",
       "domain": "orbits",
       "source": "src/adam_core/orbits/arrow_bridge.py",
-      "line": 122,
+      "line": 119,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -12357,7 +12357,7 @@
       "kind": "function",
       "domain": "orbits",
       "source": "src/adam_core/orbits/arrow_bridge.py",
-      "line": 112,
+      "line": 109,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -12385,7 +12385,7 @@
       "kind": "function",
       "domain": "orbits",
       "source": "src/adam_core/orbits/arrow_bridge.py",
-      "line": 96,
+      "line": 93,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -12413,7 +12413,7 @@
       "kind": "function",
       "domain": "orbits",
       "source": "src/adam_core/orbits/arrow_bridge.py",
-      "line": 221,
+      "line": 218,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -12441,7 +12441,7 @@
       "kind": "function",
       "domain": "orbits",
       "source": "src/adam_core/orbits/arrow_bridge.py",
-      "line": 86,
+      "line": 83,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -12469,7 +12469,7 @@
       "kind": "function",
       "domain": "orbits",
       "source": "src/adam_core/orbits/arrow_bridge.py",
-      "line": 197,
+      "line": 194,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -12497,7 +12497,7 @@
       "kind": "function",
       "domain": "orbits",
       "source": "src/adam_core/orbits/arrow_bridge.py",
-      "line": 56,
+      "line": 53,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -12525,7 +12525,7 @@
       "kind": "function",
       "domain": "orbits",
       "source": "src/adam_core/orbits/arrow_bridge.py",
-      "line": 185,
+      "line": 182,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -12553,7 +12553,7 @@
       "kind": "function",
       "domain": "orbits",
       "source": "src/adam_core/orbits/arrow_bridge.py",
-      "line": 241,
+      "line": 238,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -12581,7 +12581,7 @@
       "kind": "function",
       "domain": "orbits",
       "source": "src/adam_core/orbits/arrow_bridge.py",
-      "line": 236,
+      "line": 233,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -12609,7 +12609,7 @@
       "kind": "function",
       "domain": "orbits",
       "source": "src/adam_core/orbits/arrow_bridge.py",
-      "line": 387,
+      "line": 384,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -12637,7 +12637,7 @@
       "kind": "function",
       "domain": "orbits",
       "source": "src/adam_core/orbits/arrow_bridge.py",
-      "line": 91,
+      "line": 88,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -12665,7 +12665,7 @@
       "kind": "function",
       "domain": "orbits",
       "source": "src/adam_core/orbits/arrow_bridge.py",
-      "line": 215,
+      "line": 212,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -12693,7 +12693,7 @@
       "kind": "function",
       "domain": "orbits",
       "source": "src/adam_core/orbits/arrow_bridge.py",
-      "line": 65,
+      "line": 62,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -12721,7 +12721,7 @@
       "kind": "function",
       "domain": "orbits",
       "source": "src/adam_core/orbits/arrow_bridge.py",
-      "line": 203,
+      "line": 200,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
