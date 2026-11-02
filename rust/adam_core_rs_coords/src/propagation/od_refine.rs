@@ -3584,6 +3584,10 @@ fn apply_observation_transforms<F>(
 where
     F: FnOnce(&mut OrbitDeterminationAstrometry) -> Result<bool, String>,
 {
+    // Complete OD consumes a fixed 6x6 coordinate covariance. Reject any
+    // extended or mixed-width storage before snapshots, models, or variance
+    // checks can interpret it with that stride.
+    super::od::validate_od_covariance_dimension(observed)?;
     let n = observed.len();
     if obs_code.len() != n || band.len() != n || astcat.len() != n {
         return Err(PropagationError::InvalidRequest(

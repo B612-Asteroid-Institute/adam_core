@@ -3766,7 +3766,7 @@ pub(super) fn validate_od_observations(
 /// Reject unsupported observation-covariance storage before any OD path can
 /// interpret values with the fixed 6x6 stride. A missing covariance is allowed
 /// here because `run_od` may apply a sigma-filling model before it is required.
-pub(super) fn validate_od_covariance_dimension(
+pub(crate) fn validate_od_covariance_dimension(
     observed: &CoordinateBatch,
 ) -> PropagationResultValue<()> {
     if let Some(covariance) = &observed.covariance {

@@ -10,11 +10,27 @@ from email.utils import collapse_rfc2231_value
 from pathlib import Path
 from zipfile import BadZipFile, ZipFile
 
+from packaging.utils import (
+    InvalidWheelFilename,
+    canonicalize_name,
+    parse_wheel_filename,
+)
+
 NATIVE_MODULE_PREFIX = "adam_core/_rust_native"
 VERSION_MODULE = "adam_core/_version.py"
 RELEASE_INVENTORY = "adam_core/_release_inventory.json"
 RELEASE_INVENTORY_FORMAT = "adam-core-release-inventory-v2"
 FORBIDDEN_RUNTIME_DEPENDENCIES = {"pdm"}
+
+
+def _validated_wheel_filename(wheel: Path) -> tuple[str, str]:
+    """Return canonical distribution/version from a valid PEP 427 filename."""
+
+    try:
+        name, version, _build, _tags = parse_wheel_filename(wheel.name)
+    except InvalidWheelFilename as error:
+        raise SystemExit(f"{wheel} has an invalid wheel filename: {error}") from error
+    return canonicalize_name(name), str(version)
 
 
 def _wheel_metadata(archive: ZipFile, wheel: Path) -> tuple[str, str, list[str]]:
@@ -97,9 +113,20 @@ def _verify_release_inventory(archive: ZipFile, wheel: Path) -> None:
 
 
 def _inspect_wheel(wheel: Path) -> str:
+    filename_name, filename_version = _validated_wheel_filename(wheel)
     try:
         with ZipFile(wheel) as archive:
             name, metadata_version, requirements = _wheel_metadata(archive, wheel)
+            if canonicalize_name(name) != filename_name:
+                raise SystemExit(
+                    f"{wheel} filename distribution {filename_name!r} does not match "
+                    f"METADATA name {name!r}"
+                )
+            if metadata_version != filename_version:
+                raise SystemExit(
+                    f"{wheel} filename version {filename_version!r} does not match "
+                    f"METADATA version {metadata_version!r}"
+                )
             runtime_version = _runtime_version(archive, wheel)
             _verify_release_inventory(archive, wheel)
             if name not in {"adam_core", "adam-core"}:

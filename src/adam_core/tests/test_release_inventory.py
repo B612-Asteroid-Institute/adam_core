@@ -10,7 +10,10 @@ from zipfile import ZipFile
 import pytest
 
 from migration.scripts import release_inventory
-from migration.scripts.check_wheel_artifacts import _verify_release_inventory
+from migration.scripts.check_wheel_artifacts import (
+    _validated_wheel_filename,
+    _verify_release_inventory,
+)
 
 
 def _git(repo: Path, *args: str) -> str:
@@ -44,6 +47,15 @@ def _inventory_repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
         release_inventory, "PACKAGED_INVENTORY", package / "_release_inventory.json"
     )
     return repo
+
+
+def test_wheel_checker_rejects_malformed_evidence_filename(tmp_path: Path) -> None:
+    canonical = tmp_path / "adam_core-0.7.0-cp312-cp312-manylinux_2_39_aarch64.whl"
+    assert _validated_wheel_filename(canonical) == ("adam-core", "0.7.0")
+
+    malformed = tmp_path / "adam_core-0.7.0-18e230cd-cp312-manylinux_2_39_aarch64.whl"
+    with pytest.raises(SystemExit, match="invalid wheel filename"):
+        _validated_wheel_filename(malformed)
 
 
 def test_release_inventory_refuses_visible_and_ignored_package_python(

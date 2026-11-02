@@ -408,8 +408,11 @@ class TestFitLeastSquaresValidation:
 
     def test_unknown_jacobian_raises(self) -> None:
         observations = make_synthetic_observations(n_obs=6)
+        # Typed callers are constrained by JacobianName. Exercise the runtime
+        # rejection contract through Python's dynamic call boundary.
+        dynamic_call = getattr(fit_least_squares, "__call__")
         with pytest.raises(ValueError, match="jacobian"):
-            fit_least_squares(
+            dynamic_call(
                 make_initial_guess(),
                 observations,
                 TwoBodyPropagator(),
@@ -457,6 +460,13 @@ class TestCapsuleWhitenedFitFacade:
         with pytest.raises(ValueError, match="x_scale=1.0"):
             fit_least_squares(
                 make_initial_guess(), observations, propagator, x_scale=1.0
+            )
+        with pytest.raises(ValueError, match="_legacy_angular_only_covariance=True"):
+            fit_least_squares(
+                make_initial_guess(),
+                observations,
+                propagator,
+                _legacy_angular_only_covariance=True,
             )
         fitted, _ = fit_least_squares(
             make_initial_guess(), observations, propagator, ftol=1e-10

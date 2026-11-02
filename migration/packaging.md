@@ -34,9 +34,15 @@ Last updated: 2026-10-21.
 ## uv Status
 
 - `uv lock --check` is expected to pass with the workspace override for `adam-core`.
-- PDM plus standard pip are currently the authoritative local build/install path.
-- Do not use `maturin develop --uv` or direct `uv pip install dist/*.whl` as the authoritative local validation path until uv local-wheel behavior is revalidated on the intended current uv release.
-- The observed local caveat was with `uv 0.6.16`: direct uv local-wheel/develop testing selected or retained PyPI `adam_core 0.5.5`, which did not contain `adam_core._rust_native`.
+- `pdm run wheel-build` remains the sole authoritative build command.
+- A clean-wheel validation with uv must run outside the repository and pass
+  `--no-config`, for example `uv pip install --no-config --python <venv-python>
+  dist/adam_core-0.7.0-<python>-<abi>-<platform>.whl`. The inherited workspace
+  override can otherwise resolve public `adam-core==0.6.1` instead of the local
+  0.7.0 wheel.
+- Validate the installed distribution/native identity and run
+  `uv pip check --no-config --python <venv-python>` after installation.
+- Do not use `maturin develop --uv` as release evidence.
 
 ## Expected Validation Shape
 

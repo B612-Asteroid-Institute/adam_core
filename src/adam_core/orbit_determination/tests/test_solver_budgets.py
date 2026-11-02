@@ -98,7 +98,7 @@ def test_evaluation_budget_caps_all_solver_work(
 @pytest.mark.parametrize("max_nfev", [None, 1000])
 def test_iteration_budget_is_separate(
     observations: OrbitDeterminationObservations,
-    jacobian: str,
+    jacobian: Literal["analytic", "2-point", "central"],
     expected_nfev: int,
     max_nfev: int,
 ) -> None:

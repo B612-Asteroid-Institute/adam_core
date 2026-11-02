@@ -1,44 +1,53 @@
-# OD `CoordinateCovariances.to_matrix()` boundary audit
+# OD covariance boundary audit
 
-Audit baseline: `cdaa4d0d87758829b61f8b449061336d44a31870`.
+Correction baseline: `18e230cd9bb9772ff7d40d915fd179fe54a3d8b0`.
 
 The policy is that `CoordinateCovariances.to_matrix()` is Python
-representation/I/O plumbing only. Covariance selection, masking, validation,
-whitening, and arithmetic used by OD belong in Rust.
+representation/I/O plumbing only. Covariance selection, validation, model
+application, whitening, rejection, and fitting arithmetic used by OD belong in
+Rust.
 
-## Production OD call sites
+## Final production boundaries
 
-| Call site | Classification |
+| Call site | Final classification |
 |---|---|
-| `evaluate.py` | Boundary serialization of observed/predicted covariance into one fused Rust evaluation call. All residual/covariance arithmetic is native. |
-| `differential_correction.py` | Boundary serialization into the Rust Cholesky/whitening kernel. Factorization and validation are native. |
-| `fitted_orbits.py` | Output-table assembly: reads the native result covariance to snapshot lon/lat uncertainties; square roots run in Rust. It is not part of fitting or model execution. |
-| `observation_uncertainty.py` and `veres2017.py` | Boundary serialization for Rust model kernels in the rejected composed implementation. The concurrent native-model successor replaces the blessed composed/fused execution with one Rust application stage; this task deliberately does not edit those files. |
-| `least_squares.py` (before this change) | **Violation:** `_angular_only` allocated a Python matrix, filled it with NaNs, copied the angular block, and rebuilt covariance before native refinement. Removed. The wrapper sends typed observations unchanged and a private compatibility setting tells the PyO3/Rust driver to retain the angular 2×2 block before Rust validation/whitening. |
+| `evaluate.py` | Representation marshalling into one Rust evaluation call. Rust owns residual and covariance arithmetic. |
+| `algorithms/fitting.py` | Representation marshalling for retained expert numerical kernels. Rust owns covariance validation, Cholesky whitening, solver and fit-covariance work. |
+| `fitted_orbits.py` | Output-table assembly from a native result covariance. Native code computes the uncertainty square roots. |
+| `workflows.py` and `_pipeline.py` | Arrow IPC marshalling only. The configured observation pipeline and every canonical OD stage execute in Rust. |
 
-The deprecated `LeastSquares` wrapper now passes typed observations to
-`refine(..., rejection="none")` unchanged. Native selection clears non-angular
-coordinate values, converts either 6D or 9D covariance rows to the legacy 6D
-angular-only representation, ignores finite or invalid irrelevant blocks exactly
-as before, and leaves relevant angular values unchanged for fail-closed Rust
-whitening validation. Exact-equivalence, 9D, hostile irrelevant-value,
-invalid-angular-value, and monkeypatched `CoordinateCovariances` regressions
-prove that no Python covariance materialization remains in this compatibility
-path.
+There is no `LeastSquares` compatibility facade and no private
+`_legacy_angular_only_covariance` setting. Unsupported range-bearing
+observations and unsupported covariance dimensions fail instead of being
+projected through an untested fallback.
 
-All typed complete-OD entries (`full_od_barycentric`, `full_od_with`,
-`run_od_barycentric`, and `run_od_with`) validate observation-covariance storage
-dimension as their first operation. Thus public `run_od` rejects all-9D and mixed
-6D/9D Arrow inputs with the accurate typed dimension error before snapshots,
-observation models, fixed-6 indexing, or missing-variance interpretation. The
-ordinary refinement boundary retains the same validation through
-`observed_covariance_flat`.
+## Dimension-first complete-OD contract
 
-## Final-line deprecated compatibility coverage (N1)
+The canonical Rust pipeline validates an observation covariance's storage
+dimension before snapshots, transforms, fixed-stride indexing, or lon/lat
+variance interpretation. Missing covariance remains permitted at this first
+check because an explicitly configured fill transform may supply it; any
+present covariance must have dimension six.
 
-`_legacy_angular_only_covariance` is a one-release private bridge for deprecated
-`LeastSquares.least_squares` only. The shared PyO3 settings parser carries the
-flag, but only `fit_orbit_whitened_ipc` consumes it; complete IOD/OD entries
-ignore it and still reject 9D or mixed observation covariance. A direct final-line
-`run_od_ipc` regression freezes that non-expansion. New code must use supported
-6D observation covariance rather than adopting this deprecated flag.
+`od::algorithms::prepare_observations` and `run_od_with_predictors` both enter
+that guarded pipeline. The PyO3 pipeline and batch IPC routes use the same
+implementation, including association-group preparation. Lower-level
+refinement independently reaches `observed_covariance_flat`, which applies the
+same typed dimension guard before returning covariance values.
+
+Maintained regressions freeze the contract:
+
+- Rust `complete_od_rejects_covariance_dimension_before_pipeline_interpretation`
+  covers public `prepare_observations` and `run_od_with_predictors` with both
+  explicit as-supplied and model-changing pipelines.
+- Python `test_batch_ipc_rejects_unsupported_covariance_dimension_first`
+  covers uniform 9D and mixed 6D/9D Arrow covariance rows through the canonical
+  native batch route and requires the typed dimension error rather than the
+  missing-variance error.
+- Existing exact-composition tests continue to prove that `run_od` prepares
+  once and is bitwise equal to `run_iod` followed by `refine`, including
+  persisted original/used astrometry and covariance.
+
+This is the canonical adaptation of the dimension-first correctness behavior
+accepted in `bf9f6e9c`: the former one-group entry guards now live at the shared
+Rust-owned preparation boundary used by the final batch architecture.

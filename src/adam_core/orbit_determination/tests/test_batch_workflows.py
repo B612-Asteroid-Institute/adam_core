@@ -7,9 +7,11 @@ import numpy as np
 import pytest
 import quivr as qv
 
+from adam_core import _rust_native
 from adam_core._rust.arrow import pa
 from adam_core.coordinates.covariances import CoordinateCovariances
 from adam_core.observations import Associations, SourceCatalog
+from adam_core.orbits.arrow_bridge import coordinates_to_ipc
 from adam_core.time import Timestamp
 
 from .. import (
@@ -30,6 +32,7 @@ from .. import (
     run_iod,
     run_od,
 )
+from ..workflows import _native_batch_inputs
 from .conftest import PureIodOrbit
 from .test_differential_correction import TwoBodyPropagator
 
@@ -213,6 +216,48 @@ def _assert_non_roundtripping_values_in_provenance(orbits: FittedOrbits) -> None
     )
     assert value["refinement"]["psd_floor_frac"].hex() == (1e-30).hex()
     assert orbits.provenance.provenance_fingerprint[0].as_py()
+
+
+@pytest.mark.parametrize("mixed", [False, True], ids=["9d", "mixed-6d-9d"])
+def test_batch_ipc_rejects_unsupported_covariance_dimension_first(
+    pure_iod_orbit: PureIodOrbit, mixed: bool
+) -> None:
+    """The native batch route rejects extended storage before its 6D stride."""
+
+    source = _two_body_source(pure_iod_orbit)
+    associations = Associations.from_kwargs(
+        detection_id=source.id, object_id=["group-1"] * len(source)
+    )
+    observations, source_ipc, associations_ipc, _, observers_ipc = _native_batch_inputs(
+        source, associations
+    )
+    coordinate_covariance = observations.coordinates.covariance.to_matrix()
+    full = np.full((len(observations), 9, 9), np.nan)
+    full[:, :6, :6] = coordinate_covariance
+    if mixed:
+        rows = [row.reshape(-1).tolist() for row in coordinate_covariance]
+        full[-1, 6, 6] = 1.0
+        rows[-1] = full[-1].reshape(-1).tolist()
+    else:
+        full[:, 6, 6] = 1.0
+        rows = [row.reshape(-1).tolist() for row in full]
+    covariance = CoordinateCovariances.from_kwargs(
+        values=pa.array(rows, type=pa.large_list(pa.float64()))
+    )
+    invalid_coordinates = observations.coordinates.set_column("covariance", covariance)
+
+    with pytest.raises(ValueError) as error:
+        _rust_native.run_od_batch_ipc(
+            None,
+            source_ipc,
+            associations_ipc,
+            coordinates_to_ipc(invalid_coordinates, "spherical"),
+            observers_ipc,
+            _config()._native,
+        )
+    message = str(error.value)
+    assert "observation covariance must have dimension 6, got 9" in message
+    assert "finite, positive lon/lat variance" not in message
 
 
 def test_non_roundtripping_config_floats_are_exact_across_every_route(

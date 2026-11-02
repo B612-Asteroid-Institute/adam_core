@@ -25,6 +25,7 @@ pub fn prepare_observations(
     config: &OdConfig,
     provider: &dyn TimeScaleProvider,
 ) -> PropagationResultValue<PreparedObservations> {
+    crate::propagation::validate_od_covariance_dimension(observed)?;
     config
         .validate()
         .map_err(crate::PropagationError::InvalidRequest)?;
@@ -146,7 +147,7 @@ mod tests {
     use crate::{
         CoordinateRepresentation, CoordinateValues, CovarianceBatch, CovarianceUnits, Epoch,
         NonGravitationalParametersRow, ObjectId, ObservatoryCode, OrbitId, OriginArray, OriginId,
-        TimeArray, TimeScale,
+        PropagationError, TimeArray, TimeScale,
     };
 
     const TRUTH_STATE: [f64; 6] = [1.2, 0.1, 0.05, -0.002, 0.016, 0.001];
@@ -303,8 +304,23 @@ mod tests {
         .unwrap()
     }
 
+    fn unsupported_covariance_observations() -> CoordinateBatch {
+        let mut observed = synthetic_observations();
+        let units = observed.covariance.as_ref().unwrap().units.clone();
+        let mut covariance = vec![f64::NAN; NUM_OBS * 81];
+        for row in 0..NUM_OBS {
+            covariance[row * 81 + 10] = SIGMA_DEG * SIGMA_DEG;
+            covariance[row * 81 + 20] = SIGMA_DEG * SIGMA_DEG;
+        }
+        observed.covariance = Some(
+            CovarianceBatch::new(NUM_OBS, 9, covariance, units)
+                .expect("test 9D covariance is structurally valid"),
+        );
+        observed
+    }
+
     fn pipeline_config(caps: &[usize]) -> OdConfig {
-        let definitions = caps
+        let definitions: Vec<ObservationTransform> = caps
             .iter()
             .map(
                 |&effective_observation_cap| ObservationTransform::NightlyBatchDeweighting {
@@ -312,8 +328,11 @@ mod tests {
                 },
             )
             .collect();
-        let pipeline =
-            ObservationPipeline::bind_explicit(definitions, &ResourceBindings::new()).unwrap();
+        let pipeline = if definitions.is_empty() {
+            ObservationPipeline::as_supplied()
+        } else {
+            ObservationPipeline::bind_explicit(definitions, &ResourceBindings::new()).unwrap()
+        };
         let iod = IodRunConfig::new(
             IodConfig {
                 max_triplets: Some(3),
@@ -428,6 +447,54 @@ mod tests {
             let mut identity = self.inner.backend();
             identity.name = format!("test.stage.{}", self.stage);
             identity
+        }
+    }
+
+    #[test]
+    fn complete_od_rejects_covariance_dimension_before_pipeline_interpretation() {
+        let observed = unsupported_covariance_observations();
+        let observers = dense_observers();
+        let (obs_code, band, astcat) = metadata();
+        let propagator = TwoBodyPropagator::default();
+        let options = ephemeris_options();
+        let predictor = PropagatorPredictor {
+            propagator: &propagator,
+            options: &options,
+            provider: &IdentityTimeProvider,
+            translation_provider: &ZeroTranslationProvider,
+        };
+        let expected = PropagationError::InvalidRequest(
+            "orbit determination observation covariance must have dimension 6, got 9".to_string(),
+        );
+
+        // Empty is the explicit as-supplied pipeline; cap=2 is model-changing.
+        for caps in [Vec::new(), vec![2]] {
+            let config = pipeline_config(&caps);
+            let prepare_error = prepare_observations(
+                &observed,
+                &obs_code,
+                &band,
+                &astcat,
+                &config,
+                &IdentityTimeProvider,
+            )
+            .expect_err("preparation must reject 9D observation covariance");
+            assert_eq!(prepare_error, expected);
+
+            let run_error = run_od_with_predictors(
+                &predictor,
+                &predictor,
+                &observed,
+                &observers,
+                &obs_code,
+                &band,
+                &astcat,
+                &config,
+                &IdentityTimeProvider,
+                &ZeroTranslationProvider,
+            )
+            .expect_err("complete OD must reject 9D observation covariance");
+            assert_eq!(run_error, expected);
         }
     }
 

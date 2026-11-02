@@ -46,6 +46,7 @@ pub use external::{
     EXTERNAL_PROPAGATOR_V2_MIN_SIZE, EXTERNAL_PROPAGATOR_V2_STM_SIZE,
     PROPAGATE_REQUEST_V2_MIN_SIZE, PROPAGATE_STM_REQUEST_V2_MIN_SIZE,
 };
+pub(crate) use od::validate_od_covariance_dimension;
 #[allow(deprecated)]
 pub use od::{
     candidate_orbit_batch, evaluate_orbit, evaluate_orbit_barycentric,

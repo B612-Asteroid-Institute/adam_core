@@ -21,6 +21,7 @@ from .._native_dispatch import (
     _warn_if_analytic_jacobian_mismatches,
     native_propagator,
 )
+from ..config import JacobianName
 from ..evaluate import OrbitDeterminationObservations
 from ..fitted_orbits import FittedOrbitMembers, FittedOrbits
 
@@ -82,12 +83,6 @@ def _fit_settings(
         "max_iterations": kwargs.get("max_iterations", 100),
         "max_nfev": kwargs.get("max_nfev"),
     }
-    # Private bridge for the deprecated LeastSquares facade: Rust retains only
-    # the angular covariance block before any validation or whitening.
-    if "_legacy_angular_only_covariance" in kwargs:
-        settings["_legacy_angular_only_covariance"] = kwargs[
-            "_legacy_angular_only_covariance"
-        ]
     return settings
 
 
@@ -587,7 +582,7 @@ def fit_least_squares(
     observations: OrbitDeterminationObservations,
     propagator: Propagator,
     ignore: Optional[List[str]] = None,
-    jacobian: str = OD_DEFAULTS["fit"]["jacobian"],
+    jacobian: JacobianName = OD_DEFAULTS["fit"]["jacobian"],
     validate_covariance: bool = OD_DEFAULTS["fit"]["validate_covariance"],
     loss: LossType = OD_DEFAULTS["fit"]["loss"],
     f_scale: float = HUBER_F_SCALE_DEFAULT,
@@ -731,13 +726,7 @@ def fit_least_squares(
     weak-direction consistency check probes the robust cost instead of chi2.
     """
     assert len(orbit) == 1, "Only one orbit can be differentially corrected"
-    legacy_angular_only = kwargs.get("_legacy_angular_only_covariance") is True
-    if (
-        not legacy_angular_only
-        and np.isfinite(
-            observations.coordinates.rho.to_numpy(zero_copy_only=False)
-        ).any()
-    ):
+    if np.isfinite(observations.coordinates.rho.to_numpy(zero_copy_only=False)).any():
         raise ValueError("orbit determination requires angular observations")
     _validate_loss(loss, f_scale)
     if jacobian not in ("auto", "analytic", "propagator", "central", "2-point"):
