@@ -184,6 +184,7 @@ Submodules
    adam_core.orbit_determination.fitted_orbits
    adam_core.orbit_determination.observation_pipeline
    adam_core.orbit_determination.profiles
+   adam_core.orbit_determination.resources
    adam_core.orbit_determination.workflows
 """,
         encoding="utf-8",

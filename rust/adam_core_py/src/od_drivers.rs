@@ -3995,17 +3995,30 @@ fn benchmark_od_fit_ipc<'py>(
                 )
             };
             let correctness = run_once()?;
-            if !correctness.fit.state.iter().all(|value| value.is_finite())
-                || !correctness
-                    .fit
-                    .covariance
-                    .iter()
-                    .all(|value| value.is_finite())
-                || correctness.fit.evaluation.num_obs != n
+            let nonfinite_state = correctness
+                .fit
+                .state
+                .iter()
+                .position(|value| !value.is_finite());
+            let nonfinite_covariance = correctness
+                .fit
+                .covariance
+                .iter()
+                .position(|value| !value.is_finite());
+            let expected_num_obs = n.checked_sub(correctness.n_rejected);
+            if nonfinite_state.is_some()
+                || nonfinite_covariance.is_some()
+                || expected_num_obs != Some(correctness.fit.evaluation.num_obs)
             {
                 return Err(adam_core_rs_coords::propagation::PropagationError::InvalidRequest(
-                    "benchmark correctness run produced a non-finite fit or wrong observation count"
-                        .to_string(),
+                    format!(
+                        "benchmark {} correctness run is invalid: nonfinite_state={nonfinite_state:?}, \
+                         nonfinite_covariance={nonfinite_covariance:?}, num_obs={}, input_num_obs={n}, \
+                         n_rejected={}, expected_num_obs={expected_num_obs:?}",
+                        operation.as_str(),
+                        correctness.fit.evaluation.num_obs,
+                        correctness.n_rejected,
+                    ),
                 ));
             }
             let mut samples = Vec::with_capacity(trials);
