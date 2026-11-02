@@ -1,12 +1,15 @@
 import uuid
 from typing import List, Literal, Optional, Tuple
 
+import numpy as np
 import pyarrow as pa
 import pyarrow.compute as pc
 import quivr as qv
+from typing_extensions import Self
 
 from ..coordinates.cartesian import CartesianCoordinates
 from ..coordinates.residuals import Residuals
+from ..coordinates.spherical import SphericalCoordinates
 from ..orbits.orbits import Orbits
 
 
@@ -104,6 +107,42 @@ def drop_duplicate_orbits(
     return filtered, filtered_orbit_members
 
 
+class OdProvenance(qv.Table):
+    """
+    Compact provenance of one fitted orbit: what produced it and how.
+
+    Written by `~adam_core.orbit_determination.run_od` (every field) and by
+    the IOD stage (``iod_*``); null for orbits produced by other entry points.
+    Configurations and model descriptors are compact JSON; model tables are
+    identified by content hash, not copied.
+    """
+
+    #: adam-core version that produced the orbit.
+    adam_core_version = qv.LargeStringColumn(nullable=True)
+    #: ``"fused"`` (one native ``run_od`` crossing) or ``"composed"``.
+    route = qv.LargeStringColumn(nullable=True)
+    #: The `OrbitFitter` class (``module.qualname``).
+    fitter = qv.LargeStringColumn(nullable=True)
+    #: Backend of the IOD stage and of the refinement (``name version``; a
+    #: propagator without a `NativeBackend` is ``python:module.qualname``).
+    iod_backend = qv.LargeStringColumn(nullable=True)
+    refinement_backend = qv.LargeStringColumn(nullable=True)
+    #: IOD, refinement and solver settings (JSON), when the fitter exposes
+    #: them (`NativeOrbitFitter.native_settings`).
+    settings = qv.LargeStringColumn(nullable=True)
+    #: Observation models applied at fit time (JSON list of descriptors:
+    #: type, scalar parameters, SHA-256 of each table).
+    models = qv.LargeStringColumn(nullable=True)
+    #: Whether the IOD found another converged solution, distinct from the
+    #: accepted one yet fitting about as well, and how many.
+    iod_ambiguous = qv.BooleanColumn(nullable=True)
+    iod_alternatives = qv.Int64Column(nullable=True)
+    #: Observations rejected as outliers by the final fit, and their
+    #: fraction of the observations it was given.
+    num_rejected = qv.Int64Column(nullable=True)
+    rejected_fraction = qv.Float64Column(nullable=True)
+
+
 class FittedOrbits(qv.Table):
 
     orbit_id = qv.LargeStringColumn(default=lambda: uuid.uuid4().hex)
@@ -116,6 +155,8 @@ class FittedOrbits(qv.Table):
     iterations = qv.Int64Column(nullable=True)
     success = qv.BooleanColumn(nullable=True)
     status_code = qv.Int64Column(nullable=True)
+    #: Compact provenance (`OdProvenance`); null outside `run_od` and IOD.
+    provenance = OdProvenance.as_column(nullable=True)
 
     def to_orbits(self) -> Orbits:
         """
@@ -134,10 +175,128 @@ class FittedOrbits(qv.Table):
         )
 
 
+class ObservationAstrometry(qv.Table):
+    """
+    Snapshot of one observation's astrometric position and uncertainty.
+
+    `FittedOrbitMembers` embeds two of these per observation: the astrometry as
+    ORIGINALLY supplied to orbit determination (``original_astrometry``) and
+    the astrometry actually USED by the fitter (``used_astrometry``) after any
+    observation models (star-catalog debiasing, uncertainty inflation,
+    deweighting) were applied at fit time by
+    `~adam_core.orbit_determination.run_od`. Values are embedded directly so
+    that fitted orbit members are self-contained provenance: the observations
+    the fit was based on can be inspected (and the model's effect audited)
+    without re-joining to the input observations or re-running the models.
+
+    The columns are:
+
+    ``lon``, ``lat`` : float, degrees
+        Observed RA / Dec, in the same convention as
+        `OrbitDeterminationObservations.coordinates` (lon = RA, lat = Dec).
+    ``sigma_lon``, ``sigma_lat`` : float, degrees
+        1-sigma uncertainties, the square roots of the lon / lat covariance
+        diagonal. ``sigma_lon`` is the uncertainty of RA itself (NOT
+        cos(dec)-corrected), matching the `SphericalCoordinates` covariance
+        convention. NaN where the covariance is not available.
+    ``cov_lonlat`` : float, degrees^2
+        RA/Dec covariance cross-term. NaN where not available.
+
+    This table deliberately carries no attributes (e.g. a frame): members with
+    and without provenance therefore concatenate freely, which a nested
+    `SphericalCoordinates` column would not allow.
+    """
+
+    lon = qv.Float64Column(nullable=True)
+    lat = qv.Float64Column(nullable=True)
+    sigma_lon = qv.Float64Column(nullable=True)
+    sigma_lat = qv.Float64Column(nullable=True)
+    cov_lonlat = qv.Float64Column(nullable=True)
+
+    @classmethod
+    def from_spherical(cls, coordinates: SphericalCoordinates) -> Self:
+        """
+        Snapshot the lon / lat position and RA/Dec covariance block of
+        spherical coordinates.
+
+        Parameters
+        ----------
+        coordinates : `~adam_core.coordinates.SphericalCoordinates` (N)
+            Coordinates to snapshot, typically
+            ``OrbitDeterminationObservations.coordinates``.
+
+        Returns
+        -------
+        astrometry : `ObservationAstrometry` (N)
+            Position and 1-sigma uncertainties in degrees, in input order.
+        """
+        if len(coordinates) == 0:
+            return cls.empty()
+
+        from adam_core import _rust_native
+
+        covariances = np.ascontiguousarray(
+            coordinates.covariance.to_matrix(), dtype=np.float64
+        )
+        sigma_lon = _rust_native.sqrt_values_numpy(
+            np.ascontiguousarray(covariances[:, 1, 1])
+        )
+        sigma_lat = _rust_native.sqrt_values_numpy(
+            np.ascontiguousarray(covariances[:, 2, 2])
+        )
+        return cls.from_kwargs(
+            lon=coordinates.lon,
+            lat=coordinates.lat,
+            sigma_lon=sigma_lon,
+            sigma_lat=sigma_lat,
+            cov_lonlat=covariances[:, 1, 2],
+        )
+
+
 class FittedOrbitMembers(qv.Table):
+    """
+    Per-observation record of an orbit fit.
+
+    Columns
+    -------
+    orbit_id, obs_id : str
+        Fitted orbit and observation identifiers (``obs_id`` matches
+        `OrbitDeterminationObservations.id`).
+    residuals : `~adam_core.coordinates.Residuals`, nullable
+        Observed-minus-computed residuals of the fitted orbit.
+    solution, outlier : bool, nullable
+        Whether the observation constrained the solution / was rejected.
+    weight : float, nullable
+        Effective weight of the observation in the solution, as reported by
+        the fitter: 0 for observations excluded from the fit, 1 for fully
+        weighted observations and, for a robust loss (e.g.
+        ``fit_least_squares(loss="huber")``), the smaller of the observation's
+        per-component iteratively-reweighted-least-squares weights when it
+        was downweighted. Null when the fitter does not report weights.
+    original_astrometry : `ObservationAstrometry`, nullable
+        Position and uncertainty of the observation as ORIGINALLY supplied.
+    used_astrometry : `ObservationAstrometry`, nullable
+        Position and uncertainty actually USED by the fitter, i.e. after the
+        observation models applied at fit time by
+        `~adam_core.orbit_determination.run_od`. Equal to
+        ``original_astrometry`` when no model changed the observation.
+    astcat : str, nullable
+        Star catalog the observation was reduced against (see
+        `OrbitDeterminationObservations.astcat`).
+
+    The provenance columns (``original_astrometry``, ``used_astrometry``,
+    ``astcat``) are populated by `run_od`. Fitters called directly leave them
+    null; members with and without provenance share one schema and can be
+    concatenated, and members serialized before these columns existed load
+    with the columns null.
+    """
 
     orbit_id = qv.LargeStringColumn()
     obs_id = qv.LargeStringColumn()
     residuals = Residuals.as_column(nullable=True)
     solution = qv.BooleanColumn(nullable=True)
     outlier = qv.BooleanColumn(nullable=True)
+    weight = qv.Float64Column(nullable=True)
+    original_astrometry = ObservationAstrometry.as_column(nullable=True)
+    used_astrometry = ObservationAstrometry.as_column(nullable=True)
+    astcat = qv.LargeStringColumn(nullable=True)

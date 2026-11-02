@@ -162,8 +162,55 @@ impl TwoBodyPropagator {
 impl Propagator for TwoBodyPropagator {
     type Shard = TwoBodyShard;
 
+    fn backend(&self) -> super::BackendIdentity {
+        super::BackendIdentity {
+            name: "adam_core.two_body".to_string(),
+            version: env!("CARGO_PKG_VERSION").to_string(),
+            two_body_dynamics: true,
+        }
+    }
+
     fn integration_time_scale(&self) -> TimeScale {
         TimeScale::Tdb
+    }
+
+    fn supports_stm(&self) -> bool {
+        true
+    }
+
+    /// Exact two-body STMs by forward-mode automatic differentiation of the
+    /// universal-variable propagation.
+    fn propagate_stm(
+        &self,
+        state: [f64; 6],
+        epoch_tdb: Epoch,
+        times_tdb: &[Epoch],
+    ) -> PropagationResultValue<Vec<super::StmRow>> {
+        use adam_core_rs_autodiff::{Dual, Scalar};
+        let mu = origin_mu_au3_day2(&crate::OriginId::from_code("SUN"))?;
+        Ok(times_tdb
+            .iter()
+            .map(|time| {
+                let propagated = crate::propagate::propagate_2body_row::<Dual<6>>(
+                    Dual::seed(state),
+                    Dual::from_f64(time.mjd() - epoch_tdb.mjd()),
+                    Dual::from_f64(mu),
+                    self.config.max_iter,
+                    self.config.tol,
+                );
+                let mut row = super::StmRow {
+                    state: std::array::from_fn(|k| propagated[k].re),
+                    stm: std::array::from_fn(|index| propagated[index / 6].du[index % 6]),
+                    valid: true,
+                };
+                row.valid = row
+                    .state
+                    .iter()
+                    .chain(row.stm.iter())
+                    .all(|v| v.is_finite());
+                row
+            })
+            .collect())
     }
 
     fn supports(&self, mode: CovariancePropagation) -> bool {

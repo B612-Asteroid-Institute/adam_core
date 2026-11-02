@@ -8,7 +8,10 @@
 
 mod diagnostics;
 mod ephemeris;
+mod external;
 mod od;
+mod od_ranging;
+mod od_refine;
 mod pipeline;
 mod request;
 #[cfg(test)]
@@ -24,15 +27,53 @@ pub use ephemeris::{
     EphemerisDiagnostics, EphemerisFailureCode, EphemerisOptions, EphemerisPhotometryOptions,
     EphemerisResult, EphemerisRowDiagnostic,
 };
+pub use external::{
+    two_body_reference, ExternalContext, ExternalPropagator, ExternalPropagatorV1,
+    OwnedExternalPropagator, PropagateRequestV1, PropagateStmV1, EXTERNAL_PROPAGATOR_ABI_VERSION,
+    EXTERNAL_PROPAGATOR_CAPSULE,
+};
+#[allow(deprecated)]
 pub use od::{
-    evaluate_orbit_barycentric, fit_orbit_least_squares_barycentric,
-    fit_orbit_least_squares_evaluated_barycentric, iod_fit_barycentric,
-    iod_fit_linkages_barycentric, od_fit_barycentric, vallado_least_squares_barycentric,
-    EvaluatedLeastSquaresFit, FitEvaluation, IodConfig, IodOutput, ObservationSelectionMethod,
-    OdConfig, OdMethod, OdOutput, ValladoConfig, ValladoIteration, ValladoResult, ValladoStatus,
-    INVALID_LIGHT_TIME_MESSAGE,
+    candidate_orbit_batch, evaluate_orbit, evaluate_orbit_barycentric,
+    fit_orbit_least_squares_barycentric, fit_orbit_least_squares_evaluated_barycentric, iod_fit,
+    iod_fit_barycentric, iod_fit_linkages_barycentric, od_fit_barycentric,
+    vallado_least_squares_barycentric, CorrectionConfig, EvaluatedLeastSquaresFit, FitEvaluation,
+    IodAcceptance, IodCandidate, IodConfig, IodOutput, IodResult, ObservationSelectionMethod,
+    OdConfig, OdMethod, OdOutput, OrbitGeometry, PrefitScope, SpanSearchConfig, ValladoConfig,
+    ValladoIteration, ValladoResult, ValladoStatus, VelocityMethod, INVALID_LIGHT_TIME_MESSAGE,
+    IOD_DEFAULT_MU, IOD_DEFAULT_SPEED_OF_LIGHT,
+};
+pub use od_ranging::{
+    admissible_rho_dot_interval, attributable, ranging_state, Attributable, RangingConfig,
+    RangingResult, RangingSample, RANGING_EARTH_MU,
+};
+pub use od_refine::{
+    cmc2003_fit_barycentric, fit_orbit_whitened_barycentric, full_od_barycentric,
+    iterative_fit_barycentric, max_outliers, refine_barycentric, run_iod_barycentric,
+    run_iod_linkages_barycentric, run_od_barycentric, symmetric_eigen_6x6, AstrometrySnapshot,
+    Cmc2003FitConfig, Cmc2003FitOutput, CovarianceValidation, FullOdConfig, FullOdOutput,
+    IterativeFitConfig, IterativeFitOutput, JacobianMethod, RefinedOutput, RefinementConfig,
+    RunOdOutput, WhitenedFitConfig, WhitenedFitOutput, DELTA_CHI2_WINDOW,
 };
 pub use pipeline::{OrbitRow, PropagationResult};
+
+/// The OD loops over a [`SphericalPredictor`](adapter::SphericalPredictor), the narrow prediction
+/// interface the stages are written against.
+///
+/// The supported stage contract is the `Propagator`-generic functions at the
+/// top of this module ([`run_iod_barycentric`], [`refine_barycentric`],
+/// [`run_od_barycentric`] and the fit and rejection loops' `*_barycentric`
+/// forms), which name the propagator each stage runs on. These adapter-level
+/// forms take an already-built predictor; they exist for language bindings
+/// that build the predictor themselves and are not a separate contract.
+pub mod adapter {
+    pub use super::od::{run_iod, PropagatorPredictor, SphericalPredictor};
+    pub use super::od_ranging::systematic_ranging_with;
+    pub use super::od_refine::{
+        cmc2003_fit_with, fit_orbit_whitened_with, full_od_with, iterative_fit_with, refine_with,
+        run_iod_corrected, run_iod_with, run_od_with, validate_fit_covariance_with,
+    };
+}
 pub use request::{
     CovariancePropagation, EpochOrder, EpochPolicy, PropagationInput, PropagationOptions,
     PropagationRequest,
@@ -91,8 +132,61 @@ impl From<SchemaError> for PropagationError {
     }
 }
 
+/// Who a [`Propagator`] is: recorded in orbit-determination provenance and
+/// used to decide which derivatives are exact for it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BackendIdentity {
+    /// Stable backend name (e.g. `adam_core.two_body`, `adam_assist`).
+    pub name: String,
+    /// Backend version (its crate or package version).
+    pub version: String,
+    /// Whether the backend integrates exactly the Kepler two-body problem, so
+    /// the analytic two-body Jacobian is its exact derivative.
+    pub two_body_dynamics: bool,
+}
+
+/// One propagated row with its state-transition matrix.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct StmRow {
+    /// Heliocentric ecliptic state at the target time.
+    pub state: [f64; 6],
+    /// Row-major `d state(t) / d state(epoch)`.
+    pub stm: [f64; 36],
+    pub valid: bool,
+}
+
 pub trait Propagator: Sync {
     type Shard: PropagatorShard;
+
+    /// Whether [`Propagator::propagate_stm`] is implemented: the backend
+    /// supplies exact derivatives of its own dynamics, which orbit
+    /// determination then uses (`JacobianMethod::Propagator`).
+    fn supports_stm(&self) -> bool {
+        false
+    }
+
+    /// One heliocentric (SUN) ecliptic state at `epoch_tdb`, propagated to
+    /// each of `times_tdb` (TDB) with its state-transition matrix.
+    fn propagate_stm(
+        &self,
+        _state: [f64; 6],
+        _epoch_tdb: crate::Epoch,
+        _times_tdb: &[crate::Epoch],
+    ) -> PropagationResultValue<Vec<StmRow>> {
+        Err(PropagationError::InvalidRequest(
+            "this propagator provides no state-transition matrices".to_string(),
+        ))
+    }
+
+    /// The backend's identity. The default names the implementing type with
+    /// an unknown version and no two-body declaration; backends override it.
+    fn backend(&self) -> BackendIdentity {
+        BackendIdentity {
+            name: std::any::type_name::<Self>().to_string(),
+            version: "unknown".to_string(),
+            two_body_dynamics: false,
+        }
+    }
 
     fn integration_time_scale(&self) -> TimeScale;
     fn supports(&self, mode: CovariancePropagation) -> bool;

@@ -1,0 +1,442 @@
+"""
+Outlier rejection with re-inclusion after Carpino, Milani & Chesley (2003).
+
+Carpino, Milani & Chesley (2003, Icarus 166, 248; "CMC2003") reject and
+re-include observations by testing each observation's post-fit residual
+against its EXPECTED residual covariance rather than against its reported
+uncertainty alone. The scheme is the one implemented in OrbFit
+(``src/propag/least_squares.f90`` ``reject_obs``, defaults in
+``lib/reject.def``) and used by NEODyS/AstDyS; this module ports it as an
+outlier treatment for adam_core's differential correction, selectable as
+``outlier_rejection="cmc2003"`` on `NativeOrbitFitter`.
+
+Algorithm (one pass; passes repeat until no observation changes state)
+----------------------------------------------------------------------
+1. Fit the currently selected observations (`fit_least_squares`), warm-started
+   from the previous pass.
+2. For every observation i, compute the whitened residual ``r_i`` (two
+   components, so ``|r_i|**2`` is the observation's chi2) and the covariance
+   of the fitted prediction projected onto its sky plane, ``P_i = J_i C J_i^T``,
+   with ``J_i`` the whitened observation Jacobian and ``C`` the fit
+   covariance. The expected residual covariance is ``I - P_i`` for an
+   observation INSIDE the fit (the fit absorbs part of its error) and
+   ``I + P_i`` for one OUTSIDE it; ``chi2_i = r_i^T (I -/+ P_i)^-1 r_i``.
+   The projection is OrbFit's linear ``A Gamma A^T`` in whitened units,
+   evaluated with central differences through the full propagator at the
+   fitted state. The selected rows of this same whitened Jacobian determine
+   ``C``; all rows are retained for rejection and recovery. ``jacobian``
+   controls optimizer steps only in this rejection loop. A row whose
+   statistic cannot be established never looks acceptable: a non-finite
+   statistic (NaN residual from a failed prediction, NaN Jacobian rows) is
+   ``+inf`` with the ``"non_finite_chi2"`` flag, and a singular expected
+   covariance is ``+inf`` with ``"singular_residual_covariance"`` unless
+   both residual components are exactly zero (then ``0``). ``+inf`` exceeds
+   every rejection threshold and no recovery threshold, so such a row is
+   rejected when selected (subject to the guards of step 4) and never
+   re-included; when the worst selected row is infinite the batch
+   threshold is infinite too, so that pass rejects exactly the infinite
+   rows.
+3. Re-include an excluded observation when ``chi2_i <= chi2_recover +
+   0.75 * fudge``; reject a selected one when ``chi2_i >= threshold`` and
+   ``chi2_i > chi2_reject + fudge``, where ``threshold`` is ``chi2_frac`` times
+   the worst selected chi2 (so only observations within a fraction of the
+   worst offender go in one pass) or the worst chi2 itself in
+   one-at-a-time mode (few observations, ``n_selected <= 6 * min_obs``, or
+   four passes with the same number of modifications). The small-sample
+   fudge ``400 * 3**(-n_selected)`` follows OrbFit's error-model form and is
+   negligible beyond ~8 observations.
+4. Guards: no observation is rejected when ``n <= min_obs``; the last
+   selected observation of an apparition (time-sorted groups split at gaps
+   longer than ``apparition_gap_days``) is never rejected; rejection stops
+   when the selected fraction would drop below
+   ``1 - max_rejected_fraction``.
+
+Every call starts with all observations selected, so decisions do not
+cascade across calls.
+
+The per-pass decision kernels (apparitions, expected residual covariance
+chi2, reject / re-include selection) run in the Rust backend
+(``adam_core_rs_coords::cmc2003``); the refit loop also runs in Rust.
+
+Constants are OrbFit's ``reject.def`` defaults: chi2_reject 8, chi2_recover 7,
+chi2_frac 0.25, at most 15 passes, at most 50% rejected, 180-day apparition
+gap, and a 5% eigenvalue floor on the expected residual covariance (whitened
+units) protecting against ``I - P_i`` losing positive definiteness.
+"""
+
+from __future__ import annotations
+
+import logging
+from dataclasses import dataclass
+from typing import Any
+
+import numpy as np
+import numpy.typing as npt
+
+from ..orbits.orbits import Orbits
+from ..propagator.propagator import Propagator
+from ._native_dispatch import (
+    _warn_if_analytic_jacobian_mismatches,
+    deprecated,
+    native_propagator,
+    native_work_unit,
+)
+from .differential_correction import (
+    _FUSED_LOOP_KWARGS,
+    _NATIVE_FIT_KWARGS,
+    HUBER_F_SCALE_DEFAULT,
+    OD_DEFAULTS,
+    LossType,
+    _emit_native_warnings,
+    _fit_settings,
+    _fitted_tables_from_native_output,
+    _native_problem,
+    _whiten_residual_pairs,
+)
+from .evaluate import OrbitDeterminationObservations
+from .fitted_orbits import FittedOrbitMembers, FittedOrbits
+
+logger = logging.getLogger(__name__)
+
+__all__ = [
+    "CMC2003_APPARITION_GAP_DAYS",
+    "CMC2003_CHI2_FRAC",
+    "CMC2003_CHI2_RECOVER",
+    "CMC2003_CHI2_REJECT",
+    "CMC2003_MAX_ITERATIONS",
+    "CMC2003_MAX_REJECTED_FRACTION",
+    "CMC2003_PSD_FLOOR_FRAC",
+    "CMC2003Fit",
+    "cmc2003_fit",
+    "cmc2003_fit_detailed",
+]
+
+# OrbFit lib/reject.def defaults
+# The values are Rust's `Cmc2003FitConfig::default()` (`OD_DEFAULTS`).
+CMC2003_CHI2_REJECT = OD_DEFAULTS["cmc2003"]["chi2_reject"]
+CMC2003_CHI2_RECOVER = OD_DEFAULTS["cmc2003"]["chi2_recover"]
+CMC2003_CHI2_FRAC = OD_DEFAULTS["cmc2003"]["chi2_frac"]
+CMC2003_MAX_ITERATIONS = OD_DEFAULTS["cmc2003"]["max_iterations"]
+CMC2003_MAX_REJECTED_FRACTION = OD_DEFAULTS["cmc2003"]["max_rejected_fraction"]
+CMC2003_APPARITION_GAP_DAYS = OD_DEFAULTS["cmc2003"]["apparition_gap_days"]
+# Eigenvalue floor on the expected residual covariance, as a fraction of the
+# (whitened, i.e. unit) observation variance.
+CMC2003_PSD_FLOOR_FRAC = OD_DEFAULTS["cmc2003"]["psd_floor_frac"]
+
+_N_PARAMETERS = 6
+# OrbFit: no rejection at all when n <= round(0.5 * n_params)
+_MIN_OBS = round(0.5 * _N_PARAMETERS)
+
+
+@dataclass(frozen=True)
+class CMC2003Fit:
+    """
+    Result of `cmc2003_fit_detailed`: the final fit, members for every input
+    observation, and run diagnostics.
+    """
+
+    #: Final fit to the selected observations (`FittedOrbits`, 1 row).
+    fitted_orbit: FittedOrbits
+    #: One row per input observation, in input order: residuals with respect
+    #: to the final orbit, ``outlier`` True for rejected observations,
+    #: ``solution`` True for selected ones, and the fit ``weight``.
+    fitted_orbit_members: FittedOrbitMembers
+    #: Number of fit passes performed.
+    n_iterations: int
+    #: Observations excluded from the final fit.
+    n_rejected: int
+    #: Re-inclusion events summed over all passes.
+    n_recovered: int
+    #: Diagnostic flags raised during the run (sorted, may be empty):
+    #: ``"too_few_observations"``, ``"max_iterations"``,
+    #: ``"max_rejected_fraction"``, ``"kept_last_in_apparition"``,
+    #: ``"psd_floor"``, ``"no_fit_covariance"``,
+    #: ``"singular_residual_covariance"``, ``"non_finite_chi2"``.
+    flags: tuple[str, ...]
+
+
+def _apparitions(
+    mjd: npt.NDArray[np.float64], gap_days: float
+) -> npt.NDArray[np.int64]:
+    """Apparition index per observation: time-sorted groups split at gaps
+    longer than ``gap_days``."""
+    from adam_core import _rust_native
+
+    return np.asarray(
+        _rust_native.cmc2003_apparitions_numpy(
+            np.ascontiguousarray(mjd, dtype=np.float64), float(gap_days)
+        ),
+        dtype=np.int64,
+    )
+
+
+def _expected_residual_chi2(
+    residuals: npt.NDArray[np.float64],
+    jacobian: npt.NDArray[np.float64],
+    covariance: npt.NDArray[np.float64] | None,
+    selected: npt.NDArray[np.bool_],
+    psd_floor_frac: float = CMC2003_PSD_FLOOR_FRAC,
+) -> tuple[npt.NDArray[np.float64], set[str]]:
+    """
+    Per-observation chi2 against the expected post-fit residual covariance.
+
+    Parameters
+    ----------
+    residuals : (N, 2)
+        Whitened (lon, lat) residual components of every observation with
+        respect to the fitted orbit.
+    jacobian : (2N, 6)
+        Jacobian of the whitened residual vector with respect to the fitted
+        state (rows 2i, 2i+1 belong to observation i).
+    covariance : (6, 6) or None
+        Fit covariance. None, or a non-finite matrix, is treated as zero
+        prediction uncertainty (chi2 reduces to the plain residual chi2) and
+        raises the ``"no_fit_covariance"`` flag.
+    selected : (N,) bool
+        Whether each observation is inside the current fit (``I - P``) or
+        outside it (``I + P``).
+    psd_floor_frac : float
+        Eigenvalue floor for the expected residual covariance in whitened
+        units.
+
+    Returns
+    -------
+    chi2 : (N,)
+        Expected-covariance chi2 per observation (non-negative). ``+inf``
+        where the statistic is non-finite (``"non_finite_chi2"``) or the
+        expected covariance is singular with a nonzero residual
+        (``"singular_residual_covariance"``); such rows are rejected when
+        selected and never recovered.
+    flags : set of str
+        Diagnostic flags raised while computing.
+    """
+    from adam_core import _rust_native
+
+    n = len(residuals)
+    covariance_array = (
+        None
+        if covariance is None
+        else np.ascontiguousarray(covariance, dtype=np.float64).reshape(6, 6)
+    )
+    chi2, flags = _rust_native.cmc2003_expected_residual_chi2_numpy(
+        np.ascontiguousarray(residuals, dtype=np.float64).reshape(n, 2),
+        np.ascontiguousarray(jacobian, dtype=np.float64).reshape(2 * n, 6),
+        covariance_array,
+        np.ascontiguousarray(selected, dtype=bool),
+        float(psd_floor_frac),
+    )
+    return np.asarray(chi2, dtype=np.float64), set(flags)
+
+
+def _cmc2003_select(
+    chi2: npt.NDArray[np.float64],
+    selected: npt.NDArray[np.bool_],
+    apparitions: npt.NDArray[np.int64],
+    *,
+    chi2_reject: float,
+    chi2_recover: float,
+    chi2_frac: float,
+    max_rejected_fraction: float,
+    one_at_a_time: bool,
+    min_obs: int = _MIN_OBS,
+) -> tuple[npt.NDArray[np.bool_], int, int, set[str]]:
+    """
+    One CMC2003 reject / re-include decision pass.
+
+    Returns the new selection mask, the number of rejections, the number of
+    re-inclusions and any diagnostic flags. See the module docstring for the
+    rules; ``one_at_a_time`` selects the single-worst-observation batch rule.
+    """
+    from adam_core import _rust_native
+
+    new_selected, n_rejected, n_recovered, flags = _rust_native.cmc2003_select_numpy(
+        np.ascontiguousarray(chi2, dtype=np.float64),
+        np.ascontiguousarray(selected, dtype=bool),
+        np.ascontiguousarray(apparitions, dtype=np.int64),
+        float(chi2_reject),
+        float(chi2_recover),
+        float(chi2_frac),
+        float(max_rejected_fraction),
+        bool(one_at_a_time),
+        int(min_obs),
+    )
+    return (
+        np.asarray(new_selected, dtype=bool),
+        int(n_rejected),
+        int(n_recovered),
+        set(flags),
+    )
+
+
+def _whitened_residuals(
+    members: FittedOrbitMembers, whiteners: npt.NDArray[np.float64]
+) -> npt.NDArray[np.float64]:
+    """(N, 2) whitened (lon, lat) residual components from fitted members."""
+    values = members.residuals.to_array()[:, 1:3]
+    return _whiten_residual_pairs(whiteners, values).reshape(-1, 2)
+
+
+def cmc2003_fit_detailed(
+    orbit: Orbits,
+    observations: OrbitDeterminationObservations,
+    propagator: Propagator,
+    *,
+    chi2_reject: float = CMC2003_CHI2_REJECT,
+    chi2_recover: float = CMC2003_CHI2_RECOVER,
+    chi2_frac: float = CMC2003_CHI2_FRAC,
+    max_iterations: int = CMC2003_MAX_ITERATIONS,
+    max_rejected_fraction: float = CMC2003_MAX_REJECTED_FRACTION,
+    apparition_gap_days: float = CMC2003_APPARITION_GAP_DAYS,
+    psd_floor_frac: float = CMC2003_PSD_FLOOR_FRAC,
+    loss: LossType = "linear",
+    f_scale: float = HUBER_F_SCALE_DEFAULT,
+    validate_covariance: bool = True,
+    **kwargs: Any,
+) -> CMC2003Fit:
+    """
+    Differentially correct an orbit with CMC2003 outlier rejection and
+    re-inclusion, returning the fit together with run diagnostics.
+
+    Parameters
+    ----------
+    orbit : `~adam_core.orbits.Orbits` (1)
+        Initial orbit (e.g. from IOD); its epoch is the fit epoch.
+    observations : `OrbitDeterminationObservations` (N)
+        Observations believed to belong to the object. All start selected.
+    propagator : `~adam_core.propagator.Propagator`
+        Propagator used by `fit_least_squares`.
+    chi2_reject, chi2_recover : float
+        Hysteresis thresholds on the expected-covariance chi2 (OrbFit
+        defaults 8 and 7).
+    chi2_frac : float
+        Batch rule: only selected observations with chi2 within this fraction
+        of the worst offender are rejected in one pass (0.25).
+    max_iterations : int
+        Maximum number of fit passes (15). If reached, a final fit to the
+        final selection is performed and ``"max_iterations"`` is flagged.
+    max_rejected_fraction : float
+        Never reject more than this fraction of the observations (0.5).
+    apparition_gap_days : float
+        Gap splitting apparitions; the last selected observation of an
+        apparition is never rejected (180 days).
+    psd_floor_frac : float
+        Eigenvalue floor on the expected residual covariance in whitened
+        units (0.05).
+    loss, f_scale : see `fit_least_squares`
+        Loss used by every fit pass. The default ``"linear"`` gives the
+        weighted least-squares covariance assumed by CMC2003. ``"huber"``
+        remains available as a heuristic combination: its robust-cost
+        covariance does not establish calibrated CMC rejection statistics.
+    validate_covariance : bool
+        Check the full-predictor covariance against a 1-sigma weak-direction
+        displacement on every pass; warn if it disagrees. Disabling this
+        diagnostic does not change the central-difference finalization.
+    **kwargs
+        Solver settings for `fit_least_squares` (e.g. ``jacobian``,
+        ``max_nfev``). ``jacobian`` controls optimizer steps; covariance and
+        rejection always share a central-difference Jacobian through the
+        full predictor, including light-time handling. This finalization
+        costs twelve candidate predictions per pass, batched where supported,
+        outside the solver evaluation budget. ``ignore`` is managed by this
+        function and must not be passed.
+
+    Returns
+    -------
+    result : `CMC2003Fit`
+        Final fit, members for all N observations, and diagnostics.
+
+    Raises
+    ------
+    ValueError
+        If ``observations`` is empty or ``ignore`` is passed in ``kwargs``.
+    """
+    n = len(observations)
+    if n == 0:
+        raise ValueError("cmc2003_fit requires at least one observation")
+    if "ignore" in kwargs:
+        raise ValueError("ignore is managed by cmc2003_fit and cannot be passed")
+    assert len(orbit) == 1, "Only one orbit can be fitted"
+    unsupported = set(kwargs) - _FUSED_LOOP_KWARGS - _NATIVE_FIT_KWARGS
+    if unsupported:
+        raise ValueError(
+            "cmc2003_fit runs the Rust rejection loop and accepts only the fit "
+            "settings jacobian, xtol, ftol, gtol, max_nfev; got "
+            + ", ".join(f"{key}={kwargs[key]!r}" for key in sorted(unsupported))
+        )
+    fit_settings = _fit_settings(
+        loss,
+        f_scale,
+        kwargs.get("jacobian", OD_DEFAULTS["fit"]["jacobian"]),
+        validate_covariance,
+        kwargs,
+    )
+    _warn_if_analytic_jacobian_mismatches(propagator, fit_settings["jacobian"])
+    loop_settings = dict(
+        chi2_reject=chi2_reject,
+        chi2_recover=chi2_recover,
+        chi2_frac=chi2_frac,
+        max_iterations=max_iterations,
+        max_rejected_fraction=max_rejected_fraction,
+        apparition_gap_days=apparition_gap_days,
+        psd_floor_frac=psd_floor_frac,
+    )
+
+    # Rust-backed propagators run the whole CMC2003 loop in one crossing
+    # (``cmc2003_fit`` work unit); every other propagator runs the same Rust
+    # loop through the callback route. The facade only wraps the final pass.
+    fused = native_work_unit(propagator, "cmc2003_fit")
+    if fused is not None:
+        output = fused(orbit, observations, fit_settings=fit_settings, **loop_settings)
+    else:
+        from adam_core import _rust_native
+
+        output = _rust_native.cmc2003_fit_ipc(
+            native_propagator(propagator),
+            *_native_problem(orbit, observations),
+            fit_settings=fit_settings,
+            **loop_settings,
+        )
+    _emit_native_warnings(output)
+    fitted_orbit, fitted_orbit_members = _fitted_tables_from_native_output(
+        orbit, observations, output, np.asarray(output["weights"], dtype=np.float64)
+    )
+    return CMC2003Fit(
+        fitted_orbit=fitted_orbit,
+        fitted_orbit_members=fitted_orbit_members,
+        n_iterations=int(output["n_iterations"]),
+        n_rejected=int(output["n_rejected"]),
+        n_recovered=int(output["n_recovered"]),
+        flags=tuple(sorted(output["flags"])),
+    )
+
+
+def _cmc2003_fit(
+    orbit: Orbits,
+    observations: OrbitDeterminationObservations,
+    propagator: Propagator,
+    **kwargs: Any,
+) -> tuple[FittedOrbits, FittedOrbitMembers]:
+    """
+    Differentially correct an orbit with CMC2003 outlier rejection and
+    re-inclusion.
+
+    Convenience wrapper around `cmc2003_fit_detailed` returning only the
+    fitted orbit and members (rejected observations have ``outlier`` True).
+    All keyword arguments are forwarded; see `cmc2003_fit_detailed`.
+
+    Returns
+    -------
+    fitted_orbit : `FittedOrbits` (1)
+    fitted_orbit_members : `FittedOrbitMembers` (N)
+    """
+    result = cmc2003_fit_detailed(orbit, observations, propagator, **kwargs)
+    return result.fitted_orbit, result.fitted_orbit_members
+
+
+@deprecated(
+    _cmc2003_fit,
+    "refine(orbit, observations, propagator) (rejection='cmc2003'), or "
+    "cmc2003_fit_detailed for the loop diagnostics",
+)
+def cmc2003_fit(*args, **kwargs):  # pragma: no cover - replaced by the alias
+    """Deprecated alias of `_cmc2003_fit`."""

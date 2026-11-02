@@ -11,8 +11,6 @@ from ..evaluate import OrbitDeterminationObservations
 from ..fitted_orbits import FittedOrbitMembers, FittedOrbits
 from ..od import od
 
-ASSISTPropagator = pytest.importorskip("adam_assist").ASSISTPropagator
-
 
 @pytest.fixture
 def real_data():
@@ -62,6 +60,7 @@ def real_data():
 
 
 def test_od(real_data):
+    ASSISTPropagator = pytest.importorskip("adam_assist").ASSISTPropagator
     starting_orbit, observations = real_data
 
     # Run the orbit determination
@@ -87,60 +86,72 @@ def test_od(real_data):
     assert od_orbit.success[0]
 
 
-def test_od_dispatches_to_native_work_unit(real_data):
-    """The public `od` runs the whole differential-correction loop behind one
-    Rust crossing when the propagator exposes the fused `od_fit` work unit:
-    outputs are bit-identical to the direct native call."""
-    starting_orbit, observations = real_data
+def test_od_is_refine_with_worst_residual_rejection():
+    """The deprecated `od` is a shim over the native refinement stage: its
+    output is `refine(..., rejection="worst_residual")` with the legacy
+    rejection settings, and its finite-difference knobs change nothing."""
+    from ..od_orchestration import refine
+    from .test_differential_correction import (
+        TwoBodyPropagator,
+        make_initial_guess,
+        make_synthetic_observations,
+    )
 
-    od_orbit, od_orbit_members = od(
-        orbit=starting_orbit,
-        observations=observations[:10],
-        propagator=ASSISTPropagator,
+    guess = make_initial_guess()
+    observations = make_synthetic_observations()
+    settings = dict(
         rchi2_threshold=10,
-        min_obs=3,
+        min_obs=5,
         min_arc_length=1.0,
         contamination_percentage=0.0,
-        delta=1e-6,
-        max_iter=20,
-        method="central",
-        propagator_kwargs={},
     )
-    direct = ASSISTPropagator().od_fit(
-        starting_orbit,
-        observations[:10],
-        rchi2_threshold=10,
-        min_obs=3,
-        min_arc_length=1.0,
-        contamination_percentage=0.0,
-        delta=1e-6,
-        max_iter=20,
-        method="central",
+    with pytest.warns(DeprecationWarning, match="od.od is deprecated"):
+        legacy, legacy_members = od(
+            FittedOrbits.from_kwargs(
+                orbit_id=guess.orbit_id,
+                object_id=guess.object_id,
+                coordinates=guess.coordinates,
+                arc_length=[0.0],
+                num_obs=[0],
+                chi2=[0.0],
+                reduced_chi2=[0.0],
+                iterations=[0],
+                success=[False],
+                status_code=[0],
+            ),
+            observations,
+            TwoBodyPropagator,
+            delta=1e-3,
+            max_iter=2,
+            method="finite",
+            **settings,
+        )
+    expected, expected_members = refine(
+        guess,
+        observations,
+        TwoBodyPropagator(),
+        rejection="worst_residual",
+        rejection_settings=settings,
     )
-    assert direct["found"]
     np.testing.assert_array_equal(
-        od_orbit.coordinates.values[0], np.asarray(direct["state"])
+        legacy.coordinates.values, expected.coordinates.values
     )
     np.testing.assert_array_equal(
-        od_orbit.coordinates.covariance.to_matrix()[0],
-        np.asarray(direct["covariance"]).reshape(6, 6),
+        legacy.coordinates.covariance.to_matrix(),
+        expected.coordinates.covariance.to_matrix(),
     )
-    assert od_orbit.chi2[0].as_py() == direct["chi2"]
-    assert od_orbit.reduced_chi2[0].as_py() == direct["reduced_chi2"]
-    assert od_orbit.num_obs[0].as_py() == direct["num_obs"]
-    assert od_orbit.iterations[0].as_py() == direct["iterations"]
-    assert od_orbit_members.outlier.to_pylist() == list(direct["outlier"])
-    np.testing.assert_array_equal(
-        od_orbit_members.residuals.to_array(),
-        np.asarray(direct["residual_values"]),
-    )
+    assert legacy.reduced_chi2.to_pylist() == expected.reduced_chi2.to_pylist()
+    assert legacy_members.outlier.to_pylist() == expected_members.outlier.to_pylist()
+    assert legacy.success[0].as_py()
 
 
 def test_od_method_validation_matches_legacy():
+    from .test_differential_correction import TwoBodyPropagator
+
     with pytest.raises(ValueError, match="method should be one of"):
         od(
             orbit=None,
             observations=None,
-            propagator=ASSISTPropagator,
+            propagator=TwoBodyPropagator,
             method="nope",
         )

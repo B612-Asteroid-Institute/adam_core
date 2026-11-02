@@ -23,6 +23,7 @@ from __future__ import annotations
 import pyarrow as pa
 
 from adam_core import _rust_native as _rn
+from adam_core._rust.arrow import contiguous_record_batch
 from adam_core._rust.arrow import stamp_adam_core_metadata as _stamp_adam_core_metadata
 from adam_core._rust.arrow import to_quivr_metadata as _to_quivr_metadata
 from adam_core.observers import Observers
@@ -136,15 +137,11 @@ def _to_record_batch(
     scale: str,
     schema_name: str,
 ) -> pa.RecordBatch:
-    """Stamp one quivr table and expose its combined chunks as a RecordBatch."""
+    """Stamp one quivr table and expose it as a single contiguous RecordBatch."""
     stamped = _stamp_adam_core_metadata(
         table, representation, frame, scale, schema_name
     )
-    arrays = [
-        column.chunk(0) if column.num_chunks == 1 else column.combine_chunks()
-        for column in stamped.columns
-    ]
-    return pa.RecordBatch.from_arrays(arrays, schema=stamped.schema)
+    return contiguous_record_batch(stamped)
 
 
 def orbits_to_record_batch(orbits: Orbits) -> pa.RecordBatch:

@@ -295,6 +295,28 @@ def test_unrelated_lock_guard_allows_removals_but_rejects_added_versions() -> No
         )
 
 
+def test_lock_guard_aligns_spicekit_only_to_the_core_lock() -> None:
+    core_versions = develop_downstream_adam_assist._locked_versions(
+        develop_downstream_adam_assist._locked_packages(ROOT / "Cargo.lock")
+    )
+    (spicekit_version,) = core_versions["spicekit"]
+    before = [_package("spicekit", "0.2.2"), _package("retained", "1.0.0")]
+    aligned = [
+        _package("spicekit", spicekit_version),
+        _package("retained", "1.0.0"),
+    ]
+    develop_downstream_adam_assist._reject_unrelated_version_additions(before, aligned)
+
+    for changed in (
+        [_package("spicekit", "99.0.0"), _package("retained", "1.0.0")],
+        [*aligned, _package("retained", "2.0.0")],
+    ):
+        with pytest.raises(SystemExit, match="added unrelated package versions"):
+            develop_downstream_adam_assist._reject_unrelated_version_additions(
+                before, changed
+            )
+
+
 def test_downstream_prepare_restores_lock_and_config_on_failure(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -446,7 +468,7 @@ def test_rust_ci_is_reproducible_and_downstream_sources_are_exact() -> None:
     nightly = (workflows / "nightly-rust-benchmark.yml").read_text()
     release_matrix = (workflows / "release-candidate-wheel-matrix.yml").read_text()
     tier1 = (workflows / "tier1-dependent-smoke.yml").read_text()
-    assist_sha = "8eba85d28b6b266548f2b3892b90db3857763625"
+    assist_sha = "c06164a18e8d90d8bf83d7ab58e479dc97e1be41"
 
     assert "dtolnay/rust-toolchain@1.87.0" in normal_ci
     assert "components: rustfmt, clippy" in normal_ci

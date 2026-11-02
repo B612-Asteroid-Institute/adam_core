@@ -4,9 +4,9 @@ Set ``ADAM_ASSIST_RUST_REPO`` to an exact candidate checkout; otherwise a
 sibling ``../adam-assist`` checkout is used. The build receives a temporary
 Cargo patch for this checkout's public Core crates and refuses to replace an
 existing downstream Cargo config. Compatible Core patch releases temporarily
-refresh only those patched package entries in the dependent lock, then restore
-the original lock byte-for-byte after a local develop build. adam-core retains
-no GPL crate sources.
+refresh those patched package entries and align spicekit to Core's lock, then
+restore the original lock byte-for-byte after a local develop build. adam-core
+retains no GPL crate sources.
 """
 
 from __future__ import annotations
@@ -126,11 +126,20 @@ def _reject_unrelated_version_additions(
     retained_non_core = (before_versions.keys() & after_versions.keys()) - set(
         PUBLIC_CORE_CRATES
     )
-    additions = {
-        name: sorted(after_versions[name] - before_versions[name])
-        for name in retained_non_core
-        if after_versions[name] - before_versions[name]
-    }
+    # Core #229 requires spicekit's KernelPool (0.2.3). The native-OD ASSIST
+    # candidate predates that lock update; permit only the version already
+    # selected by Core, without allowing unrelated dependency upgrades.
+    core_versions = _locked_versions(_locked_packages(PROJECT_ROOT / "Cargo.lock"))
+    allowed_shared_versions = {"spicekit": core_versions["spicekit"]}
+    additions = {}
+    for name in retained_non_core:
+        unexpected = (
+            after_versions[name]
+            - before_versions[name]
+            - allowed_shared_versions.get(name, set())
+        )
+        if unexpected:
+            additions[name] = sorted(unexpected)
     if additions:
         raise SystemExit(
             "temporary Core lock refresh added unrelated package versions: "
@@ -161,7 +170,7 @@ def _refresh_core_lock(
     # One Cargo transaction unlocks all five mutually exact-pinned Core crates.
     # It may remove obsolete dependency versions or introduce new dependency
     # names required by Core (for example rawzip), but it may not add a version
-    # for any non-Core package name retained from the preliminary lock.
+    # for any retained non-Core package except Core's locked spicekit version.
     _reject_unrelated_version_additions(before, after)
     print(f"prepared downstream Cargo.lock for Core {version}")
 

@@ -34,7 +34,12 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: B612-Asteroid-Institute/adam-assist
-          ref: 8eba85d28b6b266548f2b3892b90db3857763625
+          # adam-assist 0.5.0 pairing + the native OD propagator (capsule and
+          # STMs) this branch's Rust API requires: branch
+          # pairing/adam-assist-0.5.0-native-od-core-pr217 (8c95fdf + 2 commits).
+          # Main's ASSIST pin lacks the OD capsule. The lock preparation below
+          # aligns this candidate's spicekit with the Core lock from #229.
+          ref: c06164a18e8d90d8bf83d7ab58e479dc97e1be41
           path: dependent
       - name: Build reference propagator in the Core test environment
         env:

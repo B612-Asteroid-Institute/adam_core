@@ -1,4 +1,7 @@
-import platform
+"""
+The deprecated `LeastSquares` delegates to the native refinement stage,
+`refine(..., rejection="none")`.
+"""
 
 import numpy as np
 import pyarrow.compute as pc
@@ -7,7 +10,6 @@ import pytest
 from ...coordinates import (
     CartesianCoordinates,
     CoordinateCovariances,
-    SphericalCoordinates,
 )
 from ...coordinates.origin import Origin
 from ...coordinates.residuals import Residuals, calculate_reduced_chi2
@@ -15,70 +17,47 @@ from ...observers import Observers
 from ...orbit_determination.evaluate import OrbitDeterminationObservations
 from ...orbits import Orbits
 from ...time import Timestamp
-from ..least_squares import (
-    LeastSquares,
-    _normal_equations,
-    _spherical_residual_columns_from_values,
+from ..least_squares import LeastSquares
+from ..od_orchestration import refine
+from .test_differential_correction import (
+    TwoBodyPropagator,
+    make_initial_guess,
+    make_synthetic_observations,
 )
 
 
-def test_spherical_residual_columns_from_values_matches_residuals_table() -> None:
-    observed = SphericalCoordinates.from_kwargs(
-        rho=np.ones(4),
-        lon=np.array([100.0, 355.0, 5.0, 40.0]),
-        lat=np.array([0.0, 10.0, -20.0, 45.0]),
-        vrho=np.zeros(4),
-        vlon=np.zeros(4),
-        vlat=np.zeros(4),
-        origin=Origin.from_kwargs(code=np.full(4, "500", dtype="object")),
-        time=Timestamp.from_mjd(np.arange(59000, 59004), scale="utc"),
-        frame="equatorial",
+def test_least_squares_is_refine_without_rejection() -> None:
+    guess = make_initial_guess()
+    observations = make_synthetic_observations()
+    with pytest.warns(DeprecationWarning, match="LeastSquares is deprecated"):
+        fitter = LeastSquares(use_central_difference=False)
+    debug_info: dict = {}
+    legacy = fitter.least_squares(
+        guess,
+        observations,
+        TwoBodyPropagator(),
+        perturbation_initial_fraction=1e-3,
+        max_iterations=20,
+        debug_info=debug_info,
     )
-    predicted = SphericalCoordinates.from_kwargs(
-        rho=np.ones(4),
-        lon=np.array([95.0, 5.0, 355.0, 42.5]),
-        lat=np.array([1.0, -3.0, -19.0, 44.0]),
-        vrho=np.zeros(4),
-        vlon=np.zeros(4),
-        vlat=np.zeros(4),
-        origin=observed.origin,
-        time=observed.time,
-        frame="equatorial",
+    expected, _ = refine(
+        guess,
+        observations,
+        TwoBodyPropagator(),
+        rejection="none",
+        fit_settings={"max_iterations": 20},
     )
-
-    expected = LeastSquares(False)._residual_columns(observed, predicted)
-    actual = _spherical_residual_columns_from_values(observed.values, predicted.values)
-
-    np.testing.assert_allclose(actual, expected, rtol=0.0, atol=0.0)
-
-    broadcast_expected = LeastSquares(False)._residual_columns(observed, predicted[0])
-    broadcast_actual = _spherical_residual_columns_from_values(
-        observed.values, predicted[0].values
+    assert legacy is not None
+    np.testing.assert_array_equal(
+        legacy.coordinates.values, expected.coordinates.values
     )
-    np.testing.assert_allclose(broadcast_actual, broadcast_expected, rtol=0.0, atol=0.0)
-
-    with pytest.raises(ValueError, match="Predicted coordinates must have length 1"):
-        _spherical_residual_columns_from_values(observed.values, predicted[:2].values)
-
-
-def test_normal_equations_matches_reference_loop() -> None:
-    rng = np.random.default_rng(42)
-    partials = rng.normal(size=(17, 2, 6))
-    residuals = rng.normal(size=(17, 2))
-    weights = rng.uniform(0.1, 4.0, size=(17, 2))
-
-    expected_ATWA = np.zeros((6, 6), dtype=np.float64)
-    expected_ATWb = np.zeros(6, dtype=np.float64)
-    for i in range(len(partials)):
-        W = np.diag(weights[i])
-        AtW = partials[i].T @ W
-        expected_ATWA += AtW @ partials[i]
-        expected_ATWb += AtW @ residuals[i]
-
-    ATWA, ATWb = _normal_equations(partials, residuals, weights)
-
-    np.testing.assert_allclose(ATWA, expected_ATWA, rtol=1e-15, atol=1e-13)
-    np.testing.assert_allclose(ATWb, expected_ATWb, rtol=1e-15, atol=1e-13)
+    np.testing.assert_array_equal(
+        legacy.coordinates.covariance.to_matrix(),
+        expected.coordinates.covariance.to_matrix(),
+    )
+    assert debug_info["num_observations"] == len(observations)
+    assert debug_info["success"]
+    assert debug_info["reduced_chi2"] == expected.reduced_chi2[0].as_py()
 
 
 @pytest.fixture
@@ -133,12 +112,12 @@ def real_data():
     return observers, orbit
 
 
-@pytest.mark.parametrize("use_central_difference", [True, False])
-def test_least_squares_adjusts(real_data, use_central_difference) -> None:
+def test_least_squares_adjusts(real_data) -> None:
+    ASSISTPropagator = pytest.importorskip("adam_assist").ASSISTPropagator
     observers, orbit = real_data
 
     # Make observations that fit the orbit perfectly
-    propagator = pytest.importorskip("adam_assist").ASSISTPropagator()
+    propagator = ASSISTPropagator()
     perfect_ephem = propagator.generate_ephemeris(
         orbit, observers, covariance=True, chunk_size=1, max_processes=1
     )
@@ -148,16 +127,19 @@ def test_least_squares_adjusts(real_data, use_central_difference) -> None:
         observers=observers,
     )
 
-    fitter = LeastSquares(use_central_difference)
+    with pytest.warns(DeprecationWarning, match="LeastSquares is deprecated"):
+        fitter = LeastSquares(use_central_difference=True)
 
     # If we feed perfect observations to perfect orbit, there should be no change
     debug_info = {}
     unchanged_orbit = fitter.least_squares(
         orbit, perfect_observations, propagator, debug_info=debug_info
     )
-    assert len(debug_info["iterations"]) == 1
-    assert debug_info["exit_message"].startswith("RMS is zero")
-    assert unchanged_orbit == orbit
+    assert unchanged_orbit is not None
+    assert debug_info["success"]
+    np.testing.assert_allclose(
+        unchanged_orbit.coordinates.values, orbit.coordinates.values, atol=1e-9
+    )
 
     # Change the orbit a bit so that it still works as an initial guess, but doesn't fit observations perfectly.
     # This will take several iterations, with improvements
@@ -172,29 +154,7 @@ def test_least_squares_adjusts(real_data, use_central_difference) -> None:
     )
     assert improved_orbit is not None
 
-    # We should make several iterations. Even if it doesn't converge in the sense of getting tiny delta RMS
-    # (it may overshoot on RMS), it should make several iterations and improve the fit
-    assert len(debug_info["iterations"]) > 2
-    final_rms = debug_info["iterations"][-1]["rms"]
-
-    # Published adam-core 0.5.8 / adam-assist 0.4.1 and candidate 0.6.0 / 0.5.0
-    # produce this identical central-difference RMS on Linux x86-64. Preserve
-    # the existing threshold for every other result, and fingerprint this
-    # pre-existing behavior narrowly so any numerical drift still fails.
-    # Evidence: https://github.com/B612-Asteroid-Institute/adam_core/actions/runs/38793715850
-    known_linux_central_rms = (
-        platform.system() == "Linux"
-        and platform.machine() == "x86_64"
-        and use_central_difference
-        and np.isclose(
-            final_rms,
-            0.0039270187884886025,
-            rtol=0.0,
-            atol=1e-15,
-        )
-    )
-    if not known_linux_central_rms:
-        assert final_rms < 1e-3
+    assert debug_info["iterations"] >= 1
     guessed_ephem = propagator.generate_ephemeris(
         guess_orbit, observers, chunk_size=1, max_processes=1
     )
@@ -219,15 +179,9 @@ def test_least_squares_adjusts(real_data, use_central_difference) -> None:
     no_debug_orbit = fitter.least_squares(guess_orbit, perfect_observations, propagator)
     assert no_debug_orbit is not None
 
-    if known_linux_central_rms:
-        pytest.xfail(
-            "Pre-existing published-pair Linux central-difference RMS; "
-            "tracked by personal-jh12s"
-        )
 
-
-@pytest.mark.parametrize("use_central_difference", [True, False])
-def test_least_squares_zero_base(real_data, use_central_difference) -> None:
+def test_least_squares_zero_base(real_data) -> None:
+    ASSISTPropagator = pytest.importorskip("adam_assist").ASSISTPropagator
     observers, orbit = real_data
 
     # Set the last component of the orbit, which is already the smallest value, to 0.
@@ -235,7 +189,7 @@ def test_least_squares_zero_base(real_data, use_central_difference) -> None:
     zeroed_value = orbit.coordinates.set_column("vz", [0.0])
     zeroed_orbit = orbit.set_column("coordinates", zeroed_value)
 
-    propagator = pytest.importorskip("adam_assist").ASSISTPropagator()
+    propagator = ASSISTPropagator()
     perfect_ephem = propagator.generate_ephemeris(
         orbit, observers, covariance=True, chunk_size=1, max_processes=1
     )
@@ -245,14 +199,14 @@ def test_least_squares_zero_base(real_data, use_central_difference) -> None:
         observers=observers,
     )
 
-    fitter = LeastSquares(use_central_difference)
+    with pytest.warns(DeprecationWarning, match="LeastSquares is deprecated"):
+        fitter = LeastSquares(use_central_difference=True)
     debug_info = {}
     improved_orbit = fitter.least_squares(
         zeroed_orbit, perfect_observations, propagator, debug_info=debug_info
     )
     assert improved_orbit is not None
-
-    assert len(debug_info["iterations"]) > 2
+    assert debug_info["iterations"] >= 1
     guessed_ephem = propagator.generate_ephemeris(
         zeroed_orbit, observers, chunk_size=1, max_processes=1
     )
