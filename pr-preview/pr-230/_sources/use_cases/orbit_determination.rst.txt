@@ -191,10 +191,8 @@ predictor-level building blocks under ``adam_core_rs_coords::od::algorithms``.
 Provenance
 ----------
 
-Canonical batch results fail closed on unknown or dirty native build identity
-and populate, where applicable:
+Canonical batch results populate, where applicable:
 
-* adam-core version and exact source commit;
 * ordered complete source/member, membership, and exact orbit-state fingerprints;
 * a validated provenance consistency digest covering route, complete
   configuration (including profile selection), input fingerprint, and every
@@ -216,8 +214,8 @@ Failure boundary
 ----------------
 
 Malformed configuration, resources, IDs/member mappings, unsupported provider
-capabilities, malformed provider responses, and unavailable build identity are
-invocation-fatal with no partial output. Only safely isolated scientific
+capabilities and malformed provider responses are invocation-fatal with no
+partial output. Only safely isolated scientific
 no-solution/refinement/evaluation failures continue per group. They are rows of
 ``OrbitDeterminationFailures`` with typed stage counters, not opaque JSON.
 ``orbit_id`` is present only for an emitted state; ``input_orbit_id`` separately

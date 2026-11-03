@@ -560,18 +560,13 @@
 <span class="k">class</span><span class="w"> </span><span class="nc">OdProvenance</span><span class="p">(</span><span class="n">qv</span><span class="o">.</span><span class="n">Table</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">"""Runtime provenance for a fitted orbit.</span>
 
-<span class="sd">    Canonical batch workflows populate clean adam-core identity,</span>
-<span class="sd">    ordered-input fingerprint, route, native provider metadata, stage</span>
+<span class="sd">    Canonical batch workflows populate the ordered-input fingerprint, route,</span>
+<span class="sd">    native provider metadata, stage</span>
 <span class="sd">    diagnostics, complete canonical Rust configuration, and rejection counts.</span>
 <span class="sd">    Rows produced by lower-level numerical kernels may leave fields null.</span>
 <span class="sd">    Resource paths are never recorded.</span>
 <span class="sd">    """</span>
 
-    <span class="c1">#: adam-core version that produced the orbit.</span>
-    <span class="n">adam_core_version</span> <span class="o">=</span> <span class="n">qv</span><span class="o">.</span><span class="n">LargeStringColumn</span><span class="p">(</span><span class="n">nullable</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-    <span class="c1">#: Exact clean source commit embedded by the native build. Configured</span>
-    <span class="c1">#: workflows refuse dirty or unknown identities before work.</span>
-    <span class="n">adam_core_build</span> <span class="o">=</span> <span class="n">qv</span><span class="o">.</span><span class="n">LargeStringColumn</span><span class="p">(</span><span class="n">nullable</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
     <span class="c1">#: SHA-256 of the ordered caller table plus exact used-astrometry rows.</span>
     <span class="n">input_fingerprint</span> <span class="o">=</span> <span class="n">qv</span><span class="o">.</span><span class="n">LargeStringColumn</span><span class="p">(</span><span class="n">nullable</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
     <span class="c1">#: SHA-256 of the exact emitted orbit state/time/origin/covariance and</span>

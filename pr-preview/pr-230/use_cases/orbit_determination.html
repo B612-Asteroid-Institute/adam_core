@@ -626,10 +626,8 @@ predictor-level building blocks under <code class="docutils literal notranslate"
 </section>
 <section id="provenance">
 <h2>Provenance<a class="headerlink" href="#provenance" title="Link to this heading">¶</a></h2>
-<p>Canonical batch results fail closed on unknown or dirty native build identity
-and populate, where applicable:</p>
+<p>Canonical batch results populate, where applicable:</p>
 <ul class="simple">
-<li><p>adam-core version and exact source commit;</p></li>
 <li><p>ordered complete source/member, membership, and exact orbit-state fingerprints;</p></li>
 <li><p>a validated provenance consistency digest covering route, complete
 configuration (including profile selection), input fingerprint, and every
@@ -650,8 +648,8 @@ null.</p>
 <section id="failure-boundary">
 <h2>Failure boundary<a class="headerlink" href="#failure-boundary" title="Link to this heading">¶</a></h2>
 <p>Malformed configuration, resources, IDs/member mappings, unsupported provider
-capabilities, malformed provider responses, and unavailable build identity are
-invocation-fatal with no partial output. Only safely isolated scientific
+capabilities and malformed provider responses are invocation-fatal with no
+partial output. Only safely isolated scientific
 no-solution/refinement/evaluation failures continue per group. They are rows of
 <code class="docutils literal notranslate"><span class="pre">OrbitDeterminationFailures</span></code> with typed stage counters, not opaque JSON.
 <code class="docutils literal notranslate"><span class="pre">orbit_id</span></code> is present only for an emitted state; <code class="docutils literal notranslate"><span class="pre">input_orbit_id</span></code> separately

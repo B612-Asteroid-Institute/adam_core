@@ -563,8 +563,6 @@
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_provenance</span><span class="p">(</span><span class="n">value</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">OdProvenance</span><span class="p">:</span>
     <span class="k">return</span> <span class="n">OdProvenance</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
-        <span class="n">adam_core_version</span><span class="o">=</span><span class="p">[</span><span class="n">value</span><span class="p">[</span><span class="s2">"adam_core_version"</span><span class="p">]],</span>
-        <span class="n">adam_core_build</span><span class="o">=</span><span class="p">[</span><span class="n">value</span><span class="p">[</span><span class="s2">"adam_core_build"</span><span class="p">]],</span>
         <span class="n">input_fingerprint</span><span class="o">=</span><span class="p">[</span><span class="n">value</span><span class="p">[</span><span class="s2">"input_fingerprint"</span><span class="p">]],</span>
         <span class="n">state_fingerprint</span><span class="o">=</span><span class="p">[</span><span class="n">value</span><span class="p">[</span><span class="s2">"state_fingerprint"</span><span class="p">]],</span>
         <span class="n">provenance_fingerprint</span><span class="o">=</span><span class="p">[</span><span class="n">value</span><span class="p">[</span><span class="s2">"provenance_fingerprint"</span><span class="p">]],</span>
