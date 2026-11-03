@@ -12,13 +12,21 @@ fn function_section<'a>(source: &'a str, name: &str, next: &str) -> &'a str {
 #[test]
 fn binding_build_identity_comes_only_from_compiled_core() {
     let binding = include_str!("../src/lib.rs");
-    assert!(binding.contains("CoreBuildIdentity::compiled()"));
+    assert!(binding.contains("adam_core::build_identity()"));
     assert!(!binding.contains("env!(\"ADAM_CORE_BUILD_COMMIT\")"));
 
     let build = include_str!("../build.rs");
     assert!(!build.contains("rustc-env=ADAM_CORE_BUILD_COMMIT"));
     assert!(!build.contains("resolve_commit"));
     assert!(build.contains("validate_release_attestation(&repo, &commit)"));
+}
+
+#[test]
+fn od_provenance_has_no_compiled_build_identity() {
+    let driver = include_str!("../src/od_drivers.rs");
+    assert!(!driver.contains("adam_core_version"));
+    assert!(!driver.contains("adam_core_build"));
+    assert!(!driver.contains("CoreBuildIdentity"));
 }
 
 #[test]

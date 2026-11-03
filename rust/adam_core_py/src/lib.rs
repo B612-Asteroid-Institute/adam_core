@@ -31,8 +31,8 @@ mod trajectory;
 mod variant_ephemeris;
 
 #[pyfunction]
-fn build_identity() -> (String, String) {
-    let identity = adam_core::od::CoreBuildIdentity::compiled();
+fn build_identity() -> (&'static str, &'static str) {
+    let identity = adam_core::build_identity();
     (identity.version, identity.commit)
 }
 

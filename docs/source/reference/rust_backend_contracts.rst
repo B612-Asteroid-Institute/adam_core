@@ -187,10 +187,10 @@ Current Migrated APIs
     ``adam_core.propagator.v2`` capsule. Capsule adoption validates its ABI,
     identity fields, and capabilities. The current predictor-level composition
     accepts an already-adopted predictor and does not itself sequence global
-    provider/build/ID preflight. Providers never select transforms, profiles,
+    provider/resource/ID preflight. Providers never select transforms, profiles,
     grouping, fitting, rejection, covariance, or OD algorithms.
-  - The canonical batch layer rejects dirty/unknown Core identity, invalid
-    IDs/member mappings, and malformed resource/config/provider contracts
+  - The canonical batch layer rejects invalid IDs/member mappings and
+    malformed resource/config/provider contracts
     atomically before pipeline or numerical work. Configuration JSON uses
     correctly rounded float parsing, so every finite Python ``float`` bit is
     retained through native persistence and consistency validation. Canonical

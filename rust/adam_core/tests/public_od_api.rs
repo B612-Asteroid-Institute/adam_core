@@ -25,6 +25,7 @@ fn canonical_workflows_have_deliberate_root_and_module_exports() {
     assert!(std::mem::size_of::<adam_core::od::IodRunConfig>() > 0);
     assert!(std::mem::size_of::<adam_core::od::RefinementRunConfig>() > 0);
     assert!(std::mem::size_of::<adam_core::od::EvaluationConfig>() > 0);
+    assert!(!adam_core::build_identity().version.is_empty());
 }
 
 #[test]
@@ -50,6 +51,9 @@ fn removed_public_preparation_seams_are_not_reintroduced() {
         "pub fn evaluate_orbits_from_prepared",
         "pub struct OrbitIdRename",
         "pub fn renamed_orbit_ids",
+        "CoreBuildIdentity",
+        "InvalidBuildIdentity",
+        "Core identities differ",
         "#[doc(hidden)]",
     ] {
         assert!(!core.contains(forbidden), "reintroduced seam: {forbidden}");

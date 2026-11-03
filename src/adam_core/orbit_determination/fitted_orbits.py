@@ -112,18 +112,13 @@ def drop_duplicate_orbits(
 class OdProvenance(qv.Table):
     """Runtime provenance for a fitted orbit.
 
-    Canonical batch workflows populate clean adam-core identity,
-    ordered-input fingerprint, route, native provider metadata, stage
+    Canonical batch workflows populate the ordered-input fingerprint, route,
+    native provider metadata, stage
     diagnostics, complete canonical Rust configuration, and rejection counts.
     Rows produced by lower-level numerical kernels may leave fields null.
     Resource paths are never recorded.
     """
 
-    #: adam-core version that produced the orbit.
-    adam_core_version = qv.LargeStringColumn(nullable=True)
-    #: Exact clean source commit embedded by the native build. Configured
-    #: workflows refuse dirty or unknown identities before work.
-    adam_core_build = qv.LargeStringColumn(nullable=True)
     #: SHA-256 of the ordered caller table plus exact used-astrometry rows.
     input_fingerprint = qv.LargeStringColumn(nullable=True)
     #: SHA-256 of the exact emitted orbit state/time/origin/covariance and

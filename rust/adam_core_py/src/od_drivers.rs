@@ -20,8 +20,8 @@ use adam_core::od::algorithms::{
     ErfaTimeProvider, GlobalSpiceTranslation as LockingSpiceTranslation,
 };
 use adam_core::od::{
-    AssociatedObservations, AstrometryColumns, CoreBuildIdentity, FittedOrbitMembersBatch,
-    MemberedOrbits, OdBatchError, OdBatchResult, OdGroupResult, OdObservationBatch, OdPropagator,
+    AssociatedObservations, AstrometryColumns, FittedOrbitMembersBatch, MemberedOrbits,
+    OdBatchError, OdBatchResult, OdGroupResult, OdObservationBatch, OdPropagator,
     OdPropagatorSource, OdProvenance, OdRoute, ProviderMetadata,
 };
 use adam_core_rs_coords::od::algorithms::{
@@ -1278,8 +1278,6 @@ fn decode_association_batch(raw: &Bound<'_, PyBytes>) -> PyResult<AssociationBat
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct OrbitProvenanceInput {
-    adam_core_version: Option<String>,
-    adam_core_build: Option<String>,
     input_fingerprint: Option<String>,
     state_fingerprint: Option<String>,
     provenance_fingerprint: Option<String>,
@@ -1494,11 +1492,6 @@ fn parse_typed_orbit_provenance(
                 evaluation_provider.as_ref(),
             )?;
             let provenance = OdProvenance {
-                adam_core: CoreBuildIdentity::new(
-                    decoded.adam_core_version.unwrap_or_default(),
-                    decoded.adam_core_build.unwrap_or_default(),
-                )
-                .map_err(batch_error)?,
                 input_fingerprint: decoded.input_fingerprint.unwrap_or_default(),
                 state_fingerprint: decoded.state_fingerprint,
                 provenance_fingerprint: decoded.provenance_fingerprint.unwrap_or_default(),
@@ -1560,8 +1553,6 @@ fn typed_provenance_dict<'py>(
     provenance: &OdProvenance,
 ) -> PyResult<Bound<'py, PyDict>> {
     let out = PyDict::new(py);
-    out.set_item("adam_core_version", &provenance.adam_core.version)?;
-    out.set_item("adam_core_build", &provenance.adam_core.commit)?;
     out.set_item("input_fingerprint", &provenance.input_fingerprint)?;
     out.set_item("state_fingerprint", provenance.state_fingerprint.as_deref())?;
     out.set_item("route", provenance.route.as_str())?;

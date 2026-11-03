@@ -4,11 +4,9 @@ import hashlib
 import json
 import re
 import struct
-import subprocess
 
 import pytest
 
-from adam_core import _rust_native
 from adam_core._rust.arrow import pa
 from adam_core.observations import Associations, SourceCatalog
 
@@ -53,7 +51,7 @@ def _put_optional_digest_string(digest: "hashlib._Hash", value: str | None) -> N
         _put_digest_string(digest, value)
 
 
-def _public_v2_consistency_digest(
+def _public_consistency_digest(
     orbit: FittedOrbits,
     *,
     configuration: str,
@@ -68,7 +66,7 @@ def _public_v2_consistency_digest(
         ).encode("utf-8")
     ).hexdigest()
     digest = hashlib.sha256()
-    digest.update(b"adam-core-od-provenance-consistency/v2\0")
+    digest.update(b"adam-core-od-provenance-consistency/v3\0")
     for value in (
         orbit.provenance.route[0].as_py(),
         json.loads(configuration)["configuration_sha256"],
@@ -76,10 +74,14 @@ def _public_v2_consistency_digest(
         orbit.provenance.input_fingerprint[0].as_py(),
     ):
         _put_digest_string(digest, value)
+    _put_optional_digest_string(digest, orbit.provenance.state_fingerprint[0].as_py())
     for column in (
-        orbit.provenance.iod_backend,
         orbit.provenance.iod_provider,
+        orbit.provenance.refinement_provider,
+        orbit.provenance.evaluation_provider,
         orbit.provenance.iod_diagnostics,
+        orbit.provenance.refinement_diagnostics,
+        orbit.provenance.evaluation_diagnostics,
     ):
         _put_optional_digest_string(digest, column[0].as_py())
     ambiguous = orbit.provenance.iod_ambiguous[0].as_py()
@@ -90,6 +92,8 @@ def _public_v2_consistency_digest(
     else:
         digest.update(b"\x01")
         digest.update(struct.pack("<Q", alternatives))
+    # IOD has no refinement rejection count or fraction.
+    digest.update(b"\x00\x00")
     return digest.hexdigest()
 
 
@@ -104,16 +108,6 @@ def provider_counter(monkeypatch: pytest.MonkeyPatch) -> type[_Counter]:
 
     monkeypatch.setattr(TwoBodyPropagator, "propagator_capsule", counted)
     return _Counter
-
-
-def test_native_build_identity_is_exact_clean_head() -> None:
-    head = subprocess.run(
-        ["git", "rev-parse", "HEAD"],
-        check=True,
-        capture_output=True,
-        text=True,
-    ).stdout.strip()
-    assert _rust_native.build_identity() == ("0.7.0", head)
 
 
 def _source_and_ids(pure_iod_orbit: PureIodOrbit) -> tuple[SourceCatalog, list[str]]:
@@ -362,10 +356,8 @@ def test_explicit_evaluation_subset_and_stage_provenance(
     assert evaluated_members.obs_id.to_pylist() == subset.obs_id.to_pylist()
     assert evaluated.num_obs.to_pylist() == [4]
     provenance = evaluated.provenance
-    assert _rust_native.build_identity() == (
-        provenance.adam_core_version[0].as_py(),
-        provenance.adam_core_build[0].as_py(),
-    )
+    assert "adam_core_version" not in provenance.schema.names
+    assert "adam_core_build" not in provenance.schema.names
     assert provenance.evaluation_backend[0].as_py()
     assert provenance.evaluation_provider[0].as_py()
     assert provenance.state_fingerprint[0].as_py()
@@ -754,7 +746,7 @@ def test_seed_configuration_content_must_match_its_science_sha_before_provider(
     changed = json.loads(orbits.provenance.configuration[0].as_py())
     changed["evaluation"]["covariance_dimension"] = 5
     # Keep the stale science hash deliberately, then recompute the public,
-    # unkeyed v2 consistency digest over the altered complete configuration.
+    # unkeyed consistency digest over the altered complete configuration.
     assert (
         changed["configuration_sha256"]
         == json.loads(orbits.provenance.configuration[0].as_py())[
@@ -768,7 +760,7 @@ def test_seed_configuration_content_must_match_its_science_sha_before_provider(
     ).set_column(
         "provenance.provenance_fingerprint",
         pa.array(
-            [_public_v2_consistency_digest(orbits, configuration=changed_json)],
+            [_public_consistency_digest(orbits, configuration=changed_json)],
             type=pa.large_string(),
         ),
     )

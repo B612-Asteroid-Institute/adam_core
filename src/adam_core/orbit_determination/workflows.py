@@ -123,8 +123,6 @@ def _snapshot(value: dict[str, Any]) -> ObservationAstrometry:
 
 def _provenance(value: dict[str, Any]) -> OdProvenance:
     return OdProvenance.from_kwargs(
-        adam_core_version=[value["adam_core_version"]],
-        adam_core_build=[value["adam_core_build"]],
         input_fingerprint=[value["input_fingerprint"]],
         state_fingerprint=[value["state_fingerprint"]],
         provenance_fingerprint=[value["provenance_fingerprint"]],

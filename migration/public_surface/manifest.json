@@ -11209,7 +11209,7 @@
       "kind": "class",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/fitted_orbits.py",
-      "line": 329,
+      "line": 324,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -11237,7 +11237,7 @@
       "kind": "class",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/fitted_orbits.py",
-      "line": 204,
+      "line": 199,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -11265,7 +11265,7 @@
       "kind": "method",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/fitted_orbits.py",
-      "line": 224,
+      "line": 219,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -11293,7 +11293,7 @@
       "kind": "class",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/fitted_orbits.py",
-      "line": 243,
+      "line": 238,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -11321,7 +11321,7 @@
       "kind": "classmethod",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/fitted_orbits.py",
-      "line": 288,
+      "line": 283,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -11377,7 +11377,7 @@
       "kind": "class",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/fitted_orbits.py",
-      "line": 172,
+      "line": 167,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -12189,7 +12189,7 @@
       "kind": "function",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/workflows.py",
-      "line": 438,
+      "line": 436,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -12217,7 +12217,7 @@
       "kind": "function",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/workflows.py",
-      "line": 364,
+      "line": 362,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -12245,7 +12245,7 @@
       "kind": "function",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/workflows.py",
-      "line": 270,
+      "line": 268,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -12273,7 +12273,7 @@
       "kind": "function",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/workflows.py",
-      "line": 306,
+      "line": 304,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {

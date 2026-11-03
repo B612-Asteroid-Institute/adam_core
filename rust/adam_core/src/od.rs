@@ -203,8 +203,6 @@ pub enum OdBatchErrorCode {
     InvalidInput,
     /// The explicit stage configuration is invalid.
     InvalidConfiguration,
-    /// The Core source/build identity is unavailable or malformed.
-    InvalidBuildIdentity,
     /// The prediction service identity or fingerprint is incomplete.
     InvalidProviderIdentity,
     /// Persisted orbit/member provenance is missing, malformed, or inconsistent.
@@ -225,7 +223,6 @@ impl OdBatchErrorCode {
         match self {
             Self::InvalidInput => "invalid_input",
             Self::InvalidConfiguration => "invalid_configuration",
-            Self::InvalidBuildIdentity => "invalid_build_identity",
             Self::InvalidProviderIdentity => "invalid_provider_identity",
             Self::InvalidProvenance => "invalid_provenance",
             Self::Propagation => "propagation",
@@ -249,7 +246,6 @@ impl std::str::FromStr for OdBatchErrorCode {
         match value {
             "invalid_input" => Ok(Self::InvalidInput),
             "invalid_configuration" => Ok(Self::InvalidConfiguration),
-            "invalid_build_identity" => Ok(Self::InvalidBuildIdentity),
             "invalid_provider_identity" => Ok(Self::InvalidProviderIdentity),
             "invalid_provenance" => Ok(Self::InvalidProvenance),
             "propagation" => Ok(Self::Propagation),
@@ -326,69 +322,6 @@ impl From<PropagationError> for OdBatchError {
 impl From<SchemaError> for OdBatchError {
     fn from(value: SchemaError) -> Self {
         Self::propagation(value.into())
-    }
-}
-
-/// Exact Core build identity recorded in every fitted-orbit provenance record.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct CoreBuildIdentity {
-    /// adam-core semantic version.
-    pub version: String,
-    /// Exact lowercase 40-hex Git commit.
-    pub commit: String,
-}
-
-impl CoreBuildIdentity {
-    /// Return the raw identity embedded by the compiled `adam_core` crate.
-    ///
-    /// This accessor deliberately does not validate the commit so diagnostic
-    /// bindings can report `unknown` or `dirty:<commit>` exactly as compiled.
-    /// Canonical scientific workflows use [`Self::current`] and fail closed.
-    pub fn compiled() -> Self {
-        Self {
-            version: env!("CARGO_PKG_VERSION").to_owned(),
-            commit: env!("ADAM_CORE_BUILD_COMMIT").to_owned(),
-        }
-    }
-
-    /// Return and validate the identity embedded by the `adam_core` crate build.
-    pub fn current() -> Result<Self, OdBatchError> {
-        let identity = Self::compiled();
-        identity.validate()?;
-        Ok(identity)
-    }
-
-    /// Construct and fail closed on an inexact source identity.
-    ///
-    /// Canonical workflow callers do not use this constructor; it exists for
-    /// validation of persisted provenance decoded by foreign-language bindings.
-    pub fn new(
-        version: impl Into<String>,
-        commit: impl Into<String>,
-    ) -> Result<Self, OdBatchError> {
-        let identity = Self {
-            version: version.into(),
-            commit: commit.into(),
-        };
-        identity.validate()?;
-        Ok(identity)
-    }
-
-    /// Validate the exact version/commit pair.
-    pub fn validate(&self) -> Result<(), OdBatchError> {
-        if self.version.trim().is_empty() {
-            return Err(OdBatchError::new(
-                OdBatchErrorCode::InvalidBuildIdentity,
-                "canonical OD requires a non-empty adam-core version",
-            ));
-        }
-        if !is_git_commit(&self.commit) {
-            return Err(OdBatchError::new(
-                OdBatchErrorCode::InvalidBuildIdentity,
-                "canonical OD requires an exact 40-character lowercase hexadecimal build commit",
-            ));
-        }
-        Ok(())
     }
 }
 
@@ -577,7 +510,6 @@ struct PredictionService<'a> {
 }
 
 struct OdExecutionContext<'a> {
-    build: &'a CoreBuildIdentity,
     time_provider: &'a ErfaTimeProvider,
     translation_provider: &'a GlobalSpiceTranslation,
 }
@@ -588,11 +520,9 @@ fn with_stage_predictor<R>(
     driver: impl FnOnce(&PredictionService<'_>, &OdExecutionContext<'_>) -> Result<R, OdBatchError>,
 ) -> Result<R, OdBatchError> {
     let settings = canonical_stage_settings(config)?;
-    let build = CoreBuildIdentity::current()?;
     let time = ErfaTimeProvider;
     let translation = GlobalSpiceTranslation;
     let context = OdExecutionContext {
-        build: &build,
         time_provider: &time,
         translation_provider: &translation,
     };
@@ -638,11 +568,9 @@ fn with_stage_predictors<R>(
 ) -> Result<R, OdBatchError> {
     let iod = canonical_stage_settings(iod_config)?;
     let refinement = canonical_stage_settings(refinement_config)?;
-    let build = CoreBuildIdentity::current()?;
     let time = ErfaTimeProvider;
     let translation = GlobalSpiceTranslation;
     let context = OdExecutionContext {
-        build: &build,
         time_provider: &time,
         translation_provider: &translation,
     };
@@ -1022,7 +950,6 @@ impl EvaluationDiagnostics {
 /// Complete Rust-owned fitted-orbit provenance.
 #[derive(Debug, Clone)]
 pub struct OdProvenance {
-    pub adam_core: CoreBuildIdentity,
     pub input_fingerprint: String,
     pub state_fingerprint: Option<String>,
     pub provenance_fingerprint: String,
@@ -1061,7 +988,6 @@ impl OdProvenance {
 
     /// Revalidate all identity fields after a persistence round trip.
     pub fn validate(&self) -> Result<(), OdBatchError> {
-        self.adam_core.validate()?;
         if !is_sha256(&self.input_fingerprint)
             || self
                 .state_fingerprint
@@ -1346,7 +1272,7 @@ impl OdGroupResult {
             observations: observations.clone(),
             members: member_batch_from_records(&self.members),
         };
-        validate_member_input(&output, true, &fitted.provenance.adam_core)?;
+        validate_member_input(&output, true)?;
         Ok(Some(output))
     }
 }
@@ -1630,8 +1556,7 @@ impl OdBatchResult {
             members,
             provenance,
         };
-        let build = successful[0].1.provenance.adam_core.clone();
-        validate_member_input(&output, true, &build)?;
+        validate_member_input(&output, true)?;
         Ok(Some(output))
     }
 
@@ -1660,13 +1585,6 @@ impl OdBatchResult {
     }
 }
 
-fn is_git_commit(value: &str) -> bool {
-    value.len() == 40
-        && value
-            .bytes()
-            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
-}
-
 fn is_sha256(value: &str) -> bool {
     value.len() == 64
         && value
@@ -1678,22 +1596,22 @@ fn sha256(value: &[u8]) -> String {
     format!("{:x}", Sha256::digest(value))
 }
 
-fn fingerprint_string(digest: &mut Sha256, value: &str) {
-    digest.update((value.len() as u64).to_le_bytes());
+fn fingerprint_string(digest: &mut impl sha2::digest::Update, value: &str) {
+    digest.update(&(value.len() as u64).to_le_bytes());
     digest.update(value.as_bytes());
 }
 
-fn fingerprint_optional_string(digest: &mut Sha256, value: Option<&str>) {
-    digest.update([u8::from(value.is_some())]);
+fn fingerprint_optional_string(digest: &mut impl sha2::digest::Update, value: Option<&str>) {
+    digest.update(&[u8::from(value.is_some())]);
     if let Some(value) = value {
         fingerprint_string(digest, value);
     }
 }
 
-fn fingerprint_optional_f64(digest: &mut Sha256, value: Option<f64>) {
-    digest.update([u8::from(value.is_some())]);
+fn fingerprint_optional_f64(digest: &mut impl sha2::digest::Update, value: Option<f64>) {
+    digest.update(&[u8::from(value.is_some())]);
     if let Some(value) = value {
-        digest.update(value.to_bits().to_le_bytes());
+        digest.update(&value.to_bits().to_le_bytes());
     }
 }
 
@@ -2026,16 +1944,16 @@ fn default_orbit_id(group_id: &str, config_sha256: &str, input_fingerprint: &str
     format!("{:x}", digest.finalize())
 }
 
-fn provenance_consistency_digest(provenance: &OdProvenance) -> String {
-    let mut digest = Sha256::new();
+fn write_provenance_consistency_payload(
+    provenance: &OdProvenance,
+    digest: &mut impl sha2::digest::Update,
+) {
     digest.update(b"adam-core-od-provenance-consistency/v3\0");
-    fingerprint_string(&mut digest, provenance.route.as_str());
-    fingerprint_string(&mut digest, &provenance.adam_core.version);
-    fingerprint_string(&mut digest, &provenance.adam_core.commit);
-    fingerprint_string(&mut digest, provenance.configuration.science_sha256());
-    fingerprint_string(&mut digest, provenance.configuration.complete_sha256());
-    fingerprint_string(&mut digest, &provenance.input_fingerprint);
-    fingerprint_optional_string(&mut digest, provenance.state_fingerprint.as_deref());
+    fingerprint_string(digest, provenance.route.as_str());
+    fingerprint_string(digest, provenance.configuration.science_sha256());
+    fingerprint_string(digest, provenance.configuration.complete_sha256());
+    fingerprint_string(digest, &provenance.input_fingerprint);
+    fingerprint_optional_string(digest, provenance.state_fingerprint.as_deref());
     for value in [
         provenance
             .iod_provider
@@ -2062,22 +1980,27 @@ fn provenance_consistency_digest(provenance: &OdProvenance) -> String {
             .as_ref()
             .map(EvaluationDiagnostics::canonical_json),
     ] {
-        fingerprint_optional_string(&mut digest, value.as_deref());
+        fingerprint_optional_string(digest, value.as_deref());
     }
     match provenance.iod_ambiguous {
-        Some(value) => digest.update([1, u8::from(value)]),
-        None => digest.update([0]),
+        Some(value) => digest.update(&[1, u8::from(value)]),
+        None => digest.update(&[0]),
     }
     for value in [provenance.iod_alternatives, provenance.num_rejected] {
         match value {
             Some(value) => {
-                digest.update([1]);
-                digest.update((value as u64).to_le_bytes());
+                digest.update(&[1]);
+                digest.update(&(value as u64).to_le_bytes());
             }
-            None => digest.update([0]),
+            None => digest.update(&[0]),
         }
     }
-    fingerprint_optional_f64(&mut digest, provenance.rejected_fraction);
+    fingerprint_optional_f64(digest, provenance.rejected_fraction);
+}
+
+fn provenance_consistency_digest(provenance: &OdProvenance) -> String {
+    let mut digest = Sha256::new();
+    write_provenance_consistency_payload(provenance, &mut digest);
     format!("{:x}", digest.finalize())
 }
 
@@ -2205,7 +2128,6 @@ fn output_state_fingerprint(
 
 #[allow(clippy::too_many_arguments)]
 fn make_provenance(
-    build: &CoreBuildIdentity,
     route: OdRoute,
     input_fingerprint: String,
     config: CanonicalConfiguration,
@@ -2239,7 +2161,6 @@ fn make_provenance(
     let iod_ambiguous = iod.map(IodResult::ambiguous);
     let iod_alternatives = iod.map(|result| result.ambiguous_with.len());
     let mut provenance = OdProvenance {
-        adam_core: build.clone(),
         input_fingerprint,
         state_fingerprint,
         provenance_fingerprint: String::new(),
@@ -2355,7 +2276,6 @@ enum BatchPreparation<P> {
 struct PreparedAssociatedBatch<'a> {
     input: &'a AssociatedObservations,
     config: OdConfig,
-    build: CoreBuildIdentity,
     groups: Vec<AssociationGroup>,
     prepared_groups: Vec<(PreparedObservations, ObserverBatch)>,
 }
@@ -2367,7 +2287,6 @@ fn prepare_associated_batch<'a>(
     config
         .validate()
         .map_err(|message| OdBatchError::new(OdBatchErrorCode::InvalidConfiguration, message))?;
-    let build = CoreBuildIdentity::current()?;
     let groups = plan_associations(&input.observations.source.id, &input.associations)
         .map_err(|message| OdBatchError::new(OdBatchErrorCode::InvalidInput, message))?;
     if groups.is_empty() {
@@ -2379,7 +2298,6 @@ fn prepare_associated_batch<'a>(
     Ok(Some(PreparedAssociatedBatch {
         input,
         config: config.clone(),
-        build,
         groups,
         prepared_groups,
     }))
@@ -2406,12 +2324,6 @@ impl PreparedIod<'_> {
     fn execute(self, provider: &OdPropagator<'_>) -> Result<OdBatchResult, OdBatchError> {
         let fit = *self.inner.config.for_iod().correction_fit();
         with_stage_predictor(provider, fit, |service, context| {
-            if self.inner.build != *context.build {
-                return Err(OdBatchError::new(
-                    OdBatchErrorCode::InvalidBuildIdentity,
-                    "OD preparation and execution Core identities differ",
-                ));
-            }
             service.metadata.validate()?;
             run_iod_prepared(
                 self.inner.input,
@@ -2481,7 +2393,6 @@ fn run_iod_prepared(
                 let failure = iod_failure(&group.group_id, &iod, group.source_indices.len());
                 let state_fingerprint = output_state_fingerprint(Some(&iod), None, None)?;
                 let provenance = make_provenance(
-                    context.build,
                     OdRoute::RunIod,
                     input_fingerprint,
                     configuration.clone(),
@@ -2618,17 +2529,9 @@ fn run_od_prepared(
     let PreparedAssociatedBatch {
         input,
         config,
-        build,
         groups,
         prepared_groups,
     } = prepared;
-    context.build.validate()?;
-    if build != *context.build {
-        return Err(OdBatchError::new(
-            OdBatchErrorCode::InvalidBuildIdentity,
-            "OD preparation and execution Core identities differ",
-        ));
-    }
     iod_service.metadata.validate()?;
     refinement_service.metadata.validate()?;
     let configuration = CanonicalConfiguration::from_od(&config)?;
@@ -2683,7 +2586,6 @@ fn run_od_prepared(
                     .clone();
                 let state_fingerprint = output_state_fingerprint(Some(&iod), Some(&refined), None)?;
                 let provenance = make_provenance(
-                    context.build,
                     OdRoute::RunOd,
                     input_fingerprint,
                     configuration.clone(),
@@ -3064,9 +2966,7 @@ fn validate_iod_seed_provenance(row: usize, provenance: &OdProvenance) -> Result
 fn validate_member_input(
     input: &MemberedOrbits,
     require_outlier: bool,
-    context: &CoreBuildIdentity,
 ) -> Result<Vec<OrbitMemberGroup>, OdBatchError> {
-    context.validate()?;
     input.members.validate_lengths(require_outlier)?;
     input
         .orbits
@@ -3111,12 +3011,6 @@ fn validate_member_input(
             )
         })?;
         provenance.validate()?;
-        if provenance.adam_core != *context {
-            return Err(OdBatchError::new(
-                OdBatchErrorCode::InvalidProvenance,
-                format!("orbit provenance at row {row} has incompatible Core identity"),
-            ));
-        }
         let actual = orbit_state_fingerprint(&input.orbits, row, None, None);
         if provenance.state_fingerprint.as_deref() != Some(&actual) {
             return Err(OdBatchError::new(
@@ -3137,7 +3031,6 @@ fn validate_member_input(
 
 struct PreparedMemberBatch<'a> {
     input: &'a MemberedOrbits,
-    build: CoreBuildIdentity,
     groups: Vec<OrbitMemberGroup>,
     prepared_groups: Vec<(PreparedObservations, ObserverBatch)>,
 }
@@ -3146,8 +3039,7 @@ fn prepare_member_batch<'a>(
     input: &'a MemberedOrbits,
     require_outlier: bool,
 ) -> Result<Option<PreparedMemberBatch<'a>>, OdBatchError> {
-    let build = CoreBuildIdentity::current()?;
-    let groups = validate_member_input(input, require_outlier, &build)?;
+    let groups = validate_member_input(input, require_outlier)?;
     if groups.is_empty() {
         return Ok(None);
     }
@@ -3163,7 +3055,6 @@ fn prepare_member_batch<'a>(
     let prepared_groups = prepare_member_groups(&groups, input)?;
     Ok(Some(PreparedMemberBatch {
         input,
-        build,
         groups,
         prepared_groups,
     }))
@@ -3265,17 +3156,9 @@ fn refine_prepared(
 ) -> Result<OdBatchResult, OdBatchError> {
     let PreparedMemberBatch {
         input,
-        build,
         groups,
         prepared_groups,
     } = prepared;
-    context.build.validate()?;
-    if build != *context.build {
-        return Err(OdBatchError::new(
-            OdBatchErrorCode::InvalidBuildIdentity,
-            "OD preparation and execution Core identities differ",
-        ));
-    }
     service.metadata.validate()?;
     let configuration = CanonicalConfiguration::from_refinement(config)?;
     let refinement = *config.refinement();
@@ -3338,7 +3221,6 @@ fn refine_prepared(
                     Some((&input.orbits, group.orbit_index)),
                 )?;
                 let mut provenance = make_provenance(
-                    context.build,
                     effective_route,
                     input_fingerprint,
                     effective_configuration,
@@ -3453,8 +3335,8 @@ impl PreparedEvaluation<'_> {
             adam_core_rs_coords::RefinementConfig::WorstResidual(value) => value.fit,
             adam_core_rs_coords::RefinementConfig::Cmc2003(value) => value.fit,
         };
-        with_stage_predictor(provider, fit, |service, context| {
-            evaluate_prepared(self.inner, &self.config, service, context)
+        with_stage_predictor(provider, fit, |service, _context| {
+            evaluate_prepared(self.inner, &self.config, service)
         })
     }
 }
@@ -3477,21 +3359,12 @@ fn evaluate_prepared(
     prepared: PreparedMemberBatch<'_>,
     config: &OdConfig,
     service: &PredictionService<'_>,
-    context: &OdExecutionContext<'_>,
 ) -> Result<OdBatchResult, OdBatchError> {
     let PreparedMemberBatch {
         input,
-        build,
         groups,
         prepared_groups,
     } = prepared;
-    context.build.validate()?;
-    if build != *context.build {
-        return Err(OdBatchError::new(
-            OdBatchErrorCode::InvalidBuildIdentity,
-            "OD preparation and execution Core identities differ",
-        ));
-    }
     service.metadata.validate()?;
     let configuration = CanonicalConfiguration::from_od(config)?;
     let parameters = config.for_evaluation().covariance_dimension() as i64;
@@ -3542,7 +3415,6 @@ fn evaluate_prepared(
                     None,
                 ));
                 let provenance = make_provenance(
-                    context.build,
                     OdRoute::EvaluateOrbits,
                     input_fingerprint,
                     configuration.clone(),
@@ -4012,10 +3884,6 @@ mod tests {
 
     fn run_od_provenance() -> OdProvenance {
         let mut provenance = OdProvenance {
-            adam_core: CoreBuildIdentity {
-                version: "0.7.0".to_string(),
-                commit: "a".repeat(40),
-            },
             input_fingerprint: "2".repeat(64),
             state_fingerprint: Some("3".repeat(64)),
             provenance_fingerprint: String::new(),
@@ -4352,7 +4220,6 @@ mod tests {
         for code in [
             OdBatchErrorCode::InvalidInput,
             OdBatchErrorCode::InvalidConfiguration,
-            OdBatchErrorCode::InvalidBuildIdentity,
             OdBatchErrorCode::InvalidProviderIdentity,
             OdBatchErrorCode::InvalidProvenance,
             OdBatchErrorCode::Propagation,
@@ -4539,9 +4406,8 @@ mod tests {
         assert!(!settings.options.stellar_aberration);
         assert_eq!(settings.options.output_time_scale, TimeScale::Utc);
         let expected = two_body_provider_metadata(&settings.two_body);
-        with_stage_predictor(&OdPropagator::two_body(), config, |service, context| {
+        with_stage_predictor(&OdPropagator::two_body(), config, |service, _context| {
             assert_eq!(service.metadata, expected);
-            assert_eq!(*context.build, CoreBuildIdentity::current()?);
             Ok(())
         })
         .expect("canonical provider binding");
@@ -4560,6 +4426,29 @@ mod tests {
         assert_eq!(
             OdBatchError::from(PropagationError::ThreadPool("pool".to_string())).code,
             OdBatchErrorCode::Runtime
+        );
+    }
+
+    #[test]
+    fn provenance_consistency_payload_excludes_compiled_commit() {
+        #[derive(Default)]
+        struct RecordedPayload(Vec<u8>);
+
+        impl sha2::digest::Update for RecordedPayload {
+            fn update(&mut self, data: &[u8]) {
+                self.0.extend_from_slice(data);
+            }
+        }
+
+        let provenance = run_od_provenance();
+        let mut payload = RecordedPayload::default();
+        write_provenance_consistency_payload(&provenance, &mut payload);
+        let commit = crate::build_identity().commit.as_bytes();
+        assert!(!commit.is_empty());
+        assert!(!payload.0.windows(commit.len()).any(|value| value == commit));
+        assert_eq!(
+            provenance.provenance_fingerprint,
+            format!("{:x}", Sha256::digest(&payload.0))
         );
     }
 

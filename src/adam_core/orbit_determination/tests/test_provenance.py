@@ -31,11 +31,11 @@ def test_complete_configuration_provenance_is_canonical_and_path_free() -> None:
     assert "/Users/" not in encoded and "/tmp/" not in encoded
 
 
-def test_runtime_provenance_schema_contains_complete_identity_fields() -> None:
+def test_runtime_provenance_schema_contains_scientific_identity_fields_only() -> None:
     names = set(OdProvenance.schema.names)
+    assert "adam_core_version" not in names
+    assert "adam_core_build" not in names
     assert {
-        "adam_core_version",
-        "adam_core_build",
         "input_fingerprint",
         "state_fingerprint",
         "provenance_fingerprint",

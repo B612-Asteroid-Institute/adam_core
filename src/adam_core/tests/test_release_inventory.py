@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import importlib
 import json
 import subprocess
 from pathlib import Path
@@ -22,6 +23,12 @@ def _git(repo: Path, *args: str) -> str:
     return subprocess.run(
         ["git", *args], cwd=repo, check=True, text=True, capture_output=True
     ).stdout.strip()
+
+
+def test_native_artifact_build_identity_is_exact_clean_head() -> None:
+    native = importlib.import_module("adam_core._rust_native")
+    root = Path(__file__).resolve().parents[3]
+    assert native.build_identity() == ("0.7.0", _git(root, "rev-parse", "HEAD"))
 
 
 def _inventory_repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
