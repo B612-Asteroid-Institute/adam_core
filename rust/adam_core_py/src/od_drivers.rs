@@ -15,6 +15,11 @@
 use crate::coordinates::{read_orbit_ipc, write_orbit_ipc, ErfaTimeProvider};
 use crate::od_config::{PyIodRunConfig, PyOdConfig, PyRefinementRunConfig};
 use crate::od_support::{od_error, LockingSpiceTranslation};
+use adam_core::od::{
+    AssociatedObservations, AstrometryColumns, CoreBuildIdentity, FittedOrbitMembersBatch,
+    MemberedOrbits, OdBatchError, OdBatchResult, OdExecutionContext, OdGroupResult,
+    OdObservationBatch, OdProvenance, OdRoute, PredictionService, ProviderMetadata,
+};
 use adam_core_rs_coords::od::algorithms::{
     prepare_observations, refine_with_predictor, run_od_with_predictors, PreparedObservations,
 };
@@ -23,12 +28,11 @@ use adam_core_rs_coords::propagation::adapter::{
     validate_fit_covariance_with, PropagatorPredictor, SphericalPredictor,
 };
 use adam_core_rs_coords::propagation::{
-    evaluate_orbit, AstrometrySnapshot, BackendIdentity, Cmc2003FitConfig, CovariancePropagation,
-    EphemerisOptions, EpochPolicy, ExternalPropagator, ExternalPropagatorV2, IodCandidate,
-    IodCandidateFailure, IodResult, IterativeFitConfig, JacobianMethod, PropagationOptions,
-    PropagationResultValue, Propagator, RangingResult, RangingSample, RefinementConfig,
-    TwoBodyPropagator, TwoBodyPropagatorConfig, WhitenedFitConfig, WhitenedFitOutput,
-    EXTERNAL_PROPAGATOR_CAPSULE,
+    AstrometrySnapshot, BackendIdentity, Cmc2003FitConfig, CovariancePropagation, EphemerisOptions,
+    EpochPolicy, ExternalPropagator, ExternalPropagatorV2, IodCandidate, IodCandidateFailure,
+    IodResult, IterativeFitConfig, JacobianMethod, PropagationOptions, PropagationResultValue,
+    Propagator, RangingResult, RangingSample, RefinementConfig, TwoBodyPropagator,
+    TwoBodyPropagatorConfig, WhitenedFitConfig, WhitenedFitOutput, EXTERNAL_PROPAGATOR_CAPSULE,
 };
 use adam_core_rs_coords::{
     validate_loss, AssociationBatch, CoordinateBatch as DataCoordinateBatch, IntoNestedRecordBatch,
@@ -42,8 +46,6 @@ use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::{PyBytes, PyCapsule, PyDict, PyList, PyTuple};
 use serde::Deserialize;
-use serde_json::json;
-use sha2::{Digest, Sha256};
 use std::hint::black_box;
 use std::time::Instant;
 
@@ -388,74 +390,56 @@ impl PySource {
     }
 }
 
-#[derive(Clone)]
-struct ProviderMetadata {
-    name: String,
-    version: String,
-    abi_version: u32,
-    identity_validated_by_capsule: bool,
-    capabilities: u64,
-    known_capabilities: u64,
-    integration_time_scale: String,
-    two_body_dynamics: bool,
-    configuration_fingerprint: String,
-    data_fingerprint: String,
+fn external_provider_metadata(propagator: &ExternalPropagator) -> ProviderMetadata {
+    let identity = propagator.identity();
+    ProviderMetadata {
+        name: identity.name.clone(),
+        version: identity.version.clone(),
+        abi_version: propagator.abi_version(),
+        identity_validated_by_capsule: true,
+        capabilities: propagator.capabilities(),
+        known_capabilities: propagator.known_capabilities(),
+        integration_time_scale: propagator.integration_scale().as_str().to_string(),
+        two_body_dynamics: identity.two_body_dynamics,
+        configuration_fingerprint: propagator
+            .configuration_fingerprint()
+            .expect("PySource requires metadata")
+            .to_string(),
+        data_fingerprint: propagator
+            .data_fingerprint()
+            .expect("PySource requires metadata")
+            .to_string(),
+    }
 }
 
-impl ProviderMetadata {
-    fn external(propagator: &ExternalPropagator) -> Self {
-        let identity = propagator.identity();
-        Self {
-            name: identity.name.clone(),
-            version: identity.version.clone(),
-            abi_version: propagator.abi_version(),
-            identity_validated_by_capsule: true,
-            capabilities: propagator.capabilities(),
-            known_capabilities: propagator.known_capabilities(),
-            integration_time_scale: propagator.integration_scale().as_str().to_string(),
-            two_body_dynamics: identity.two_body_dynamics,
-            configuration_fingerprint: propagator
-                .configuration_fingerprint()
-                .expect("PySource requires metadata")
-                .to_string(),
-            data_fingerprint: propagator
-                .data_fingerprint()
-                .expect("PySource requires metadata")
-                .to_string(),
-        }
+fn two_body_provider_metadata(settings: &FitSettings) -> ProviderMetadata {
+    let identity = settings.propagator.backend();
+    let mut capabilities = adam_core_rs_coords::propagation::EXTERNAL_PROPAGATOR_CAP_THREAD_SAFE;
+    if settings.propagator.supports_stm() {
+        capabilities |= adam_core_rs_coords::propagation::EXTERNAL_PROPAGATOR_CAP_STM;
     }
-
-    fn two_body(settings: &FitSettings) -> Self {
-        let identity = settings.propagator.backend();
-        let mut capabilities =
-            adam_core_rs_coords::propagation::EXTERNAL_PROPAGATOR_CAP_THREAD_SAFE;
-        if settings.propagator.supports_stm() {
-            capabilities |= adam_core_rs_coords::propagation::EXTERNAL_PROPAGATOR_CAP_STM;
-        }
-        if settings.propagator.supports_non_gravitational_parameters() {
-            capabilities |=
-                adam_core_rs_coords::propagation::EXTERNAL_PROPAGATOR_CAP_NON_GRAVITATIONAL;
-        }
-        Self {
-            name: identity.name,
-            version: identity.version,
-            abi_version: adam_core_rs_coords::propagation::EXTERNAL_PROPAGATOR_ABI_VERSION,
-            identity_validated_by_capsule: false,
-            capabilities,
-            known_capabilities: capabilities,
-            integration_time_scale: settings
-                .propagator
-                .integration_time_scale()
-                .as_str()
-                .to_string(),
-            two_body_dynamics: identity.two_body_dynamics,
-            configuration_fingerprint:
-                adam_core_rs_coords::propagation::two_body_reference::configuration_fingerprint(
-                    settings.propagator.config(),
-                ),
-            data_fingerprint:
-                adam_core_rs_coords::propagation::two_body_reference::DATA_FINGERPRINT.to_string(),
-        }
+    if settings.propagator.supports_non_gravitational_parameters() {
+        capabilities |= adam_core_rs_coords::propagation::EXTERNAL_PROPAGATOR_CAP_NON_GRAVITATIONAL;
+    }
+    ProviderMetadata {
+        name: identity.name,
+        version: identity.version,
+        abi_version: adam_core_rs_coords::propagation::EXTERNAL_PROPAGATOR_ABI_VERSION,
+        identity_validated_by_capsule: false,
+        capabilities,
+        known_capabilities: capabilities,
+        integration_time_scale: settings
+            .propagator
+            .integration_time_scale()
+            .as_str()
+            .to_string(),
+        two_body_dynamics: identity.two_body_dynamics,
+        configuration_fingerprint:
+            adam_core_rs_coords::propagation::two_body_reference::configuration_fingerprint(
+                settings.propagator.config(),
+            ),
+        data_fingerprint: adam_core_rs_coords::propagation::two_body_reference::DATA_FINGERPRINT
+            .to_string(),
     }
 }
 
@@ -493,8 +477,8 @@ fn native_provider_metadata<'py>(
     let settings = parse_fit_settings(fit_settings)?;
     let source = propagator.map(PySource::new).transpose()?;
     let metadata = source.as_ref().map_or_else(
-        || ProviderMetadata::two_body(&settings),
-        |source| ProviderMetadata::external(&source.propagator),
+        || two_body_provider_metadata(&settings),
+        |source| external_provider_metadata(&source.propagator),
     );
     provider_metadata_dict(py, &metadata)
 }
@@ -513,23 +497,39 @@ fn external_predictor<'a>(
     }
 }
 
+trait DriverError: Send {
+    fn into_py_error(self) -> PyErr;
+}
+
+impl DriverError for adam_core_rs_coords::PropagationError {
+    fn into_py_error(self) -> PyErr {
+        od_error(self)
+    }
+}
+
+impl DriverError for OdBatchError {
+    fn into_py_error(self) -> PyErr {
+        batch_error(self)
+    }
+}
+
 /// Run `driver` with the GIL released over a capsule-backed native
 /// propagator, or adam-core's two-body propagator when `None`.
-fn run_with_predictor<R: Send>(
+fn run_with_predictor<R: Send, E: DriverError>(
     py: Python<'_>,
     propagator: Option<&Bound<'_, PyAny>>,
     settings: &FitSettings,
-    driver: impl for<'p> FnOnce(&'p dyn SphericalPredictor) -> PropagationResultValue<R> + Send,
+    driver: impl for<'p> FnOnce(&'p dyn SphericalPredictor, &'p ProviderMetadata) -> Result<R, E> + Send,
 ) -> PyResult<(R, ProviderMetadata)> {
     let source = propagator.map(PySource::new).transpose()?;
     let metadata = source.as_ref().map_or_else(
-        || ProviderMetadata::two_body(settings),
-        |source| ProviderMetadata::external(&source.propagator),
+        || two_body_provider_metadata(settings),
+        |source| external_provider_metadata(&source.propagator),
     );
     let output = py
         .allow_threads(|| {
             if let Some(source) = &source {
-                driver(&external_predictor(&source.propagator, settings))
+                driver(&external_predictor(&source.propagator, settings), &metadata)
             } else {
                 let predictor = PropagatorPredictor {
                     propagator: &settings.propagator,
@@ -537,14 +537,14 @@ fn run_with_predictor<R: Send>(
                     provider: &ErfaTimeProvider,
                     translation_provider: &LockingSpiceTranslation,
                 };
-                driver(&predictor)
+                driver(&predictor, &metadata)
             }
         })
-        .map_err(od_error)?;
+        .map_err(DriverError::into_py_error)?;
     Ok((output, metadata))
 }
 
-fn run_with_stage_predictors<R: Send>(
+fn run_with_stage_predictors<R: Send, E: DriverError>(
     py: Python<'_>,
     propagator: Option<&Bound<'_, PyAny>>,
     iod_settings: &FitSettings,
@@ -552,19 +552,21 @@ fn run_with_stage_predictors<R: Send>(
     driver: impl for<'p> FnOnce(
             &'p dyn SphericalPredictor,
             &'p dyn SphericalPredictor,
-        ) -> PropagationResultValue<R>
+            &'p ProviderMetadata,
+            &'p ProviderMetadata,
+        ) -> Result<R, E>
         + Send,
 ) -> PyResult<(R, ProviderMetadata, ProviderMetadata)> {
     let source = propagator.map(PySource::new).transpose()?;
     let (iod_metadata, refinement_metadata) = source.as_ref().map_or_else(
         || {
             (
-                ProviderMetadata::two_body(iod_settings),
-                ProviderMetadata::two_body(refinement_settings),
+                two_body_provider_metadata(iod_settings),
+                two_body_provider_metadata(refinement_settings),
             )
         },
         |source| {
-            let metadata = ProviderMetadata::external(&source.propagator);
+            let metadata = external_provider_metadata(&source.propagator);
             (metadata.clone(), metadata)
         },
     );
@@ -573,7 +575,7 @@ fn run_with_stage_predictors<R: Send>(
             if let Some(source) = &source {
                 let iod = external_predictor(&source.propagator, iod_settings);
                 let refinement = external_predictor(&source.propagator, refinement_settings);
-                driver(&iod, &refinement)
+                driver(&iod, &refinement, &iod_metadata, &refinement_metadata)
             } else {
                 let iod = PropagatorPredictor {
                     propagator: &iod_settings.propagator,
@@ -587,10 +589,10 @@ fn run_with_stage_predictors<R: Send>(
                     provider: &ErfaTimeProvider,
                     translation_provider: &LockingSpiceTranslation,
                 };
-                driver(&iod, &refinement)
+                driver(&iod, &refinement, &iod_metadata, &refinement_metadata)
             }
         })
-        .map_err(od_error)?;
+        .map_err(DriverError::into_py_error)?;
     Ok((output, iod_metadata, refinement_metadata))
 }
 // ---------------------------------------------------------------------------
@@ -617,6 +619,26 @@ fn set_evaluation_fields(
     Ok(())
 }
 
+fn set_evaluation_result_fields(
+    py: Python<'_>,
+    out: &Bound<'_, PyDict>,
+    evaluation: adam_core_rs_coords::propagation::FitEvaluation,
+    n: usize,
+    success: bool,
+    status_code: i64,
+) -> PyResult<()> {
+    let solution = evaluation
+        .outlier
+        .iter()
+        .map(|&value| !value)
+        .collect::<Vec<_>>();
+    set_evaluation_fields(py, out, evaluation, n)?;
+    out.set_item("success", success)?;
+    out.set_item("status_code", status_code)?;
+    out.set_item("solution", solution)?;
+    Ok(())
+}
+
 /// The dict contract of a fused whitened fit: solution, covariance, solver
 /// diagnostics, weights and the evaluation over the full observation set.
 fn fit_output_dict<'py>(
@@ -635,8 +657,6 @@ fn fit_output_dict<'py>(
     out.set_item("iterations", output.iterations)?;
     out.set_item("optimizer_iterations", output.optimizer_iterations)?;
     out.set_item("converged", output.converged)?;
-    out.set_item("success", output.converged)?;
-    out.set_item("status_code", output.status_code)?;
     out.set_item("cost", output.cost)?;
     out.set_item("fit_chi2", output.fit_chi2)?;
     out.set_item(
@@ -647,14 +667,14 @@ fn fit_output_dict<'py>(
         "residuals_whitened",
         ndarray::Array1::from_vec(output.residuals_whitened).into_pyarray(py),
     )?;
-    let solution = output
-        .evaluation
-        .outlier
-        .iter()
-        .map(|&value| !value)
-        .collect::<Vec<_>>();
-    set_evaluation_fields(py, &out, output.evaluation, n)?;
-    out.set_item("solution", solution)?;
+    set_evaluation_result_fields(
+        py,
+        &out,
+        output.evaluation,
+        n,
+        output.converged,
+        output.status_code,
+    )?;
     out.set_item("warnings", output.warnings)?;
     Ok(out)
 }
@@ -873,18 +893,19 @@ fn fit_orbit_whitened_ipc<'py>(
     let problem = decode_observations(observed_ipc, observers_ipc)?;
     let settings = parse_fit_settings(fit_settings)?;
     let n = problem.observed.len();
-    let (output, provider) = run_with_predictor(py, propagator, &settings, |predictor| {
-        fit_orbit_whitened_with(
-            predictor,
-            &orbit,
-            &problem.observed,
-            &problem.observers,
-            &ignore,
-            &settings.config,
-            &ErfaTimeProvider,
-            &LockingSpiceTranslation,
-        )
-    })?;
+    let (output, provider) =
+        run_with_predictor(py, propagator, &settings, |predictor, _metadata| {
+            fit_orbit_whitened_with(
+                predictor,
+                &orbit,
+                &problem.observed,
+                &problem.observers,
+                &ignore,
+                &settings.config,
+                &ErfaTimeProvider,
+                &LockingSpiceTranslation,
+            )
+        })?;
     let out = fit_output_dict(py, output, n)?;
     out.set_item(
         "refinement_provider",
@@ -938,20 +959,21 @@ fn validate_fit_covariance_ipc<'py>(
     let settings = parse_fit_settings(fit_settings)?;
     let covariance = covariance_36(&covariance)?;
     let jacobian = JacobianMethod::parse(jacobian).map_err(value_error)?;
-    let (output, provider) = run_with_predictor(py, propagator, &settings, |predictor| {
-        validate_fit_covariance_with(
-            predictor,
-            &orbit,
-            &problem.observed,
-            &problem.observers,
-            &ignore,
-            covariance,
-            jacobian,
-            &settings.config,
-            &ErfaTimeProvider,
-            &LockingSpiceTranslation,
-        )
-    })?;
+    let (output, provider) =
+        run_with_predictor(py, propagator, &settings, |predictor, _metadata| {
+            validate_fit_covariance_with(
+                predictor,
+                &orbit,
+                &problem.observed,
+                &problem.observers,
+                &ignore,
+                covariance,
+                jacobian,
+                &settings.config,
+                &ErfaTimeProvider,
+                &LockingSpiceTranslation,
+            )
+        })?;
     let out = PyDict::new(py);
     let validated = ndarray::Array2::from_shape_vec((6, 6), output.covariance.to_vec())
         .map_err(|err| value_error(format!("failed to shape covariance: {err}")))?;
@@ -1003,17 +1025,18 @@ fn iterative_fit_ipc<'py>(
         fit: settings.config,
     };
     let n = problem.observed.len();
-    let (output, provider) = run_with_predictor(py, propagator, &settings, |predictor| {
-        iterative_fit_with(
-            predictor,
-            &orbit,
-            &problem.observed,
-            &problem.observers,
-            &config,
-            &ErfaTimeProvider,
-            &LockingSpiceTranslation,
-        )
-    })?;
+    let (output, provider) =
+        run_with_predictor(py, propagator, &settings, |predictor, _metadata| {
+            iterative_fit_with(
+                predictor,
+                &orbit,
+                &problem.observed,
+                &problem.observers,
+                &config,
+                &ErfaTimeProvider,
+                &LockingSpiceTranslation,
+            )
+        })?;
     let out = fit_output_dict(py, output.fit, n)?;
     out.set_item("passes", output.passes)?;
     out.set_item(
@@ -1110,17 +1133,18 @@ fn cmc2003_fit_ipc<'py>(
         fit: settings.config,
     };
     let n = problem.observed.len();
-    let (output, provider) = run_with_predictor(py, propagator, &settings, |predictor| {
-        cmc2003_fit_with(
-            predictor,
-            &orbit,
-            &problem.observed,
-            &problem.observers,
-            &config,
-            &ErfaTimeProvider,
-            &LockingSpiceTranslation,
-        )
-    })?;
+    let (output, provider) =
+        run_with_predictor(py, propagator, &settings, |predictor, _metadata| {
+            cmc2003_fit_with(
+                predictor,
+                &orbit,
+                &problem.observed,
+                &problem.observers,
+                &config,
+                &ErfaTimeProvider,
+                &LockingSpiceTranslation,
+            )
+        })?;
     let out = fit_output_dict(py, output.fit, n)?;
     out.set_item("n_iterations", output.n_iterations)?;
     out.set_item("n_rejected", output.n_rejected)?;
@@ -1155,17 +1179,18 @@ fn refine_config_ipc<'py>(
     };
     let settings = fit_settings_from_config(fit)?;
     let n = problem.observed.len();
-    let (output, provider) = run_with_predictor(py, propagator, &settings, |predictor| {
-        refine_with(
-            predictor,
-            &orbit,
-            &problem.observed,
-            &problem.observers,
-            &refinement,
-            &ErfaTimeProvider,
-            &LockingSpiceTranslation,
-        )
-    })?;
+    let (output, provider) =
+        run_with_predictor(py, propagator, &settings, |predictor, _metadata| {
+            refine_with(
+                predictor,
+                &orbit,
+                &problem.observed,
+                &problem.observers,
+                &refinement,
+                &ErfaTimeProvider,
+                &LockingSpiceTranslation,
+            )
+        })?;
     let out = fit_output_dict(py, output.fit, n)?;
     out.set_item("passes", output.passes)?;
     out.set_item("n_rejected", output.n_rejected)?;
@@ -1241,17 +1266,18 @@ fn run_iod_config_ipc<'py>(
     drop(config);
     let settings = fit_settings_from_config(correction_fit)?;
     let n = problem.observed.len();
-    let (result, provider) = run_with_predictor(py, iod_propagator, &settings, |predictor| {
-        run_iod_with(
-            predictor,
-            &problem.observed,
-            &problem.observers,
-            &iod_config,
-            &correction_fit,
-            &ErfaTimeProvider,
-            &LockingSpiceTranslation,
-        )
-    })?;
+    let (result, provider) =
+        run_with_predictor(py, iod_propagator, &settings, |predictor, _metadata| {
+            run_iod_with(
+                predictor,
+                &problem.observed,
+                &problem.observers,
+                &iod_config,
+                &correction_fit,
+                &ErfaTimeProvider,
+                &LockingSpiceTranslation,
+            )
+        })?;
     let out = iod_dict(py, result, n)?;
     out.set_item("iod_provider", provider_metadata_dict(py, &provider)?)?;
     Ok(out)
@@ -1312,74 +1338,6 @@ fn decode_association_batch(raw: &Bound<'_, PyBytes>) -> PyResult<AssociationBat
         .map_err(|error| value_error(format!("failed to decode Associations: {error}")))
 }
 
-fn validate_catalog_problem(source: &SourceCatalogBatch, problem: &OdObservations) -> PyResult<()> {
-    if source.len() != problem.observed.len() || source.len() != problem.observers.len() {
-        return Err(value_error(format!(
-            "SourceCatalog, observed coordinates, and observers must have equal length ({} != {} != {})",
-            source.len(),
-            problem.observed.len(),
-            problem.observers.len()
-        )));
-    }
-    for (row, (expected, actual)) in source
-        .observatory_code
-        .iter()
-        .zip(problem.observers.code.iter())
-        .enumerate()
-    {
-        if expected != &actual.0 {
-            return Err(value_error(format!(
-                "observer code mismatch at row {row}: SourceCatalog {expected:?}, observers {:?}",
-                actual.0
-            )));
-        }
-    }
-    let observed_times = problem
-        .observed
-        .times
-        .as_ref()
-        .ok_or_else(|| value_error("orbit-determination observed coordinates require time"))?;
-    if observed_times.scale != source.time.scale {
-        return Err(value_error(format!(
-            "SourceCatalog/observed time-scale mismatch: {} != {}",
-            source.time.scale.as_str(),
-            observed_times.scale.as_str()
-        )));
-    }
-    let observer_times = problem
-        .observers
-        .coordinates
-        .times
-        .as_ref()
-        .ok_or_else(|| value_error("orbit-determination observer coordinates require time"))?;
-    if observer_times.scale != source.time.scale {
-        return Err(value_error(format!(
-            "SourceCatalog/observer time-scale mismatch: {} != {}",
-            source.time.scale.as_str(),
-            observer_times.scale.as_str()
-        )));
-    }
-    for row in 0..source.len() {
-        let observed_epoch = observed_times.epochs[row];
-        if observed_epoch.days != source.time.days[row]
-            || observed_epoch.nanos != source.time.nanos[row]
-        {
-            return Err(value_error(format!(
-                "SourceCatalog/observed epoch mismatch at row {row}"
-            )));
-        }
-        let observer_epoch = observer_times.epochs[row];
-        if observer_epoch.days != source.time.days[row]
-            || observer_epoch.nanos != source.time.nanos[row]
-        {
-            return Err(value_error(format!(
-                "SourceCatalog/observer epoch mismatch at row {row}"
-            )));
-        }
-    }
-    Ok(())
-}
-
 fn checked_build_identity() -> PyResult<(&'static str, &'static str)> {
     let version = env!("CARGO_PKG_VERSION");
     let commit = env!("ADAM_CORE_BUILD_COMMIT");
@@ -1395,420 +1353,8 @@ fn checked_build_identity() -> PyResult<(&'static str, &'static str)> {
     Ok((version, commit))
 }
 
-fn provider_json(metadata: &ProviderMetadata) -> String {
-    json!({
-        "name": &metadata.name,
-        "version": &metadata.version,
-        "abi_version": metadata.abi_version,
-        "identity_validated_by_capsule": metadata.identity_validated_by_capsule,
-        "capabilities": metadata.capabilities,
-        "known_capabilities": metadata.known_capabilities,
-        "integration_time_scale": &metadata.integration_time_scale,
-        "two_body_dynamics": metadata.two_body_dynamics,
-        "configuration_fingerprint": &metadata.configuration_fingerprint,
-        "data_fingerprint": &metadata.data_fingerprint,
-    })
-    .to_string()
-}
-
-fn fingerprint_string(digest: &mut Sha256, value: &str) {
-    digest.update((value.len() as u64).to_le_bytes());
-    digest.update(value.as_bytes());
-}
-
-fn fingerprint_optional_string(digest: &mut Sha256, value: Option<&str>) {
-    digest.update([u8::from(value.is_some())]);
-    if let Some(value) = value {
-        fingerprint_string(digest, value);
-    }
-}
-
-fn fingerprint_optional_f64(digest: &mut Sha256, value: Option<f64>) {
-    digest.update([u8::from(value.is_some())]);
-    if let Some(value) = value {
-        digest.update(value.to_bits().to_le_bytes());
-    }
-}
-
-fn member_input_fingerprint(
-    source: &SourceCatalogBatch,
-    observers: &DataObserverBatch,
-    source_row: usize,
-    original: &AstrometrySnapshot,
-    used: &AstrometrySnapshot,
-    snapshot_row: usize,
-) -> String {
-    let mut digest = Sha256::new();
-    digest.update(b"adam-core-od-member-input/v1\0");
-    fingerprint_string(&mut digest, &source.id[source_row]);
-    fingerprint_optional_string(&mut digest, source.exposure_id[source_row].as_deref());
-    fingerprint_string(&mut digest, source.time.scale.as_str());
-    digest.update(source.time.days[source_row].to_le_bytes());
-    digest.update(source.time.nanos[source_row].to_le_bytes());
-    for value in [source.ra[source_row], source.dec[source_row]] {
-        digest.update(value.to_bits().to_le_bytes());
-    }
-    for value in [
-        source.ra_sigma[source_row],
-        source.dec_sigma[source_row],
-        source.radec_corr[source_row],
-        source.mag[source_row],
-        source.mag_sigma[source_row],
-        source.fwhm[source_row],
-        source.a[source_row],
-        source.a_sigma[source_row],
-        source.b[source_row],
-        source.b_sigma[source_row],
-        source.pa[source_row],
-        source.pa_sigma[source_row],
-        source.exposure_duration[source_row],
-        source.exposure_seeing[source_row],
-        source.exposure_depth_5sigma[source_row],
-    ] {
-        fingerprint_optional_f64(&mut digest, value);
-    }
-    fingerprint_string(&mut digest, &source.observatory_code[source_row]);
-    fingerprint_optional_string(&mut digest, source.filter[source_row].as_deref());
-    let exposure_start_valid = source
-        .exposure_start_time
-        .validity
-        .as_ref()
-        .is_none_or(|validity| validity[source_row]);
-    digest.update([u8::from(exposure_start_valid)]);
-    if exposure_start_valid {
-        fingerprint_string(&mut digest, source.exposure_start_time.scale.as_str());
-        digest.update(source.exposure_start_time.days[source_row].to_le_bytes());
-        digest.update(source.exposure_start_time.nanos[source_row].to_le_bytes());
-    }
-    fingerprint_optional_string(&mut digest, source.object_id[source_row].as_deref());
-    fingerprint_string(&mut digest, &source.catalog_id[source_row]);
-    fingerprint_optional_string(&mut digest, source.astcat[source_row].as_deref());
-    fingerprint_optional_string(&mut digest, source.photcat[source_row].as_deref());
-
-    fingerprint_string(&mut digest, &observers.code[source_row].0);
-    fingerprint_string(&mut digest, observers.coordinates.frame.as_str());
-    fingerprint_string(
-        &mut digest,
-        &observers.coordinates.origins.origins[source_row].code(),
-    );
-    for value in observers.coordinates.values.raw_values()[source_row] {
-        digest.update(value.to_bits().to_le_bytes());
-    }
-    digest.update([u8::from(observers.coordinates.times.is_some())]);
-    if let Some(times) = &observers.coordinates.times {
-        fingerprint_string(&mut digest, times.scale.as_str());
-        digest.update(times.epochs[source_row].days.to_le_bytes());
-        digest.update(times.epochs[source_row].nanos.to_le_bytes());
-    }
-    digest.update([u8::from(observers.coordinates.covariance.is_some())]);
-    if let Some(covariance) = &observers.coordinates.covariance {
-        digest.update((covariance.row_dimension(source_row) as u64).to_le_bytes());
-        digest.update([u8::from(covariance.is_row_valid(source_row))]);
-        for value in covariance.row_values(source_row) {
-            digest.update(value.to_bits().to_le_bytes());
-        }
-    }
-    for value in [
-        original.lon[snapshot_row],
-        original.lat[snapshot_row],
-        original.sigma_lon[snapshot_row],
-        original.sigma_lat[snapshot_row],
-        original.variance_lon[snapshot_row],
-        original.variance_lat[snapshot_row],
-        original.cov_lonlat[snapshot_row],
-        used.lon[snapshot_row],
-        used.lat[snapshot_row],
-        used.sigma_lon[snapshot_row],
-        used.sigma_lat[snapshot_row],
-        used.variance_lon[snapshot_row],
-        used.variance_lat[snapshot_row],
-        used.cov_lonlat[snapshot_row],
-    ] {
-        digest.update(value.to_bits().to_le_bytes());
-    }
-    format!("{:x}", digest.finalize())
-}
-
-fn member_input_fingerprints(
-    source: &SourceCatalogBatch,
-    observers: &DataObserverBatch,
-    rows: &[usize],
-    original: &AstrometrySnapshot,
-    used: &AstrometrySnapshot,
-) -> Vec<String> {
-    rows.iter()
-        .enumerate()
-        .map(|(snapshot_row, &source_row)| {
-            member_input_fingerprint(source, observers, source_row, original, used, snapshot_row)
-        })
-        .collect()
-}
-
-fn membership_fingerprint(
-    group_id: &str,
-    orbit_id: &str,
-    observation_id: &str,
-    member_fingerprint: &str,
-) -> String {
-    let mut digest = Sha256::new();
-    digest.update(b"adam-core-od-membership-pair/v1\0");
-    fingerprint_string(&mut digest, group_id);
-    fingerprint_string(&mut digest, orbit_id);
-    fingerprint_string(&mut digest, observation_id);
-    fingerprint_string(&mut digest, member_fingerprint);
-    format!("{:x}", digest.finalize())
-}
-
-fn orbit_state_fingerprint(
-    orbits: &DataOrbitBatch,
-    row: usize,
-    state_override: Option<&[f64; 6]>,
-    covariance_override: Option<&[f64; 36]>,
-) -> String {
-    let mut digest = Sha256::new();
-    digest.update(b"adam-core-od-orbit-state/v1\0");
-    fingerprint_string(&mut digest, orbits.coordinates.frame.as_str());
-    fingerprint_string(&mut digest, &orbits.coordinates.origins.origins[row].code());
-    let state = state_override
-        .copied()
-        .unwrap_or(orbits.coordinates.values.raw_values()[row]);
-    for value in state {
-        digest.update(value.to_bits().to_le_bytes());
-    }
-    digest.update([u8::from(orbits.coordinates.times.is_some())]);
-    if let Some(times) = &orbits.coordinates.times {
-        fingerprint_string(&mut digest, times.scale.as_str());
-        digest.update(times.epochs[row].days.to_le_bytes());
-        digest.update(times.epochs[row].nanos.to_le_bytes());
-    }
-    let covariance = covariance_override.map(<[f64; 36]>::as_slice).or_else(|| {
-        orbits
-            .coordinates
-            .covariance
-            .as_ref()
-            .map(|values| values.row_values(row))
-    });
-    digest.update([u8::from(covariance.is_some())]);
-    if let Some(covariance) = covariance {
-        digest.update((covariance.len() as u64).to_le_bytes());
-        for &value in covariance {
-            digest.update(value.to_bits().to_le_bytes());
-        }
-    }
-    digest.update([u8::from(orbits.physical_parameters.is_some())]);
-    if let Some(parameters) = &orbits.physical_parameters {
-        for value in [
-            parameters.h_v[row],
-            parameters.h_v_sigma[row],
-            parameters.g[row],
-            parameters.g_sigma[row],
-            parameters.sigma_eff[row],
-            parameters.chi2_red[row],
-        ] {
-            fingerprint_optional_f64(&mut digest, value);
-        }
-    }
-    digest.update([u8::from(orbits.non_gravitational_parameters.is_some())]);
-    if let Some(parameters) = &orbits.non_gravitational_parameters {
-        fingerprint_optional_string(&mut digest, parameters.source[row].as_deref());
-        let values = parameters.row(row);
-        for value in [
-            values.a1, values.a2, values.a3, values.aln, values.nk, values.nm, values.nn, values.r0,
-        ] {
-            fingerprint_optional_f64(&mut digest, value);
-        }
-    }
-    format!("{:x}", digest.finalize())
-}
-
-fn output_orbit_state_fingerprint(
-    iod: Option<&IodResult>,
-    refined: Option<&adam_core_rs_coords::propagation::RefinedOutput>,
-    input_orbit: Option<(&DataOrbitBatch, usize)>,
-) -> PyResult<Option<String>> {
-    let override_state = refined.map(|value| &value.fit.state);
-    let override_covariance = refined.map(|value| &value.fit.covariance);
-    if let Some((orbits, row)) = input_orbit {
-        return Ok(Some(orbit_state_fingerprint(
-            orbits,
-            row,
-            override_state,
-            override_covariance,
-        )));
-    }
-    let Some(iod) = iod else {
-        return Ok(None);
-    };
-    let Some(seed) = iod.seed_orbit().map_err(od_error)? else {
-        return Ok(None);
-    };
-    Ok(Some(orbit_state_fingerprint(
-        &seed,
-        0,
-        override_state,
-        override_covariance,
-    )))
-}
-
-fn group_input_fingerprint(
-    group_id: &str,
-    source: &SourceCatalogBatch,
-    observers: &DataObserverBatch,
-    rows: &[usize],
-    original: &AstrometrySnapshot,
-    used: &AstrometrySnapshot,
-    input_orbit: Option<(&DataOrbitBatch, usize)>,
-    member_outlier: Option<&[bool]>,
-) -> String {
-    let mut digest = Sha256::new();
-    digest.update(b"adam-core-od-input/v1\0");
-    fingerprint_string(&mut digest, group_id);
-    if let Some((orbits, row)) = input_orbit {
-        digest.update([1]);
-        fingerprint_string(&mut digest, &orbits.orbit_id[row].0);
-        fingerprint_optional_string(
-            &mut digest,
-            orbits.object_id[row].as_ref().map(|value| value.0.as_str()),
-        );
-        fingerprint_string(
-            &mut digest,
-            &orbit_state_fingerprint(orbits, row, None, None),
-        );
-    } else {
-        digest.update([0]);
-    }
-    digest.update([u8::from(member_outlier.is_some())]);
-    if let Some(member_outlier) = member_outlier {
-        digest.update((member_outlier.len() as u64).to_le_bytes());
-        for value in member_outlier {
-            digest.update([u8::from(*value)]);
-        }
-    }
-    for fingerprint in member_input_fingerprints(source, observers, rows, original, used) {
-        fingerprint_string(&mut digest, &fingerprint);
-    }
-    format!("{:x}", digest.finalize())
-}
-
-fn canonical_orbit_id(group_id: &str, config_sha256: &str, input_fingerprint: &str) -> String {
-    let mut digest = Sha256::new();
-    digest.update(b"adam-core-od-orbit/v1\0");
-    fingerprint_string(&mut digest, group_id);
-    fingerprint_string(&mut digest, config_sha256);
-    fingerprint_string(&mut digest, input_fingerprint);
-    format!("{:x}", digest.finalize())
-}
-
-#[derive(Debug, Clone)]
-struct ConfigurationIdentity {
-    science_sha256: String,
-    complete_sha256: String,
-}
-
-fn configuration_identity(configuration: &str) -> Result<ConfigurationIdentity, String> {
-    let mut value: serde_json::Value = serde_json::from_str(configuration)
-        .map_err(|error| format!("invalid orbit configuration: {error}"))?;
-    let complete_canonical = serde_json::to_vec(&value)
-        .map_err(|error| format!("configuration is not serializable: {error}"))?;
-    let complete_sha256 = format!("{:x}", Sha256::digest(complete_canonical));
-    let declared = value
-        .get("configuration_sha256")
-        .and_then(serde_json::Value::as_str)
-        .map(str::to_string);
-    let science_sha256 = if let Some(declared) = declared {
-        if !is_sha256(&declared) {
-            return Err("configuration_sha256 is not a lowercase SHA-256".to_string());
-        }
-        let object = value
-            .as_object_mut()
-            .ok_or_else(|| "configuration provenance is not an object".to_string())?;
-        object.remove("configuration_sha256");
-        // Profile identity records selection, not science, and is intentionally
-        // excluded by OdConfig::configuration_sha256. It remains covered by
-        // complete_sha256 and therefore by the provenance consistency digest.
-        object.remove("profile");
-        let canonical = serde_json::to_vec(&value)
-            .map_err(|error| format!("configuration is not serializable: {error}"))?;
-        let actual = format!("{:x}", Sha256::digest(canonical));
-        if declared != actual {
-            return Err("configuration_sha256 does not match canonical configuration".to_string());
-        }
-        declared
-    } else {
-        // Standalone stage configurations have no embedded full-OD science
-        // digest, so their canonical value supplies both identities.
-        complete_sha256.clone()
-    };
-    Ok(ConfigurationIdentity {
-        science_sha256,
-        complete_sha256,
-    })
-}
-
-#[allow(clippy::too_many_arguments)]
-fn provenance_consistency_digest(
-    route: &str,
-    configuration: &ConfigurationIdentity,
-    input: &str,
-    iod_backend: Option<&str>,
-    iod_provider: Option<&str>,
-    iod_diagnostics: Option<&str>,
-    iod_ambiguous: Option<bool>,
-    iod_alternatives: Option<usize>,
-) -> String {
-    let mut digest = Sha256::new();
-    digest.update(b"adam-core-od-provenance-consistency/v2\0");
-    fingerprint_string(&mut digest, route);
-    fingerprint_string(&mut digest, &configuration.science_sha256);
-    fingerprint_string(&mut digest, &configuration.complete_sha256);
-    fingerprint_string(&mut digest, input);
-    fingerprint_optional_string(&mut digest, iod_backend);
-    fingerprint_optional_string(&mut digest, iod_provider);
-    fingerprint_optional_string(&mut digest, iod_diagnostics);
-    match iod_ambiguous {
-        Some(value) => digest.update([1, u8::from(value)]),
-        None => digest.update([0]),
-    }
-    match iod_alternatives {
-        Some(value) => {
-            digest.update([1]);
-            digest.update((value as u64).to_le_bytes());
-        }
-        None => digest.update([0]),
-    }
-    format!("{:x}", digest.finalize())
-}
-
-#[derive(Debug, Clone)]
-struct BatchFailure {
-    stage: &'static str,
-    code: &'static str,
-    message: String,
-    num_obs: usize,
-    arc_length: Option<f64>,
-    triplets_tried: Option<usize>,
-    candidates_evaluated: Option<usize>,
-    candidates_failed: Option<usize>,
-    corrections_run: Option<usize>,
-    passes: Option<usize>,
-    n_rejected: Option<usize>,
-    n_recovered: Option<usize>,
-    status_code: Option<i64>,
-    best_state_retained: bool,
-}
-
-fn group_scientific_code(error: &adam_core_rs_coords::PropagationError) -> Option<&'static str> {
-    match error {
-        adam_core_rs_coords::PropagationError::GroupScientific { code, .. } => Some(code.as_str()),
-        _ => None,
-    }
-}
-
-fn local_scientific_error(error: &adam_core_rs_coords::PropagationError) -> bool {
-    group_scientific_code(error).is_some()
-}
-
 #[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct OrbitProvenanceInput {
     adam_core_version: Option<String>,
     adam_core_build: Option<String>,
@@ -1816,72 +1362,113 @@ struct OrbitProvenanceInput {
     state_fingerprint: Option<String>,
     provenance_fingerprint: Option<String>,
     route: Option<String>,
+    fitter: Option<String>,
     iod_backend: Option<String>,
+    refinement_backend: Option<String>,
+    evaluation_backend: Option<String>,
     iod_provider: Option<String>,
+    refinement_provider: Option<String>,
+    evaluation_provider: Option<String>,
     iod_diagnostics: Option<String>,
+    refinement_diagnostics: Option<String>,
+    evaluation_diagnostics: Option<String>,
+    settings: Option<String>,
     configuration: Option<String>,
     iod_ambiguous: Option<bool>,
     iod_alternatives: Option<usize>,
+    num_rejected: Option<usize>,
+    rejected_fraction: Option<f64>,
 }
 
-#[derive(Debug, Clone)]
-struct SeedIodProvenance {
-    input_fingerprint: String,
-    configuration_identity: ConfigurationIdentity,
-    iod_backend: String,
-    iod_provider: String,
-    iod_diagnostics: String,
-    configuration: String,
-    iod_ambiguous: bool,
-    iod_alternatives: usize,
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ProviderMetadataInput {
+    name: String,
+    version: String,
+    abi_version: u32,
+    identity_validated_by_capsule: bool,
+    capabilities: u64,
+    known_capabilities: u64,
+    integration_time_scale: String,
+    two_body_dynamics: bool,
+    configuration_fingerprint: String,
+    data_fingerprint: String,
 }
 
-fn validate_seed_source_fingerprint(
-    seed: Option<&SeedIodProvenance>,
-    orbits: &DataOrbitBatch,
-    orbit_index: usize,
-    source: &SourceCatalogBatch,
-    observers: &DataObserverBatch,
-    source_indices: &[usize],
-    prepared: &adam_core_rs_coords::od::algorithms::PreparedObservations,
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct IodDiagnosticsInput {
+    triplets_tried: usize,
+    candidates_evaluated: usize,
+    candidates_failed: usize,
+    corrections_run: usize,
+    search_cap_exhausted: bool,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RefinementDiagnosticsInput {
+    passes: usize,
+    n_rejected: usize,
+    n_recovered: usize,
+    flags: Vec<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct EvaluationDiagnosticsInput {
+    num_obs: usize,
+    arc_length: f64,
+    chi2: f64,
+    reduced_chi2: f64,
+}
+
+fn validate_backend_identity(
+    row: usize,
+    stage: &str,
+    backend: Option<&str>,
+    provider: Option<&ProviderMetadata>,
 ) -> PyResult<()> {
-    let Some(seed) = seed else {
-        return Ok(());
-    };
-    let group_id = orbits.object_id[orbit_index]
-        .as_ref()
-        .map(|value| value.0.as_str())
-        .ok_or_else(|| value_error("composed IOD seed has no association group object_id"))?;
-    let actual = group_input_fingerprint(
-        group_id,
-        source,
-        observers,
-        source_indices,
-        &prepared.original,
-        &prepared.used,
-        None,
-        None,
-    );
-    if actual != seed.input_fingerprint {
-        return Err(value_error(format!(
-            "current observations for orbit row {orbit_index} do not match the canonical IOD input fingerprint"
-        )));
+    match (backend, provider) {
+        (Some(backend), Some(provider)) if backend == provider.backend_label() => Ok(()),
+        (None, None) => Ok(()),
+        _ => Err(value_error(format!(
+            "orbit provenance at row {row} has a {stage} backend identity inconsistent with its consistency digest"
+        ))),
     }
-    Ok(())
 }
 
-fn is_sha256(value: &str) -> bool {
-    value.len() == 64
-        && value
-            .bytes()
-            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+fn parse_provider_metadata(
+    value: Option<String>,
+    row: usize,
+) -> PyResult<Option<ProviderMetadata>> {
+    value
+        .map(|value| {
+            let decoded: ProviderMetadataInput = serde_json::from_str(&value).map_err(|error| {
+                value_error(format!(
+                    "invalid provider provenance at orbit row {row}: {error}"
+                ))
+            })?;
+            Ok(ProviderMetadata {
+                name: decoded.name,
+                version: decoded.version,
+                abi_version: decoded.abi_version,
+                identity_validated_by_capsule: decoded.identity_validated_by_capsule,
+                capabilities: decoded.capabilities,
+                known_capabilities: decoded.known_capabilities,
+                integration_time_scale: decoded.integration_time_scale,
+                two_body_dynamics: decoded.two_body_dynamics,
+                configuration_fingerprint: decoded.configuration_fingerprint,
+                data_fingerprint: decoded.data_fingerprint,
+            })
+        })
+        .transpose()
 }
 
-fn parse_orbit_provenance(
+fn parse_typed_orbit_provenance(
     values: &[Option<String>],
     orbits: &DataOrbitBatch,
-    refinement_config_json: Option<&str>,
-) -> PyResult<Vec<Option<SeedIodProvenance>>> {
+) -> PyResult<Vec<Option<OdProvenance>>> {
     if values.len() != orbits.len() {
         return Err(value_error(format!(
             "orbit provenance length {} does not match {} orbit rows",
@@ -1889,15 +1476,6 @@ fn parse_orbit_provenance(
             orbits.len()
         )));
     }
-    let expected_refinement = refinement_config_json
-        .map(serde_json::from_str::<serde_json::Value>)
-        .transpose()
-        .map_err(|error| {
-            value_error(format!(
-                "invalid canonical refinement configuration: {error}"
-            ))
-        })?;
-    let (version, build) = checked_build_identity()?;
     values
         .iter()
         .enumerate()
@@ -1907,591 +1485,137 @@ fn parse_orbit_provenance(
                     "canonical orbit row {row} has no complete Rust provenance"
                 ))
             })?;
-            let provenance: OrbitProvenanceInput = serde_json::from_str(encoded).map_err(|error| {
+            let decoded: OrbitProvenanceInput = serde_json::from_str(encoded).map_err(|error| {
                 value_error(format!("invalid orbit provenance at row {row}: {error}"))
             })?;
-            let input_fingerprint = provenance
-                .input_fingerprint
-                .as_deref()
-                .filter(|value| is_sha256(value))
-                .ok_or_else(|| value_error(format!("orbit provenance at row {row} has no valid input fingerprint")))?;
-            let state_fingerprint = provenance
-                .state_fingerprint
-                .as_deref()
-                .filter(|value| is_sha256(value))
-                .ok_or_else(|| value_error(format!("orbit provenance at row {row} has no valid state fingerprint")))?;
-            if provenance.adam_core_version.as_deref() != Some(version)
-                || provenance.adam_core_build.as_deref() != Some(build)
-            {
+            if decoded.fitter.is_some() || decoded.settings.is_some() {
                 return Err(value_error(format!(
-                    "orbit provenance at row {row} has incompatible Core build identity"
+                    "orbit provenance at row {row} contains unsupported executable settings"
                 )));
             }
-            let actual_state = orbit_state_fingerprint(orbits, row, None, None);
-            if actual_state != state_fingerprint {
-                return Err(value_error(format!(
-                    "orbit row {row} does not match its Rust state fingerprint"
-                )));
-            }
-            let route = provenance.route.as_deref().ok_or_else(|| {
-                value_error(format!("orbit provenance at row {row} has no route"))
-            })?;
-            if !matches!(route, "run_iod" | "run_od" | "refine" | "evaluate_orbits") {
-                return Err(value_error(format!(
-                    "orbit provenance at row {row} has unknown route {route:?}"
-                )));
-            }
-            let configuration = provenance.configuration.as_deref().ok_or_else(|| {
-                value_error(format!("orbit provenance at row {row} has no configuration"))
-            })?;
-            let configuration_value: serde_json::Value = serde_json::from_str(configuration)
-                .map_err(|error| value_error(format!("invalid orbit configuration at row {row}: {error}")))?;
-            let configuration_identity = configuration_identity(configuration).map_err(|error| {
-                value_error(format!("orbit configuration at row {row} is invalid: {error}"))
-            })?;
-            let canonical_configuration = serde_json::to_string(&configuration_value)
-                .map_err(|error| value_error(format!("orbit configuration at row {row} is not serializable: {error}")))?;
-            let declared_provenance_fingerprint = provenance
-                .provenance_fingerprint
-                .as_deref()
-                .filter(|value| is_sha256(value))
-                .ok_or_else(|| value_error(format!("orbit provenance at row {row} has no valid provenance fingerprint")))?;
-            let expected_provenance_fingerprint = provenance_consistency_digest(
-                route,
-                &configuration_identity,
-                input_fingerprint,
-                provenance.iod_backend.as_deref(),
-                provenance.iod_provider.as_deref(),
-                provenance.iod_diagnostics.as_deref(),
-                provenance.iod_ambiguous,
-                provenance.iod_alternatives,
-            );
-            if declared_provenance_fingerprint != expected_provenance_fingerprint {
-                return Err(value_error(format!(
-                    "orbit provenance at row {row} does not match its validated consistency digest"
-                )));
-            }
-            if route != "run_iod" {
-                return Ok(None);
-            }
-            if let Some(expected_refinement) = expected_refinement.as_ref() {
-                if configuration_value.get("refinement") != Some(expected_refinement) {
+            let route = match decoded.route.as_deref() {
+                Some("run_iod") => OdRoute::RunIod,
+                Some("run_od") => OdRoute::RunOd,
+                Some("refine") => OdRoute::Refine,
+                Some("evaluate_orbits") => OdRoute::EvaluateOrbits,
+                other => {
                     return Err(value_error(format!(
-                        "seed IOD refinement configuration at orbit row {row} does not match the requested refinement"
-                    )));
+                        "orbit provenance at row {row} has unknown route {other:?}"
+                    )))
                 }
-            }
-            let config_sha = configuration_value
-                .get("configuration_sha256")
-                .and_then(serde_json::Value::as_str)
-                .filter(|value| **value == configuration_identity.science_sha256)
-                .ok_or_else(|| value_error(format!("seed IOD configuration at orbit row {row} has no valid configuration_sha256")))?;
-            let object_id = orbits.object_id[row]
-                .as_ref()
-                .map(|value| value.0.as_str())
-                .ok_or_else(|| value_error(format!("seed IOD orbit at row {row} requires its association group object_id")))?;
-            if orbits.orbit_id[row].0 != canonical_orbit_id(object_id, config_sha, input_fingerprint) {
-                return Err(value_error(format!(
-                    "seed IOD orbit ID at row {row} is inconsistent with its canonical provenance"
-                )));
-            }
-            let iod_provider = provenance.iod_provider.as_deref().ok_or_else(|| {
-                value_error(format!("seed IOD provenance at row {row} has no provider"))
+            };
+            let configuration = decoded.configuration.ok_or_else(|| {
+                value_error(format!(
+                    "orbit provenance at row {row} has no configuration"
+                ))
             })?;
-            let provider: serde_json::Value = serde_json::from_str(iod_provider)
-                .map_err(|error| value_error(format!("invalid seed IOD provider provenance at orbit row {row}: {error}")))?;
-            for field in ["name", "version", "configuration_fingerprint", "data_fingerprint"] {
-                if provider.get(field).and_then(serde_json::Value::as_str).is_none_or(str::is_empty) {
-                    return Err(value_error(format!(
-                        "seed IOD provider provenance at orbit row {row} has no {field}"
-                    )));
-                }
-            }
-            let iod_backend = provenance.iod_backend.filter(|value| !value.trim().is_empty())
-                .ok_or_else(|| value_error(format!("seed IOD provenance at row {row} has no backend")))?;
-            let iod_diagnostics = provenance.iod_diagnostics.filter(|value| !value.trim().is_empty())
-                .ok_or_else(|| value_error(format!("seed IOD provenance at row {row} has no diagnostics")))?;
-            Ok(Some(SeedIodProvenance {
-                input_fingerprint: input_fingerprint.to_string(),
-                configuration_identity,
-                iod_backend,
-                iod_provider: iod_provider.to_string(),
-                iod_diagnostics,
-                configuration: canonical_configuration,
-                iod_ambiguous: provenance.iod_ambiguous.ok_or_else(|| value_error(format!("seed IOD provenance at row {row} has no ambiguity flag")))?,
-                iod_alternatives: provenance.iod_alternatives.ok_or_else(|| value_error(format!("seed IOD provenance at row {row} has no alternative count")))?,
-            }))
-        })
-        .collect()
-}
-
-struct BatchIodGroup {
-    group_id: String,
-    orbit_id: String,
-    rows: Vec<usize>,
-    prepared: adam_core_rs_coords::od::algorithms::PreparedObservations,
-    iod: Option<IodResult>,
-    failure: Option<BatchFailure>,
-}
-
-struct BatchOdGroup {
-    group_id: String,
-    orbit_id: String,
-    rows: Vec<usize>,
-    prepared: adam_core_rs_coords::od::algorithms::PreparedObservations,
-    iod: Option<IodResult>,
-    refined: Option<adam_core_rs_coords::propagation::RefinedOutput>,
-    failure: Option<BatchFailure>,
-}
-
-struct BatchRefineGroup {
-    orbit_id: String,
-    orbit_index: usize,
-    rows: Vec<usize>,
-    member_rows: Vec<usize>,
-    prepared: adam_core_rs_coords::od::algorithms::PreparedObservations,
-    refined: Option<adam_core_rs_coords::propagation::RefinedOutput>,
-    failure: Option<BatchFailure>,
-}
-
-struct BatchEvaluationGroup {
-    orbit_id: String,
-    orbit_index: usize,
-    rows: Vec<usize>,
-    member_rows: Vec<usize>,
-    member_outlier: Vec<bool>,
-    prepared: adam_core_rs_coords::od::algorithms::PreparedObservations,
-    evaluation: Option<adam_core_rs_coords::propagation::FitEvaluation>,
-    failure: Option<BatchFailure>,
-}
-
-#[allow(clippy::too_many_arguments)]
-fn prepared_from_member_snapshots(
-    observed: DataCoordinateBatch,
-    member_indices: &[usize],
-    original_lon: &[Option<f64>],
-    original_lat: &[Option<f64>],
-    original_sigma_lon: &[Option<f64>],
-    original_sigma_lat: &[Option<f64>],
-    original_variance_lon: &[Option<f64>],
-    original_variance_lat: &[Option<f64>],
-    original_cov_lonlat: &[Option<f64>],
-    used_lon: &[Option<f64>],
-    used_lat: &[Option<f64>],
-    used_sigma_lon: &[Option<f64>],
-    used_sigma_lat: &[Option<f64>],
-    used_variance_lon: &[Option<f64>],
-    used_variance_lat: &[Option<f64>],
-    used_cov_lonlat: &[Option<f64>],
-) -> PropagationResultValue<adam_core_rs_coords::od::algorithms::PreparedObservations> {
-    let required = member_indices
-        .iter()
-        .copied()
-        .max()
-        .map_or(0, |value| value + 1);
-    if [
-        original_lon.len(),
-        original_lat.len(),
-        original_sigma_lon.len(),
-        original_sigma_lat.len(),
-        original_variance_lon.len(),
-        original_variance_lat.len(),
-        original_cov_lonlat.len(),
-        used_lon.len(),
-        used_lat.len(),
-        used_sigma_lon.len(),
-        used_sigma_lat.len(),
-        used_variance_lon.len(),
-        used_variance_lat.len(),
-        used_cov_lonlat.len(),
-    ]
-    .iter()
-    .any(|&len| len < required)
-    {
-        return Err(adam_core_rs_coords::PropagationError::InvalidRequest(
-            "FittedOrbitMembers astrometry snapshot columns have inconsistent lengths".to_string(),
-        ));
-    }
-    let spherical = observed.values.spherical().ok_or_else(|| {
-        adam_core_rs_coords::PropagationError::InvalidRequest(
-            "OD observations must be spherical".to_string(),
-        )
-    })?;
-    let source_lon = spherical.iter().map(|value| value[1]).collect::<Vec<_>>();
-    let source_lat = spherical.iter().map(|value| value[2]).collect::<Vec<_>>();
-    let source_covariance = observed.covariance.as_ref().ok_or_else(|| {
-        adam_core_rs_coords::PropagationError::InvalidRequest(
-            "refinement observations require covariance".to_string(),
-        )
-    })?;
-    if source_covariance.dimension != 6 {
-        return Err(adam_core_rs_coords::PropagationError::InvalidRequest(
-            "refinement requires six-dimensional spherical observation covariance".to_string(),
-        ));
-    }
-    let source_original = AstrometrySnapshot::from_columns(
-        &source_lon,
-        &source_lat,
-        &source_covariance.values_row_major,
-    );
-    let mut values = observed.values.raw_values().to_vec();
-    let mut covariance = source_covariance.values_row_major.clone();
-    let mut original = AstrometrySnapshot {
-        lon: Vec::with_capacity(member_indices.len()),
-        lat: Vec::with_capacity(member_indices.len()),
-        sigma_lon: Vec::with_capacity(member_indices.len()),
-        sigma_lat: Vec::with_capacity(member_indices.len()),
-        variance_lon: Vec::with_capacity(member_indices.len()),
-        variance_lat: Vec::with_capacity(member_indices.len()),
-        cov_lonlat: Vec::with_capacity(member_indices.len()),
-    };
-    let mut lon = Vec::with_capacity(member_indices.len());
-    let mut lat = Vec::with_capacity(member_indices.len());
-    let mut models_changed = false;
-    let equal = |left: f64, right: f64| {
-        left.to_bits() == right.to_bits() || (left.is_nan() && right.is_nan())
-    };
-    for (row, &member) in member_indices.iter().enumerate() {
-        let original_value = |column: &[Option<f64>]| {
-            column[member].ok_or_else(|| {
-                adam_core_rs_coords::PropagationError::InvalidRequest(
-                    "refinement/evaluation requires original_astrometry for every declared member"
-                        .to_string(),
-                )
-            })
-        };
-        let persisted_original = [
-            original_value(original_lon)?,
-            original_value(original_lat)?,
-            original_value(original_sigma_lon)?,
-            original_value(original_sigma_lat)?,
-            original_value(original_variance_lon)?,
-            original_value(original_variance_lat)?,
-            original_value(original_cov_lonlat)?,
-        ];
-        let source_values = [
-            source_original.lon[row],
-            source_original.lat[row],
-            source_original.sigma_lon[row],
-            source_original.sigma_lat[row],
-            source_original.variance_lon[row],
-            source_original.variance_lat[row],
-            source_original.cov_lonlat[row],
-        ];
-        if persisted_original
-            .iter()
-            .zip(source_values)
-            .any(|(&persisted, source)| !equal(persisted, source))
-        {
-            return Err(adam_core_rs_coords::PropagationError::InvalidRequest(
-                format!(
-                    "observation source row {row} does not match persisted original_astrometry member row {member}"
-                ),
-            ));
-        }
-        original.lon.push(persisted_original[0]);
-        original.lat.push(persisted_original[1]);
-        original.sigma_lon.push(persisted_original[2]);
-        original.sigma_lat.push(persisted_original[3]);
-        original.variance_lon.push(persisted_original[4]);
-        original.variance_lat.push(persisted_original[5]);
-        original.cov_lonlat.push(persisted_original[6]);
-
-        let member_value = |column: &[Option<f64>]| {
-            column[member].ok_or_else(|| {
-                adam_core_rs_coords::PropagationError::InvalidRequest(
-                    "refinement/evaluation requires used_astrometry for every declared member"
-                        .to_string(),
-                )
-            })
-        };
-        let used_lon = member_value(used_lon)?;
-        let used_lat = member_value(used_lat)?;
-        let sigma_lon = member_value(used_sigma_lon)?;
-        let sigma_lat = member_value(used_sigma_lat)?;
-        let variance_lon = member_value(used_variance_lon)?;
-        let variance_lat = member_value(used_variance_lat)?;
-        if !used_lon.is_finite()
-            || !(0.0..360.0).contains(&used_lon)
-            || !used_lat.is_finite()
-            || !(-90.0..=90.0).contains(&used_lat)
-            || !sigma_lon.is_finite()
-            || !sigma_lat.is_finite()
-            || !variance_lon.is_finite()
-            || !variance_lat.is_finite()
-            || sigma_lon <= 0.0
-            || sigma_lat <= 0.0
-            || variance_lon <= 0.0
-            || variance_lat <= 0.0
-            || !equal(sigma_lon, variance_lon.sqrt())
-            || !equal(sigma_lat, variance_lat.sqrt())
-        {
-            return Err(adam_core_rs_coords::PropagationError::InvalidRequest(
-                format!("member used_astrometry row {member} is not finite and positive"),
-            ));
-        }
-        let cross = used_cov_lonlat[member].unwrap_or(f64::NAN);
-        if cross.is_infinite()
-            || (cross.is_finite() && variance_lon * variance_lat - cross.powi(2) <= 0.0)
-        {
-            return Err(adam_core_rs_coords::PropagationError::InvalidRequest(
-                format!("member used_astrometry row {member} covariance is not positive definite"),
-            ));
-        }
-        models_changed |= !equal(persisted_original[0], used_lon)
-            || !equal(persisted_original[1], used_lat)
-            || !equal(persisted_original[2], sigma_lon)
-            || !equal(persisted_original[3], sigma_lat)
-            || !equal(persisted_original[4], variance_lon)
-            || !equal(persisted_original[5], variance_lat)
-            || !equal(persisted_original[6], cross);
-        values[row][1] = used_lon;
-        values[row][2] = used_lat;
-        let block = &mut covariance[row * 36..(row + 1) * 36];
-        block[7] = variance_lon;
-        block[14] = variance_lat;
-        block[8] = cross;
-        block[13] = cross;
-        lon.push(used_lon);
-        lat.push(used_lat);
-    }
-    let used = AstrometrySnapshot::from_columns(&lon, &lat, &covariance);
-    let mut covariance_batch = adam_core_rs_coords::CovarianceBatch::new(
-        member_indices.len(),
-        source_covariance.dimension,
-        covariance,
-        source_covariance.units.clone(),
-    )?;
-    if let Some(validity) = &source_covariance.row_validity {
-        covariance_batch = covariance_batch.with_row_validity(validity.clone())?;
-    }
-    let coordinates = DataCoordinateBatch::new(
-        adam_core_rs_coords::CoordinateValues::Spherical(values),
-        observed.frame,
-        observed.origins,
-        observed.times,
-        Some(covariance_batch),
-    )?;
-    Ok(adam_core_rs_coords::propagation::AppliedObservationModels {
-        original,
-        used,
-        models_changed,
-        observations: coordinates,
-    })
-}
-
-fn prepare_association_groups(
-    groups: &[adam_core_rs_coords::od::AssociationGroup],
-    source: &SourceCatalogBatch,
-    problem: &OdObservations,
-    config: &OdConfig,
-) -> PyResult<
-    Vec<(
-        adam_core_rs_coords::od::algorithms::PreparedObservations,
-        DataObserverBatch,
-    )>,
-> {
-    groups
-        .iter()
-        .map(|group| {
-            let observed = problem
-                .observed
-                .take(&group.source_indices)
-                .map_err(|error| value_error(error.to_string()))?;
-            let observers = problem
-                .observers
-                .take(&group.source_indices)
-                .map_err(|error| value_error(error.to_string()))?;
-            let obs_code = group
-                .source_indices
-                .iter()
-                .map(|&row| source.observatory_code[row].clone())
-                .collect::<Vec<_>>();
-            let band = group
-                .source_indices
-                .iter()
-                .map(|&row| source.filter[row].clone())
-                .collect::<Vec<_>>();
-            let astcat = group
-                .source_indices
-                .iter()
-                .map(|&row| source.astcat[row].clone())
-                .collect::<Vec<_>>();
-            let prepared = adam_core_rs_coords::od::algorithms::prepare_observations(
-                &observed,
-                &obs_code,
-                &band,
-                &astcat,
-                config,
-                &ErfaTimeProvider,
+            let configuration = adam_core::od::CanonicalConfiguration::from_value(
+                serde_json::from_str(&configuration).map_err(|error| {
+                    value_error(format!("invalid orbit configuration at row {row}: {error}"))
+                })?,
             )
-            .map_err(od_error)?;
-            Ok((prepared, observers))
-        })
-        .collect()
-}
-
-#[allow(clippy::too_many_arguments)]
-fn prepare_member_groups(
-    groups: &[adam_core_rs_coords::od::OrbitMemberGroup],
-    source: &SourceCatalogBatch,
-    problem: &OdObservations,
-    orbits: &DataOrbitBatch,
-    seed_iod_provenance: Option<&[Option<SeedIodProvenance>]>,
-    persisted_member_fingerprints: &[Option<String>],
-    persisted_membership_fingerprints: &[Option<String>],
-    original_lon: &[Option<f64>],
-    original_lat: &[Option<f64>],
-    original_sigma_lon: &[Option<f64>],
-    original_sigma_lat: &[Option<f64>],
-    original_variance_lon: &[Option<f64>],
-    original_variance_lat: &[Option<f64>],
-    original_cov_lonlat: &[Option<f64>],
-    used_lon: &[Option<f64>],
-    used_lat: &[Option<f64>],
-    used_sigma_lon: &[Option<f64>],
-    used_sigma_lat: &[Option<f64>],
-    used_variance_lon: &[Option<f64>],
-    used_variance_lat: &[Option<f64>],
-    used_cov_lonlat: &[Option<f64>],
-) -> PyResult<
-    Vec<(
-        adam_core_rs_coords::od::algorithms::PreparedObservations,
-        DataObserverBatch,
-    )>,
-> {
-    groups
-        .iter()
-        .map(|group| {
-            let observed = problem
-                .observed
-                .take(&group.source_indices)
-                .map_err(|error| value_error(error.to_string()))?;
-            let observers = problem
-                .observers
-                .take(&group.source_indices)
-                .map_err(|error| value_error(error.to_string()))?;
-            let prepared = prepared_from_member_snapshots(
-                observed,
-                &group.member_indices,
-                original_lon,
-                original_lat,
-                original_sigma_lon,
-                original_sigma_lat,
-                original_variance_lon,
-                original_variance_lat,
-                original_cov_lonlat,
-                used_lon,
-                used_lat,
-                used_sigma_lon,
-                used_sigma_lat,
-                used_variance_lon,
-                used_variance_lat,
-                used_cov_lonlat,
-            )
-            .map_err(od_error)?;
-            let actual_member_fingerprints = member_input_fingerprints(
-                source,
-                &problem.observers,
-                &group.source_indices,
-                &prepared.original,
-                &prepared.used,
-            );
-            for (&member_row, actual) in group
-                .member_indices
-                .iter()
-                .zip(actual_member_fingerprints.iter())
-            {
-                let persisted = persisted_member_fingerprints[member_row]
-                    .as_deref()
-                    .filter(|value| is_sha256(value))
-                    .ok_or_else(|| {
-                        value_error(format!(
-                            "FittedOrbitMembers input_fingerprint is missing or invalid at row {member_row}"
-                        ))
-                    })?;
-                if persisted != actual {
-                    return Err(value_error(format!(
-                        "current source/observer/prepared input does not match member fingerprint at row {member_row}"
-                    )));
-                }
-            }
-            let group_id = orbit_group_id(orbits, group.orbit_index, &group.orbit_id);
-            for ((&source_row, &member_row), member_fingerprint) in group
-                .source_indices
-                .iter()
-                .zip(group.member_indices.iter())
-                .zip(actual_member_fingerprints.iter())
-            {
-                let actual = membership_fingerprint(
-                    group_id,
-                    &group.orbit_id,
-                    &source.id[source_row],
-                    member_fingerprint,
-                );
-                let persisted = persisted_membership_fingerprints[member_row]
-                    .as_deref()
-                    .filter(|value| is_sha256(value))
-                    .ok_or_else(|| {
-                        value_error(format!(
-                            "FittedOrbitMembers membership_fingerprint is missing or invalid at row {member_row}"
-                        ))
-                    })?;
-                if persisted != actual {
-                    return Err(value_error(format!(
-                        "current explicit membership does not match its Rust fingerprint at row {member_row}"
-                    )));
-                }
-            }
-            validate_seed_source_fingerprint(
-                seed_iod_provenance.and_then(|values| values[group.orbit_index].as_ref()),
-                orbits,
-                group.orbit_index,
-                source,
-                &problem.observers,
-                &group.source_indices,
-                &prepared,
+            .map_err(batch_error)?;
+            let iod_diagnostics = decoded
+                .iod_diagnostics
+                .map(|value| serde_json::from_str::<IodDiagnosticsInput>(&value))
+                .transpose()
+                .map_err(|error| value_error(format!("invalid IOD diagnostics: {error}")))?
+                .map(|value| adam_core::od::IodDiagnostics {
+                    triplets_tried: value.triplets_tried,
+                    candidates_evaluated: value.candidates_evaluated,
+                    candidates_failed: value.candidates_failed,
+                    corrections_run: value.corrections_run,
+                    search_cap_exhausted: value.search_cap_exhausted,
+                });
+            let refinement_diagnostics = decoded
+                .refinement_diagnostics
+                .map(|value| serde_json::from_str::<RefinementDiagnosticsInput>(&value))
+                .transpose()
+                .map_err(|error| value_error(format!("invalid refinement diagnostics: {error}")))?
+                .map(|value| adam_core::od::RefinementDiagnostics {
+                    passes: value.passes,
+                    n_rejected: value.n_rejected,
+                    n_recovered: value.n_recovered,
+                    flags: value.flags,
+                });
+            let evaluation_diagnostics = decoded
+                .evaluation_diagnostics
+                .map(|value| serde_json::from_str::<EvaluationDiagnosticsInput>(&value))
+                .transpose()
+                .map_err(|error| value_error(format!("invalid evaluation diagnostics: {error}")))?
+                .map(|value| adam_core::od::EvaluationDiagnostics {
+                    num_obs: value.num_obs,
+                    arc_length: value.arc_length,
+                    chi2: value.chi2,
+                    reduced_chi2: value.reduced_chi2,
+                });
+            let iod_provider = parse_provider_metadata(decoded.iod_provider, row)?;
+            let refinement_provider = parse_provider_metadata(decoded.refinement_provider, row)?;
+            let evaluation_provider = parse_provider_metadata(decoded.evaluation_provider, row)?;
+            validate_backend_identity(
+                row,
+                "IOD",
+                decoded.iod_backend.as_deref(),
+                iod_provider.as_ref(),
             )?;
-            Ok((prepared, observers))
+            validate_backend_identity(
+                row,
+                "refinement",
+                decoded.refinement_backend.as_deref(),
+                refinement_provider.as_ref(),
+            )?;
+            validate_backend_identity(
+                row,
+                "evaluation",
+                decoded.evaluation_backend.as_deref(),
+                evaluation_provider.as_ref(),
+            )?;
+            let provenance = OdProvenance {
+                adam_core: CoreBuildIdentity::new(
+                    decoded.adam_core_version.unwrap_or_default(),
+                    decoded.adam_core_build.unwrap_or_default(),
+                )
+                .map_err(batch_error)?,
+                input_fingerprint: decoded.input_fingerprint.unwrap_or_default(),
+                state_fingerprint: decoded.state_fingerprint,
+                provenance_fingerprint: decoded.provenance_fingerprint.unwrap_or_default(),
+                route,
+                iod_provider,
+                refinement_provider,
+                evaluation_provider,
+                iod_diagnostics,
+                refinement_diagnostics,
+                evaluation_diagnostics,
+                configuration,
+                iod_ambiguous: decoded.iod_ambiguous,
+                iod_alternatives: decoded.iod_alternatives,
+                num_rejected: decoded.num_rejected,
+                rejected_fraction: decoded.rejected_fraction,
+            };
+            provenance.validate().map_err(batch_error)?;
+            Ok(Some(provenance))
         })
         .collect()
 }
 
-fn iod_failure(result: &IodResult, n: usize) -> Option<BatchFailure> {
-    let output = result.to_output(n);
-    (!output.found).then(|| BatchFailure {
-        stage: "iod",
-        code: "no_solution",
-        message: output
-            .not_found_reason
-            .unwrap_or_else(|| "IOD found no canonical state".to_string()),
-        num_obs: n,
-        arc_length: None,
-        triplets_tried: Some(output.triplets_tried),
-        candidates_evaluated: Some(output.candidates_evaluated),
-        candidates_failed: Some(output.candidates_failed),
-        corrections_run: Some(result.corrections_run),
-        passes: None,
-        n_rejected: None,
-        n_recovered: None,
-        status_code: None,
-        best_state_retained: false,
-    })
+fn batch_error(error: OdBatchError) -> PyErr {
+    if let Some(source) = error.source {
+        od_error(source)
+    } else {
+        value_error(error.to_string())
+    }
 }
 
-fn failure_dict<'py>(
+fn typed_failure_dict<'py>(
     py: Python<'py>,
-    group_id: &str,
-    orbit_id: Option<&str>,
-    input_orbit_id: Option<&str>,
-    failure: &BatchFailure,
+    failure: &adam_core::od::OrbitDeterminationFailure,
 ) -> PyResult<Bound<'py, PyDict>> {
     let out = PyDict::new(py);
-    out.set_item("group_id", group_id)?;
-    out.set_item("orbit_id", orbit_id)?;
-    out.set_item("input_orbit_id", input_orbit_id)?;
+    out.set_item("group_id", &failure.group_id)?;
+    out.set_item("orbit_id", failure.orbit_id.as_deref())?;
+    out.set_item("input_orbit_id", failure.input_orbit_id.as_deref())?;
     out.set_item("stage", failure.stage)?;
-    out.set_item("code", failure.code)?;
+    out.set_item("code", failure.code.as_str())?;
     out.set_item("message", &failure.message)?;
     out.set_item("recoverable", failure.best_state_retained)?;
     out.set_item("num_obs", failure.num_obs)?;
@@ -2508,255 +1632,111 @@ fn failure_dict<'py>(
     Ok(out)
 }
 
-#[allow(clippy::too_many_arguments)]
-fn provenance_dict<'py>(
+fn typed_provenance_dict<'py>(
     py: Python<'py>,
-    route: &str,
-    input_fingerprint: String,
-    state_fingerprint: Option<String>,
-    config_json: &str,
-    config_identity: &ConfigurationIdentity,
-    iod_provider: Option<&ProviderMetadata>,
-    refinement_provider: Option<&ProviderMetadata>,
-    evaluation_provider: Option<&ProviderMetadata>,
-    iod: Option<&IodResult>,
-    refined: Option<&adam_core_rs_coords::propagation::RefinedOutput>,
-    evaluation: Option<&adam_core_rs_coords::propagation::FitEvaluation>,
-    seed_iod: Option<&SeedIodProvenance>,
+    provenance: &OdProvenance,
 ) -> PyResult<Bound<'py, PyDict>> {
-    let (version, build) = checked_build_identity()?;
-    let effective_route = if seed_iod.is_some() { "run_od" } else { route };
-    let effective_input_fingerprint = seed_iod
-        .map(|seed| seed.input_fingerprint.as_str())
-        .unwrap_or(input_fingerprint.as_str());
-    let effective_config_json = seed_iod
-        .map(|seed| seed.configuration.as_str())
-        .unwrap_or(config_json);
-    let effective_config_identity = seed_iod
-        .map(|seed| &seed.configuration_identity)
-        .unwrap_or(config_identity);
     let out = PyDict::new(py);
-    out.set_item("adam_core_version", version)?;
-    out.set_item("adam_core_build", build)?;
-    out.set_item("input_fingerprint", effective_input_fingerprint)?;
-    out.set_item("state_fingerprint", state_fingerprint)?;
-    out.set_item("route", effective_route)?;
+    out.set_item("adam_core_version", &provenance.adam_core.version)?;
+    out.set_item("adam_core_build", &provenance.adam_core.commit)?;
+    out.set_item("input_fingerprint", &provenance.input_fingerprint)?;
+    out.set_item("state_fingerprint", provenance.state_fingerprint.as_deref())?;
+    out.set_item("route", provenance.route.as_str())?;
     out.set_item("fitter", py.None())?;
-    let backend = |provider: &ProviderMetadata| format!("{} {}", provider.name, provider.version);
-    let iod_backend = seed_iod
-        .map(|seed| seed.iod_backend.clone())
-        .or_else(|| iod_provider.map(backend));
-    out.set_item("iod_backend", iod_backend.as_deref())?;
-    out.set_item("refinement_backend", refinement_provider.map(backend))?;
-    out.set_item("evaluation_backend", evaluation_provider.map(backend))?;
-    let iod_provider_value = seed_iod
-        .map(|seed| seed.iod_provider.clone())
-        .or_else(|| iod_provider.map(provider_json));
-    out.set_item("iod_provider", iod_provider_value.as_deref())?;
+    out.set_item("iod_backend", provenance.iod_backend())?;
+    out.set_item("refinement_backend", provenance.refinement_backend())?;
+    out.set_item("evaluation_backend", provenance.evaluation_backend())?;
+    out.set_item(
+        "iod_provider",
+        provenance
+            .iod_provider
+            .as_ref()
+            .map(ProviderMetadata::canonical_json),
+    )?;
     out.set_item(
         "refinement_provider",
-        refinement_provider.map(provider_json),
+        provenance
+            .refinement_provider
+            .as_ref()
+            .map(ProviderMetadata::canonical_json),
     )?;
     out.set_item(
         "evaluation_provider",
-        evaluation_provider.map(provider_json),
+        provenance
+            .evaluation_provider
+            .as_ref()
+            .map(ProviderMetadata::canonical_json),
     )?;
-    let iod_diagnostics = seed_iod
-        .map(|seed| seed.iod_diagnostics.clone())
-        .or_else(|| {
-            iod.map(|result| {
-                let output = result.to_output(0);
-                json!({
-                    "triplets_tried": output.triplets_tried,
-                    "candidates_evaluated": output.candidates_evaluated,
-                    "candidates_failed": output.candidates_failed,
-                    "corrections_run": result.corrections_run,
-                    "search_cap_exhausted": result.search_cap_exhausted,
-                })
-                .to_string()
-            })
-        });
-    let refinement_diagnostics = refined.map(|result| {
-        json!({
-            "passes": result.passes,
-            "n_rejected": result.n_rejected,
-            "n_recovered": result.n_recovered,
-            "flags": &result.flags,
-        })
-        .to_string()
-    });
-    let evaluation_diagnostics = evaluation.map(|result| {
-        json!({
-            "num_obs": result.num_obs,
-            "arc_length": result.arc_length,
-            "chi2": result.orbit_chi2,
-            "reduced_chi2": result.reduced_chi2,
-        })
-        .to_string()
-    });
-    out.set_item("iod_diagnostics", iod_diagnostics.as_deref())?;
-    out.set_item("refinement_diagnostics", refinement_diagnostics)?;
-    out.set_item("evaluation_diagnostics", evaluation_diagnostics)?;
+    out.set_item(
+        "iod_diagnostics",
+        provenance
+            .iod_diagnostics
+            .as_ref()
+            .map(adam_core::od::IodDiagnostics::canonical_json),
+    )?;
+    out.set_item(
+        "refinement_diagnostics",
+        provenance
+            .refinement_diagnostics
+            .as_ref()
+            .map(adam_core::od::RefinementDiagnostics::canonical_json),
+    )?;
+    out.set_item(
+        "evaluation_diagnostics",
+        provenance
+            .evaluation_diagnostics
+            .as_ref()
+            .map(adam_core::od::EvaluationDiagnostics::canonical_json),
+    )?;
     out.set_item("settings", py.None())?;
-    out.set_item("configuration", effective_config_json)?;
-    let iod_ambiguous = seed_iod
-        .map(|seed| seed.iod_ambiguous)
-        .or_else(|| iod.map(|result| !result.ambiguous_with.is_empty()));
-    let iod_alternatives = seed_iod
-        .map(|seed| seed.iod_alternatives)
-        .or_else(|| iod.map(|result| result.ambiguous_with.len()));
-    out.set_item("iod_ambiguous", iod_ambiguous)?;
-    out.set_item("iod_alternatives", iod_alternatives)?;
-    out.set_item("num_rejected", refined.map(|result| result.n_rejected))?;
-    out.set_item(
-        "rejected_fraction",
-        refined.map(|result| {
-            if result.fit.evaluation.chi2.is_empty() {
-                0.0
-            } else {
-                result.n_rejected as f64 / result.fit.evaluation.chi2.len() as f64
-            }
-        }),
-    )?;
-    out.set_item(
-        "provenance_fingerprint",
-        provenance_consistency_digest(
-            effective_route,
-            effective_config_identity,
-            effective_input_fingerprint,
-            iod_backend.as_deref(),
-            iod_provider_value.as_deref(),
-            iod_diagnostics.as_deref(),
-            iod_ambiguous,
-            iod_alternatives,
-        ),
-    )?;
+    out.set_item("configuration", provenance.configuration.canonical_json())?;
+    out.set_item("iod_ambiguous", provenance.iod_ambiguous)?;
+    out.set_item("iod_alternatives", provenance.iod_alternatives)?;
+    out.set_item("num_rejected", provenance.num_rejected)?;
+    out.set_item("rejected_fraction", provenance.rejected_fraction)?;
+    out.set_item("provenance_fingerprint", &provenance.provenance_fingerprint)?;
     Ok(out)
 }
 
-#[allow(clippy::too_many_arguments)]
-fn base_group_dict<'py>(
-    py: Python<'py>,
-    group_id: &str,
-    orbit_id: &str,
-    rows: &[usize],
-    prepared: &adam_core_rs_coords::od::algorithms::PreparedObservations,
-    iod_provider: Option<&ProviderMetadata>,
-    refinement_provider: Option<&ProviderMetadata>,
-    evaluation_provider: Option<&ProviderMetadata>,
-    config_json: &str,
-    config_identity: &ConfigurationIdentity,
-    route: &str,
-    iod: Option<&IodResult>,
-    refined: Option<&adam_core_rs_coords::propagation::RefinedOutput>,
-    evaluation: Option<&adam_core_rs_coords::propagation::FitEvaluation>,
-    seed_iod: Option<&SeedIodProvenance>,
-    input_orbit: Option<(&DataOrbitBatch, usize)>,
-    member_outlier: Option<&[bool]>,
-    source: &SourceCatalogBatch,
-    observers: &DataObserverBatch,
-) -> PyResult<Bound<'py, PyDict>> {
+fn typed_group_dict<'py>(py: Python<'py>, group: &OdGroupResult) -> PyResult<Bound<'py, PyDict>> {
     let out = PyDict::new(py);
-    out.set_item("group_id", group_id)?;
-    out.set_item("orbit_id", orbit_id)?;
-    out.set_item("row_indices", rows)?;
+    out.set_item("group_id", &group.group_id)?;
+    out.set_item("orbit_id", &group.orbit_id)?;
+    out.set_item("row_indices", &group.row_indices)?;
+    out.set_item("member_indices", &group.member_indices)?;
     out.set_item(
         "original_astrometry",
-        snapshot_dict(py, prepared.original.clone())?,
+        snapshot_dict(py, group.prepared.original.clone())?,
     )?;
-    out.set_item("used_astrometry", snapshot_dict(py, prepared.used.clone())?)?;
-    let member_fingerprints =
-        member_input_fingerprints(source, observers, rows, &prepared.original, &prepared.used);
-    let membership_fingerprints = rows
-        .iter()
-        .zip(member_fingerprints.iter())
-        .map(|(&row, fingerprint)| {
-            membership_fingerprint(group_id, orbit_id, &source.id[row], fingerprint)
-        })
-        .collect::<Vec<_>>();
-    out.set_item("member_input_fingerprints", member_fingerprints)?;
-    out.set_item("member_membership_fingerprints", membership_fingerprints)?;
     out.set_item(
-        "provenance",
-        provenance_dict(
-            py,
-            route,
-            group_input_fingerprint(
-                group_id,
-                source,
-                observers,
-                rows,
-                &prepared.original,
-                &prepared.used,
-                input_orbit,
-                member_outlier,
-            ),
-            output_orbit_state_fingerprint(iod, refined, input_orbit)?,
-            config_json,
-            config_identity,
-            iod_provider,
-            refinement_provider,
-            evaluation_provider,
-            iod,
-            refined,
-            evaluation,
-            seed_iod,
-        )?,
+        "used_astrometry",
+        snapshot_dict(py, group.prepared.used.clone())?,
     )?;
-    Ok(out)
-}
-
-#[allow(clippy::too_many_arguments)]
-fn group_dict<'py>(
-    py: Python<'py>,
-    group_id: &str,
-    orbit_id: &str,
-    rows: &[usize],
-    prepared: &adam_core_rs_coords::od::algorithms::PreparedObservations,
-    iod_provider: Option<&ProviderMetadata>,
-    refinement_provider: Option<&ProviderMetadata>,
-    config_json: &str,
-    config_identity: &ConfigurationIdentity,
-    route: &str,
-    iod: Option<IodResult>,
-    refined: Option<adam_core_rs_coords::propagation::RefinedOutput>,
-    failure: Option<BatchFailure>,
-    seed_iod: Option<&SeedIodProvenance>,
-    input_orbit: Option<(&DataOrbitBatch, usize)>,
-    source: &SourceCatalogBatch,
-    observers: &DataObserverBatch,
-) -> PyResult<Bound<'py, PyDict>> {
-    let out = base_group_dict(
-        py,
-        group_id,
-        orbit_id,
-        rows,
-        prepared,
-        iod_provider,
-        refinement_provider,
-        None,
-        config_json,
-        config_identity,
-        route,
-        iod.as_ref(),
-        refined.as_ref(),
-        None,
-        seed_iod,
-        input_orbit,
-        None,
-        source,
-        observers,
+    out.set_item(
+        "member_input_fingerprints",
+        group
+            .members
+            .iter()
+            .map(|member| member.input_fingerprint.as_str())
+            .collect::<Vec<_>>(),
     )?;
-    let has_state = iod.as_ref().is_some_and(|result| result.accepted.is_some());
-    let has_refined = refined.is_some();
-    let refinement_failed_without_state = route == "run_od"
-        && failure
-            .as_ref()
-            .is_some_and(|failure| failure.stage == "refinement")
-        && !has_refined;
-    let output_kind = if has_refined {
+    out.set_item(
+        "member_membership_fingerprints",
+        group
+            .members
+            .iter()
+            .map(|member| member.membership_fingerprint.as_str())
+            .collect::<Vec<_>>(),
+    )?;
+    let orbit = group.orbit.as_ref();
+    let refined = orbit.and_then(|record| record.refined.as_ref());
+    let evaluation = orbit.and_then(|record| record.evaluation.as_ref());
+    let iod = group.iod.as_ref();
+    let output_kind = if refined.is_some() {
         "refined"
-    } else if has_state && !refinement_failed_without_state {
+    } else if evaluation.is_some() {
+        "evaluation"
+    } else if orbit.is_some() && iod.is_some() {
         "iod"
     } else {
         "none"
@@ -2764,42 +1744,61 @@ fn group_dict<'py>(
     out.set_item("output_kind", output_kind)?;
     out.set_item(
         "iod",
-        iod.map(|result| iod_dict(py, result, rows.len()))
+        iod.cloned()
+            .map(|value| iod_dict(py, value, group.row_indices.len()))
             .transpose()?,
     )?;
     out.set_item(
         "refined",
         refined
-            .map(|result| {
-                let output = fit_output_dict(py, result.fit, rows.len())?;
-                output.set_item("passes", result.passes)?;
-                output.set_item("n_rejected", result.n_rejected)?;
-                output.set_item("n_recovered", result.n_recovered)?;
-                output.set_item("flags", result.flags)?;
+            .cloned()
+            .map(|value| {
+                let passes = value.passes;
+                let n_rejected = value.n_rejected;
+                let n_recovered = value.n_recovered;
+                let flags = value.flags.clone();
+                let output = fit_output_dict(py, value.fit, group.row_indices.len())?;
+                output.set_item("passes", passes)?;
+                output.set_item("n_rejected", n_rejected)?;
+                output.set_item("n_recovered", n_recovered)?;
+                output.set_item("flags", flags)?;
                 Ok::<_, PyErr>(output)
             })
             .transpose()?,
     )?;
     out.set_item(
-        "failure",
-        failure
-            .as_ref()
-            .map(|failure| {
-                failure_dict(
-                    py,
-                    group_id,
-                    (output_kind != "none").then_some(orbit_id),
-                    input_orbit
-                        .map(|(orbits, row)| orbits.orbit_id[row].0.as_str())
-                        .or_else(|| {
-                            (route == "run_od" && failure.stage == "refinement").then_some(orbit_id)
-                        }),
-                    failure,
-                )
-            })
+        "evaluation",
+        evaluation
+            .cloned()
+            .map(|value| evaluation_output_dict(py, value, group.row_indices.len()))
             .transpose()?,
     )?;
+    out.set_item(
+        "failure",
+        group
+            .failure
+            .as_ref()
+            .map(|failure| typed_failure_dict(py, failure))
+            .transpose()?,
+    )?;
+    out.set_item(
+        "provenance",
+        orbit
+            .map(|record| typed_provenance_dict(py, &record.provenance))
+            .transpose()?,
+    )?;
+    if let Some(index) = group.input_orbit_index {
+        out.set_item("orbit_index", index)?;
+    }
     Ok(out)
+}
+
+fn typed_groups_list<'py>(py: Python<'py>, result: &OdBatchResult) -> PyResult<Bound<'py, PyList>> {
+    let items = PyList::empty(py);
+    for group in &result.groups {
+        items.append(typed_group_dict(py, group)?)?;
+    }
+    Ok(items)
 }
 
 #[pyfunction]
@@ -2814,117 +1813,59 @@ fn run_iod_batch_ipc<'py>(
     config: PyRef<'py, PyOdConfig>,
 ) -> PyResult<Bound<'py, PyDict>> {
     config.inner.validate().map_err(value_error)?;
-    checked_build_identity()?;
-    let config_sha = config.inner.configuration_sha256();
-    let config_json = config.inner.provenance_json();
-    let config_identity = configuration_identity(&config_json)
-        .map_err(|error| value_error(format!("invalid canonical OD configuration: {error}")))?;
+    let (version, commit) = checked_build_identity()?;
+    let build = CoreBuildIdentity::new(version, commit).map_err(batch_error)?;
     let owned_config = config.inner.clone();
     drop(config);
     let source = decode_source_catalog(source_ipc)?;
     let associations = decode_association_batch(associations_ipc)?;
-    let groups = adam_core_rs_coords::od::plan_associations(&source.id, &associations)
-        .map_err(value_error)?;
-    if groups.is_empty() {
+    let problem = decode_observations(observed_ipc, observers_ipc)?;
+    let input = AssociatedObservations {
+        observations: OdObservationBatch {
+            source,
+            observed: problem.observed,
+            observers: problem.observers,
+        },
+        associations,
+    };
+    let preparation_context = OdExecutionContext {
+        build: &build,
+        time_provider: &ErfaTimeProvider,
+        translation_provider: &LockingSpiceTranslation,
+    };
+    let Some(prepared) =
+        adam_core::od::prepare_associated_batch(&input, &owned_config, &preparation_context)
+            .map_err(batch_error)?
+    else {
         let out = PyDict::new(py);
         out.set_item("groups", PyList::empty(py))?;
         out.set_item("provider", py.None())?;
         return Ok(out);
-    }
-    let problem = decode_observations(observed_ipc, observers_ipc)?;
-    validate_catalog_problem(&source, &problem)?;
-    let prepared_groups = prepare_association_groups(&groups, &source, &problem, &owned_config)?;
-
-    let correction_fit = *owned_config.for_iod().correction_fit();
-    let settings = fit_settings_from_config(correction_fit)?;
-    let (results, metadata) = run_with_predictor(py, propagator, &settings, |predictor| {
-        let mut results = Vec::with_capacity(groups.len());
-        for (group, (prepared, observers)) in groups.iter().zip(prepared_groups) {
-            let input_fingerprint = group_input_fingerprint(
-                &group.group_id,
-                &source,
-                &problem.observers,
-                &group.source_indices,
-                &prepared.original,
-                &prepared.used,
-                None,
-                None,
-            );
-            let orbit_id = canonical_orbit_id(&group.group_id, &config_sha, &input_fingerprint);
-            match adam_core_rs_coords::od::algorithms::run_iod_with_predictor(
-                predictor,
-                &prepared,
-                &observers,
-                &owned_config,
-                &ErfaTimeProvider,
-                &LockingSpiceTranslation,
-            ) {
-                Ok(iod) => {
-                    let failure = iod_failure(&iod, group.source_indices.len());
-                    results.push(BatchIodGroup {
-                        group_id: group.group_id.clone(),
-                        orbit_id,
-                        rows: group.source_indices.clone(),
-                        prepared,
-                        iod: Some(iod),
-                        failure,
-                    });
-                }
-                Err(error) if local_scientific_error(&error) => results.push(BatchIodGroup {
-                    group_id: group.group_id.clone(),
-                    orbit_id,
-                    rows: group.source_indices.clone(),
-                    prepared,
-                    iod: None,
-                    failure: Some(BatchFailure {
-                        stage: "iod",
-                        code: group_scientific_code(&error)
-                            .expect("guarded group scientific error"),
-                        message: error.to_string(),
-                        num_obs: group.source_indices.len(),
-                        arc_length: None,
-                        triplets_tried: None,
-                        candidates_evaluated: None,
-                        candidates_failed: None,
-                        corrections_run: None,
-                        passes: None,
-                        n_rejected: None,
-                        n_recovered: None,
-                        status_code: None,
-                        best_state_retained: false,
-                    }),
-                }),
-                Err(error) => return Err(error),
-            }
-        }
-        Ok(results)
+    };
+    let settings = fit_settings_from_config(*owned_config.for_iod().correction_fit())?;
+    let (result, _) = run_with_predictor(py, propagator, &settings, |predictor, metadata| {
+        let service = PredictionService {
+            predictor,
+            metadata: metadata.clone(),
+        };
+        let execution_context = OdExecutionContext {
+            build: &build,
+            time_provider: &ErfaTimeProvider,
+            translation_provider: &LockingSpiceTranslation,
+        };
+        adam_core::od::run_iod_from_prepared(prepared, &service, &execution_context)
     })?;
-
-    let items = PyList::empty(py);
-    for result in results {
-        items.append(group_dict(
-            py,
-            &result.group_id,
-            &result.orbit_id,
-            &result.rows,
-            &result.prepared,
-            Some(&metadata),
-            None,
-            &config_json,
-            &config_identity,
-            "run_iod",
-            result.iod,
-            None,
-            result.failure,
-            None,
-            None,
-            &source,
-            &problem.observers,
-        )?)?;
-    }
     let out = PyDict::new(py);
-    out.set_item("groups", items)?;
-    out.set_item("provider", provider_metadata_dict(py, &metadata)?)?;
+    out.set_item("groups", typed_groups_list(py, &result)?)?;
+    out.set_item(
+        "provider",
+        result
+            .providers
+            .iod
+            .as_ref()
+            .map(|metadata| provider_metadata_dict(py, metadata))
+            .transpose()?,
+    )?;
     Ok(out)
 }
 
@@ -2940,212 +1881,89 @@ fn run_od_batch_ipc<'py>(
     config: PyRef<'py, PyOdConfig>,
 ) -> PyResult<Bound<'py, PyDict>> {
     config.inner.validate().map_err(value_error)?;
-    checked_build_identity()?;
-    let config_sha = config.inner.configuration_sha256();
-    let config_json = config.inner.provenance_json();
-    let config_identity = configuration_identity(&config_json)
-        .map_err(|error| value_error(format!("invalid canonical OD configuration: {error}")))?;
+    let (version, commit) = checked_build_identity()?;
+    let build = CoreBuildIdentity::new(version, commit).map_err(batch_error)?;
     let owned_config = config.inner.clone();
     drop(config);
     let source = decode_source_catalog(source_ipc)?;
     let associations = decode_association_batch(associations_ipc)?;
-    let groups = adam_core_rs_coords::od::plan_associations(&source.id, &associations)
-        .map_err(value_error)?;
-    if groups.is_empty() {
+    let problem = decode_observations(observed_ipc, observers_ipc)?;
+    let input = AssociatedObservations {
+        observations: OdObservationBatch {
+            source,
+            observed: problem.observed,
+            observers: problem.observers,
+        },
+        associations,
+    };
+    let preparation_context = OdExecutionContext {
+        build: &build,
+        time_provider: &ErfaTimeProvider,
+        translation_provider: &LockingSpiceTranslation,
+    };
+    let Some(prepared) =
+        adam_core::od::prepare_associated_batch(&input, &owned_config, &preparation_context)
+            .map_err(batch_error)?
+    else {
         let out = PyDict::new(py);
         out.set_item("groups", PyList::empty(py))?;
         out.set_item("provider", py.None())?;
         return Ok(out);
-    }
-    let problem = decode_observations(observed_ipc, observers_ipc)?;
-    validate_catalog_problem(&source, &problem)?;
-    let prepared_groups = prepare_association_groups(&groups, &source, &problem, &owned_config)?;
-    let correction_fit = *owned_config.for_iod().correction_fit();
-    let iod_settings = fit_settings_from_config(correction_fit)?;
+    };
+    let iod_settings = fit_settings_from_config(*owned_config.for_iod().correction_fit())?;
     let refinement = *owned_config.for_refinement().refinement();
     let refinement_fit = match refinement {
         RefinementConfig::WorstResidual(value) => value.fit,
         RefinementConfig::Cmc2003(value) => value.fit,
     };
     let refinement_settings = fit_settings_from_config(refinement_fit)?;
-    let (results, iod_metadata, refinement_metadata) = run_with_stage_predictors(
+    let (result, _, _) = run_with_stage_predictors(
         py,
         propagator,
         &iod_settings,
         &refinement_settings,
-        |iod_predictor, refinement_predictor| {
-            let mut results = Vec::with_capacity(groups.len());
-            for (group, (prepared, observers)) in groups.iter().zip(prepared_groups) {
-                let input_fingerprint = group_input_fingerprint(
-                    &group.group_id,
-                    &source,
-                    &problem.observers,
-                    &group.source_indices,
-                    &prepared.original,
-                    &prepared.used,
-                    None,
-                    None,
-                );
-                let orbit_id = canonical_orbit_id(&group.group_id, &config_sha, &input_fingerprint);
-                let iod = match adam_core_rs_coords::od::algorithms::run_iod_with_predictor(
-                    iod_predictor,
-                    &prepared,
-                    &observers,
-                    &owned_config,
-                    &ErfaTimeProvider,
-                    &LockingSpiceTranslation,
-                ) {
-                    Ok(iod) => iod,
-                    Err(error) if local_scientific_error(&error) => {
-                        results.push(BatchOdGroup {
-                            group_id: group.group_id.clone(),
-                            orbit_id,
-                            rows: group.source_indices.clone(),
-                            prepared,
-                            iod: None,
-                            refined: None,
-                            failure: Some(BatchFailure {
-                                stage: "iod",
-                                code: group_scientific_code(&error)
-                                    .expect("guarded group scientific error"),
-                                message: error.to_string(),
-                                num_obs: group.source_indices.len(),
-                                arc_length: None,
-                                triplets_tried: None,
-                                candidates_evaluated: None,
-                                candidates_failed: None,
-                                corrections_run: None,
-                                passes: None,
-                                n_rejected: None,
-                                n_recovered: None,
-                                status_code: None,
-                                best_state_retained: false,
-                            }),
-                        });
-                        continue;
-                    }
-                    Err(error) => return Err(error),
-                };
-                if let Some(failure) = iod_failure(&iod, group.source_indices.len()) {
-                    results.push(BatchOdGroup {
-                        group_id: group.group_id.clone(),
-                        orbit_id,
-                        rows: group.source_indices.clone(),
-                        prepared,
-                        iod: Some(iod),
-                        refined: None,
-                        failure: Some(failure),
-                    });
-                    continue;
-                }
-                let seed = iod
-                    .seed_orbit()?
-                    .expect("found IOD result has a seed orbit");
-                match adam_core_rs_coords::od::algorithms::refine_with_predictor(
-                    refinement_predictor,
-                    &seed,
-                    &prepared,
-                    &observers,
-                    &owned_config,
-                    &ErfaTimeProvider,
-                    &LockingSpiceTranslation,
-                ) {
-                    Ok(refined) => {
-                        let failure = (!refined.fit.converged).then(|| BatchFailure {
-                            stage: "refinement",
-                            code: "not_converged",
-                            message: format!(
-                                "refinement did not converge (status_code={})",
-                                refined.fit.status_code
-                            ),
-                            num_obs: refined.fit.evaluation.num_obs,
-                            arc_length: Some(refined.fit.evaluation.arc_length),
-                            triplets_tried: None,
-                            candidates_evaluated: None,
-                            candidates_failed: None,
-                            corrections_run: None,
-                            passes: Some(refined.passes),
-                            n_rejected: Some(refined.n_rejected),
-                            n_recovered: Some(refined.n_recovered),
-                            status_code: Some(refined.fit.status_code),
-                            best_state_retained: true,
-                        });
-                        results.push(BatchOdGroup {
-                            group_id: group.group_id.clone(),
-                            orbit_id,
-                            rows: group.source_indices.clone(),
-                            prepared,
-                            iod: Some(iod),
-                            refined: Some(refined),
-                            failure,
-                        });
-                    }
-                    Err(error) if local_scientific_error(&error) => results.push(BatchOdGroup {
-                        group_id: group.group_id.clone(),
-                        orbit_id,
-                        rows: group.source_indices.clone(),
-                        prepared,
-                        iod: Some(iod),
-                        refined: None,
-                        failure: Some(BatchFailure {
-                            stage: "refinement",
-                            code: group_scientific_code(&error)
-                                .expect("guarded group scientific error"),
-                            message: error.to_string(),
-                            num_obs: group.source_indices.len(),
-                            arc_length: None,
-                            triplets_tried: None,
-                            candidates_evaluated: None,
-                            candidates_failed: None,
-                            corrections_run: None,
-                            passes: None,
-                            n_rejected: None,
-                            n_recovered: None,
-                            status_code: None,
-                            best_state_retained: false,
-                        }),
-                    }),
-                    Err(error) => return Err(error),
-                }
-            }
-            Ok(results)
+        |iod_predictor, refinement_predictor, iod_metadata, refinement_metadata| {
+            let iod_service = PredictionService {
+                predictor: iod_predictor,
+                metadata: iod_metadata.clone(),
+            };
+            let refinement_service = PredictionService {
+                predictor: refinement_predictor,
+                metadata: refinement_metadata.clone(),
+            };
+            let execution_context = OdExecutionContext {
+                build: &build,
+                time_provider: &ErfaTimeProvider,
+                translation_provider: &LockingSpiceTranslation,
+            };
+            adam_core::od::run_od_from_prepared(
+                prepared,
+                &iod_service,
+                &refinement_service,
+                &execution_context,
+            )
         },
     )?;
-
-    let items = PyList::empty(py);
-    for result in results {
-        let refinement_attempted = result.refined.is_some()
-            || result
-                .failure
-                .as_ref()
-                .is_some_and(|failure| failure.stage == "refinement");
-        items.append(group_dict(
-            py,
-            &result.group_id,
-            &result.orbit_id,
-            &result.rows,
-            &result.prepared,
-            Some(&iod_metadata),
-            refinement_attempted.then_some(&refinement_metadata),
-            &config_json,
-            &config_identity,
-            "run_od",
-            result.iod,
-            result.refined,
-            result.failure,
-            None,
-            None,
-            &source,
-            &problem.observers,
-        )?)?;
-    }
     let out = PyDict::new(py);
-    out.set_item("groups", items)?;
+    out.set_item("groups", typed_groups_list(py, &result)?)?;
     let providers = PyDict::new(py);
-    providers.set_item("iod", provider_metadata_dict(py, &iod_metadata)?)?;
+    providers.set_item(
+        "iod",
+        result
+            .providers
+            .iod
+            .as_ref()
+            .map(|metadata| provider_metadata_dict(py, metadata))
+            .transpose()?,
+    )?;
     providers.set_item(
         "refinement",
-        provider_metadata_dict(py, &refinement_metadata)?,
+        result
+            .providers
+            .refinement
+            .as_ref()
+            .map(|metadata| provider_metadata_dict(py, metadata))
+            .transpose()?,
     )?;
     out.set_item("provider", providers)?;
     Ok(out)
@@ -3157,102 +1975,8 @@ fn evaluation_output_dict<'py>(
     n: usize,
 ) -> PyResult<Bound<'py, PyDict>> {
     let out = PyDict::new(py);
-    let solution = evaluation
-        .outlier
-        .iter()
-        .map(|&value| !value)
-        .collect::<Vec<_>>();
-    set_evaluation_fields(py, &out, evaluation, n)?;
-    out.set_item("success", true)?;
-    out.set_item("status_code", 1_i64)?;
-    out.set_item("solution", solution)?;
+    set_evaluation_result_fields(py, &out, evaluation, n, true, 1)?;
     Ok(out)
-}
-
-fn orbit_group_id<'a>(orbits: &'a DataOrbitBatch, row: usize, fallback: &'a str) -> &'a str {
-    orbits.object_id[row]
-        .as_ref()
-        .map(|value| value.0.as_str())
-        .unwrap_or(fallback)
-}
-
-fn evaluation_group_dict<'py>(
-    py: Python<'py>,
-    result: BatchEvaluationGroup,
-    provider: &ProviderMetadata,
-    config_json: &str,
-    config_identity: &ConfigurationIdentity,
-    source: &SourceCatalogBatch,
-    observers: &DataObserverBatch,
-    orbits: &DataOrbitBatch,
-) -> PyResult<Bound<'py, PyDict>> {
-    let group_id = orbit_group_id(orbits, result.orbit_index, &result.orbit_id);
-    let has_evaluation = result.evaluation.is_some();
-    let out = base_group_dict(
-        py,
-        group_id,
-        &result.orbit_id,
-        &result.rows,
-        &result.prepared,
-        None,
-        None,
-        Some(provider),
-        config_json,
-        config_identity,
-        "evaluate_orbits",
-        None,
-        None,
-        result.evaluation.as_ref(),
-        None,
-        Some((orbits, result.orbit_index)),
-        Some(&result.member_outlier),
-        source,
-        observers,
-    )?;
-    out.set_item("orbit_index", result.orbit_index)?;
-    out.set_item("member_indices", &result.member_rows)?;
-    out.set_item(
-        "output_kind",
-        if has_evaluation { "evaluation" } else { "none" },
-    )?;
-    out.set_item(
-        "evaluation",
-        result
-            .evaluation
-            .map(|value| evaluation_output_dict(py, value, result.rows.len()))
-            .transpose()?,
-    )?;
-    out.set_item(
-        "failure",
-        result
-            .failure
-            .as_ref()
-            .map(|failure| {
-                failure_dict(
-                    py,
-                    group_id,
-                    has_evaluation.then_some(result.orbit_id.as_str()),
-                    Some(&result.orbit_id),
-                    failure,
-                )
-            })
-            .transpose()?,
-    )?;
-    Ok(out)
-}
-
-fn validate_member_snapshot_lengths(
-    member_count: usize,
-    columns: &[(&str, usize)],
-) -> PyResult<()> {
-    for &(name, len) in columns {
-        if len != member_count {
-            return Err(value_error(format!(
-                "FittedOrbitMembers {name} length {len} does not match {member_count} rows"
-            )));
-        }
-    }
-    Ok(())
 }
 
 #[pyfunction]
@@ -3293,200 +2017,93 @@ fn refine_batch_ipc<'py>(
     config: PyRef<'py, PyRefinementRunConfig>,
 ) -> PyResult<Bound<'py, PyDict>> {
     config.inner.validate().map_err(value_error)?;
-    checked_build_identity()?;
-    let refinement = *config.inner.refinement();
-    let config_json = config.inner.canonical_json();
-    let config_identity = configuration_identity(&config_json).map_err(|error| {
-        value_error(format!(
-            "invalid canonical refinement configuration: {error}"
-        ))
-    })?;
+    let (version, commit) = checked_build_identity()?;
+    let build = CoreBuildIdentity::new(version, commit).map_err(batch_error)?;
+    let owned_config = config.inner;
     drop(config);
     let orbits = decode_orbit(orbit_ipc)?;
     let source = decode_source_catalog(source_ipc)?;
-    validate_member_snapshot_lengths(
-        member_orbit_ids.len(),
-        &[
-            ("obs_id", member_obs_ids.len()),
-            ("input_fingerprint", member_input_fingerprints.len()),
-            (
-                "membership_fingerprint",
-                member_membership_fingerprints.len(),
-            ),
-            ("original_astrometry.lon", original_lon.len()),
-            ("original_astrometry.lat", original_lat.len()),
-            ("original_astrometry.sigma_lon", original_sigma_lon.len()),
-            ("original_astrometry.sigma_lat", original_sigma_lat.len()),
-            (
-                "original_astrometry.variance_lon",
-                original_variance_lon.len(),
-            ),
-            (
-                "original_astrometry.variance_lat",
-                original_variance_lat.len(),
-            ),
-            ("original_astrometry.cov_lonlat", original_cov_lonlat.len()),
-            ("used_astrometry.lon", used_lon.len()),
-            ("used_astrometry.lat", used_lat.len()),
-            ("used_astrometry.sigma_lon", used_sigma_lon.len()),
-            ("used_astrometry.sigma_lat", used_sigma_lat.len()),
-            ("used_astrometry.variance_lon", used_variance_lon.len()),
-            ("used_astrometry.variance_lat", used_variance_lat.len()),
-            ("used_astrometry.cov_lonlat", used_cov_lonlat.len()),
-        ],
-    )?;
-    let groups = adam_core_rs_coords::od::plan_orbit_members(
-        &orbits,
-        &source.id,
-        &member_orbit_ids,
-        &member_obs_ids,
-    )
-    .map_err(value_error)?;
-    if groups.is_empty() {
+    let problem = decode_observations(observed_ipc, observers_ipc)?;
+    let provenance = parse_typed_orbit_provenance(&seed_iod_provenance, &orbits)?;
+    let member_count = member_orbit_ids.len();
+    let input = MemberedOrbits {
+        orbits,
+        provenance,
+        observations: OdObservationBatch {
+            source,
+            observed: problem.observed,
+            observers: problem.observers,
+        },
+        members: FittedOrbitMembersBatch {
+            orbit_id: member_orbit_ids,
+            observation_id: member_obs_ids,
+            outlier: vec![None; member_count],
+            input_fingerprint: member_input_fingerprints,
+            membership_fingerprint: member_membership_fingerprints,
+            original_astrometry: AstrometryColumns {
+                lon: original_lon,
+                lat: original_lat,
+                sigma_lon: original_sigma_lon,
+                sigma_lat: original_sigma_lat,
+                variance_lon: original_variance_lon,
+                variance_lat: original_variance_lat,
+                cov_lonlat: original_cov_lonlat,
+            },
+            used_astrometry: AstrometryColumns {
+                lon: used_lon,
+                lat: used_lat,
+                sigma_lon: used_sigma_lon,
+                sigma_lat: used_sigma_lat,
+                variance_lon: used_variance_lon,
+                variance_lat: used_variance_lat,
+                cov_lonlat: used_cov_lonlat,
+            },
+        },
+    };
+    let preparation_context = OdExecutionContext {
+        build: &build,
+        time_provider: &ErfaTimeProvider,
+        translation_provider: &LockingSpiceTranslation,
+    };
+    let Some(prepared) =
+        adam_core::od::prepare_refinement_batch(&input, &owned_config, &preparation_context)
+            .map_err(batch_error)?
+    else {
         let out = PyDict::new(py);
         out.set_item("groups", PyList::empty(py))?;
         out.set_item("provider", py.None())?;
         return Ok(out);
-    }
-    let problem = decode_observations(observed_ipc, observers_ipc)?;
-    validate_catalog_problem(&source, &problem)?;
-    let seed_iod_provenance =
-        parse_orbit_provenance(&seed_iod_provenance, &orbits, Some(&config_json))?;
-    let prepared_groups = prepare_member_groups(
-        &groups,
-        &source,
-        &problem,
-        &orbits,
-        Some(&seed_iod_provenance),
-        &member_input_fingerprints,
-        &member_membership_fingerprints,
-        &original_lon,
-        &original_lat,
-        &original_sigma_lon,
-        &original_sigma_lat,
-        &original_variance_lon,
-        &original_variance_lat,
-        &original_cov_lonlat,
-        &used_lon,
-        &used_lat,
-        &used_sigma_lon,
-        &used_sigma_lat,
-        &used_variance_lon,
-        &used_variance_lat,
-        &used_cov_lonlat,
-    )?;
-    let fit = match refinement {
+    };
+    let fit = match *owned_config.refinement() {
         RefinementConfig::WorstResidual(value) => value.fit,
         RefinementConfig::Cmc2003(value) => value.fit,
     };
     let settings = fit_settings_from_config(fit)?;
-    let (results, metadata) = run_with_predictor(py, propagator, &settings, |predictor| {
-        let mut results = Vec::with_capacity(groups.len());
-        for (group, (prepared, observers)) in groups.iter().zip(&prepared_groups) {
-            let seed = orbits.take(&[group.orbit_index])?;
-            match refine_with(
-                predictor,
-                &seed,
-                &prepared.observations,
-                observers,
-                &refinement,
-                &ErfaTimeProvider,
-                &LockingSpiceTranslation,
-            ) {
-                Ok(refined) => {
-                    let failure = (!refined.fit.converged).then(|| BatchFailure {
-                        stage: "refinement",
-                        code: "not_converged",
-                        message: format!(
-                            "refinement did not converge (status_code={})",
-                            refined.fit.status_code
-                        ),
-                        num_obs: refined.fit.evaluation.num_obs,
-                        arc_length: Some(refined.fit.evaluation.arc_length),
-                        triplets_tried: None,
-                        candidates_evaluated: None,
-                        candidates_failed: None,
-                        corrections_run: None,
-                        passes: Some(refined.passes),
-                        n_rejected: Some(refined.n_rejected),
-                        n_recovered: Some(refined.n_recovered),
-                        status_code: Some(refined.fit.status_code),
-                        best_state_retained: true,
-                    });
-                    results.push(BatchRefineGroup {
-                        orbit_id: group.orbit_id.clone(),
-                        orbit_index: group.orbit_index,
-                        rows: group.source_indices.clone(),
-                        member_rows: group.member_indices.clone(),
-                        prepared: prepared.clone(),
-                        refined: Some(refined),
-                        failure,
-                    });
-                }
-                Err(error) if local_scientific_error(&error) => {
-                    results.push(BatchRefineGroup {
-                        orbit_id: group.orbit_id.clone(),
-                        orbit_index: group.orbit_index,
-                        rows: group.source_indices.clone(),
-                        member_rows: group.member_indices.clone(),
-                        prepared: prepared.clone(),
-                        refined: None,
-                        failure: Some(BatchFailure {
-                            stage: "refinement",
-                            code: group_scientific_code(&error)
-                                .expect("guarded group scientific error"),
-                            message: error.to_string(),
-                            num_obs: group.source_indices.len(),
-                            arc_length: None,
-                            triplets_tried: None,
-                            candidates_evaluated: None,
-                            candidates_failed: None,
-                            corrections_run: None,
-                            passes: None,
-                            n_rejected: None,
-                            n_recovered: None,
-                            status_code: None,
-                            best_state_retained: false,
-                        }),
-                    });
-                }
-                Err(error) => return Err(error),
-            }
-        }
-        Ok(results)
+    let (result, _) = run_with_predictor(py, propagator, &settings, |predictor, metadata| {
+        let service = PredictionService {
+            predictor,
+            metadata: metadata.clone(),
+        };
+        let execution_context = OdExecutionContext {
+            build: &build,
+            time_provider: &ErfaTimeProvider,
+            translation_provider: &LockingSpiceTranslation,
+        };
+        adam_core::od::refine_from_prepared(prepared, &owned_config, &service, &execution_context)
     })?;
-    let items = PyList::empty(py);
-    for result in results {
-        let group_id = orbit_group_id(&orbits, result.orbit_index, &result.orbit_id);
-        let group = group_dict(
-            py,
-            group_id,
-            &result.orbit_id,
-            &result.rows,
-            &result.prepared,
-            None,
-            Some(&metadata),
-            &config_json,
-            &config_identity,
-            "refine",
-            None,
-            result.refined,
-            result.failure,
-            seed_iod_provenance[result.orbit_index].as_ref(),
-            Some((&orbits, result.orbit_index)),
-            &source,
-            &problem.observers,
-        )?;
-        group.set_item("orbit_index", result.orbit_index)?;
-        group.set_item("member_indices", &result.member_rows)?;
-        items.append(group)?;
-    }
     let out = PyDict::new(py);
-    out.set_item("groups", items)?;
-    out.set_item("provider", provider_metadata_dict(py, &metadata)?)?;
+    out.set_item("groups", typed_groups_list(py, &result)?)?;
+    out.set_item(
+        "provider",
+        result
+            .providers
+            .refinement
+            .as_ref()
+            .map(|metadata| provider_metadata_dict(py, metadata))
+            .transpose()?,
+    )?;
     Ok(out)
 }
-
 #[pyfunction]
 #[pyo3(signature = (
     propagator, orbit_ipc, source_ipc, observed_ipc, observers_ipc,
@@ -3526,204 +2143,97 @@ fn evaluate_orbits_batch_ipc<'py>(
     config: PyRef<'py, PyOdConfig>,
 ) -> PyResult<Bound<'py, PyDict>> {
     config.inner.validate().map_err(value_error)?;
-    checked_build_identity()?;
-    let parameters = config.inner.for_evaluation().covariance_dimension() as i64;
-    let config_json = config.inner.provenance_json();
-    let config_identity = configuration_identity(&config_json).map_err(|error| {
-        value_error(format!(
-            "invalid canonical evaluation configuration: {error}"
-        ))
-    })?;
-    let refinement = *config.inner.for_refinement().refinement();
+    let (version, commit) = checked_build_identity()?;
+    let build = CoreBuildIdentity::new(version, commit).map_err(batch_error)?;
+    let owned_config = config.inner.clone();
     drop(config);
     let orbits = decode_orbit(orbit_ipc)?;
     let source = decode_source_catalog(source_ipc)?;
-    validate_member_snapshot_lengths(
-        member_orbit_ids.len(),
-        &[
-            ("obs_id", member_obs_ids.len()),
-            ("outlier", member_outlier.len()),
-            ("input_fingerprint", member_input_fingerprints.len()),
-            (
-                "membership_fingerprint",
-                member_membership_fingerprints.len(),
-            ),
-            ("original_astrometry.lon", original_lon.len()),
-            ("original_astrometry.lat", original_lat.len()),
-            ("original_astrometry.sigma_lon", original_sigma_lon.len()),
-            ("original_astrometry.sigma_lat", original_sigma_lat.len()),
-            (
-                "original_astrometry.variance_lon",
-                original_variance_lon.len(),
-            ),
-            (
-                "original_astrometry.variance_lat",
-                original_variance_lat.len(),
-            ),
-            ("original_astrometry.cov_lonlat", original_cov_lonlat.len()),
-            ("used_astrometry.lon", used_lon.len()),
-            ("used_astrometry.lat", used_lat.len()),
-            ("used_astrometry.sigma_lon", used_sigma_lon.len()),
-            ("used_astrometry.sigma_lat", used_sigma_lat.len()),
-            ("used_astrometry.variance_lon", used_variance_lon.len()),
-            ("used_astrometry.variance_lat", used_variance_lat.len()),
-            ("used_astrometry.cov_lonlat", used_cov_lonlat.len()),
-        ],
-    )?;
-    let groups = adam_core_rs_coords::od::plan_orbit_members(
-        &orbits,
-        &source.id,
-        &member_orbit_ids,
-        &member_obs_ids,
-    )
-    .map_err(value_error)?;
-    if groups.is_empty() {
+    let problem = decode_observations(observed_ipc, observers_ipc)?;
+    let provenance = parse_typed_orbit_provenance(&orbit_provenance, &orbits)?;
+    let input = MemberedOrbits {
+        orbits,
+        provenance,
+        observations: OdObservationBatch {
+            source,
+            observed: problem.observed,
+            observers: problem.observers,
+        },
+        members: FittedOrbitMembersBatch {
+            orbit_id: member_orbit_ids,
+            observation_id: member_obs_ids,
+            outlier: member_outlier,
+            input_fingerprint: member_input_fingerprints,
+            membership_fingerprint: member_membership_fingerprints,
+            original_astrometry: AstrometryColumns {
+                lon: original_lon,
+                lat: original_lat,
+                sigma_lon: original_sigma_lon,
+                sigma_lat: original_sigma_lat,
+                variance_lon: original_variance_lon,
+                variance_lat: original_variance_lat,
+                cov_lonlat: original_cov_lonlat,
+            },
+            used_astrometry: AstrometryColumns {
+                lon: used_lon,
+                lat: used_lat,
+                sigma_lon: used_sigma_lon,
+                sigma_lat: used_sigma_lat,
+                variance_lon: used_variance_lon,
+                variance_lat: used_variance_lat,
+                cov_lonlat: used_cov_lonlat,
+            },
+        },
+    };
+    let preparation_context = OdExecutionContext {
+        build: &build,
+        time_provider: &ErfaTimeProvider,
+        translation_provider: &LockingSpiceTranslation,
+    };
+    let Some(prepared) =
+        adam_core::od::prepare_evaluation_batch(&input, &owned_config, &preparation_context)
+            .map_err(batch_error)?
+    else {
         let out = PyDict::new(py);
         out.set_item("groups", PyList::empty(py))?;
         out.set_item("provider", py.None())?;
         return Ok(out);
-    }
-    let problem = decode_observations(observed_ipc, observers_ipc)?;
-    validate_catalog_problem(&source, &problem)?;
-    if let Some(row) = member_outlier.iter().position(Option::is_none) {
-        return Err(value_error(format!(
-            "FittedOrbitMembers outlier is null at row {row}"
-        )));
-    }
-    parse_orbit_provenance(&orbit_provenance, &orbits, None)?;
+    };
+    let refinement = *owned_config.for_refinement().refinement();
     let evaluation_fit = match refinement {
         RefinementConfig::WorstResidual(value) => value.fit,
         RefinementConfig::Cmc2003(value) => value.fit,
     };
-    let prepared_groups = prepare_member_groups(
-        &groups,
-        &source,
-        &problem,
-        &orbits,
-        None,
-        &member_input_fingerprints,
-        &member_membership_fingerprints,
-        &original_lon,
-        &original_lat,
-        &original_sigma_lon,
-        &original_sigma_lat,
-        &original_variance_lon,
-        &original_variance_lat,
-        &original_cov_lonlat,
-        &used_lon,
-        &used_lat,
-        &used_sigma_lon,
-        &used_sigma_lat,
-        &used_variance_lon,
-        &used_variance_lat,
-        &used_cov_lonlat,
-    )?;
     let settings = fit_settings_from_config(evaluation_fit)?;
-    let (results, metadata) = run_with_predictor(py, propagator, &settings, |predictor| {
-        let mut results = Vec::with_capacity(groups.len());
-        for (group, (prepared, observers)) in groups.iter().zip(&prepared_groups) {
-            let orbit = orbits.take(&[group.orbit_index])?;
-            let state = orbit
-                .coordinates
-                .values
-                .cartesian()
-                .expect("validated orbit coordinates are Cartesian")[0];
-            let ignore = group
-                .member_indices
-                .iter()
-                .map(|&row| member_outlier[row].unwrap_or(false))
-                .collect::<Vec<_>>();
-            match evaluate_orbit(
-                predictor,
-                state,
-                &orbit,
-                &prepared.observations,
-                observers,
-                &ignore,
-                parameters,
-            ) {
-                Ok(evaluation) => results.push(BatchEvaluationGroup {
-                    orbit_id: group.orbit_id.clone(),
-                    orbit_index: group.orbit_index,
-                    rows: group.source_indices.clone(),
-                    member_rows: group.member_indices.clone(),
-                    member_outlier: ignore,
-                    prepared: prepared.clone(),
-                    evaluation: Some(evaluation),
-                    failure: None,
-                }),
-                Err(error) if local_scientific_error(&error) => {
-                    results.push(BatchEvaluationGroup {
-                        orbit_id: group.orbit_id.clone(),
-                        orbit_index: group.orbit_index,
-                        rows: group.source_indices.clone(),
-                        member_rows: group.member_indices.clone(),
-                        member_outlier: ignore,
-                        prepared: prepared.clone(),
-                        evaluation: None,
-                        failure: Some(BatchFailure {
-                            stage: "evaluation",
-                            code: group_scientific_code(&error)
-                                .expect("guarded group scientific error"),
-                            message: error.to_string(),
-                            num_obs: group.source_indices.len(),
-                            arc_length: None,
-                            triplets_tried: None,
-                            candidates_evaluated: None,
-                            candidates_failed: None,
-                            corrections_run: None,
-                            passes: None,
-                            n_rejected: None,
-                            n_recovered: None,
-                            status_code: None,
-                            best_state_retained: false,
-                        }),
-                    });
-                }
-                Err(error) => return Err(error),
-            }
-        }
-        Ok(results)
-    })?;
-    let items = PyList::empty(py);
-    for result in results {
-        items.append(evaluation_group_dict(
-            py,
-            result,
-            &metadata,
-            &config_json,
-            &config_identity,
-            &source,
-            &problem.observers,
-            &orbits,
-        )?)?;
-    }
-    let out = PyDict::new(py);
-    out.set_item("groups", items)?;
-    out.set_item("provider", provider_metadata_dict(py, &metadata)?)?;
-    Ok(out)
-}
-
-#[cfg(test)]
-mod batch_contract_tests {
-    use super::*;
-    use adam_core_rs_coords::propagation::GroupScientificFailureCode;
-
-    #[test]
-    fn only_typed_group_scientific_errors_are_local() {
-        let local = adam_core_rs_coords::PropagationError::GroupScientific {
-            code: GroupScientificFailureCode::RankDeficient,
-            message: "test".to_string(),
+    let (result, _) = run_with_predictor(py, propagator, &settings, |predictor, metadata| {
+        let service = PredictionService {
+            predictor,
+            metadata: metadata.clone(),
         };
-        assert!(local_scientific_error(&local));
-        assert_eq!(group_scientific_code(&local), Some("rank_deficient"));
-        assert!(!local_scientific_error(
-            &adam_core_rs_coords::PropagationError::RowFailure("coverage".to_string())
-        ));
-        assert!(!local_scientific_error(
-            &adam_core_rs_coords::PropagationError::Backend("global".to_string())
-        ));
-    }
+        let execution_context = OdExecutionContext {
+            build: &build,
+            time_provider: &ErfaTimeProvider,
+            translation_provider: &LockingSpiceTranslation,
+        };
+        adam_core::od::evaluate_orbits_from_prepared(
+            prepared,
+            &owned_config,
+            &service,
+            &execution_context,
+        )
+    })?;
+    let out = PyDict::new(py);
+    out.set_item("groups", typed_groups_list(py, &result)?)?;
+    out.set_item(
+        "provider",
+        result
+            .providers
+            .evaluation
+            .as_ref()
+            .map(|metadata| provider_metadata_dict(py, metadata))
+            .transpose()?,
+    )?;
+    Ok(out)
 }
 
 /// Native OD timing lanes supported by [`benchmark_od_fit_ipc`].
