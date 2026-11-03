@@ -8,6 +8,7 @@ import json
 import sys
 import types
 from pathlib import Path
+from typing import get_type_hints
 
 import numpy as np
 import pytest
@@ -57,8 +58,16 @@ def test_python_workflow_signatures_and_config_state_do_not_drift() -> None:
             "config",
         ],
     }
+    expected_configs = {
+        "run_iod": od.IodRunConfig,
+        "run_od": od.OdConfig,
+        "refine": od.RefinementRunConfig,
+        "evaluate_orbits": od.EvaluationConfig,
+    }
     for name, parameters in expected.items():
-        assert list(inspect.signature(getattr(od, name)).parameters) == parameters
+        function = getattr(od, name)
+        assert list(inspect.signature(function).parameters) == parameters
+        assert get_type_hints(function)["config"] is expected_configs[name]
     assert "_workflow_native" not in inspect.getsource(config_module)
     assert "_workflow_native" not in inspect.getsource(workflows_module)
 
@@ -80,7 +89,36 @@ def test_stage_configs_are_self_contained_without_hidden_workflow_state() -> Non
         od.IodStageConfig.core_v1(),
         od.ResourceBindings({}),
     )
+    assert direct.profile_identity is None
     assert direct.provenance["schema"] == "adam-core-iod-run-config/v1"
+    direct_iod = od.run_iod(SourceCatalog.empty(), Associations.empty(), None, direct)
+    assert [len(table) for table in direct_iod] == [0, 0, 0]
+
+    direct_evaluation = od.EvaluationConfig(6, config.refinement.refinement.fit)
+    direct_evaluated = od.evaluate_orbits(
+        od.FittedOrbits.empty(),
+        od.FittedOrbitMembers.empty(),
+        SourceCatalog.empty(),
+        None,
+        direct_evaluation,
+    )
+    assert [len(table) for table in direct_evaluated] == [0, 0, 0]
+
+    with pytest.raises(TypeError, match="IodRunConfig"):
+        od.run_iod(
+            SourceCatalog.empty(),
+            Associations.empty(),
+            None,
+            config,  # type: ignore[arg-type]
+        )
+    with pytest.raises(TypeError, match="EvaluationConfig"):
+        od.evaluate_orbits(
+            od.FittedOrbits.empty(),
+            od.FittedOrbitMembers.empty(),
+            SourceCatalog.empty(),
+            None,
+            config,  # type: ignore[arg-type]
+        )
 
 
 def test_empty_batch_returns_three_typed_empty_tables_without_provider_binding() -> (
@@ -230,6 +268,71 @@ def test_published_core_resource_binds_and_validates_natively() -> None:
         resource["actual_sha256"]
         == "ef6a50830bb83d8b1161e7acb391eed988ea9708e9fbcccc0c834da6109476e3"
     )
+
+
+def test_bound_profile_projection_is_one_time_path_independent_value_state(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    import jpl_debias_2018
+
+    bias_link = tmp_path / "bias.dat"
+    bias_link.symlink_to(Path(jpl_debias_2018.bias_dat))
+    resources = od.ResourceBindings({"efcc18_catalog_bias_table": bias_link})
+    calls = {"bind": 0, "explicit_od": 0, "explicit_iod": 0}
+    original_bind = _rust_native.bind_od_profile
+    original_explicit_od = _rust_native.explicit_od_config
+    original_explicit_iod = _rust_native.explicit_iod_run_config
+
+    def bind(*args: object) -> object:
+        calls["bind"] += 1
+        return original_bind(*args)
+
+    def explicit_od(*args: object) -> object:
+        calls["explicit_od"] += 1
+        return original_explicit_od(*args)
+
+    def explicit_iod(*args: object) -> object:
+        calls["explicit_iod"] += 1
+        return original_explicit_iod(*args)
+
+    monkeypatch.setattr(_rust_native, "bind_od_profile", bind)
+    monkeypatch.setattr(_rust_native, "explicit_od_config", explicit_od)
+    monkeypatch.setattr(_rust_native, "explicit_iod_run_config", explicit_iod)
+
+    config = od.CORE_OD_V1.bind(resources)
+    assert calls == {"bind": 1, "explicit_od": 0, "explicit_iod": 0}
+    identity = config.profile_identity
+    assert identity is not None
+    assert (identity.name, identity.version, identity.definition_sha256) == (
+        "CORE_OD_V1",
+        1,
+        od.CORE_OD_V1.definition_sha256,
+    )
+    with pytest.raises(TypeError, match="Core Rust"):
+        od.ProfileIdentity("CORE_OD_V1", 1, "f" * 64, _token=object())
+    with pytest.raises(ValueError, match="init=False"):
+        dataclasses.replace(config, profile_identity=None)
+
+    direct = od.OdConfig.explicit(
+        observation_pipeline=config.observation_pipeline,
+        iod=config.iod,
+        refinement=config.refinement,
+        resources=resources,
+    )
+    assert calls["explicit_od"] == 1
+    assert direct.profile_identity is None
+    assert direct != config
+    assert direct.provenance != config.provenance
+    assert direct.for_iod() != config.for_iod()
+    assert calls["explicit_iod"] == 0
+
+    bias_link.unlink()
+    for _ in range(3):
+        iod = config.for_iod()
+        assert iod.profile_identity == config.profile_identity
+        assert config.for_refinement() == config.refinement
+        assert config.for_evaluation().covariance_dimension == 6
+    assert calls == {"bind": 1, "explicit_od": 1, "explicit_iod": 0}
 
 
 def test_profiles_are_native_sourced_and_not_constructible_or_replaceable() -> None:

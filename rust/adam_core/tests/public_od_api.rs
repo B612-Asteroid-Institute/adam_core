@@ -11,14 +11,26 @@ fn canonical_workflow_signatures_do_not_drift() {
         adam_core::evaluate_orbits;
     let _: fn(&AssociatedObservations, &IodRunConfig, &OdPropagator<'_>) -> Batch =
         adam_core::od::run_iod;
+    let _: fn(&AssociatedObservations, &OdConfig, &OdPropagator<'_>) -> Batch =
+        adam_core::od::run_od;
+    let _: fn(&MemberedOrbits, &RefinementRunConfig, &OdPropagator<'_>) -> Batch =
+        adam_core::od::refine;
+    let _: fn(&MemberedOrbits, &EvaluationConfig, &OdPropagator<'_>) -> Batch =
+        adam_core::od::evaluate_orbits;
     let _ = OdPropagator::two_body();
 }
 
 #[allow(dead_code)]
-fn batch_products_are_directly_exposed(result: &adam_core::od::OdBatchResult) {
-    let _: &Vec<adam_core::od::FittedOrbitRecord> = &result.fitted_orbits;
-    let _: &Vec<adam_core::od::FittedOrbitMemberRecord> = &result.fitted_orbit_members;
-    let _: &Vec<adam_core::od::OrbitDeterminationFailure> = &result.failures;
+fn batch_products_are_immutable_and_losslessly_consumable(result: &adam_core::od::OdBatchResult) {
+    let _: &[adam_core::od::FittedOrbitRecord] = result.fitted_orbits();
+    let _: &[adam_core::od::FittedOrbitMemberRecord] = result.fitted_orbit_members();
+    let _: &[adam_core::od::OrbitDeterminationFailure] = result.failures();
+    let owned: (
+        Vec<adam_core::od::FittedOrbitRecord>,
+        Vec<adam_core::od::FittedOrbitMemberRecord>,
+        Vec<adam_core::od::OrbitDeterminationFailure>,
+    ) = result.clone().into_products();
+    let _ = owned;
 }
 
 #[test]
@@ -35,6 +47,7 @@ fn canonical_workflows_have_deliberate_root_and_module_exports() {
     assert!(std::mem::size_of::<adam_core::od::IodStageConfig>() > 0);
     assert!(std::mem::size_of::<adam_core::od::RefinementRunConfig>() > 0);
     assert!(std::mem::size_of::<adam_core::od::EvaluationConfig>() > 0);
+    assert!(std::mem::size_of::<adam_core::od::profiles::ProfileIdentity>() > 0);
     assert!(!adam_core::build_identity().version.is_empty());
 }
 
@@ -65,6 +78,9 @@ fn removed_public_preparation_seams_are_not_reintroduced() {
         "InvalidBuildIdentity",
         "Core identities differ",
         "pub trait OdPropagatorSource",
+        "pub fitted_orbits: Vec",
+        "pub fitted_orbit_members: Vec",
+        "pub failures: Vec",
     ] {
         assert!(!core.contains(forbidden), "reintroduced seam: {forbidden}");
     }

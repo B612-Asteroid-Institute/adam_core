@@ -35,6 +35,45 @@ def _canonical_json(value: object) -> str:
     return json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False)
 
 
+_PROFILE_IDENTITY_TOKEN = object()
+
+
+@dataclass(frozen=True, slots=True, init=False)
+class ProfileIdentity:
+    """Immutable Rust-validated named-profile identity."""
+
+    name: str
+    version: int
+    definition_sha256: str
+
+    def __init__(
+        self,
+        name: str,
+        version: int,
+        definition_sha256: str,
+        *,
+        _token: object,
+    ) -> None:
+        if _token is not _PROFILE_IDENTITY_TOKEN:
+            raise TypeError("ProfileIdentity values are created only by Core Rust")
+        object.__setattr__(self, "name", name)
+        object.__setattr__(self, "version", version)
+        object.__setattr__(self, "definition_sha256", definition_sha256)
+
+
+def _profile_identity_from_native(native: Any) -> ProfileIdentity | None:
+    raw = native.profile_identity_json
+    if raw is None:
+        return None
+    value = cast(dict[str, object], json.loads(raw))
+    return ProfileIdentity(
+        cast(str, value["name"]),
+        cast(int, value["version"]),
+        cast(str, value["definition_sha256"]),
+        _token=_PROFILE_IDENTITY_TOKEN,
+    )
+
+
 @dataclass(frozen=True, slots=True)
 class ResourceBindings:
     """Concrete local paths keyed by stable semantic resource slot."""
@@ -158,10 +197,11 @@ class IodStageConfig:
         raw = json.loads(native.canonical_json)
         search = raw["search_correction_ranging"]
         fit = raw["candidate_correction_fit"]
-        value = cls(
-            search_correction_ranging=_iod_search_from_dict(search),
-            candidate_correction_fit=_fit_from_dict(fit),
+        value = object.__new__(cls)
+        object.__setattr__(
+            value, "search_correction_ranging", _iod_search_from_dict(search)
         )
+        object.__setattr__(value, "candidate_correction_fit", _fit_from_dict(fit))
         object.__setattr__(value, "_native", native)
         return value
 
@@ -173,6 +213,7 @@ class IodRunConfig:
     observation_pipeline: ObservationPipeline
     iod: IodStageConfig
     resources: ResourceBindings
+    profile_identity: ProfileIdentity | None = field(init=False, default=None)
     _native: Any = field(init=False, repr=False, compare=False)
 
     def __post_init__(self) -> None:
@@ -201,7 +242,13 @@ class IodRunConfig:
         iod: IodStageConfig,
         resources: ResourceBindings,
     ) -> IodRunConfig:
-        value = cls(observation_pipeline, iod, resources)
+        value = object.__new__(cls)
+        object.__setattr__(value, "observation_pipeline", observation_pipeline)
+        object.__setattr__(value, "iod", iod)
+        object.__setattr__(value, "resources", resources)
+        object.__setattr__(
+            value, "profile_identity", _profile_identity_from_native(native)
+        )
         object.__setattr__(value, "_native", native)
         return value
 
@@ -215,7 +262,15 @@ class IodRunConfig:
 
     @property
     def profile_name(self) -> str | None:
-        return cast(str | None, self._native.profile_name)
+        return None if self.profile_identity is None else self.profile_identity.name
+
+    @property
+    def profile_definition_sha256(self) -> str | None:
+        return (
+            None
+            if self.profile_identity is None
+            else self.profile_identity.definition_sha256
+        )
 
     @property
     def provenance(self) -> Mapping[str, object]:
@@ -280,7 +335,8 @@ class RefinementRunConfig:
             declaration = Cmc2003Refinement(fit=fit, **raw)
         else:  # pragma: no cover - native/Python version skew guard
             raise RuntimeError(f"unknown native refinement method {method!r}")
-        value = cls(declaration)
+        value = object.__new__(cls)
+        object.__setattr__(value, "refinement", declaration)
         object.__setattr__(value, "_native", native)
         return value
 
@@ -311,9 +367,12 @@ class EvaluationConfig:
     @classmethod
     def _from_native(cls, native: Any) -> EvaluationConfig:
         raw = json.loads(native.canonical_json)
-        value = cls(
-            covariance_dimension=cast(int, raw["covariance_dimension"]),
-            prediction_fit=_fit_from_dict(raw["prediction_fit"]),
+        value = object.__new__(cls)
+        object.__setattr__(
+            value, "covariance_dimension", cast(int, raw["covariance_dimension"])
+        )
+        object.__setattr__(
+            value, "prediction_fit", _fit_from_dict(raw["prediction_fit"])
         )
         object.__setattr__(value, "_native", native)
         return value
@@ -343,6 +402,7 @@ class OdConfig:
     iod: IodStageConfig
     refinement: RefinementRunConfig
     resources: ResourceBindings
+    profile_identity: ProfileIdentity | None = field(init=False, default=None)
     _native: Any = field(init=False, repr=False, compare=False)
 
     def __post_init__(self) -> None:
@@ -388,7 +448,14 @@ class OdConfig:
         refinement: RefinementRunConfig,
         resources: ResourceBindings,
     ) -> OdConfig:
-        value = cls(observation_pipeline, iod, refinement, resources)
+        value = object.__new__(cls)
+        object.__setattr__(value, "observation_pipeline", observation_pipeline)
+        object.__setattr__(value, "iod", iod)
+        object.__setattr__(value, "refinement", refinement)
+        object.__setattr__(value, "resources", resources)
+        object.__setattr__(
+            value, "profile_identity", _profile_identity_from_native(native)
+        )
         object.__setattr__(value, "_native", native)
         return value
 
@@ -413,7 +480,15 @@ class OdConfig:
 
     @property
     def profile_name(self) -> str | None:
-        return cast(str | None, self._native.profile_name)
+        return None if self.profile_identity is None else self.profile_identity.name
+
+    @property
+    def profile_definition_sha256(self) -> str | None:
+        return (
+            None
+            if self.profile_identity is None
+            else self.profile_identity.definition_sha256
+        )
 
 
 __all__ = [
@@ -431,6 +506,7 @@ __all__ = [
     "OdResourceValidationError",
     "ObservationSelectionName",
     "PrefitScopeName",
+    "ProfileIdentity",
     "RangingConfig",
     "RefinementRunConfig",
     "ResourceBindings",

@@ -40,7 +40,7 @@ The baseline projection methods are copies of declarations, not bound stage valu
    - the exact `WhitenedFitConfig` used for provider prediction/residual evaluation.
 5. Make `OdConfig` own the bound observation pipeline, `IodStageConfig`, `RefinementRunConfig`, and optional profile identity. Evaluation is not part of `run_od` and is configured independently.
 6. `OdConfig::for_iod()` returns the complete bound `IodRunConfig`; `for_refinement()` remains a complete copy. `for_evaluation()` returns a new self-contained value derived from the explicitly selected refinement prediction settings; it does not retain or embed `OdConfig`. Named profiles also expose their explicit evaluation config separately.
-7. Python values mirror these public fields. Remove `_workflow_native` entirely. Native PyO3 wrappers are implementation handles only and cannot carry undeclared scientific state.
+7. Python values mirror these public fields. Remove `_workflow_native` entirely. Native PyO3 wrappers are implementation handles only and cannot carry undeclared scientific state. A bound named profile is declared as immutable `profile_identity` value state (`name`, `version`, and definition SHA-256); explicit constructors always produce `None` and cannot accept a caller-forged identity.
 
 ### Composition and provenance
 
@@ -48,7 +48,7 @@ A minimal IOD stage value cannot carry unrelated refinement/evaluation declarati
 
 - standalone/fused IOD uses a versioned route-specific canonical IOD configuration containing profile identity, transforms/resources, and IOD settings;
 - `run_od` uses the complete bound OD configuration containing profile identity, transforms/resources, IOD settings, and refinement settings;
-- refinement of a `run_iod` seed composes the seed's canonical IOD configuration with the explicit `RefinementRunConfig`, producing exactly the same canonical OD configuration as direct `run_od`;
+- refinement of a `run_iod` seed composes the seed's canonical IOD configuration with the explicit `RefinementRunConfig`, producing exactly the same canonical OD configuration as direct `run_od`; a named profile identity is retained only when the requested refinement exactly matches that verified profile definition, otherwise composition deliberately drops the profile and equals an explicit unprofiled `OdConfig`;
 - standalone refinement uses only its explicit refinement configuration;
 - evaluation uses only its self-contained evaluation configuration;
 - route configuration fingerprints/domains are versioned and tested; no compiled build identity is reintroduced;
@@ -69,23 +69,24 @@ Ordinary Rust callers construct `OdPropagator::two_body()` or `OdPropagator::ext
 
 ### Result ownership
 
-`OdBatchResult` directly owns and publicly exposes deterministic:
+`OdBatchResult` privately owns deterministic vectors for fitted orbits, fitted memberships, and typed failures. Public accessors return immutable slices, while `into_products()` moves all three vectors out together. Group preparation/diagnostic details and stage-provider summaries remain private/accessorial; callers therefore cannot invalidate their index/range views. `to_membered_orbits()` is the lossless batch handoff, and mutable relational labels are edited only on the resulting `MemberedOrbits`.
 
-- `fitted_orbits: Vec<FittedOrbitRecord>`,
-- `fitted_orbit_members: Vec<FittedOrbitMemberRecord>`, and
-- `failures: Vec<OrbitDeterminationFailure>`.
-
-Group preparation/diagnostic details and stage-provider summaries become private/accessorial. Internal constructors maintain product/group consistency; public consumers do not have to traverse group planning state. Python marshaling reads the three primary products plus private binding accessors for diagnostics needed to assemble typed tables.
+The Python binding intentionally marshals through deterministic `groups()` plus `group_orbit` / `group_members` / `group_failure` accessors because it assembles per-group Quivr tables and diagnostics. Ordinary Rust callers may read the three primary slices without traversing group planning state.
 
 ## Intentional language differences
 
 1. Python accepts/returns typed Quivr tables; Rust accepts/returns Core Rust batches/records.
 2. Python propagator arguments may be `None` (the explicit built-in two-body backend) or capsule-providing objects; Rust uses explicit `OdPropagator` constructors.
 3. Python obtains an external provider lazily after Rust static preparation; ordinary Rust already has a provider reference and does not need acquisition.
-4. Python returns the established tuple `(FittedOrbits, FittedOrbitMembers, OrbitDeterminationFailures)`; Rust returns `OdBatchResult` with those three primary collections.
-5. Python resource paths are bound while constructing configs; canonical Rust configuration/provenance stores verified identities and path-free values.
+4. Python returns the established tuple `(FittedOrbits, FittedOrbitMembers, OrbitDeterminationFailures)`; Rust returns `OdBatchResult` with immutable views and an owning `into_products()` path.
+5. Python resource paths are bound while constructing configs; canonical Rust configuration/provenance stores verified identities and path-free values. Native-to-Python stage projections reuse validated native state and never reopen those paths.
+6. Rust names the IOD declaration accessor `stage()` / `iod_stage()` while Python exposes `.iod`; Python additionally forwards `.search_correction_ranging` and `.candidate_correction_fit` on `IodRunConfig`.
+7. Rust provides `IodRunConfig::explicit`; Python provides the positional `IodRunConfig(...)` constructor. Python supports both positional `OdConfig(...)` and keyword-only `OdConfig.explicit(...)` over the same fields.
+8. Predictor-level focused seams intentionally changed with the stage split: `prepare_observations` takes `&ObservationPipeline`, `run_iod_with_predictor` takes `&IodStageConfig`, and `refine_with_predictor` takes `&RefinementRunConfig`.
+9. Rust `EvaluationConfig` contains floating-point fit settings and therefore is copyable but not `Eq`; Python dataclass value equality compares the same declared fields.
+10. `OdProfile.evaluation` currently decodes the profile's Core-v1 evaluation declaration through `EvaluationConfig.core_v1()`; both shipped definitions are pinned to that exact value.
 
-No other signature, default, validation, ordering, failure, configuration, provider, or provenance difference is intentional.
+Outside these enumerated language and route-schema/default-label changes, defaults, ordering, failure classification, provider identity, scientific fingerprints, and numerical outcomes are required to remain equal.
 
 ## Required drift guards and examples
 
@@ -95,5 +96,5 @@ No other signature, default, validation, ordering, failure, configuration, provi
 4. Exact direct-`run_od` versus projected-`run_iod` + `refine` tests covering success, typed scientific failure, empty input, provider identity, profile/resource binding, and provider-call count.
 5. Standalone Rust examples/tests for all four functions with the built-in provider and at least one external-provider path.
 6. Python tests for direct construction of each self-contained stage config; no projection-only hidden acceptance path.
-7. `OdBatchResult` tests that consume the three direct public collections without traversing group internals.
+7. `OdBatchResult` tests that read immutable product slices, consume `into_products()`, preserve safe group access, and compile-reject direct field mutation.
 8. Package/profile/resource and public-surface audits updated for the deliberate breaking API.

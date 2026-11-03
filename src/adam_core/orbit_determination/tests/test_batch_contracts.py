@@ -507,7 +507,8 @@ def test_composed_seed_fields_have_a_validated_consistency_digest(
                 [orbits.provenance.iod_alternatives[0].as_py() + 41], type=pa.int64()
             ),
         )
-    with pytest.raises(ValueError, match="consistency digest"):
+    expected = "profile" if field == "profile" else "consistency digest"
+    with pytest.raises(ValueError, match=expected):
         refine(
             forged,
             members,
@@ -725,6 +726,58 @@ def test_inconsistent_or_ambiguous_orbit_labels_fail_before_provider(
             source,
             TwoBodyPropagator(),
             config.for_evaluation(),
+        )
+    assert provider_counter.calls == 0
+
+
+@pytest.mark.parametrize(
+    "profile_claim",
+    [
+        {
+            "name": "UNKNOWN_OD_V1",
+            "version": 1,
+            "definition_sha256": "f" * 64,
+        },
+        {
+            "name": "CORE_OD_V1",
+            "version": 1,
+            "definition_sha256": "fb921274a3daf4bb09885a4247a3f2598b141e355883dc2e2815cfbd5153810b",
+        },
+    ],
+    ids=["unknown", "known-identity-wrong-definition"],
+)
+def test_profile_claim_is_validated_even_with_recomputed_public_digest(
+    pure_iod_orbit: PureIodOrbit,
+    provider_counter: type[_Counter],
+    profile_claim: dict[str, object],
+) -> None:
+    source, ids = _source_and_ids(pure_iod_orbit)
+    associations = Associations.from_kwargs(
+        detection_id=ids, object_id=["g"] * len(ids)
+    )
+    config = _config()
+    orbits, members, failures = run_iod(source, associations, None, config.for_iod())
+    assert len(failures) == 0
+    changed = json.loads(orbits.provenance.configuration[0].as_py())
+    changed["profile"] = profile_claim
+    changed_json = json.dumps(changed, separators=(",", ":"))
+    forged = orbits.set_column(
+        "provenance.configuration",
+        pa.array([changed_json], type=pa.large_string()),
+    ).set_column(
+        "provenance.provenance_fingerprint",
+        pa.array(
+            [_public_consistency_digest(orbits, configuration=changed_json)],
+            type=pa.large_string(),
+        ),
+    )
+    with pytest.raises(ValueError, match="profile"):
+        refine(
+            forged,
+            members,
+            source,
+            TwoBodyPropagator(),
+            config.for_refinement(),
         )
     assert provider_counter.calls == 0
 

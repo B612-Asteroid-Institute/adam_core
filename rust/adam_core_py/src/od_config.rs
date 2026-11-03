@@ -4,9 +4,10 @@ use std::sync::Arc;
 
 use adam_core_rs_coords::{
     EvaluationConfig, IodRunConfig, IodStageConfig, ObservationPipeline, ObservationTransform,
-    OdConfig, OdConfigError, OdProfile, RefinementRunConfig, ResidualCovarianceOperation,
-    ResourceBindings, ResourceRequirement, ResourceSlot, ASTEROID_INSTITUTE_OD_V1, CORE_OD_V1,
-    EFCC18_BIAS_RESOURCE, V2_FULL_RESOURCE, V2_SIGMA_FILL_RESOURCE,
+    OdConfig, OdConfigError, OdProfile, ProfileIdentity, RefinementRunConfig,
+    ResidualCovarianceOperation, ResourceBindings, ResourceRequirement, ResourceSlot,
+    ASTEROID_INSTITUTE_OD_V1, CORE_OD_V1, EFCC18_BIAS_RESOURCE, V2_FULL_RESOURCE,
+    V2_SIGMA_FILL_RESOURCE,
 };
 use pyo3::exceptions::{PyTypeError, PyValueError};
 use pyo3::prelude::*;
@@ -32,6 +33,17 @@ fn profile(name: &str) -> PyResult<OdProfile> {
         "ASTEROID_INSTITUTE_OD_V1" => Ok(ASTEROID_INSTITUTE_OD_V1),
         _ => Err(value_error(format!("unknown OD profile {name:?}"))),
     }
+}
+
+fn profile_identity_json(identity: Option<ProfileIdentity>) -> Option<String> {
+    identity.map(|identity| {
+        serde_json::to_string(&serde_json::json!({
+            "name": identity.name,
+            "version": identity.version,
+            "definition_sha256": identity.definition_sha256,
+        }))
+        .expect("profile identity is serializable")
+    })
 }
 
 fn bindings(paths: BTreeMap<String, String>) -> PyResult<ResourceBindings> {
@@ -70,6 +82,11 @@ impl PyOdConfig {
         self.inner
             .profile_identity()
             .map(|profile| profile.definition_sha256.to_string())
+    }
+
+    #[getter]
+    fn profile_identity_json(&self) -> Option<String> {
+        profile_identity_json(self.inner.profile_identity())
     }
 
     #[getter]
@@ -150,6 +167,11 @@ impl PyIodRunConfig {
         self.inner
             .profile_identity()
             .map(|profile| profile.name.to_string())
+    }
+
+    #[getter]
+    fn profile_identity_json(&self) -> Option<String> {
+        profile_identity_json(self.inner.profile_identity())
     }
 
     #[getter]

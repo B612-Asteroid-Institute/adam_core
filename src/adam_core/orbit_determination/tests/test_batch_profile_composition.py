@@ -97,6 +97,36 @@ def _forced_failure(config: OdConfig, bindings: ResourceBindings) -> OdConfig:
     )
 
 
+@pytest.mark.parametrize(
+    "profile",
+    [CORE_OD_V1, ASTEROID_INSTITUTE_OD_V1],
+    ids=lambda profile: f"{profile.name}-cross-config",
+)
+def test_profile_iod_with_custom_refinement_drops_profile_and_equals_direct(
+    pure_iod_orbit: PureIodOrbit,
+    profile: OdProfile,
+) -> None:
+    bindings = _bindings(profile)
+    profile_config = profile.bind(bindings)
+    custom_config = _forced_failure(profile_config, bindings)
+    source = _profile_source(
+        pure_iod_orbit,
+        fill_missing=profile is ASTEROID_INSTITUTE_OD_V1,
+    )
+    associations = Associations.from_kwargs(
+        detection_id=source.id, object_id=["profile-group"] * len(source)
+    )
+
+    iod = run_iod(source, associations, None, profile_config.for_iod())
+    assert len(iod[0]) == 1, iod[2].message.to_pylist()
+    composed = refine(iod[0], iod[1], source, None, custom_config.for_refinement())
+    direct = run_od(source, associations, None, custom_config)
+    _assert_exact_results(direct, composed)
+    configuration = direct[0].provenance.configuration[0].as_py()
+    assert '"profile":null' in configuration
+    assert profile.name not in configuration
+
+
 @pytest.mark.parametrize("force_failure", [False, True])
 @pytest.mark.parametrize(
     "profile",

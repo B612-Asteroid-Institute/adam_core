@@ -12,9 +12,10 @@
 //! propagation-only ABI-v2 capsule. Static validation and one-time preparation
 //! remain private. Fitted `orbit_id`
 //! values are mutable relational labels; immutable association identity remains
-//! in each record's `group_id` / orbit `object_id`. Callers may edit the public
-//! orbit and member label columns directly before passing them back to
-//! [`refine`] or [`evaluate_orbits`], where relational integrity is validated.
+//! in each record's `group_id` / orbit `object_id`. Callers may convert a batch
+//! with [`crate::od::OdBatchResult::to_membered_orbits`], edit that value's public orbit
+//! and member label columns, and pass it to [`refine`] or [`evaluate_orbits`],
+//! where relational integrity is validated.
 //!
 //! ```no_run
 //! use adam_core::{run_iod, od::{AssociatedObservations, IodRunConfig, OdPropagator}};
@@ -183,7 +184,9 @@ pub mod profiles {
 }
 
 pub use adam_core_rs_coords::propagation::IodConfig;
-pub use adam_core_rs_coords::{IterativeFitConfig, RefinementConfig, WhitenedFitConfig};
+pub use adam_core_rs_coords::{
+    IterativeFitConfig, ProfileIdentity, RefinementConfig, WhitenedFitConfig,
+};
 
 use adam_core_rs_coords::od::{
     plan_associations, plan_orbit_members, AssociationGroup, OrbitMemberGroup,
@@ -777,6 +780,126 @@ pub struct CanonicalConfiguration {
     declared_science_sha256: bool,
 }
 
+fn invalid_profile_claim(message: impl Into<String>) -> OdBatchError {
+    OdBatchError::new(OdBatchErrorCode::InvalidProvenance, message)
+}
+
+fn profile_from_claim(value: &Value) -> Result<Option<profiles::OdProfile>, OdBatchError> {
+    let Some(claim) = value.get("profile") else {
+        return Ok(None);
+    };
+    if claim.is_null() {
+        return Ok(None);
+    }
+    let name = claim
+        .get("name")
+        .and_then(Value::as_str)
+        .ok_or_else(|| invalid_profile_claim("profile identity name is missing or invalid"))?;
+    let profile = match name {
+        "CORE_OD_V1" => profiles::CORE_OD_V1,
+        "ASTEROID_INSTITUTE_OD_V1" => profiles::ASTEROID_INSTITUTE_OD_V1,
+        _ => {
+            return Err(invalid_profile_claim(format!(
+                "unknown OD profile identity {name:?}"
+            )))
+        }
+    };
+    profile
+        .verify_definition_fingerprint()
+        .map_err(invalid_profile_claim)?;
+    let identity = profile.identity();
+    let expected_identity = json!({
+        "name": identity.name,
+        "version": identity.version,
+        "definition_sha256": identity.definition_sha256,
+    });
+    if claim != &expected_identity {
+        return Err(invalid_profile_claim(format!(
+            "profile identity for {name} does not match its immutable definition"
+        )));
+    }
+    Ok(Some(profile))
+}
+
+fn expected_profile_transforms(profile: profiles::OdProfile) -> Value {
+    let mut transforms = profile
+        .definition_value()
+        .get("pipeline")
+        .and_then(Value::as_array)
+        .expect("known profile pipeline is an array")
+        .clone();
+    for transform in &mut transforms {
+        let kind = transform
+            .get("kind")
+            .and_then(Value::as_str)
+            .expect("known profile transform has a kind");
+        let slot = match kind {
+            "fill_missing_astrometric_uncertainty" => {
+                Some(ResourceSlot::StationCatalogUncertaintyTable)
+            }
+            "efcc18_catalog_bias_correction" => Some(ResourceSlot::Efcc18CatalogBiasTable),
+            "station_band_residual_covariance_adjustment" => {
+                Some(ResourceSlot::StationBandResidualCovarianceTable)
+            }
+            "nightly_batch_deweighting" => None,
+            _ => unreachable!("unknown transform in a verified profile"),
+        };
+        if let Some(slot) = slot {
+            let requirement = profile
+                .requirements()
+                .iter()
+                .find(|requirement| requirement.slot == slot)
+                .expect("known profile declares every transform resource");
+            transform
+                .as_object_mut()
+                .expect("known profile transform is an object")
+                .insert(
+                    "resource".to_string(),
+                    json!({
+                        "requirement": requirement.canonical_value(),
+                        "actual_sha256": requirement.sha256,
+                        "actual_byte_size": requirement.byte_size,
+                    }),
+                );
+        }
+    }
+    Value::Array(transforms)
+}
+
+fn validate_profile_claim(value: &Value) -> Result<Option<profiles::OdProfile>, OdBatchError> {
+    let Some(profile) = profile_from_claim(value)? else {
+        return Ok(None);
+    };
+    let schema = value.get("schema").and_then(Value::as_str);
+    if !matches!(
+        schema,
+        Some("adam-core-iod-run-config/v1" | "adam-core-od-config/v1")
+    ) {
+        return Err(invalid_profile_claim(
+            "profile identity is attached to an unsupported configuration schema",
+        ));
+    }
+    let definition = profile.definition_value();
+    if value.get("transforms") != Some(&expected_profile_transforms(profile))
+        || value.get("iod") != definition.get("iod")
+    {
+        return Err(invalid_profile_claim(format!(
+            "configuration does not match the immutable {} profile pipeline and IOD definition",
+            profile.identity().name
+        )));
+    }
+    if schema == Some("adam-core-od-config/v1")
+        && (value.get("refinement") != definition.get("refinement")
+            || value.get("evaluation") != definition.get("evaluation"))
+    {
+        return Err(invalid_profile_claim(format!(
+            "configuration does not match the immutable {} profile refinement and evaluation definition",
+            profile.identity().name
+        )));
+    }
+    Ok(Some(profile))
+}
+
 impl CanonicalConfiguration {
     /// Construct from a complete bound IOD-stage configuration.
     pub fn from_iod(config: &IodRunConfig) -> Result<Self, OdBatchError> {
@@ -819,6 +942,10 @@ impl CanonicalConfiguration {
                 "run_iod seed does not contain a canonical IOD-stage configuration",
             ));
         }
+        let claimed_profile = validate_profile_claim(&value)?;
+        let retain_profile = claimed_profile.is_some_and(|profile| {
+            profile.definition_value().get("refinement") == Some(&refinement.canonical_value())
+        });
         let object = value.as_object_mut().ok_or_else(|| {
             OdBatchError::new(
                 OdBatchErrorCode::InvalidProvenance,
@@ -826,6 +953,9 @@ impl CanonicalConfiguration {
             )
         })?;
         object.remove("configuration_sha256");
+        if claimed_profile.is_some() && !retain_profile {
+            object.insert("profile".to_string(), Value::Null);
+        }
         object.insert(
             "schema".to_string(),
             Value::String("adam-core-od-config/v1".to_string()),
@@ -859,6 +989,7 @@ impl CanonicalConfiguration {
 
     /// Validate a canonical configuration value decoded by a foreign-language binding.
     pub fn from_value(mut value: Value) -> Result<Self, OdBatchError> {
+        validate_profile_claim(&value)?;
         let complete = serde_json::to_vec(&value).map_err(|error| {
             OdBatchError::new(
                 OdBatchErrorCode::InvalidConfiguration,
@@ -1402,11 +1533,23 @@ impl WorkingBatchResult {
 }
 
 /// Exact three-concept batch product retained in deterministic group order.
+///
+/// Product storage is private so the accessorial group ranges cannot be
+/// invalidated after construction. Consumers receive immutable slices or may
+/// move all three products out together with [`Self::into_products`]. Edit
+/// relational orbit labels only after conversion with [`Self::to_membered_orbits`].
+///
+/// ```compile_fail
+/// use adam_core::od::OdBatchResult;
+/// fn cannot_invalidate_group_views(result: &mut OdBatchResult) {
+///     result.fitted_orbits.clear();
+/// }
+/// ```
 #[derive(Debug, Clone, Default)]
 pub struct OdBatchResult {
-    pub fitted_orbits: Vec<FittedOrbitRecord>,
-    pub fitted_orbit_members: Vec<FittedOrbitMemberRecord>,
-    pub failures: Vec<OrbitDeterminationFailure>,
+    fitted_orbits: Vec<FittedOrbitRecord>,
+    fitted_orbit_members: Vec<FittedOrbitMemberRecord>,
+    failures: Vec<OrbitDeterminationFailure>,
     groups: Vec<OdGroupResult>,
     providers: OdStageProviders,
 }
@@ -1647,16 +1790,30 @@ impl OdBatchResult {
         group.failure_index.map(|index| &self.failures[index])
     }
 
-    pub fn fitted_orbits(&self) -> impl Iterator<Item = &FittedOrbitRecord> {
-        self.fitted_orbits.iter()
+    /// Materialized fitted-orbit products in deterministic successful-group order.
+    pub fn fitted_orbits(&self) -> &[FittedOrbitRecord] {
+        &self.fitted_orbits
     }
 
-    pub fn fitted_orbit_members(&self) -> impl Iterator<Item = &FittedOrbitMemberRecord> {
-        self.fitted_orbit_members.iter()
+    /// Materialized membership products in deterministic group/source order.
+    pub fn fitted_orbit_members(&self) -> &[FittedOrbitMemberRecord] {
+        &self.fitted_orbit_members
     }
 
-    pub fn failures(&self) -> impl Iterator<Item = &OrbitDeterminationFailure> {
-        self.failures.iter()
+    /// Materialized typed scientific failures in deterministic group order.
+    pub fn failures(&self) -> &[OrbitDeterminationFailure] {
+        &self.failures
+    }
+
+    /// Consume the batch and move out its three primary products losslessly.
+    pub fn into_products(
+        self,
+    ) -> (
+        Vec<FittedOrbitRecord>,
+        Vec<FittedOrbitMemberRecord>,
+        Vec<OrbitDeterminationFailure>,
+    ) {
+        (self.fitted_orbits, self.fitted_orbit_members, self.failures)
     }
 
     pub fn to_membered_orbits(
@@ -1706,7 +1863,11 @@ impl OdBatchResult {
     }
 
     pub fn is_empty(&self) -> bool {
-        self.groups.is_empty()
+        debug_assert_eq!(
+            self.groups.is_empty(),
+            self.fitted_orbits.is_empty() && self.failures.is_empty()
+        );
+        self.fitted_orbits.is_empty() && self.failures.is_empty()
     }
 }
 
@@ -4112,6 +4273,35 @@ mod tests {
         }
     }
 
+    fn profile_iod_configuration(profile: profiles::OdProfile) -> CanonicalConfiguration {
+        let identity = profile.identity();
+        let mut value = json!({
+            "schema": "adam-core-iod-run-config/v1",
+            "profile": {
+                "name": identity.name,
+                "version": identity.version,
+                "definition_sha256": identity.definition_sha256,
+            },
+            "transforms": expected_profile_transforms(profile),
+            "iod": IodStageConfig::core_v1().canonical_value(),
+        });
+        let mut science = value.clone();
+        science
+            .as_object_mut()
+            .expect("profile configuration object")
+            .remove("profile");
+        let fingerprint =
+            sha256(&serde_json::to_vec(&science).expect("profile configuration is serializable"));
+        value
+            .as_object_mut()
+            .expect("profile configuration object")
+            .insert(
+                "configuration_sha256".to_string(),
+                Value::String(fingerprint),
+            );
+        CanonicalConfiguration::from_value(value).expect("known profile IOD configuration")
+    }
+
     fn run_od_provenance() -> OdProvenance {
         let mut provenance = OdProvenance {
             input_fingerprint: "2".repeat(64),
@@ -4164,6 +4354,58 @@ mod tests {
             .expect("one-row Cartesian coordinates"),
         )
         .expect("one-row orbit")
+    }
+
+    #[test]
+    fn profile_composition_retains_only_an_exact_immutable_profile_definition() {
+        let mut custom_value = RefinementRunConfig::core_v1().canonical_value();
+        custom_value["max_iterations"] = json!(7);
+        let custom = RefinementRunConfig::from_json(&custom_value.to_string())
+            .expect("custom refinement configuration");
+
+        for profile in [profiles::CORE_OD_V1, profiles::ASTEROID_INSTITUTE_OD_V1] {
+            let iod = profile_iod_configuration(profile);
+            let matching =
+                CanonicalConfiguration::compose_od(&iod, &RefinementRunConfig::core_v1())
+                    .expect("matching profile composition");
+            let matching_value: Value =
+                serde_json::from_str(&matching.canonical_json()).expect("matching JSON");
+            assert_eq!(matching_value["profile"]["name"], profile.identity().name);
+
+            let cross_config = CanonicalConfiguration::compose_od(&iod, &custom)
+                .expect("cross-configuration composition");
+            let cross_value: Value =
+                serde_json::from_str(&cross_config.canonical_json()).expect("cross JSON");
+            assert!(cross_value["profile"].is_null());
+            assert_eq!(cross_value["refinement"], custom.canonical_value());
+
+            for mutation in ["unknown", "digest", "pipeline"] {
+                let mut forged: Value =
+                    serde_json::from_str(&iod.canonical_json()).expect("IOD JSON");
+                match mutation {
+                    "unknown" => forged["profile"]["name"] = json!("UNKNOWN_OD_V1"),
+                    "digest" => forged["profile"]["definition_sha256"] = json!("f".repeat(64)),
+                    "pipeline" => forged["transforms"] = json!([]),
+                    _ => unreachable!(),
+                }
+                let error =
+                    CanonicalConfiguration::from_value(forged).expect_err("forged profile claim");
+                assert_eq!(error.code, OdBatchErrorCode::InvalidProvenance);
+                assert!(error.message.contains("profile"));
+            }
+        }
+    }
+
+    #[test]
+    fn default_batch_products_and_group_views_are_consistent() {
+        let result = OdBatchResult::default();
+        assert!(result.is_empty());
+        assert!(result.groups().is_empty());
+        assert!(result.fitted_orbits().is_empty());
+        assert!(result.fitted_orbit_members().is_empty());
+        assert!(result.failures().is_empty());
+        let (orbits, members, failures) = result.into_products();
+        assert!(orbits.is_empty() && members.is_empty() && failures.is_empty());
     }
 
     #[test]
@@ -4277,8 +4519,20 @@ mod tests {
         let config = explicit_config();
         let provider = OdPropagator::two_body();
         let iod = run_iod(&input, &config.for_iod(), &provider).expect("two-group scientific IOD");
-        assert_eq!(iod.fitted_orbits().count(), 2);
-        assert!(iod.failures().next().is_none());
+        assert_eq!(iod.fitted_orbits().len(), 2);
+        assert!(iod.failures().is_empty());
+        let (owned_orbits, owned_members, owned_failures) = iod.clone().into_products();
+        assert_eq!(owned_orbits.len(), 2);
+        assert_eq!(owned_members.len(), iod.fitted_orbit_members().len());
+        assert!(owned_failures.is_empty());
+        for group in iod.groups() {
+            assert_eq!(
+                iod.group_orbit(group)
+                    .and_then(|record| record.orbit.orbit_id.first())
+                    .map(|label| label.0.as_str()),
+                Some(group.orbit_id())
+            );
+        }
 
         let external_table = two_body_reference::new(TwoBodyPropagator::default());
         // SAFETY: the reference ABI table and its owned context remain alive
