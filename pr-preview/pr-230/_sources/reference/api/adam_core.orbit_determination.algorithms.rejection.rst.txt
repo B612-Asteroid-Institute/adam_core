@@ -1,0 +1,7 @@
+adam\_core.orbit\_determination.algorithms.rejection module
+===========================================================
+
+.. automodule:: adam_core.orbit_determination.algorithms.rejection
+   :members:
+   :show-inheritance:
+   :undoc-members:

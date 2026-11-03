@@ -1,0 +1,7 @@
+adam\_core.coordinates.cometary module
+======================================
+
+.. automodule:: adam_core.coordinates.cometary
+   :members:
+   :show-inheritance:
+   :undoc-members:

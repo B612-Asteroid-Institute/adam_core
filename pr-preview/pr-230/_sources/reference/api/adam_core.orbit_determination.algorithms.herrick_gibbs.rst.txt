@@ -1,0 +1,7 @@
+adam\_core.orbit\_determination.algorithms.herrick\_gibbs module
+================================================================
+
+.. automodule:: adam_core.orbit_determination.algorithms.herrick_gibbs
+   :members:
+   :show-inheritance:
+   :undoc-members:
