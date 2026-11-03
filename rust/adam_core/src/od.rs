@@ -53,6 +53,7 @@ use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use std::collections::HashSet;
 use std::fmt;
+use std::sync::LazyLock;
 
 /// Predictor-level numerical building blocks used by the canonical workflows.
 pub mod algorithms {
@@ -784,46 +785,18 @@ fn invalid_profile_claim(message: impl Into<String>) -> OdBatchError {
     OdBatchError::new(OdBatchErrorCode::InvalidProvenance, message)
 }
 
-fn profile_from_claim(value: &Value) -> Result<Option<profiles::OdProfile>, OdBatchError> {
-    let Some(claim) = value.get("profile") else {
-        return Ok(None);
-    };
-    if claim.is_null() {
-        return Ok(None);
-    }
-    let name = claim
-        .get("name")
-        .and_then(Value::as_str)
-        .ok_or_else(|| invalid_profile_claim("profile identity name is missing or invalid"))?;
-    let profile = match name {
-        "CORE_OD_V1" => profiles::CORE_OD_V1,
-        "ASTEROID_INSTITUTE_OD_V1" => profiles::ASTEROID_INSTITUTE_OD_V1,
-        _ => {
-            return Err(invalid_profile_claim(format!(
-                "unknown OD profile identity {name:?}"
-            )))
-        }
-    };
-    profile
-        .verify_definition_fingerprint()
-        .map_err(invalid_profile_claim)?;
-    let identity = profile.identity();
-    let expected_identity = json!({
-        "name": identity.name,
-        "version": identity.version,
-        "definition_sha256": identity.definition_sha256,
-    });
-    if claim != &expected_identity {
-        return Err(invalid_profile_claim(format!(
-            "profile identity for {name} does not match its immutable definition"
-        )));
-    }
-    Ok(Some(profile))
+#[derive(Debug)]
+struct ValidatedProfileDefinition {
+    profile: profiles::OdProfile,
+    identity: Value,
+    transforms: Value,
+    iod: Value,
+    refinement: Value,
+    evaluation: Value,
 }
 
-fn expected_profile_transforms(profile: profiles::OdProfile) -> Value {
-    let mut transforms = profile
-        .definition_value()
+fn profile_transforms(profile: profiles::OdProfile, definition: &Value) -> Value {
+    let mut transforms = definition
         .get("pipeline")
         .and_then(Value::as_array)
         .expect("known profile pipeline is an array")
@@ -866,7 +839,82 @@ fn expected_profile_transforms(profile: profiles::OdProfile) -> Value {
     Value::Array(transforms)
 }
 
-fn validate_profile_claim(value: &Value) -> Result<Option<profiles::OdProfile>, OdBatchError> {
+fn build_validated_profile(
+    profile: profiles::OdProfile,
+) -> Result<ValidatedProfileDefinition, String> {
+    profile.verify_definition_fingerprint()?;
+    let definition = profile.definition_value();
+    let identity = profile.identity();
+    Ok(ValidatedProfileDefinition {
+        profile,
+        identity: json!({
+            "name": identity.name,
+            "version": identity.version,
+            "definition_sha256": identity.definition_sha256,
+        }),
+        transforms: profile_transforms(profile, &definition),
+        iod: definition
+            .get("iod")
+            .expect("known profile declares IOD")
+            .clone(),
+        refinement: definition
+            .get("refinement")
+            .expect("known profile declares refinement")
+            .clone(),
+        evaluation: definition
+            .get("evaluation")
+            .expect("known profile declares evaluation")
+            .clone(),
+    })
+}
+
+static CORE_OD_V1_DEFINITION: LazyLock<Result<ValidatedProfileDefinition, String>> =
+    LazyLock::new(|| build_validated_profile(profiles::CORE_OD_V1));
+static ASTEROID_INSTITUTE_OD_V1_DEFINITION: LazyLock<Result<ValidatedProfileDefinition, String>> =
+    LazyLock::new(|| build_validated_profile(profiles::ASTEROID_INSTITUTE_OD_V1));
+
+fn cached_profile_definition(
+    name: &str,
+) -> Result<&'static ValidatedProfileDefinition, OdBatchError> {
+    let cached = match name {
+        "CORE_OD_V1" => &*CORE_OD_V1_DEFINITION,
+        "ASTEROID_INSTITUTE_OD_V1" => &*ASTEROID_INSTITUTE_OD_V1_DEFINITION,
+        _ => {
+            return Err(invalid_profile_claim(format!(
+                "unknown OD profile identity {name:?}"
+            )))
+        }
+    };
+    cached
+        .as_ref()
+        .map_err(|message| invalid_profile_claim(message.clone()))
+}
+
+fn profile_from_claim(
+    value: &Value,
+) -> Result<Option<&'static ValidatedProfileDefinition>, OdBatchError> {
+    let Some(claim) = value.get("profile") else {
+        return Ok(None);
+    };
+    if claim.is_null() {
+        return Ok(None);
+    }
+    let name = claim
+        .get("name")
+        .and_then(Value::as_str)
+        .ok_or_else(|| invalid_profile_claim("profile identity name is missing or invalid"))?;
+    let profile = cached_profile_definition(name)?;
+    if claim != &profile.identity {
+        return Err(invalid_profile_claim(format!(
+            "profile identity for {name} does not match its immutable definition"
+        )));
+    }
+    Ok(Some(profile))
+}
+
+fn validate_profile_claim(
+    value: &Value,
+) -> Result<Option<&'static ValidatedProfileDefinition>, OdBatchError> {
     let Some(profile) = profile_from_claim(value)? else {
         return Ok(None);
     };
@@ -879,22 +927,21 @@ fn validate_profile_claim(value: &Value) -> Result<Option<profiles::OdProfile>, 
             "profile identity is attached to an unsupported configuration schema",
         ));
     }
-    let definition = profile.definition_value();
-    if value.get("transforms") != Some(&expected_profile_transforms(profile))
-        || value.get("iod") != definition.get("iod")
+    if value.get("transforms") != Some(&profile.transforms)
+        || value.get("iod") != Some(&profile.iod)
     {
         return Err(invalid_profile_claim(format!(
             "configuration does not match the immutable {} profile pipeline and IOD definition",
-            profile.identity().name
+            profile.profile.identity().name
         )));
     }
     if schema == Some("adam-core-od-config/v1")
-        && (value.get("refinement") != definition.get("refinement")
-            || value.get("evaluation") != definition.get("evaluation"))
+        && (value.get("refinement") != Some(&profile.refinement)
+            || value.get("evaluation") != Some(&profile.evaluation))
     {
         return Err(invalid_profile_claim(format!(
             "configuration does not match the immutable {} profile refinement and evaluation definition",
-            profile.identity().name
+            profile.profile.identity().name
         )));
     }
     Ok(Some(profile))
@@ -943,9 +990,9 @@ impl CanonicalConfiguration {
             ));
         }
         let claimed_profile = validate_profile_claim(&value)?;
-        let retain_profile = claimed_profile.is_some_and(|profile| {
-            profile.definition_value().get("refinement") == Some(&refinement.canonical_value())
-        });
+        let refinement_value = refinement.canonical_value();
+        let retain_profile =
+            claimed_profile.is_some_and(|profile| profile.refinement == refinement_value);
         let object = value.as_object_mut().ok_or_else(|| {
             OdBatchError::new(
                 OdBatchErrorCode::InvalidProvenance,
@@ -960,7 +1007,7 @@ impl CanonicalConfiguration {
             "schema".to_string(),
             Value::String("adam-core-od-config/v1".to_string()),
         );
-        object.insert("refinement".to_string(), refinement.canonical_value());
+        object.insert("refinement".to_string(), refinement_value);
         object.insert("evaluation".to_string(), json!({"covariance_dimension": 6}));
         let mut science = value.clone();
         science
@@ -1445,26 +1492,83 @@ struct WorkingGroupResult {
     iod: Option<IodResult>,
 }
 
-/// Accessorial planning/diagnostic metadata for one deterministic disposition.
+/// Internal planning/diagnostic metadata for one deterministic disposition.
+#[cfg_attr(not(feature = "python-bindings"), allow(dead_code))]
 #[derive(Debug, Clone)]
-pub struct OdGroupResult {
-    pub group_id: String,
+struct OdGroupResult {
+    group_id: String,
     orbit_id: String,
-    pub row_indices: Vec<usize>,
-    pub input_orbit_index: Option<usize>,
-    pub member_indices: Vec<usize>,
-    pub prepared: PreparedObservations,
+    row_indices: Vec<usize>,
+    input_orbit_index: Option<usize>,
+    member_indices: Vec<usize>,
+    prepared: PreparedObservations,
     orbit_index: Option<usize>,
     member_start: usize,
     member_end: usize,
     failure_index: Option<usize>,
     /// IOD diagnostics are retained even when no fitted orbit exists.
-    pub iod: Option<IodResult>,
+    iod: Option<IodResult>,
 }
 
-impl OdGroupResult {
-    pub fn orbit_id(&self) -> &str {
-        &self.orbit_id
+#[cfg_attr(not(feature = "python-bindings"), allow(dead_code))]
+#[derive(Debug, Clone, Copy)]
+struct GroupView<'a> {
+    group: &'a OdGroupResult,
+    orbit: Option<&'a FittedOrbitRecord>,
+    members: &'a [FittedOrbitMemberRecord],
+    failure: Option<&'a OrbitDeterminationFailure>,
+}
+
+/// Binding-only borrowed view of one disposition and its associated products.
+///
+/// The view is created only from one borrowed [`OdBatchResult`], so its orbit,
+/// membership, failure, and diagnostic references cannot be paired with a
+/// different batch.
+#[cfg(feature = "python-bindings")]
+#[doc(hidden)]
+#[derive(Debug, Clone, Copy)]
+pub struct PythonGroupView<'a>(GroupView<'a>);
+
+#[cfg(feature = "python-bindings")]
+impl<'a> PythonGroupView<'a> {
+    pub fn group_id(self) -> &'a str {
+        &self.0.group.group_id
+    }
+
+    pub fn orbit_id(self) -> &'a str {
+        &self.0.group.orbit_id
+    }
+
+    pub fn row_indices(self) -> &'a [usize] {
+        &self.0.group.row_indices
+    }
+
+    pub fn input_orbit_index(self) -> Option<usize> {
+        self.0.group.input_orbit_index
+    }
+
+    pub fn member_indices(self) -> &'a [usize] {
+        &self.0.group.member_indices
+    }
+
+    pub fn prepared(self) -> &'a PreparedObservations {
+        &self.0.group.prepared
+    }
+
+    pub fn iod(self) -> Option<&'a IodResult> {
+        self.0.group.iod.as_ref()
+    }
+
+    pub fn orbit(self) -> Option<&'a FittedOrbitRecord> {
+        self.0.orbit
+    }
+
+    pub fn members(self) -> &'a [FittedOrbitMemberRecord] {
+        self.0.members
+    }
+
+    pub fn failure(self) -> Option<&'a OrbitDeterminationFailure> {
+        self.0.failure
     }
 }
 
@@ -1541,8 +1645,18 @@ impl WorkingBatchResult {
 ///
 /// ```compile_fail
 /// use adam_core::od::OdBatchResult;
-/// fn cannot_invalidate_group_views(result: &mut OdBatchResult) {
+/// fn cannot_invalidate_products(result: &mut OdBatchResult) {
 ///     result.fitted_orbits.clear();
+/// }
+/// ```
+///
+/// Raw group handles are deliberately absent from the ordinary public API, so
+/// a handle from one batch cannot be paired with another batch.
+///
+/// ```compile_fail
+/// use adam_core::od::OdBatchResult;
+/// fn cannot_obtain_raw_group_handles(result: &OdBatchResult) {
+///     let _ = result.groups();
 /// }
 /// ```
 #[derive(Debug, Clone, Default)]
@@ -1770,24 +1884,27 @@ fn member_batch_from_records<'a>(
 }
 
 impl OdBatchResult {
-    pub fn groups(&self) -> &[OdGroupResult] {
-        &self.groups
+    fn group_views(&self) -> impl ExactSizeIterator<Item = GroupView<'_>> + '_ {
+        self.groups.iter().map(|group| GroupView {
+            group,
+            orbit: group.orbit_index.map(|index| &self.fitted_orbits[index]),
+            members: &self.fitted_orbit_members[group.member_start..group.member_end],
+            failure: group.failure_index.map(|index| &self.failures[index]),
+        })
+    }
+
+    /// Borrow complete per-group dispositions for Python result marshalling.
+    ///
+    /// This feature-internal bridge returns self-contained borrowed views; it
+    /// never accepts a standalone group handle alongside a separate batch.
+    #[cfg(feature = "python-bindings")]
+    #[doc(hidden)]
+    pub fn python_group_views(&self) -> impl ExactSizeIterator<Item = PythonGroupView<'_>> + '_ {
+        self.group_views().map(PythonGroupView)
     }
 
     pub fn providers(&self) -> &OdStageProviders {
         &self.providers
-    }
-
-    pub fn group_orbit(&self, group: &OdGroupResult) -> Option<&FittedOrbitRecord> {
-        group.orbit_index.map(|index| &self.fitted_orbits[index])
-    }
-
-    pub fn group_members(&self, group: &OdGroupResult) -> &[FittedOrbitMemberRecord] {
-        &self.fitted_orbit_members[group.member_start..group.member_end]
-    }
-
-    pub fn group_failure(&self, group: &OdGroupResult) -> Option<&OrbitDeterminationFailure> {
-        group.failure_index.map(|index| &self.failures[index])
     }
 
     /// Materialized fitted-orbit products in deterministic successful-group order.
@@ -1846,15 +1963,15 @@ impl OdBatchResult {
         observations: &OdObservationBatch,
     ) -> Result<Vec<MemberedOrbits>, OdBatchError> {
         let mut output = Vec::with_capacity(self.fitted_orbits.len());
-        for group in &self.groups {
-            let Some(orbit) = self.group_orbit(group) else {
+        for group in self.group_views() {
+            let Some(orbit) = group.orbit else {
                 continue;
             };
             let membered = MemberedOrbits {
                 orbits: orbit.orbit.clone(),
                 provenance: vec![Some(orbit.provenance.clone())],
                 observations: observations.clone(),
-                members: member_batch_from_records(self.group_members(group)),
+                members: member_batch_from_records(group.members),
             };
             validate_member_input(&membered, true)?;
             output.push(membered);
@@ -4282,7 +4399,10 @@ mod tests {
                 "version": identity.version,
                 "definition_sha256": identity.definition_sha256,
             },
-            "transforms": expected_profile_transforms(profile),
+            "transforms": cached_profile_definition(profile.identity().name)
+                .expect("known profile definition")
+                .transforms
+                .clone(),
             "iod": IodStageConfig::core_v1().canonical_value(),
         });
         let mut science = value.clone();
@@ -4357,6 +4477,23 @@ mod tests {
     }
 
     #[test]
+    fn built_in_profile_validation_is_cached_as_immutable_state() {
+        for profile in [profiles::CORE_OD_V1, profiles::ASTEROID_INSTITUTE_OD_V1] {
+            let first = cached_profile_definition(profile.identity().name)
+                .expect("known profile validates");
+            let second = cached_profile_definition(profile.identity().name)
+                .expect("known profile remains valid");
+            assert!(std::ptr::eq(first, second));
+            assert_eq!(first.identity["name"], profile.identity().name);
+            assert_eq!(
+                first.refinement,
+                RefinementRunConfig::core_v1().canonical_value()
+            );
+            assert_eq!(first.evaluation, json!({"covariance_dimension": 6}));
+        }
+    }
+
+    #[test]
     fn profile_composition_retains_only_an_exact_immutable_profile_definition() {
         let mut custom_value = RefinementRunConfig::core_v1().canonical_value();
         custom_value["max_iterations"] = json!(7);
@@ -4400,7 +4537,7 @@ mod tests {
     fn default_batch_products_and_group_views_are_consistent() {
         let result = OdBatchResult::default();
         assert!(result.is_empty());
-        assert!(result.groups().is_empty());
+        assert!(result.groups.is_empty());
         assert!(result.fitted_orbits().is_empty());
         assert!(result.fitted_orbit_members().is_empty());
         assert!(result.failures().is_empty());
@@ -4470,21 +4607,22 @@ mod tests {
         );
         assert_eq!(iod.groups[0].row_indices, [0, 1, 2]);
         assert_eq!(iod.groups[1].row_indices, [1, 2]);
-        assert!(iod.groups.iter().all(|group| {
-            iod.group_failure(group).is_some_and(|failure| {
+        assert!(iod.group_views().all(|group| {
+            group.failure.is_some_and(|failure| {
                 failure.stage == OdStage::Iod && failure.code == OdGroupFailureCode::NoSolution
             })
         }));
         let composed = run_od(&input, &config, &provider).expect("composed scientific failures");
         assert_eq!(composed.groups.len(), iod.groups.len());
-        for (iod_group, composed_group) in iod.groups.iter().zip(&composed.groups) {
-            assert_eq!(composed_group.group_id, iod_group.group_id);
-            assert_eq!(composed_group.row_indices, iod_group.row_indices);
+        for (iod_group, composed_group) in iod.group_views().zip(composed.group_views()) {
+            assert_eq!(composed_group.group.group_id, iod_group.group.group_id);
             assert_eq!(
-                composed
-                    .group_failure(composed_group)
-                    .map(|failure| &failure.code),
-                iod.group_failure(iod_group).map(|failure| &failure.code)
+                composed_group.group.row_indices,
+                iod_group.group.row_indices
+            );
+            assert_eq!(
+                composed_group.failure.map(|failure| &failure.code),
+                iod_group.failure.map(|failure| &failure.code)
             );
         }
     }
@@ -4525,13 +4663,42 @@ mod tests {
         assert_eq!(owned_orbits.len(), 2);
         assert_eq!(owned_members.len(), iod.fitted_orbit_members().len());
         assert!(owned_failures.is_empty());
-        for group in iod.groups() {
+        let membered_groups = iod
+            .to_membered_groups(&observations)
+            .expect("safe per-group conversion");
+        assert_eq!(membered_groups.len(), 2);
+        for membered in &membered_groups {
+            assert_eq!(membered.orbits.len(), 1);
+            let orbit_id = &membered.orbits.orbit_id[0].0;
+            assert!(membered
+                .members
+                .orbit_id
+                .iter()
+                .all(|member_id| member_id == orbit_id));
+        }
+        for group in iod.group_views() {
             assert_eq!(
-                iod.group_orbit(group)
+                group
+                    .orbit
                     .and_then(|record| record.orbit.orbit_id.first())
                     .map(|label| label.0.as_str()),
-                Some(group.orbit_id())
+                Some(group.group.orbit_id.as_str())
             );
+        }
+        #[cfg(feature = "python-bindings")]
+        for group in iod.python_group_views() {
+            let orbit = group.orbit().expect("successful group has an orbit");
+            assert_eq!(orbit.group_id, group.group_id());
+            assert_eq!(
+                orbit.orbit.orbit_id[0].0,
+                group.orbit_id(),
+                "borrowed group view selected another group's orbit"
+            );
+            assert!(group
+                .members()
+                .iter()
+                .all(|member| member.orbit_id == group.orbit_id()));
+            assert!(group.failure().is_none());
         }
 
         let external_table = two_body_reference::new(TwoBodyPropagator::default());
@@ -4562,21 +4729,15 @@ mod tests {
             &external_provider,
         )
         .expect("external composed OD");
-        for (fused, composed) in external_fused.groups.iter().zip(&external_composed.groups) {
+        for (fused, composed) in external_fused
+            .group_views()
+            .zip(external_composed.group_views())
+        {
             assert_eq!(
-                external_fused
-                    .group_orbit(fused)
-                    .expect("external fused orbit")
-                    .orbit,
-                external_composed
-                    .group_orbit(composed)
-                    .expect("external composed orbit")
-                    .orbit
+                fused.orbit.expect("external fused orbit").orbit,
+                composed.orbit.expect("external composed orbit").orbit
             );
-            assert_eq!(
-                external_fused.group_members(fused).len(),
-                external_composed.group_members(composed).len()
-            );
+            assert_eq!(fused.members.len(), composed.members.len());
         }
 
         let original_input = iod
@@ -4635,31 +4796,26 @@ mod tests {
             .expect("refine directly relabelled seed");
         assert_eq!(source.calls(), 1);
         assert_eq!(refined.groups[0].group_id, "multi-one");
-        assert_eq!(refined.groups[0].orbit_id(), "user-visible-label");
+        assert_eq!(refined.groups[0].orbit_id, "user-visible-label");
         assert_eq!(refined.groups[1].group_id, "multi-two");
-        assert_eq!(refined.groups[1].orbit_id(), original_ids[1]);
+        assert_eq!(refined.groups[1].orbit_id, original_ids[1]);
         let evaluated = evaluate_orbits(&relabelled, &EvaluationConfig::core_v1(), &provider)
             .expect("evaluate directly relabelled seed");
-        assert_eq!(evaluated.groups[0].orbit_id(), "user-visible-label");
-        assert_eq!(evaluated.groups[1].orbit_id(), original_ids[1]);
+        assert_eq!(evaluated.groups[0].orbit_id, "user-visible-label");
+        assert_eq!(evaluated.groups[1].orbit_id, original_ids[1]);
 
         let fused = run_od(&input, &config, &provider).expect("fused OD");
         let composed =
             refine(&original_input, &config.for_refinement(), &provider).expect("composed OD");
-        for (fused_group, composed_group) in fused.groups.iter().zip(&composed.groups) {
-            let fused_orbit = fused.group_orbit(fused_group).expect("fused orbit");
-            let composed_orbit = composed
-                .group_orbit(composed_group)
-                .expect("composed orbit");
+        for (fused_group, composed_group) in fused.group_views().zip(composed.group_views()) {
+            let fused_orbit = fused_group.orbit.expect("fused orbit");
+            let composed_orbit = composed_group.orbit.expect("composed orbit");
             assert_eq!(fused_orbit.orbit, composed_orbit.orbit);
             assert_eq!(
                 fused_orbit.provenance.provenance_fingerprint,
                 composed_orbit.provenance.provenance_fingerprint
             );
-            assert_eq!(
-                fused.group_members(fused_group).len(),
-                composed.group_members(composed_group).len()
-            );
+            assert_eq!(fused_group.members.len(), composed_group.members.len());
         }
 
         if let Some(bias) = std::env::var_os("ADAM_CORE_EFCC18_BIAS") {
@@ -4676,17 +4832,15 @@ mod tests {
                 .expect("profile fitted orbits");
             let profile_composed = refine(&profile_input, &profile.for_refinement(), &provider)
                 .expect("profile composed OD");
-            for (fused, composed) in profile_fused.groups.iter().zip(&profile_composed.groups) {
+            for (fused, composed) in profile_fused
+                .group_views()
+                .zip(profile_composed.group_views())
+            {
                 assert_eq!(
-                    profile_fused.group_orbit(fused).map(|value| &value.orbit),
-                    profile_composed
-                        .group_orbit(composed)
-                        .map(|value| &value.orbit)
+                    fused.orbit.map(|value| &value.orbit),
+                    composed.orbit.map(|value| &value.orbit)
                 );
-                assert_eq!(
-                    profile_fused.group_members(fused).len(),
-                    profile_composed.group_members(composed).len()
-                );
+                assert_eq!(fused.members.len(), composed.members.len());
             }
         }
 

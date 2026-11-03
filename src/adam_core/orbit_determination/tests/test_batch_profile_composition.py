@@ -1,4 +1,9 @@
-"""Resource-gated exact composition through the shipped Rust-owned profiles."""
+"""Exact composition through the shipped Rust-owned profiles.
+
+The public Core profile uses its installed, exactly pinned dependency without
+an environment gate. The Institute profile remains gated on separately supplied
+private resource paths.
+"""
 
 import dataclasses
 import os
@@ -16,6 +21,7 @@ from .. import (
     OdConfig,
     RefinementRunConfig,
     ResourceBindings,
+    core_od_v1_resource_bindings,
     evaluate_orbits,
     refine,
     run_iod,
@@ -37,6 +43,8 @@ _RESOURCE_PATH_ENV = {
 
 
 def _bindings(profile: OdProfile) -> ResourceBindings:
+    if profile is CORE_OD_V1:
+        return core_od_v1_resource_bindings()
     paths: dict[str, Path] = {}
     for requirement in profile.requirements:
         env_name = _RESOURCE_PATH_ENV[requirement.slot]

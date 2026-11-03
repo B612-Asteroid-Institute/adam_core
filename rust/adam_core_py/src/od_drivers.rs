@@ -24,8 +24,8 @@ use adam_core::od::algorithms::{
 use adam_core::od::python_bindings::{self as canonical_bindings, ProviderSource};
 use adam_core::od::{
     AssociatedObservations, AstrometryColumns, FittedOrbitMembersBatch, MemberedOrbits,
-    OdBatchError, OdBatchResult, OdGroupResult, OdObservationBatch, OdPropagator, OdProvenance,
-    OdRoute, ProviderMetadata,
+    OdBatchError, OdBatchResult, OdObservationBatch, OdPropagator, OdProvenance, OdRoute,
+    ProviderMetadata, PythonGroupView,
 };
 use adam_core_rs_coords::od::algorithms::{
     prepare_observations, refine_with_predictor, run_od_with_predictors, PreparedObservations,
@@ -1631,42 +1631,41 @@ fn typed_provenance_dict<'py>(
 
 fn typed_group_dict<'py>(
     py: Python<'py>,
-    result: &OdBatchResult,
-    group: &OdGroupResult,
+    group: PythonGroupView<'_>,
 ) -> PyResult<Bound<'py, PyDict>> {
     let out = PyDict::new(py);
-    out.set_item("group_id", &group.group_id)?;
+    out.set_item("group_id", group.group_id())?;
     out.set_item("orbit_id", group.orbit_id())?;
-    out.set_item("row_indices", &group.row_indices)?;
-    out.set_item("member_indices", &group.member_indices)?;
+    out.set_item("row_indices", group.row_indices())?;
+    out.set_item("member_indices", group.member_indices())?;
     out.set_item(
         "original_astrometry",
-        snapshot_dict(py, group.prepared.original.clone())?,
+        snapshot_dict(py, group.prepared().original.clone())?,
     )?;
     out.set_item(
         "used_astrometry",
-        snapshot_dict(py, group.prepared.used.clone())?,
+        snapshot_dict(py, group.prepared().used.clone())?,
     )?;
     out.set_item(
         "member_input_fingerprints",
-        result
-            .group_members(group)
+        group
+            .members()
             .iter()
             .map(|member| member.input_fingerprint.as_str())
             .collect::<Vec<_>>(),
     )?;
     out.set_item(
         "member_membership_fingerprints",
-        result
-            .group_members(group)
+        group
+            .members()
             .iter()
             .map(|member| member.membership_fingerprint.as_str())
             .collect::<Vec<_>>(),
     )?;
-    let orbit = result.group_orbit(group);
+    let orbit = group.orbit();
     let refined = orbit.and_then(|record| record.refined.as_ref());
     let evaluation = orbit.and_then(|record| record.evaluation.as_ref());
-    let iod = group.iod.as_ref();
+    let iod = group.iod();
     let output_kind = if refined.is_some() {
         "refined"
     } else if evaluation.is_some() {
@@ -1680,7 +1679,7 @@ fn typed_group_dict<'py>(
     out.set_item(
         "iod",
         iod.cloned()
-            .map(|value| iod_dict(py, value, group.row_indices.len()))
+            .map(|value| iod_dict(py, value, group.row_indices().len()))
             .transpose()?,
     )?;
     out.set_item(
@@ -1692,7 +1691,7 @@ fn typed_group_dict<'py>(
                 let n_rejected = value.n_rejected;
                 let n_recovered = value.n_recovered;
                 let flags = value.flags.clone();
-                let output = fit_output_dict(py, value.fit, group.row_indices.len())?;
+                let output = fit_output_dict(py, value.fit, group.row_indices().len())?;
                 output.set_item("passes", passes)?;
                 output.set_item("n_rejected", n_rejected)?;
                 output.set_item("n_recovered", n_recovered)?;
@@ -1705,13 +1704,13 @@ fn typed_group_dict<'py>(
         "evaluation",
         evaluation
             .cloned()
-            .map(|value| evaluation_output_dict(py, value, group.row_indices.len()))
+            .map(|value| evaluation_output_dict(py, value, group.row_indices().len()))
             .transpose()?,
     )?;
     out.set_item(
         "failure",
-        result
-            .group_failure(group)
+        group
+            .failure()
             .map(|failure| typed_failure_dict(py, failure))
             .transpose()?,
     )?;
@@ -1721,7 +1720,7 @@ fn typed_group_dict<'py>(
             .map(|record| typed_provenance_dict(py, &record.provenance))
             .transpose()?,
     )?;
-    if let Some(index) = group.input_orbit_index {
+    if let Some(index) = group.input_orbit_index() {
         out.set_item("orbit_index", index)?;
     }
     Ok(out)
@@ -1729,8 +1728,8 @@ fn typed_group_dict<'py>(
 
 fn typed_groups_list<'py>(py: Python<'py>, result: &OdBatchResult) -> PyResult<Bound<'py, PyList>> {
     let items = PyList::empty(py);
-    for group in result.groups() {
-        items.append(typed_group_dict(py, result, group)?)?;
+    for group in result.python_group_views() {
+        items.append(typed_group_dict(py, group)?)?;
     }
     Ok(items)
 }

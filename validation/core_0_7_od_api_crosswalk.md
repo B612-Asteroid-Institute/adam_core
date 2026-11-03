@@ -69,9 +69,9 @@ Ordinary Rust callers construct `OdPropagator::two_body()` or `OdPropagator::ext
 
 ### Result ownership
 
-`OdBatchResult` privately owns deterministic vectors for fitted orbits, fitted memberships, and typed failures. Public accessors return immutable slices, while `into_products()` moves all three vectors out together. Group preparation/diagnostic details and stage-provider summaries remain private/accessorial; callers therefore cannot invalidate their index/range views. `to_membered_orbits()` is the lossless batch handoff, and mutable relational labels are edited only on the resulting `MemberedOrbits`.
+`OdBatchResult` privately owns deterministic vectors for fitted orbits, fitted memberships, and typed failures. Public accessors return immutable slices, while `into_products()` moves all three vectors out together. Raw group handles and the separate `groups()` / `group_*` association accessors are absent from the ordinary public API, so a handle from one batch cannot panic, go stale, or select records from another batch. `to_membered_orbits()` and `to_membered_groups()` are the safe lossless handoffs, and mutable relational labels are edited only on the resulting `MemberedOrbits` values.
 
-The Python binding intentionally marshals through deterministic `groups()` plus `group_orbit` / `group_members` / `group_failure` accessors because it assembles per-group Quivr tables and diagnostics. Ordinary Rust callers may read the three primary slices without traversing group planning state.
+The Python-feature bridge alone exposes an opaque borrowed group view for Quivr assembly. Each view borrows its originating `OdBatchResult` together with that group's orbit, membership, failure, preparation, and diagnostics; no API accepts a standalone view alongside a separate batch. Ordinary Rust callers use the three primary slices without traversing group planning state.
 
 ## Intentional language differences
 
@@ -96,5 +96,5 @@ Outside these enumerated language and route-schema/default-label changes, defaul
 4. Exact direct-`run_od` versus projected-`run_iod` + `refine` tests covering success, typed scientific failure, empty input, provider identity, profile/resource binding, and provider-call count.
 5. Standalone Rust examples/tests for all four functions with the built-in provider and at least one external-provider path.
 6. Python tests for direct construction of each self-contained stage config; no projection-only hidden acceptance path.
-7. `OdBatchResult` tests that read immutable product slices, consume `into_products()`, preserve safe group access, and compile-reject direct field mutation.
+7. `OdBatchResult` tests that read immutable product slices, consume `into_products()`, preserve safe membered conversion, and compile-reject direct field mutation and raw group-handle access.
 8. Package/profile/resource and public-surface audits updated for the deliberate breaking API.

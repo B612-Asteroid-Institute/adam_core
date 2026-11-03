@@ -81,6 +81,11 @@ fn removed_public_preparation_seams_are_not_reintroduced() {
         "pub fitted_orbits: Vec",
         "pub fitted_orbit_members: Vec",
         "pub failures: Vec",
+        "pub struct OdGroupResult",
+        "pub fn groups(",
+        "pub fn group_orbit(",
+        "pub fn group_members(",
+        "pub fn group_failure(",
     ] {
         assert!(!core.contains(forbidden), "reintroduced seam: {forbidden}");
     }

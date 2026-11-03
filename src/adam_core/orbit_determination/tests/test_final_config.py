@@ -72,7 +72,9 @@ def test_python_workflow_signatures_and_config_state_do_not_drift() -> None:
     assert "_workflow_native" not in inspect.getsource(workflows_module)
 
 
-def test_stage_configs_are_self_contained_without_hidden_workflow_state() -> None:
+def test_stage_configs_are_self_contained_without_hidden_workflow_state(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     config = _as_supplied()
     iod = config.for_iod()
     assert isinstance(iod, od.IodRunConfig)
@@ -104,6 +106,14 @@ def test_stage_configs_are_self_contained_without_hidden_workflow_state() -> Non
     )
     assert [len(table) for table in direct_evaluated] == [0, 0, 0]
 
+    native_calls = 0
+
+    def reject_native_fallback(*args: object, **kwargs: object) -> object:
+        nonlocal native_calls
+        native_calls += 1
+        raise AssertionError("wrong-type config reached the native route")
+
+    monkeypatch.setattr(_rust_native, "run_iod_batch_ipc", reject_native_fallback)
     with pytest.raises(TypeError, match="IodRunConfig"):
         od.run_iod(
             SourceCatalog.empty(),
@@ -111,6 +121,7 @@ def test_stage_configs_are_self_contained_without_hidden_workflow_state() -> Non
             None,
             config,  # type: ignore[arg-type]
         )
+    assert native_calls == 0
     with pytest.raises(TypeError, match="EvaluationConfig"):
         od.evaluate_orbits(
             od.FittedOrbits.empty(),
