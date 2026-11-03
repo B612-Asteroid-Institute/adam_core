@@ -1,15 +1,24 @@
 #[allow(dead_code)]
-fn canonical_workflows_are_callable() {
-    let _ = adam_core::run_iod::<adam_core::od::OdPropagator<'static>>;
-    let _ = adam_core::run_od::<adam_core::od::OdPropagator<'static>>;
-    let _ = adam_core::refine::<adam_core::od::OdPropagator<'static>>;
-    let _ = adam_core::evaluate_orbits::<adam_core::od::OdPropagator<'static>>;
+fn canonical_workflow_signatures_do_not_drift() {
+    use adam_core::od::*;
+    type Batch = Result<OdBatchResult, OdBatchError>;
+    let _: fn(&AssociatedObservations, &IodRunConfig, &OdPropagator<'_>) -> Batch =
+        adam_core::run_iod;
+    let _: fn(&AssociatedObservations, &OdConfig, &OdPropagator<'_>) -> Batch = adam_core::run_od;
+    let _: fn(&MemberedOrbits, &RefinementRunConfig, &OdPropagator<'_>) -> Batch =
+        adam_core::refine;
+    let _: fn(&MemberedOrbits, &EvaluationConfig, &OdPropagator<'_>) -> Batch =
+        adam_core::evaluate_orbits;
+    let _: fn(&AssociatedObservations, &IodRunConfig, &OdPropagator<'_>) -> Batch =
+        adam_core::od::run_iod;
+    let _ = OdPropagator::two_body();
+}
 
-    let _ = adam_core::od::run_iod::<adam_core::od::OdPropagator<'static>>;
-    let _ = adam_core::od::run_od::<adam_core::od::OdPropagator<'static>>;
-    let _ = adam_core::od::refine::<adam_core::od::OdPropagator<'static>>;
-    let _ = adam_core::od::evaluate_orbits::<adam_core::od::OdPropagator<'static>>;
-    let _ = adam_core::od::OdPropagator::two_body();
+#[allow(dead_code)]
+fn batch_products_are_directly_exposed(result: &adam_core::od::OdBatchResult) {
+    let _: &Vec<adam_core::od::FittedOrbitRecord> = &result.fitted_orbits;
+    let _: &Vec<adam_core::od::FittedOrbitMemberRecord> = &result.fitted_orbit_members;
+    let _: &Vec<adam_core::od::OrbitDeterminationFailure> = &result.failures;
 }
 
 #[test]
@@ -23,6 +32,7 @@ fn canonical_workflows_have_deliberate_root_and_module_exports() {
     );
     assert!(std::mem::size_of::<adam_core::od::OdConfig>() > 0);
     assert!(std::mem::size_of::<adam_core::od::IodRunConfig>() > 0);
+    assert!(std::mem::size_of::<adam_core::od::IodStageConfig>() > 0);
     assert!(std::mem::size_of::<adam_core::od::RefinementRunConfig>() > 0);
     assert!(std::mem::size_of::<adam_core::od::EvaluationConfig>() > 0);
     assert!(!adam_core::build_identity().version.is_empty());
@@ -54,7 +64,7 @@ fn removed_public_preparation_seams_are_not_reintroduced() {
         "CoreBuildIdentity",
         "InvalidBuildIdentity",
         "Core identities differ",
-        "#[doc(hidden)]",
+        "pub trait OdPropagatorSource",
     ] {
         assert!(!core.contains(forbidden), "reintroduced seam: {forbidden}");
     }

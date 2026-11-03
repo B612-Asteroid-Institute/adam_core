@@ -17,7 +17,7 @@ from .._native_dispatch import native_propagator
 from ..evaluate import OrbitDeterminationObservations
 
 if TYPE_CHECKING:
-    from ..config import IodRunConfig
+    from ..config import IodStageConfig
 
 from ..fitted_orbits import FittedOrbitMembers, FittedOrbits
 
@@ -294,7 +294,7 @@ def _empty_report(reason: str) -> IodReport:
 def _run_iod_prepared(
     observations: OrbitDeterminationObservations,
     propagator: Propagator,
-    stage_config: "IodRunConfig",
+    stage_config: "IodStageConfig",
     *,
     native_backend: object | None = None,
 ) -> Tuple[FittedOrbits, FittedOrbitMembers, IodReport]:
@@ -311,10 +311,10 @@ def _run_iod_prepared(
     _, observed_ipc, observers_ipc = _native_problem(
         _placeholder_orbit(observations), observations
     )
-    from ..config import IodRunConfig
+    from ..config import IodStageConfig
 
-    if not isinstance(stage_config, IodRunConfig):
-        raise TypeError("stage_config must be an IodRunConfig")
+    if not isinstance(stage_config, IodStageConfig):
+        raise TypeError("stage_config must be an IodStageConfig")
     output = _rust_native.run_iod_config_ipc(
         native_propagator(propagator) if native_backend is None else native_backend,
         observed_ipc,

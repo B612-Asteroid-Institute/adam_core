@@ -19,7 +19,7 @@ from .. import (
     EvaluationConfig,
     FittedOrbitMembers,
     FittedOrbits,
-    IodRunConfig,
+    IodStageConfig,
     NightlyBatchDeweighting,
     ObservationPipeline,
     OdConfig,
@@ -42,9 +42,8 @@ BatchResult = tuple[FittedOrbits, FittedOrbitMembers, OrbitDeterminationFailures
 def _config() -> OdConfig:
     return OdConfig.explicit(
         observation_pipeline=ObservationPipeline.as_supplied(),
-        iod=IodRunConfig.core_v1(),
+        iod=IodStageConfig.core_v1(),
         refinement=RefinementRunConfig.core_v1(),
-        evaluation=EvaluationConfig.six_dimensional(),
         resources=ResourceBindings({}),
     )
 
@@ -176,9 +175,8 @@ def _not_converging_config() -> OdConfig:
     refinement = RefinementRunConfig(dataclasses.replace(declaration, fit=fit))
     return OdConfig.explicit(
         observation_pipeline=config.observation_pipeline,
-        iod=config.for_iod(),
+        iod=config.iod,
         refinement=refinement,
-        evaluation=config.for_evaluation(),
         resources=ResourceBindings({}),
     )
 
@@ -190,7 +188,7 @@ def _non_roundtripping_float_config() -> OdConfig:
     iod_declaration = base.for_iod()
     search = iod_declaration.search_correction_ranging
     ranging = dataclasses.replace(search.ranging, rho_min_au=1.8135371537546276e-10)
-    iod = IodRunConfig(
+    iod = IodStageConfig(
         dataclasses.replace(search, ranging=ranging),
         iod_declaration.candidate_correction_fit,
     )
@@ -203,7 +201,6 @@ def _non_roundtripping_float_config() -> OdConfig:
         observation_pipeline=base.observation_pipeline,
         iod=iod,
         refinement=refinement,
-        evaluation=base.for_evaluation(),
         resources=ResourceBindings({}),
     )
 
@@ -214,7 +211,8 @@ def _assert_non_roundtripping_values_in_provenance(orbits: FittedOrbits) -> None
         value["iod"]["search_correction_ranging"]["ranging"]["rho_min_au"].hex()
         == (1.8135371537546276e-10).hex()
     )
-    assert value["refinement"]["psd_floor_frac"].hex() == (1e-30).hex()
+    if "refinement" in value:
+        assert value["refinement"]["psd_floor_frac"].hex() == (1e-30).hex()
     assert orbits.provenance.provenance_fingerprint[0].as_py()
 
 
@@ -296,7 +294,12 @@ def test_non_roundtripping_config_floats_are_exact_across_every_route(
     _assert_exact_results(evaluated_fused, evaluated_composed)
     for result in (evaluated_iod, evaluated_fused, evaluated_composed):
         assert len(result[0]) == 1
-        _assert_non_roundtripping_values_in_provenance(result[0])
+        value = json.loads(result[0].provenance.configuration[0].as_py())
+        assert value["schema"] == "adam-core-evaluation-config/v1"
+        assert (
+            value["prediction_fit"]["two_body"]["lt_tol"].hex()
+            == config.for_evaluation().prediction_fit.two_body.lt_tol.hex()
+        )
 
 
 def test_run_od_is_exact_run_iod_then_refine(pure_iod_orbit: PureIodOrbit) -> None:
@@ -371,9 +374,8 @@ def test_profile_shaped_deweighting_is_exact_across_fused_and_composed_routes(
     base = _not_converging_config() if force_failure else _config()
     config = OdConfig.explicit(
         observation_pipeline=ObservationPipeline((NightlyBatchDeweighting(4),)),
-        iod=base.for_iod(),
+        iod=base.iod,
         refinement=base.for_refinement(),
-        evaluation=base.for_evaluation(),
         resources=ResourceBindings({}),
     )
 
@@ -480,9 +482,8 @@ def test_overlapping_multigroup_ordered_pipeline_exact_composition_and_evaluatio
         observation_pipeline=ObservationPipeline.ordered(
             (NightlyBatchDeweighting(4), NightlyBatchDeweighting(2))
         ),
-        iod=base.for_iod(),
+        iod=base.iod,
         refinement=base.for_refinement(),
-        evaluation=base.for_evaluation(),
         resources=ResourceBindings({}),
     )
 
@@ -577,9 +578,8 @@ def test_input_fingerprint_changes_when_pipeline_changes_only_used_astrometry(
     as_supplied = _config()
     transformed = OdConfig.explicit(
         observation_pipeline=ObservationPipeline.ordered((NightlyBatchDeweighting(4),)),
-        iod=as_supplied.for_iod(),
+        iod=as_supplied.iod,
         refinement=as_supplied.for_refinement(),
-        evaluation=as_supplied.for_evaluation(),
         resources=ResourceBindings({}),
     )
 
@@ -646,9 +646,8 @@ def test_worst_residual_provenance_counts_actual_rejections(
     )
     config = OdConfig.explicit(
         observation_pipeline=base.observation_pipeline,
-        iod=base.for_iod(),
+        iod=base.iod,
         refinement=refinement,
-        evaluation=base.for_evaluation(),
         resources=ResourceBindings({}),
     )
     orbits, members, failures = run_od(source, associations, None, config)

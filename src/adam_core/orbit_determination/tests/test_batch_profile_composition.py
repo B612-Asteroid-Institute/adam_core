@@ -91,9 +91,8 @@ def _forced_failure(config: OdConfig, bindings: ResourceBindings) -> OdConfig:
     )
     return OdConfig.explicit(
         observation_pipeline=config.observation_pipeline,
-        iod=config.for_iod(),
+        iod=config.iod,
         refinement=RefinementRunConfig(dataclasses.replace(declaration, fit=fit)),
-        evaluation=config.for_evaluation(),
         resources=bindings,
     )
 

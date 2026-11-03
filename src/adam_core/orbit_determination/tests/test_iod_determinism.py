@@ -162,7 +162,7 @@ def test_iod_search_budget_is_a_separate_setting(
             velocity_method="gibbs",
         )
         settings.update(overrides)
-        config = explicit_config(**settings).for_iod()._native
+        config = explicit_config(**settings).iod._native
         return _iod_native_output(
             _rust_native.run_iod_config_ipc(
                 native_propagator(TwoBodyPropagator()),
@@ -214,7 +214,7 @@ def test_iod_epoch_crosses_as_exact_days_and_nanoseconds(
             velocity_method="gibbs",
         )
         settings.update(overrides)
-        config = explicit_config(**settings).for_iod()._native
+        config = explicit_config(**settings).iod._native
         return _iod_native_output(
             _rust_native.run_iod_config_ipc(
                 native_propagator(TwoBodyPropagator()),

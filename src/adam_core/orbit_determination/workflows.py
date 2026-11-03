@@ -273,19 +273,14 @@ def run_iod(
 ) -> _RESULT:
     """Run canonical batch IOD over explicit association hypotheses.
 
-    ``config`` must be the bound stage projection returned by an explicit
-    ``OdConfig.for_iod()``. Group parsing, validation, ordering, transforms,
+    ``config`` owns the bound pipeline/resources and complete IOD stage.
+    Group parsing, validation, ordering, transforms,
     IOD, failure classification, identifiers, and provenance are executed by
     Core Rust.
     """
 
     if not isinstance(config, IodRunConfig):
         raise TypeError("config must be an IodRunConfig")
-    if config._workflow_native is None:
-        raise ValueError(
-            "run_iod requires an IodRunConfig projected from an explicit bound "
-            "OdConfig via config.for_iod()"
-        )
     prepared, source_ipc, associations_ipc, observed_ipc, observers_ipc = (
         _native_batch_inputs(observations, associations)
     )
@@ -296,7 +291,7 @@ def run_iod(
         associations_ipc,
         observed_ipc,
         observers_ipc,
-        config._workflow_native,
+        config._native,
     )
     return _assemble(native, prepared)
 
@@ -440,11 +435,7 @@ def evaluate_orbits(
     propagator: Propagator | None,
     config: EvaluationConfig,
 ) -> _RESULT:
-    """Evaluate only explicitly declared fitted-orbit/member pairs.
-
-    ``config`` must be the bound stage projection returned by an explicit
-    ``OdConfig.for_evaluation()``.
-    """
+    """Evaluate only explicitly declared fitted-orbit/member pairs."""
 
     if not isinstance(orbits, FittedOrbits):
         raise TypeError("orbits must be FittedOrbits")
@@ -452,11 +443,6 @@ def evaluate_orbits(
         raise TypeError("members must be FittedOrbitMembers")
     if not isinstance(config, EvaluationConfig):
         raise TypeError("config must be an EvaluationConfig")
-    if config._workflow_native is None:
-        raise ValueError(
-            "evaluate_orbits requires an EvaluationConfig projected from an explicit "
-            "bound OdConfig via config.for_evaluation()"
-        )
     prepared, source_ipc, observed_ipc, observers_ipc = _source_inputs(observations)
     orbit_ipc = orbits_to_ipc(orbits.to_orbits())
     member_orbit_ids = members.orbit_id.to_pylist()
@@ -482,7 +468,7 @@ def evaluate_orbits(
         member_membership_fingerprints,
         *original,
         *used,
-        config._workflow_native,
+        config._native,
     )
     orbit_tables: list[FittedOrbits] = []
     member_tables: list[FittedOrbitMembers] = []

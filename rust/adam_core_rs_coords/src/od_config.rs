@@ -551,6 +551,13 @@ impl ObservationPipeline {
         &self.transforms
     }
 
+    pub(crate) fn validate(&self) -> Result<(), String> {
+        for transform in &self.transforms {
+            transform.validate()?;
+        }
+        Ok(())
+    }
+
     pub fn transform_kinds(&self) -> Vec<&'static str> {
         self.transforms
             .iter()
@@ -891,6 +898,13 @@ struct IodRunDeclaration {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct EvaluationDeclaration {
+    covariance_dimension: usize,
+    prediction_fit: FitDeclaration,
+}
+
+#[derive(Debug, Deserialize)]
 #[serde(tag = "method", rename_all = "snake_case", deny_unknown_fields)]
 enum RefinementDeclaration {
     WorstResidual {
@@ -914,7 +928,7 @@ enum RefinementDeclaration {
 }
 
 #[derive(Debug, Clone)]
-pub struct IodRunConfig {
+pub struct IodStageConfig {
     iod: IodConfig,
     correction_fit: WhitenedFitConfig,
 }
@@ -1022,7 +1036,7 @@ fn d21_fit_config() -> WhitenedFitConfig {
     config
 }
 
-impl IodRunConfig {
+impl IodStageConfig {
     pub fn from_json(raw: &str) -> Result<Self, String> {
         let declaration: IodRunDeclaration = serde_json::from_str(raw)
             .map_err(|error| format!("invalid IOD run configuration: {error}"))?;
@@ -1152,28 +1166,58 @@ impl RefinementRunConfig {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy)]
 pub struct EvaluationConfig {
     covariance_dimension: usize,
+    prediction_fit: WhitenedFitConfig,
 }
 
 impl EvaluationConfig {
-    pub fn new(covariance_dimension: usize) -> Result<Self, String> {
+    pub fn from_json(raw: &str) -> Result<Self, String> {
+        let declaration: EvaluationDeclaration = serde_json::from_str(raw)
+            .map_err(|error| format!("invalid evaluation configuration: {error}"))?;
+        Self::new(
+            declaration.covariance_dimension,
+            declaration.prediction_fit.into_config()?,
+        )
+    }
+
+    pub fn new(
+        covariance_dimension: usize,
+        prediction_fit: WhitenedFitConfig,
+    ) -> Result<Self, String> {
         let config = Self {
             covariance_dimension,
+            prediction_fit,
         };
         config.validate()?;
         Ok(config)
     }
 
-    pub const fn six_dimensional() -> Self {
-        Self {
-            covariance_dimension: 6,
-        }
+    /// Exact named Core-v1 evaluation values; never an implicit workflow default.
+    pub fn core_v1() -> Self {
+        Self::new(6, d21_fit_config()).expect("Core-v1 evaluation settings are valid")
     }
 
     pub const fn covariance_dimension(self) -> usize {
         self.covariance_dimension
+    }
+
+    pub const fn prediction_fit(&self) -> &WhitenedFitConfig {
+        &self.prediction_fit
+    }
+
+    pub fn canonical_value(&self) -> Value {
+        json!({
+            "schema": "adam-core-evaluation-config/v1",
+            "covariance_dimension": self.covariance_dimension,
+            "prediction_fit": fit_config_value(&self.prediction_fit),
+        })
+    }
+
+    pub fn canonical_json(&self) -> String {
+        serde_json::to_string(&self.canonical_value())
+            .expect("evaluation configuration is serializable")
     }
 
     pub fn validate(&self) -> Result<(), String> {
@@ -1183,7 +1227,7 @@ impl EvaluationConfig {
                 self.covariance_dimension
             ));
         }
-        Ok(())
+        self.prediction_fit.validate()
     }
 }
 
@@ -1194,28 +1238,130 @@ pub struct ProfileIdentity {
     pub definition_sha256: &'static str,
 }
 
-/// Complete Core-owned OD configuration. There is deliberately no `Default`.
+fn profile_value(profile: Option<ProfileIdentity>) -> Value {
+    profile.map_or(Value::Null, |profile| {
+        json!({
+            "name": profile.name,
+            "version": profile.version,
+            "definition_sha256": profile.definition_sha256,
+        })
+    })
+}
+
+fn configuration_sha256(mut value: Value) -> String {
+    value
+        .as_object_mut()
+        .expect("configuration provenance is an object")
+        .remove("profile");
+    let canonical = serde_json::to_vec(&value).expect("OD configuration is serializable");
+    format!("{:x}", Sha256::digest(canonical))
+}
+
+fn provenance_json(mut value: Value, fingerprint: String) -> String {
+    value
+        .as_object_mut()
+        .expect("configuration provenance is an object")
+        .insert(
+            "configuration_sha256".to_string(),
+            Value::String(fingerprint),
+        );
+    serde_json::to_string(&value).expect("OD configuration provenance is serializable")
+}
+
+/// Complete bound input for standalone or composed IOD.
+#[derive(Debug, Clone)]
+pub struct IodRunConfig {
+    observation_pipeline: ObservationPipeline,
+    stage: IodStageConfig,
+    profile: Option<ProfileIdentity>,
+}
+
+impl IodRunConfig {
+    pub fn explicit(
+        observation_pipeline: ObservationPipeline,
+        stage: IodStageConfig,
+    ) -> Result<Self, OdConfigError> {
+        let config = Self {
+            observation_pipeline,
+            stage,
+            profile: None,
+        };
+        config.validate().map_err(OdConfigError::configuration)?;
+        Ok(config)
+    }
+
+    fn from_parts(
+        observation_pipeline: ObservationPipeline,
+        stage: IodStageConfig,
+        profile: Option<ProfileIdentity>,
+    ) -> Self {
+        Self {
+            observation_pipeline,
+            stage,
+            profile,
+        }
+    }
+
+    pub fn validate(&self) -> Result<(), String> {
+        self.stage.validate()?;
+        for transform in self.observation_pipeline.bound_transforms() {
+            transform.validate()?;
+        }
+        Ok(())
+    }
+
+    pub const fn observation_pipeline(&self) -> &ObservationPipeline {
+        &self.observation_pipeline
+    }
+
+    pub const fn stage(&self) -> &IodStageConfig {
+        &self.stage
+    }
+
+    pub const fn profile_identity(&self) -> Option<ProfileIdentity> {
+        self.profile
+    }
+
+    fn canonical_value_without_fingerprint(&self) -> Value {
+        json!({
+            "schema": "adam-core-iod-run-config/v1",
+            "profile": profile_value(self.profile),
+            "transforms": self.observation_pipeline.provenance_value(),
+            "iod": self.stage.canonical_value(),
+        })
+    }
+
+    pub fn configuration_sha256(&self) -> String {
+        configuration_sha256(self.canonical_value_without_fingerprint())
+    }
+
+    pub fn provenance_json(&self) -> String {
+        provenance_json(
+            self.canonical_value_without_fingerprint(),
+            self.configuration_sha256(),
+        )
+    }
+}
+
+/// Complete Core-owned IOD-plus-refinement configuration. There is deliberately no `Default`.
 #[derive(Debug, Clone)]
 pub struct OdConfig {
     observation_pipeline: ObservationPipeline,
-    iod: IodRunConfig,
+    iod: IodStageConfig,
     refinement: RefinementRunConfig,
-    evaluation: EvaluationConfig,
     profile: Option<ProfileIdentity>,
 }
 
 impl OdConfig {
     pub fn explicit(
         observation_pipeline: ObservationPipeline,
-        iod: IodRunConfig,
+        iod: IodStageConfig,
         refinement: RefinementRunConfig,
-        evaluation: EvaluationConfig,
     ) -> Result<Self, OdConfigError> {
         let config = Self {
             observation_pipeline,
             iod,
             refinement,
-            evaluation,
             profile: None,
         };
         config.validate().map_err(OdConfigError::configuration)?;
@@ -1225,7 +1371,6 @@ impl OdConfig {
     pub fn validate(&self) -> Result<(), String> {
         self.iod.validate()?;
         self.refinement.validate()?;
-        self.evaluation.validate()?;
         for transform in self.observation_pipeline.bound_transforms() {
             transform.validate()?;
         }
@@ -1240,57 +1385,54 @@ impl OdConfig {
         self.profile
     }
 
+    pub const fn iod_stage(&self) -> &IodStageConfig {
+        &self.iod
+    }
+
     pub fn for_iod(&self) -> IodRunConfig {
-        self.iod.clone()
+        IodRunConfig::from_parts(
+            self.observation_pipeline.clone(),
+            self.iod.clone(),
+            self.profile,
+        )
     }
 
     pub const fn for_refinement(&self) -> RefinementRunConfig {
         self.refinement
     }
 
-    pub const fn for_evaluation(&self) -> EvaluationConfig {
-        self.evaluation
+    pub fn for_evaluation(&self) -> EvaluationConfig {
+        let fit = match *self.refinement.refinement() {
+            RefinementConfig::WorstResidual(value) => value.fit,
+            RefinementConfig::Cmc2003(value) => value.fit,
+        };
+        EvaluationConfig::new(6, fit).expect("validated refinement fit is valid for evaluation")
     }
 
     fn canonical_value_without_fingerprint(&self) -> Value {
+        // The fixed six-dimensional covariance contract remains serialized to
+        // keep accepted run_od configuration fingerprints stable. It is not a
+        // configurable input to IOD or refinement.
         json!({
             "schema": "adam-core-od-config/v1",
-            "profile": self.profile.map(|profile| json!({
-                "name": profile.name,
-                "version": profile.version,
-                "definition_sha256": profile.definition_sha256,
-            })),
+            "profile": profile_value(self.profile),
             "transforms": self.observation_pipeline.provenance_value(),
             "iod": self.iod.canonical_value(),
             "refinement": self.refinement.canonical_value(),
-            "evaluation": {"covariance_dimension": self.evaluation.covariance_dimension},
+            "evaluation": {"covariance_dimension": 6},
         })
     }
 
     /// SHA-256 of the complete, bound, path-free canonical configuration.
     pub fn configuration_sha256(&self) -> String {
-        // Profile identity records how the configuration was selected; it is
-        // not a scientific setting. Equivalent explicit and profiled bound
-        // configurations therefore share one science fingerprint.
-        let mut value = self.canonical_value_without_fingerprint();
-        value
-            .as_object_mut()
-            .expect("configuration provenance is an object")
-            .remove("profile");
-        let canonical = serde_json::to_vec(&value).expect("OD configuration is serializable");
-        format!("{:x}", Sha256::digest(canonical))
+        configuration_sha256(self.canonical_value_without_fingerprint())
     }
 
     pub fn provenance_json(&self) -> String {
-        let mut value = self.canonical_value_without_fingerprint();
-        value
-            .as_object_mut()
-            .expect("configuration provenance is an object")
-            .insert(
-                "configuration_sha256".to_string(),
-                Value::String(self.configuration_sha256()),
-            );
-        serde_json::to_string(&value).expect("OD configuration provenance is serializable")
+        provenance_json(
+            self.canonical_value_without_fingerprint(),
+            self.configuration_sha256(),
+        )
     }
 }
 
@@ -1383,7 +1525,7 @@ impl OdProfile {
             "version": self.identity.version,
             "pipeline": pipeline,
             "requirements": self.requirements().iter().map(|requirement| requirement.canonical_value()).collect::<Vec<_>>(),
-            "iod": IodRunConfig::core_v1().canonical_value(),
+            "iod": IodStageConfig::core_v1().canonical_value(),
             "refinement": RefinementRunConfig::core_v1().canonical_value(),
             "evaluation": {"covariance_dimension": 6},
         })
@@ -1413,15 +1555,18 @@ impl OdProfile {
         }
     }
 
+    pub fn evaluation_config(self) -> EvaluationConfig {
+        EvaluationConfig::core_v1()
+    }
+
     pub fn bind(self, bindings: &ResourceBindings) -> Result<OdConfig, OdConfigError> {
         self.verify_definition_fingerprint()
             .map_err(OdConfigError::configuration)?;
         let pipeline = ObservationPipeline::bind_explicit(self.definitions(), bindings)?;
         let config = OdConfig {
             observation_pipeline: pipeline,
-            iod: IodRunConfig::core_v1(),
+            iod: IodStageConfig::core_v1(),
             refinement: RefinementRunConfig::core_v1(),
-            evaluation: EvaluationConfig::six_dimensional(),
             profile: Some(self.identity),
         };
         config.validate().map_err(|reason| {
@@ -1853,7 +1998,7 @@ mod tests {
 
     #[test]
     fn core_v1_preserves_d21_effective_two_body_constants_bitwise() {
-        let iod = IodRunConfig::core_v1();
+        let iod = IodStageConfig::core_v1();
         let refinement = RefinementRunConfig::core_v1();
         let refinement_fit = match refinement.refinement() {
             RefinementConfig::WorstResidual(value) => value.fit,
@@ -1868,16 +2013,16 @@ mod tests {
 
     #[test]
     fn stage_json_round_trips_strictly_and_rejects_unknown_or_missing_fields() {
-        let iod = IodRunConfig::core_v1();
+        let iod = IodStageConfig::core_v1();
         let raw = iod.canonical_json();
-        let round_trip = IodRunConfig::from_json(&raw).unwrap();
+        let round_trip = IodStageConfig::from_json(&raw).unwrap();
         assert_eq!(round_trip.canonical_json(), raw);
         let mut value: Value = serde_json::from_str(&raw).unwrap();
         value
             .as_object_mut()
             .unwrap()
             .insert("bogus".to_string(), json!(1));
-        assert!(IodRunConfig::from_json(&value.to_string()).is_err());
+        assert!(IodStageConfig::from_json(&value.to_string()).is_err());
         let mut value: Value = serde_json::from_str(&raw).unwrap();
         value
             .get_mut("search_correction_ranging")
@@ -1885,7 +2030,7 @@ mod tests {
             .as_object_mut()
             .unwrap()
             .remove("min_obs");
-        assert!(IodRunConfig::from_json(&value.to_string()).is_err());
+        assert!(IodStageConfig::from_json(&value.to_string()).is_err());
 
         let refinement = RefinementRunConfig::core_v1();
         let raw = refinement.canonical_json();
@@ -1900,10 +2045,10 @@ mod tests {
     #[test]
     fn stage_json_preserves_known_non_roundtripping_floats_bitwise() {
         let mut iod: Value =
-            serde_json::from_str(&IodRunConfig::core_v1().canonical_json()).unwrap();
+            serde_json::from_str(&IodStageConfig::core_v1().canonical_json()).unwrap();
         iod["search_correction_ranging"]["ranging"]["rho_min_au"] =
             json!(1.8135371537546276e-10_f64);
-        let iod = IodRunConfig::from_json(&iod.to_string()).unwrap();
+        let iod = IodStageConfig::from_json(&iod.to_string()).unwrap();
         let iod_value: Value = serde_json::from_str(&iod.canonical_json()).unwrap();
         assert_eq!(
             iod_value["search_correction_ranging"]["ranging"]["rho_min_au"]
@@ -1965,9 +2110,8 @@ mod tests {
     fn complete_config_fingerprint_is_deterministic_and_path_free() {
         let first = OdConfig::explicit(
             ObservationPipeline::as_supplied(),
-            IodRunConfig::core_v1(),
+            IodStageConfig::core_v1(),
             RefinementRunConfig::core_v1(),
-            EvaluationConfig::six_dimensional(),
         )
         .unwrap();
         let second = first.clone();

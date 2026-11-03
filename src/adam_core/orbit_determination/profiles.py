@@ -26,7 +26,7 @@ from adam_core import _rust_native as _rust
 
 from .config import (
     EvaluationConfig,
-    IodRunConfig,
+    IodStageConfig,
     OdConfig,
     RefinementRunConfig,
     ResourceBindings,
@@ -93,12 +93,12 @@ class OdProfile:
         return ObservationPipeline._from_descriptors(definitions)
 
     @property
-    def iod(self) -> IodRunConfig:
+    def iod(self) -> IodStageConfig:
         value = self._payload["definition"]["iod"]
-        native = _rust.iod_run_config_from_json(
+        native = _rust.iod_stage_config_from_json(
             json.dumps(value, sort_keys=True, separators=(",", ":"))
         )
-        return IodRunConfig._from_native(native)
+        return IodStageConfig._from_native(native)
 
     @property
     def refinement(self) -> RefinementRunConfig:
@@ -110,8 +110,7 @@ class OdProfile:
 
     @property
     def evaluation(self) -> EvaluationConfig:
-        value = self._payload["definition"]["evaluation"]
-        return EvaluationConfig(cast(int, value["covariance_dimension"]))
+        return EvaluationConfig.core_v1()
 
     @property
     def definition(self) -> Mapping[str, object]:
@@ -127,7 +126,13 @@ class OdProfile:
         if not isinstance(resources, ResourceBindings):
             raise TypeError("resources must be ResourceBindings")
         native = _rust.bind_od_profile(self.name, resources._native_paths())
-        return OdConfig(native)
+        return OdConfig._from_native(
+            native,
+            observation_pipeline=self.observation_pipeline,
+            iod=self.iod,
+            refinement=self.refinement,
+            resources=resources,
+        )
 
     def __repr__(self) -> str:
         return f"OdProfile(name={self.name!r}, version={self.version})"

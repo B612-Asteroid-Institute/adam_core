@@ -132,33 +132,29 @@ class IodSearchConfig:
 
 
 @dataclass(frozen=True, slots=True)
-class IodRunConfig:
+class IodStageConfig:
     """Complete IOD/search/correction/ranging declaration."""
 
     search_correction_ranging: IodSearchConfig
     candidate_correction_fit: WhitenedFitConfig
     _native: Any = field(init=False, repr=False, compare=False)
-    _workflow_native: Any | None = field(init=False, repr=False, compare=False)
 
     def __post_init__(self) -> None:
         declaration = {
             "search_correction_ranging": asdict(self.search_correction_ranging),
             "candidate_correction_fit": asdict(self.candidate_correction_fit),
         }
-        native = _rust.iod_run_config_from_json(_canonical_json(declaration))
+        native = _rust.iod_stage_config_from_json(_canonical_json(declaration))
         object.__setattr__(self, "_native", native)
-        object.__setattr__(self, "_workflow_native", None)
 
     @classmethod
-    def core_v1(cls) -> IodRunConfig:
+    def core_v1(cls) -> IodStageConfig:
         """Load the named Core-v1 values from Rust; not an implicit default."""
 
-        return cls._from_native(_rust.IodRunConfig.core_v1())
+        return cls._from_native(_rust.IodStageConfig.core_v1())
 
     @classmethod
-    def _from_native(
-        cls, native: Any, *, workflow_native: Any | None = None
-    ) -> IodRunConfig:
+    def _from_native(cls, native: Any) -> IodStageConfig:
         raw = json.loads(native.canonical_json)
         search = raw["search_correction_ranging"]
         fit = raw["candidate_correction_fit"]
@@ -167,8 +163,64 @@ class IodRunConfig:
             candidate_correction_fit=_fit_from_dict(fit),
         )
         object.__setattr__(value, "_native", native)
-        object.__setattr__(value, "_workflow_native", workflow_native)
         return value
+
+
+@dataclass(frozen=True, slots=True)
+class IodRunConfig:
+    """Complete bound pipeline/resource/profile and IOD-stage configuration."""
+
+    observation_pipeline: ObservationPipeline
+    iod: IodStageConfig
+    resources: ResourceBindings
+    _native: Any = field(init=False, repr=False, compare=False)
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.observation_pipeline, ObservationPipeline):
+            raise TypeError("observation_pipeline must be ObservationPipeline")
+        if not isinstance(self.iod, IodStageConfig):
+            raise TypeError("iod must be IodStageConfig")
+        if not isinstance(self.resources, ResourceBindings):
+            raise TypeError("resources must be ResourceBindings")
+        descriptors = self.observation_pipeline._descriptors()
+        transforms_json = None if descriptors is None else _canonical_json(descriptors)
+        object.__setattr__(
+            self,
+            "_native",
+            _rust.explicit_iod_run_config(
+                transforms_json, self.resources._native_paths(), self.iod._native
+            ),
+        )
+
+    @classmethod
+    def _from_native(
+        cls,
+        native: Any,
+        *,
+        observation_pipeline: ObservationPipeline,
+        iod: IodStageConfig,
+        resources: ResourceBindings,
+    ) -> IodRunConfig:
+        value = cls(observation_pipeline, iod, resources)
+        object.__setattr__(value, "_native", native)
+        return value
+
+    @property
+    def search_correction_ranging(self) -> IodSearchConfig:
+        return self.iod.search_correction_ranging
+
+    @property
+    def candidate_correction_fit(self) -> WhitenedFitConfig:
+        return self.iod.candidate_correction_fit
+
+    @property
+    def profile_name(self) -> str | None:
+        return cast(str | None, self._native.profile_name)
+
+    @property
+    def provenance(self) -> Mapping[str, object]:
+        value = cast(dict[str, object], json.loads(self._native.provenance_json))
+        return MappingProxyType(value)
 
 
 @dataclass(frozen=True, slots=True)
@@ -235,29 +287,35 @@ class RefinementRunConfig:
 
 @dataclass(frozen=True, slots=True)
 class EvaluationConfig:
-    """Complete orbit-evaluation declaration."""
+    """Complete covariance and provider-prediction evaluation configuration."""
 
     covariance_dimension: int
+    prediction_fit: WhitenedFitConfig
     _native: Any = field(init=False, repr=False, compare=False)
-    _workflow_native: Any | None = field(init=False, repr=False, compare=False)
 
     def __post_init__(self) -> None:
+        declaration = {
+            "covariance_dimension": self.covariance_dimension,
+            "prediction_fit": asdict(self.prediction_fit),
+        }
         object.__setattr__(
-            self, "_native", _rust.evaluation_config(self.covariance_dimension)
+            self,
+            "_native",
+            _rust.evaluation_config_from_json(_canonical_json(declaration)),
         )
-        object.__setattr__(self, "_workflow_native", None)
 
     @classmethod
-    def six_dimensional(cls) -> EvaluationConfig:
-        return cls(6)
+    def core_v1(cls) -> EvaluationConfig:
+        return cls._from_native(_rust.EvaluationConfig.core_v1())
 
     @classmethod
-    def _from_native(
-        cls, native: Any, *, workflow_native: Any | None = None
-    ) -> EvaluationConfig:
-        value = cls(cast(int, native.covariance_dimension))
+    def _from_native(cls, native: Any) -> EvaluationConfig:
+        raw = json.loads(native.canonical_json)
+        value = cls(
+            covariance_dimension=cast(int, raw["covariance_dimension"]),
+            prediction_fit=_fit_from_dict(raw["prediction_fit"]),
+        )
         object.__setattr__(value, "_native", native)
-        object.__setattr__(value, "_workflow_native", workflow_native)
         return value
 
 
@@ -279,62 +337,74 @@ def _iod_search_from_dict(raw: Mapping[str, Any]) -> IodSearchConfig:
 
 @dataclass(frozen=True, slots=True)
 class OdConfig:
-    """Validated complete Core-owned OD configuration."""
+    """Complete bound IOD-plus-refinement configuration."""
 
-    _native: Any
+    observation_pipeline: ObservationPipeline
+    iod: IodStageConfig
+    refinement: RefinementRunConfig
+    resources: ResourceBindings
+    _native: Any = field(init=False, repr=False, compare=False)
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.observation_pipeline, ObservationPipeline):
+            raise TypeError("observation_pipeline must be ObservationPipeline")
+        if not isinstance(self.iod, IodStageConfig):
+            raise TypeError("iod must be IodStageConfig")
+        if not isinstance(self.refinement, RefinementRunConfig):
+            raise TypeError("refinement must be RefinementRunConfig")
+        if not isinstance(self.resources, ResourceBindings):
+            raise TypeError("resources must be ResourceBindings")
+        descriptors = self.observation_pipeline._descriptors()
+        transforms_json = None if descriptors is None else _canonical_json(descriptors)
+        object.__setattr__(
+            self,
+            "_native",
+            _rust.explicit_od_config(
+                transforms_json,
+                self.resources._native_paths(),
+                self.iod._native,
+                self.refinement._native,
+            ),
+        )
 
     @classmethod
     def explicit(
         cls,
         *,
         observation_pipeline: ObservationPipeline,
-        iod: IodRunConfig,
+        iod: IodStageConfig,
         refinement: RefinementRunConfig,
-        evaluation: EvaluationConfig,
         resources: ResourceBindings,
     ) -> OdConfig:
-        if not isinstance(observation_pipeline, ObservationPipeline):
-            raise TypeError("observation_pipeline must be ObservationPipeline")
-        if not isinstance(iod, IodRunConfig):
-            raise TypeError("iod must be IodRunConfig")
-        if not isinstance(refinement, RefinementRunConfig):
-            raise TypeError("refinement must be RefinementRunConfig")
-        if not isinstance(evaluation, EvaluationConfig):
-            raise TypeError("evaluation must be EvaluationConfig")
-        if not isinstance(resources, ResourceBindings):
-            raise TypeError("resources must be ResourceBindings")
-        descriptors = observation_pipeline._descriptors()
-        transforms_json = None if descriptors is None else _canonical_json(descriptors)
-        native = _rust.explicit_od_config(
-            transforms_json,
-            resources._native_paths(),
-            iod._native,
-            refinement._native,
-            evaluation._native,
-        )
-        return cls(native)
+        return cls(observation_pipeline, iod, refinement, resources)
+
+    @classmethod
+    def _from_native(
+        cls,
+        native: Any,
+        *,
+        observation_pipeline: ObservationPipeline,
+        iod: IodStageConfig,
+        refinement: RefinementRunConfig,
+        resources: ResourceBindings,
+    ) -> OdConfig:
+        value = cls(observation_pipeline, iod, refinement, resources)
+        object.__setattr__(value, "_native", native)
+        return value
 
     def for_iod(self) -> IodRunConfig:
-        """Project a complete bound setup to the public IOD stage config."""
-
         return IodRunConfig._from_native(
-            self._native.for_iod(), workflow_native=self._native
+            self._native.for_iod(),
+            observation_pipeline=self.observation_pipeline,
+            iod=self.iod,
+            resources=self.resources,
         )
 
     def for_refinement(self) -> RefinementRunConfig:
         return RefinementRunConfig._from_native(self._native.for_refinement())
 
     def for_evaluation(self) -> EvaluationConfig:
-        """Project a complete bound setup to the public evaluation config."""
-
-        return EvaluationConfig._from_native(
-            self._native.for_evaluation(), workflow_native=self._native
-        )
-
-    @property
-    def observation_pipeline(self) -> ObservationPipeline:
-        provenance = json.loads(self._native.provenance_json)
-        return ObservationPipeline._from_descriptors(provenance["transforms"])
+        return EvaluationConfig._from_native(self._native.for_evaluation())
 
     @property
     def provenance(self) -> Mapping[str, object]:
@@ -352,6 +422,7 @@ __all__ = [
     "CorrectionConfig",
     "EvaluationConfig",
     "IodRunConfig",
+    "IodStageConfig",
     "IodSearchConfig",
     "JacobianName",
     "LossName",

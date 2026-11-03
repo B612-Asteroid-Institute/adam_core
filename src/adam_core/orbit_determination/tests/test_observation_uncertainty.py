@@ -6,8 +6,7 @@ from pathlib import Path
 import pytest
 
 from ..config import (
-    EvaluationConfig,
-    IodRunConfig,
+    IodStageConfig,
     OdConfig,
     RefinementRunConfig,
     ResourceBindings,
@@ -28,9 +27,8 @@ def _explicit(
 ) -> OdConfig:
     return OdConfig.explicit(
         observation_pipeline=pipeline,
-        iod=IodRunConfig.core_v1(),
+        iod=IodStageConfig.core_v1(),
         refinement=RefinementRunConfig.core_v1(),
-        evaluation=EvaluationConfig.six_dimensional(),
         resources=resources,
     )
 

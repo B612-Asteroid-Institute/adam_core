@@ -3,8 +3,7 @@
 import json
 
 from ..config import (
-    EvaluationConfig,
-    IodRunConfig,
+    IodStageConfig,
     OdConfig,
     RefinementRunConfig,
     ResourceBindings,
@@ -16,9 +15,8 @@ from ..observation_pipeline import ObservationPipeline
 def config() -> OdConfig:
     return OdConfig.explicit(
         observation_pipeline=ObservationPipeline.as_supplied(),
-        iod=IodRunConfig.core_v1(),
+        iod=IodStageConfig.core_v1(),
         refinement=RefinementRunConfig.core_v1(),
-        evaluation=EvaluationConfig.six_dimensional(),
         resources=ResourceBindings({}),
     )
 

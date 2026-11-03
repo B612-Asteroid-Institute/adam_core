@@ -43,8 +43,7 @@ from adam_core.dynamics.propagation import propagate_2body
 from adam_core.observations import Associations, SourceCatalog
 from adam_core.observers import Observers
 from adam_core.orbit_determination import (
-    EvaluationConfig,
-    IodRunConfig,
+    IodStageConfig,
     ObservationPipeline,
     OdConfig,
     RefinementRunConfig,
@@ -283,9 +282,8 @@ def _sha256_parts(*parts: bytes) -> str:
 def _benchmark_config() -> OdConfig:
     return OdConfig.explicit(
         observation_pipeline=ObservationPipeline.as_supplied(),
-        iod=IodRunConfig.core_v1(),
+        iod=IodStageConfig.core_v1(),
         refinement=RefinementRunConfig.core_v1(),
-        evaluation=EvaluationConfig.six_dimensional(),
         resources=ResourceBindings({}),
     )
 

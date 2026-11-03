@@ -47,10 +47,10 @@ pub mod od {
         plan_associations, plan_orbit_members, AssociationGroup, OrbitMemberGroup,
     };
     pub use crate::od_config::{
-        EvaluationConfig, IodRunConfig, ObservationPipeline, ObservationTransform, OdConfig,
-        OdConfigError, RefinementRunConfig, ResidualCovarianceOperation, ResourceBindings,
-        ResourceProblem, ResourceRequirement, ResourceSlot, ResourceValidationError,
-        ValidatedResourceIdentity,
+        EvaluationConfig, IodRunConfig, IodStageConfig, ObservationPipeline, ObservationTransform,
+        OdConfig, OdConfigError, RefinementRunConfig, ResidualCovarianceOperation,
+        ResourceBindings, ResourceProblem, ResourceRequirement, ResourceSlot,
+        ResourceValidationError, ValidatedResourceIdentity,
     };
     pub use crate::propagation::apply_configured_observation_pipeline;
 
@@ -72,11 +72,11 @@ pub mod od {
 }
 
 pub use od_config::{
-    EvaluationConfig, IodRunConfig, ObservationPipeline, ObservationTransform, OdConfig,
-    OdConfigError, OdProfile, ProfileIdentity, RefinementRunConfig, ResidualCovarianceOperation,
-    ResourceBindings, ResourceProblem, ResourceRequirement, ResourceSlot, ResourceValidationError,
-    ValidatedResourceIdentity, ASTEROID_INSTITUTE_OD_V1, CORE_OD_V1, EFCC18_BIAS_RESOURCE,
-    V2_FULL_RESOURCE, V2_SIGMA_FILL_RESOURCE,
+    EvaluationConfig, IodRunConfig, IodStageConfig, ObservationPipeline, ObservationTransform,
+    OdConfig, OdConfigError, OdProfile, ProfileIdentity, RefinementRunConfig,
+    ResidualCovarianceOperation, ResourceBindings, ResourceProblem, ResourceRequirement,
+    ResourceSlot, ResourceValidationError, ValidatedResourceIdentity, ASTEROID_INSTITUTE_OD_V1,
+    CORE_OD_V1, EFCC18_BIAS_RESOURCE, V2_FULL_RESOURCE, V2_SIGMA_FILL_RESOURCE,
 };
 
 mod veres2017;

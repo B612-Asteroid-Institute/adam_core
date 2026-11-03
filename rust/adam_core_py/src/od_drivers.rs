@@ -13,16 +13,19 @@
 //! `ValueError` (invalid input) or `RuntimeError` (backend failure).
 
 use crate::coordinates::{read_orbit_ipc, write_orbit_ipc};
-use crate::od_config::{PyIodRunConfig, PyOdConfig, PyRefinementRunConfig};
+use crate::od_config::{
+    PyEvaluationConfig, PyIodRunConfig, PyIodStageConfig, PyOdConfig, PyRefinementRunConfig,
+};
 use crate::od_support::od_error;
 use adam_core::od::algorithms::{
     canonical_stage_settings, external_provider_metadata, two_body_provider_metadata,
     ErfaTimeProvider, GlobalSpiceTranslation as LockingSpiceTranslation,
 };
+use adam_core::od::python_bindings::{self as canonical_bindings, ProviderSource};
 use adam_core::od::{
     AssociatedObservations, AstrometryColumns, FittedOrbitMembersBatch, MemberedOrbits,
-    OdBatchError, OdBatchResult, OdGroupResult, OdObservationBatch, OdPropagator,
-    OdPropagatorSource, OdProvenance, OdRoute, ProviderMetadata,
+    OdBatchError, OdBatchResult, OdGroupResult, OdObservationBatch, OdPropagator, OdProvenance,
+    OdRoute, ProviderMetadata,
 };
 use adam_core_rs_coords::od::algorithms::{
     prepare_observations, refine_with_predictor, run_od_with_predictors, PreparedObservations,
@@ -506,7 +509,7 @@ impl PyCanonicalProviderSource {
     }
 }
 
-impl OdPropagatorSource for PyCanonicalProviderSource {
+impl ProviderSource for PyCanonicalProviderSource {
     fn with_propagator<R>(
         &self,
         operation: impl for<'provider> FnOnce(
@@ -1209,7 +1212,7 @@ fn run_iod_config_ipc<'py>(
     iod_propagator: Option<&Bound<'py, PyAny>>,
     observed_ipc: &Bound<'py, PyBytes>,
     observers_ipc: &Bound<'py, PyBytes>,
-    config: PyRef<'py, PyIodRunConfig>,
+    config: PyRef<'py, PyIodStageConfig>,
 ) -> PyResult<Bound<'py, PyDict>> {
     let problem = decode_observations(observed_ipc, observers_ipc)?;
     let iod_config = *config.inner.iod();
@@ -1626,7 +1629,11 @@ fn typed_provenance_dict<'py>(
     Ok(out)
 }
 
-fn typed_group_dict<'py>(py: Python<'py>, group: &OdGroupResult) -> PyResult<Bound<'py, PyDict>> {
+fn typed_group_dict<'py>(
+    py: Python<'py>,
+    result: &OdBatchResult,
+    group: &OdGroupResult,
+) -> PyResult<Bound<'py, PyDict>> {
     let out = PyDict::new(py);
     out.set_item("group_id", &group.group_id)?;
     out.set_item("orbit_id", group.orbit_id())?;
@@ -1642,21 +1649,21 @@ fn typed_group_dict<'py>(py: Python<'py>, group: &OdGroupResult) -> PyResult<Bou
     )?;
     out.set_item(
         "member_input_fingerprints",
-        group
-            .members
+        result
+            .group_members(group)
             .iter()
             .map(|member| member.input_fingerprint.as_str())
             .collect::<Vec<_>>(),
     )?;
     out.set_item(
         "member_membership_fingerprints",
-        group
-            .members
+        result
+            .group_members(group)
             .iter()
             .map(|member| member.membership_fingerprint.as_str())
             .collect::<Vec<_>>(),
     )?;
-    let orbit = group.orbit.as_ref();
+    let orbit = result.group_orbit(group);
     let refined = orbit.and_then(|record| record.refined.as_ref());
     let evaluation = orbit.and_then(|record| record.evaluation.as_ref());
     let iod = group.iod.as_ref();
@@ -1703,9 +1710,8 @@ fn typed_group_dict<'py>(py: Python<'py>, group: &OdGroupResult) -> PyResult<Bou
     )?;
     out.set_item(
         "failure",
-        group
-            .failure
-            .as_ref()
+        result
+            .group_failure(group)
             .map(|failure| typed_failure_dict(py, failure))
             .transpose()?,
     )?;
@@ -1723,8 +1729,8 @@ fn typed_group_dict<'py>(py: Python<'py>, group: &OdGroupResult) -> PyResult<Bou
 
 fn typed_groups_list<'py>(py: Python<'py>, result: &OdBatchResult) -> PyResult<Bound<'py, PyList>> {
     let items = PyList::empty(py);
-    for group in &result.groups {
-        items.append(typed_group_dict(py, group)?)?;
+    for group in result.groups() {
+        items.append(typed_group_dict(py, result, group)?)?;
     }
     Ok(items)
 }
@@ -1738,7 +1744,7 @@ fn run_iod_batch_ipc<'py>(
     associations_ipc: &Bound<'py, PyBytes>,
     observed_ipc: &Bound<'py, PyBytes>,
     observers_ipc: &Bound<'py, PyBytes>,
-    config: PyRef<'py, PyOdConfig>,
+    config: PyRef<'py, PyIodRunConfig>,
 ) -> PyResult<Bound<'py, PyDict>> {
     let owned_config = config.inner.clone();
     drop(config);
@@ -1755,14 +1761,14 @@ fn run_iod_batch_ipc<'py>(
     };
     let provider_source = PyCanonicalProviderSource::new(propagator);
     let result = run_canonical_workflow(py, &provider_source, || {
-        adam_core::od::run_iod(&input, &owned_config, &provider_source)
+        canonical_bindings::run_iod(&input, &owned_config, &provider_source)
     })?;
     let out = PyDict::new(py);
     out.set_item("groups", typed_groups_list(py, &result)?)?;
     out.set_item(
         "provider",
         result
-            .providers
+            .providers()
             .iod
             .as_ref()
             .map(|metadata| provider_metadata_dict(py, metadata))
@@ -1797,7 +1803,7 @@ fn run_od_batch_ipc<'py>(
     };
     let provider_source = PyCanonicalProviderSource::new(propagator);
     let result = run_canonical_workflow(py, &provider_source, || {
-        adam_core::od::run_od(&input, &owned_config, &provider_source)
+        canonical_bindings::run_od(&input, &owned_config, &provider_source)
     })?;
     let out = PyDict::new(py);
     out.set_item("groups", typed_groups_list(py, &result)?)?;
@@ -1805,7 +1811,7 @@ fn run_od_batch_ipc<'py>(
     providers.set_item(
         "iod",
         result
-            .providers
+            .providers()
             .iod
             .as_ref()
             .map(|metadata| provider_metadata_dict(py, metadata))
@@ -1814,7 +1820,7 @@ fn run_od_batch_ipc<'py>(
     providers.set_item(
         "refinement",
         result
-            .providers
+            .providers()
             .refinement
             .as_ref()
             .map(|metadata| provider_metadata_dict(py, metadata))
@@ -1914,14 +1920,14 @@ fn refine_batch_ipc<'py>(
     };
     let provider_source = PyCanonicalProviderSource::new(propagator);
     let result = run_canonical_workflow(py, &provider_source, || {
-        adam_core::od::refine(&input, &owned_config, &provider_source)
+        canonical_bindings::refine(&input, &owned_config, &provider_source)
     })?;
     let out = PyDict::new(py);
     out.set_item("groups", typed_groups_list(py, &result)?)?;
     out.set_item(
         "provider",
         result
-            .providers
+            .providers()
             .refinement
             .as_ref()
             .map(|metadata| provider_metadata_dict(py, metadata))
@@ -1965,9 +1971,9 @@ fn evaluate_orbits_batch_ipc<'py>(
     used_variance_lon: Vec<Option<f64>>,
     used_variance_lat: Vec<Option<f64>>,
     used_cov_lonlat: Vec<Option<f64>>,
-    config: PyRef<'py, PyOdConfig>,
+    config: PyRef<'py, PyEvaluationConfig>,
 ) -> PyResult<Bound<'py, PyDict>> {
-    let owned_config = config.inner.clone();
+    let owned_config = config.inner;
     drop(config);
     let orbits = decode_orbit(orbit_ipc)?;
     let source = decode_source_catalog(source_ipc)?;
@@ -2009,14 +2015,14 @@ fn evaluate_orbits_batch_ipc<'py>(
     };
     let provider_source = PyCanonicalProviderSource::new(propagator);
     let result = run_canonical_workflow(py, &provider_source, || {
-        adam_core::od::evaluate_orbits(&input, &owned_config, &provider_source)
+        canonical_bindings::evaluate_orbits(&input, &owned_config, &provider_source)
     })?;
     let out = PyDict::new(py);
     out.set_item("groups", typed_groups_list(py, &result)?)?;
     out.set_item(
         "provider",
         result
-            .providers
+            .providers()
             .evaluation
             .as_ref()
             .map(|metadata| provider_metadata_dict(py, metadata))
@@ -2080,7 +2086,7 @@ fn run_native_od_benchmark_once(
                 orbit,
                 prepared,
                 &problem.observers,
-                config,
+                &config.for_refinement(),
                 &ErfaTimeProvider,
                 &LockingSpiceTranslation,
             )?;
@@ -2200,7 +2206,7 @@ fn benchmark_od_fit_ipc<'py>(
         &obs_code,
         &band,
         &astcat,
-        &owned_config,
+        owned_config.observation_pipeline(),
         &ErfaTimeProvider,
     )
     .map_err(od_error)?;

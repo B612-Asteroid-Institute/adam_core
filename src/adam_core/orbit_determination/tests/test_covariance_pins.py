@@ -243,9 +243,8 @@ def covariance_config() -> OdConfig:
                 )
             ]
         ),
-        iod=base.for_iod(),
+        iod=base.iod,
         refinement=base.for_refinement(),
-        evaluation=base.for_evaluation(),
         resources=ResourceBindings(
             {"station_band_residual_covariance_table": _data_path("v2_full.parquet")}
         ),

@@ -3,7 +3,7 @@
 //! These predictor-level functions are building blocks for the forthcoming
 //! canonical batch surface. They are not a grouping or failure-envelope API.
 
-use crate::od_config::OdConfig;
+use crate::od_config::{IodStageConfig, ObservationPipeline, OdConfig, RefinementRunConfig};
 use crate::propagation::adapter::{refine_with, run_iod_with, SphericalPredictor};
 use crate::propagation::{
     apply_configured_observation_pipeline, AppliedObservationModels, IodResult, RefinedOutput,
@@ -22,38 +22,30 @@ pub fn prepare_observations(
     obs_code: &[String],
     band: &[Option<String>],
     astcat: &[Option<String>],
-    config: &OdConfig,
+    pipeline: &ObservationPipeline,
     provider: &dyn TimeScaleProvider,
 ) -> PropagationResultValue<PreparedObservations> {
     crate::propagation::validate_od_covariance_dimension(observed)?;
-    config
+    pipeline
         .validate()
         .map_err(crate::PropagationError::InvalidRequest)?;
-    apply_configured_observation_pipeline(
-        observed,
-        obs_code,
-        band,
-        astcat,
-        config.observation_pipeline(),
-        provider,
-    )
+    apply_configured_observation_pipeline(observed, obs_code, band, astcat, pipeline, provider)
 }
 
 pub fn run_iod_with_predictor<T: OriginTranslationProvider>(
     predictor: &dyn SphericalPredictor,
     prepared: &PreparedObservations,
     observers: &ObserverBatch,
-    config: &OdConfig,
+    config: &IodStageConfig,
     provider: &dyn TimeScaleProvider,
     translation_provider: &T,
 ) -> PropagationResultValue<IodResult> {
-    let iod = config.for_iod();
     run_iod_with(
         predictor,
         &prepared.observations,
         observers,
-        iod.iod(),
-        iod.correction_fit(),
+        config.iod(),
+        config.correction_fit(),
         provider,
         translation_provider,
     )
@@ -64,17 +56,16 @@ pub fn refine_with_predictor<T: OriginTranslationProvider>(
     seed: &OrbitBatch,
     prepared: &PreparedObservations,
     observers: &ObserverBatch,
-    config: &OdConfig,
+    config: &RefinementRunConfig,
     provider: &dyn TimeScaleProvider,
     translation_provider: &T,
 ) -> PropagationResultValue<RefinedOutput> {
-    let refinement = config.for_refinement();
     refine_with(
         predictor,
         seed,
         &prepared.observations,
         observers,
-        refinement.refinement(),
+        config.refinement(),
         provider,
         translation_provider,
     )
@@ -102,12 +93,19 @@ pub fn run_od_with_predictors<T: OriginTranslationProvider>(
     provider: &dyn TimeScaleProvider,
     translation_provider: &T,
 ) -> PropagationResultValue<ConfiguredRunOdOutput> {
-    let prepared = prepare_observations(observed, obs_code, band, astcat, config, provider)?;
+    let prepared = prepare_observations(
+        observed,
+        obs_code,
+        band,
+        astcat,
+        config.observation_pipeline(),
+        provider,
+    )?;
     let iod = run_iod_with_predictor(
         iod_predictor,
         &prepared,
         observers,
-        config,
+        config.iod_stage(),
         provider,
         translation_provider,
     )?;
@@ -117,7 +115,7 @@ pub fn run_od_with_predictors<T: OriginTranslationProvider>(
             &seed,
             &prepared,
             observers,
-            config,
+            &config.for_refinement(),
             provider,
             translation_provider,
         )?),
@@ -134,8 +132,8 @@ pub fn run_od_with_predictors<T: OriginTranslationProvider>(
 mod tests {
     use super::*;
     use crate::od_config::{
-        EvaluationConfig, IodRunConfig, ObservationPipeline, ObservationTransform,
-        RefinementRunConfig, ResourceBindings,
+        IodStageConfig, ObservationPipeline, ObservationTransform, RefinementRunConfig,
+        ResourceBindings,
     };
     use crate::propagation::adapter::PropagatorPredictor;
     use crate::propagation::{
@@ -333,7 +331,7 @@ mod tests {
         } else {
             ObservationPipeline::bind_explicit(definitions, &ResourceBindings::new()).unwrap()
         };
-        let iod = IodRunConfig::new(
+        let iod = IodStageConfig::new(
             IodConfig {
                 max_triplets: Some(3),
                 rchi2_threshold: 50.0,
@@ -342,13 +340,7 @@ mod tests {
             WhitenedFitConfig::default(),
         )
         .unwrap();
-        OdConfig::explicit(
-            pipeline,
-            iod,
-            RefinementRunConfig::core_v1(),
-            EvaluationConfig::six_dimensional(),
-        )
-        .unwrap()
+        OdConfig::explicit(pipeline, iod, RefinementRunConfig::core_v1()).unwrap()
     }
 
     fn metadata() -> (Vec<String>, Vec<Option<String>>, Vec<Option<String>>) {
@@ -475,7 +467,7 @@ mod tests {
                 &obs_code,
                 &band,
                 &astcat,
-                &config,
+                config.observation_pipeline(),
                 &IdentityTimeProvider,
             )
             .expect_err("preparation must reject 9D observation covariance");
@@ -502,12 +494,13 @@ mod tests {
     fn prepare_observations_executes_repeated_pipeline_and_retains_snapshots() {
         let observed = synthetic_observations();
         let (obs_code, band, astcat) = metadata();
+        let once_config = pipeline_config(&[2]);
         let once = prepare_observations(
             &observed,
             &obs_code,
             &band,
             &astcat,
-            &pipeline_config(&[2]),
+            once_config.observation_pipeline(),
             &IdentityTimeProvider,
         )
         .unwrap();
@@ -517,7 +510,7 @@ mod tests {
             &obs_code,
             &band,
             &astcat,
-            &repeated_config,
+            repeated_config.observation_pipeline(),
             &IdentityTimeProvider,
         )
         .unwrap();
@@ -597,7 +590,7 @@ mod tests {
             &obs_code,
             &band,
             &astcat,
-            &config,
+            config.observation_pipeline(),
             &IdentityTimeProvider,
         )
         .unwrap();
@@ -605,7 +598,7 @@ mod tests {
             &iod_predictor,
             &prepared,
             &observers,
-            &config,
+            config.iod_stage(),
             &IdentityTimeProvider,
             &ZeroTranslationProvider,
         )
@@ -622,7 +615,7 @@ mod tests {
             &seed,
             &prepared,
             &observers,
-            &config,
+            &config.for_refinement(),
             &IdentityTimeProvider,
             &ZeroTranslationProvider,
         )

@@ -18,8 +18,7 @@ from ..algorithms.fitting import (
 )
 from ..algorithms.iod import IodReport, _run_iod_prepared
 from ..config import (
-    EvaluationConfig,
-    IodRunConfig,
+    IodStageConfig,
     OdConfig,
     RefinementRunConfig,
     ResourceBindings,
@@ -37,7 +36,7 @@ FitResult: TypeAlias = tuple[FittedOrbits, FittedOrbitMembers]
 def explicit_config(**settings: Any) -> OdConfig:
     """Build a complete config while varying fields under numerical test."""
 
-    iod = IodRunConfig.core_v1()
+    iod = IodStageConfig.core_v1()
     search = iod.search_correction_ranging
     correction_settings = dict(settings.pop("correction_settings", {}) or {})
     ranging_settings = dict(settings.pop("ranging_settings", {}) or {})
@@ -92,7 +91,7 @@ def explicit_config(**settings: Any) -> OdConfig:
         fit = replace(fit, two_body=replace(fit.two_body, **two_body_values))
     if fit_settings:
         fit = replace(fit, **fit_settings)
-    iod = IodRunConfig(search, fit)
+    iod = IodStageConfig(search, fit)
     refinement = RefinementRunConfig.core_v1()
     if refinement_method == "worst_residual":
         refinement = RefinementRunConfig(
@@ -111,7 +110,6 @@ def explicit_config(**settings: Any) -> OdConfig:
         observation_pipeline=ObservationPipeline.as_supplied(),
         iod=iod,
         refinement=refinement,
-        evaluation=EvaluationConfig.six_dimensional(),
         resources=ResourceBindings({}),
     )
 
@@ -131,7 +129,7 @@ def run_iod_qualified(
     """Test-only numerical bridge; not a production configured workflow."""
     propagator = _instance(propagator)
     config = explicit_config(**settings)
-    return _run_iod_prepared(observations, propagator, config.for_iod())
+    return _run_iod_prepared(observations, propagator, config.iod)
 
 
 def run_prefit_iod_qualified(
@@ -187,7 +185,7 @@ def run_od_qualified(
     """Test-only IOD then refinement composition over as-supplied rows."""
     propagator = _instance(propagator)
     config = explicit_config(**settings)
-    seed, _, _ = _run_iod_prepared(observations, propagator, config.for_iod())
+    seed, _, _ = _run_iod_prepared(observations, propagator, config.iod)
     if len(seed) == 0:
         from ..fitted_orbits import FittedOrbitMembers, FittedOrbits
 

@@ -207,9 +207,8 @@ def _efcc_config(path: Path, exclude_astcats: tuple[str, ...]) -> OdConfig:
         observation_pipeline=ObservationPipeline.ordered(
             [Efcc18CatalogBiasCorrection(exclude_astcats=exclude_astcats)]
         ),
-        iod=base.for_iod(),
+        iod=base.iod,
         refinement=base.for_refinement(),
-        evaluation=base.for_evaluation(),
         resources=ResourceBindings({"efcc18_catalog_bias_table": path}),
     )
 

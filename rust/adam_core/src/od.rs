@@ -7,19 +7,19 @@
 //!
 //! # Example
 //!
-//! Each workflow accepts an [`crate::od::OdPropagatorSource`] whose identity is
+//! Each workflow accepts an [`crate::od::OdPropagator`] whose identity is
 //! derived from the actual two-body implementation or validated
 //! propagation-only ABI-v2 capsule. Static validation and one-time preparation
-//! remain private and happen before the source is resolved. Fitted `orbit_id`
+//! remain private. Fitted `orbit_id`
 //! values are mutable relational labels; immutable association identity remains
 //! in each record's `group_id` / orbit `object_id`. Callers may edit the public
 //! orbit and member label columns directly before passing them back to
 //! [`refine`] or [`evaluate_orbits`], where relational integrity is validated.
 //!
 //! ```no_run
-//! use adam_core::{run_iod, od::{AssociatedObservations, OdConfig, OdPropagator}};
+//! use adam_core::{run_iod, od::{AssociatedObservations, IodRunConfig, OdPropagator}};
 //!
-//! fn run(input: &AssociatedObservations, config: &OdConfig) {
+//! fn run(input: &AssociatedObservations, config: &IodRunConfig) {
 //!     let provider = OdPropagator::two_body();
 //!     let result = run_iod(input, config, &provider);
 //!     # let _ = result;
@@ -189,8 +189,8 @@ use adam_core_rs_coords::od::{
     plan_associations, plan_orbit_members, AssociationGroup, OrbitMemberGroup,
 };
 pub use adam_core_rs_coords::od::{
-    EvaluationConfig, IodRunConfig, ObservationPipeline, ObservationTransform, OdConfig,
-    OdConfigError, RefinementRunConfig, ResidualCovarianceOperation, ResourceBindings,
+    EvaluationConfig, IodRunConfig, IodStageConfig, ObservationPipeline, ObservationTransform,
+    OdConfig, OdConfigError, RefinementRunConfig, ResidualCovarianceOperation, ResourceBindings,
     ResourceProblem, ResourceRequirement, ResourceSlot, ResourceValidationError,
     ValidatedResourceIdentity,
 };
@@ -477,13 +477,8 @@ impl<'a> OdPropagator<'a> {
     }
 }
 
-/// Lazily supplies the actual propagation backend to one canonical workflow.
-///
-/// The workflow performs all provider-independent validation and preparation
-/// before invoking this single method. Ordinary Rust callers pass an
-/// [`OdPropagator`] directly; bindings may implement this trait to defer capsule
-/// acquisition without publishing prepared-state APIs.
-pub trait OdPropagatorSource {
+/// Internal lazy provider-acquisition seam used by binding adapters and tests.
+trait OdPropagatorSource {
     /// Run one already-prepared operation with the source's actual backend.
     fn with_propagator<R>(
         &self,
@@ -783,6 +778,16 @@ pub struct CanonicalConfiguration {
 }
 
 impl CanonicalConfiguration {
+    /// Construct from a complete bound IOD-stage configuration.
+    pub fn from_iod(config: &IodRunConfig) -> Result<Self, OdBatchError> {
+        config.validate().map_err(|message| {
+            OdBatchError::new(OdBatchErrorCode::InvalidConfiguration, message)
+        })?;
+        Self::from_value(
+            serde_json::from_str(&config.provenance_json()).expect("IodRunConfig JSON is valid"),
+        )
+    }
+
     /// Construct from a complete OD configuration.
     pub fn from_od(config: &OdConfig) -> Result<Self, OdBatchError> {
         config.validate().map_err(|message| {
@@ -791,6 +796,57 @@ impl CanonicalConfiguration {
         Self::from_value(
             serde_json::from_str(&config.provenance_json()).expect("OdConfig JSON is valid"),
         )
+    }
+
+    /// Construct from a self-contained evaluation configuration.
+    pub fn from_evaluation(config: &EvaluationConfig) -> Result<Self, OdBatchError> {
+        config.validate().map_err(|message| {
+            OdBatchError::new(OdBatchErrorCode::InvalidConfiguration, message)
+        })?;
+        Self::from_value(config.canonical_value())
+    }
+
+    /// Compose the exact canonical `run_od` configuration from an IOD seed and
+    /// the explicit refinement configuration.
+    pub fn compose_od(iod: &Self, refinement: &RefinementRunConfig) -> Result<Self, OdBatchError> {
+        refinement.validate().map_err(|message| {
+            OdBatchError::new(OdBatchErrorCode::InvalidConfiguration, message)
+        })?;
+        let mut value = iod.value.clone();
+        if value.get("schema").and_then(Value::as_str) != Some("adam-core-iod-run-config/v1") {
+            return Err(OdBatchError::new(
+                OdBatchErrorCode::InvalidProvenance,
+                "run_iod seed does not contain a canonical IOD-stage configuration",
+            ));
+        }
+        let object = value.as_object_mut().ok_or_else(|| {
+            OdBatchError::new(
+                OdBatchErrorCode::InvalidProvenance,
+                "run_iod seed configuration is not an object",
+            )
+        })?;
+        object.remove("configuration_sha256");
+        object.insert(
+            "schema".to_string(),
+            Value::String("adam-core-od-config/v1".to_string()),
+        );
+        object.insert("refinement".to_string(), refinement.canonical_value());
+        object.insert("evaluation".to_string(), json!({"covariance_dimension": 6}));
+        let mut science = value.clone();
+        science
+            .as_object_mut()
+            .expect("configuration is an object")
+            .remove("profile");
+        let fingerprint =
+            sha256(&serde_json::to_vec(&science).expect("configuration is serializable"));
+        value
+            .as_object_mut()
+            .expect("configuration is an object")
+            .insert(
+                "configuration_sha256".to_string(),
+                Value::String(fingerprint),
+            );
+        Self::from_value(value)
     }
 
     /// Construct from a standalone refinement-stage configuration.
@@ -875,10 +931,6 @@ impl CanonicalConfiguration {
     /// Canonical JSON used only at serialization boundaries.
     pub fn canonical_json(&self) -> String {
         serde_json::to_string(&self.value).expect("validated configuration is serializable")
-    }
-
-    fn refinement_value(&self) -> Option<&Value> {
-        self.value.get("refinement")
     }
 }
 
@@ -1031,10 +1083,29 @@ impl OdProvenance {
             && self.configuration.value.get("refinement").is_some()
             && self.configuration.value.get("evaluation").is_some();
         let configuration_matches_route = match self.route {
+            OdRoute::RunIod => {
+                self.configuration
+                    .value
+                    .get("schema")
+                    .and_then(Value::as_str)
+                    == Some("adam-core-iod-run-config/v1")
+                    && self.configuration.value.get("iod").is_some()
+                    && self.configuration.value.get("transforms").is_some()
+                    && !full_configuration
+            }
+            OdRoute::RunOd => full_configuration,
             OdRoute::Refine => {
                 !full_configuration && self.configuration.value.get("method").is_some()
             }
-            OdRoute::RunIod | OdRoute::RunOd | OdRoute::EvaluateOrbits => full_configuration,
+            OdRoute::EvaluateOrbits => {
+                self.configuration
+                    .value
+                    .get("schema")
+                    .and_then(Value::as_str)
+                    == Some("adam-core-evaluation-config/v1")
+                    && self.configuration.value.get("prediction_fit").is_some()
+                    && !full_configuration
+            }
         };
         let no_half_stage = self.iod_provider.is_some() == self.iod_diagnostics.is_some()
             && self.refinement_provider.is_some() == self.refinement_diagnostics.is_some()
@@ -1229,7 +1300,21 @@ pub struct FittedOrbitMemberRecord {
     pub outlier: bool,
 }
 
-/// One deterministic group disposition in a canonical batch result.
+#[derive(Debug, Clone)]
+struct WorkingGroupResult {
+    group_id: String,
+    orbit_id: String,
+    row_indices: Vec<usize>,
+    input_orbit_index: Option<usize>,
+    member_indices: Vec<usize>,
+    prepared: PreparedObservations,
+    orbit: Option<FittedOrbitRecord>,
+    members: Vec<FittedOrbitMemberRecord>,
+    failure: Option<OrbitDeterminationFailure>,
+    iod: Option<IodResult>,
+}
+
+/// Accessorial planning/diagnostic metadata for one deterministic disposition.
 #[derive(Debug, Clone)]
 pub struct OdGroupResult {
     pub group_id: String,
@@ -1238,42 +1323,17 @@ pub struct OdGroupResult {
     pub input_orbit_index: Option<usize>,
     pub member_indices: Vec<usize>,
     pub prepared: PreparedObservations,
-    pub orbit: Option<FittedOrbitRecord>,
-    pub members: Vec<FittedOrbitMemberRecord>,
-    pub failure: Option<OrbitDeterminationFailure>,
+    orbit_index: Option<usize>,
+    member_start: usize,
+    member_end: usize,
+    failure_index: Option<usize>,
     /// IOD diagnostics are retained even when no fitted orbit exists.
     pub iod: Option<IodResult>,
 }
 
 impl OdGroupResult {
-    /// Relational orbit label for this disposition. Successful rows derive it
-    /// from the materialized orbit; failure-only rows retain the planned label.
     pub fn orbit_id(&self) -> &str {
-        self.orbit
-            .as_ref()
-            .and_then(|record| record.orbit.orbit_id.first())
-            .map(|value| value.0.as_str())
-            .unwrap_or(&self.orbit_id)
-    }
-
-    /// Convert one successful group losslessly into the typed input accepted by
-    /// [`refine`] and [`evaluate_orbits`]. No diagnostics parsing or state
-    /// reconstruction is required.
-    pub fn to_membered_orbits(
-        &self,
-        observations: &OdObservationBatch,
-    ) -> Result<Option<MemberedOrbits>, OdBatchError> {
-        let Some(fitted) = &self.orbit else {
-            return Ok(None);
-        };
-        let output = MemberedOrbits {
-            orbits: fitted.orbit.clone(),
-            provenance: vec![Some(fitted.provenance.clone())],
-            observations: observations.clone(),
-            members: member_batch_from_records(&self.members),
-        };
-        validate_member_input(&output, true)?;
-        Ok(Some(output))
+        &self.orbit_id
     }
 }
 
@@ -1285,12 +1345,70 @@ pub struct OdStageProviders {
     pub evaluation: Option<ProviderMetadata>,
 }
 
-/// Exact three-concept batch product: fitted orbits, explicit memberships, and
-/// typed group failures, retained in deterministic group order.
+#[derive(Debug, Clone, Default)]
+struct WorkingBatchResult {
+    groups: Vec<WorkingGroupResult>,
+    providers: OdStageProviders,
+}
+
+impl WorkingBatchResult {
+    fn finish(self) -> OdBatchResult {
+        let mut fitted_orbits = Vec::new();
+        let mut fitted_orbit_members = Vec::new();
+        let mut failures = Vec::new();
+        let mut groups = Vec::with_capacity(self.groups.len());
+        for group in self.groups {
+            let orbit_id = group
+                .orbit
+                .as_ref()
+                .and_then(|record| record.orbit.orbit_id.first())
+                .map(|value| value.0.clone())
+                .unwrap_or(group.orbit_id);
+            let orbit_index = group.orbit.map(|orbit| {
+                let index = fitted_orbits.len();
+                fitted_orbits.push(orbit);
+                index
+            });
+            let member_start = fitted_orbit_members.len();
+            fitted_orbit_members.extend(group.members);
+            let member_end = fitted_orbit_members.len();
+            let failure_index = group.failure.map(|failure| {
+                let index = failures.len();
+                failures.push(failure);
+                index
+            });
+            groups.push(OdGroupResult {
+                group_id: group.group_id,
+                orbit_id,
+                row_indices: group.row_indices,
+                input_orbit_index: group.input_orbit_index,
+                member_indices: group.member_indices,
+                prepared: group.prepared,
+                orbit_index,
+                member_start,
+                member_end,
+                failure_index,
+                iod: group.iod,
+            });
+        }
+        OdBatchResult {
+            fitted_orbits,
+            fitted_orbit_members,
+            failures,
+            groups,
+            providers: self.providers,
+        }
+    }
+}
+
+/// Exact three-concept batch product retained in deterministic group order.
 #[derive(Debug, Clone, Default)]
 pub struct OdBatchResult {
-    pub groups: Vec<OdGroupResult>,
-    pub providers: OdStageProviders,
+    pub fitted_orbits: Vec<FittedOrbitRecord>,
+    pub fitted_orbit_members: Vec<FittedOrbitMemberRecord>,
+    pub failures: Vec<OrbitDeterminationFailure>,
+    groups: Vec<OdGroupResult>,
+    providers: OdStageProviders,
 }
 
 fn append_fitted_orbit(output: &mut OrbitBatch, next: &OrbitBatch) -> Result<(), OdBatchError> {
@@ -1509,75 +1627,82 @@ fn member_batch_from_records<'a>(
 }
 
 impl OdBatchResult {
-    /// Fitted-orbit records in deterministic group order.
+    pub fn groups(&self) -> &[OdGroupResult] {
+        &self.groups
+    }
+
+    pub fn providers(&self) -> &OdStageProviders {
+        &self.providers
+    }
+
+    pub fn group_orbit(&self, group: &OdGroupResult) -> Option<&FittedOrbitRecord> {
+        group.orbit_index.map(|index| &self.fitted_orbits[index])
+    }
+
+    pub fn group_members(&self, group: &OdGroupResult) -> &[FittedOrbitMemberRecord] {
+        &self.fitted_orbit_members[group.member_start..group.member_end]
+    }
+
+    pub fn group_failure(&self, group: &OdGroupResult) -> Option<&OrbitDeterminationFailure> {
+        group.failure_index.map(|index| &self.failures[index])
+    }
+
     pub fn fitted_orbits(&self) -> impl Iterator<Item = &FittedOrbitRecord> {
-        self.groups.iter().filter_map(|group| group.orbit.as_ref())
+        self.fitted_orbits.iter()
     }
 
-    /// Explicit membership records in deterministic group/source-row order.
     pub fn fitted_orbit_members(&self) -> impl Iterator<Item = &FittedOrbitMemberRecord> {
-        self.groups.iter().flat_map(|group| group.members.iter())
+        self.fitted_orbit_members.iter()
     }
 
-    /// Convert all successful groups into one directly reusable multi-orbit
-    /// input while cloning the observation batch only once.
-    ///
-    /// Returns `None` when the batch has no fitted orbit. Orbit and member rows
-    /// retain deterministic group/source order and may have their public label
-    /// fields edited directly before [`refine`] or [`evaluate_orbits`].
+    pub fn failures(&self) -> impl Iterator<Item = &OrbitDeterminationFailure> {
+        self.failures.iter()
+    }
+
     pub fn to_membered_orbits(
         &self,
         observations: &OdObservationBatch,
     ) -> Result<Option<MemberedOrbits>, OdBatchError> {
-        let successful = self
-            .groups
-            .iter()
-            .filter_map(|group| group.orbit.as_ref().map(|orbit| (group, orbit)))
-            .collect::<Vec<_>>();
-        let Some((_, first)) = successful.first() else {
+        let Some(first) = self.fitted_orbits.first() else {
             return Ok(None);
         };
         let mut orbits = first.orbit.clone();
-        for (_, fitted) in successful.iter().skip(1) {
+        for fitted in self.fitted_orbits.iter().skip(1) {
             append_fitted_orbit(&mut orbits, &fitted.orbit)?;
         }
-        let provenance = successful
-            .iter()
-            .map(|(_, fitted)| Some(fitted.provenance.clone()))
-            .collect();
-        let members = member_batch_from_records(
-            successful
-                .iter()
-                .flat_map(|(group, _)| group.members.iter()),
-        );
         let output = MemberedOrbits {
             orbits,
+            provenance: self
+                .fitted_orbits
+                .iter()
+                .map(|fitted| Some(fitted.provenance.clone()))
+                .collect(),
             observations: observations.clone(),
-            members,
-            provenance,
+            members: member_batch_from_records(&self.fitted_orbit_members),
         };
         validate_member_input(&output, true)?;
         Ok(Some(output))
     }
 
-    /// Convert every successful group into separate convenience inputs while
-    /// preserving deterministic group order. Prefer [`Self::to_membered_orbits`]
-    /// for survey batches so the observation batch is cloned only once.
     pub fn to_membered_groups(
         &self,
         observations: &OdObservationBatch,
     ) -> Result<Vec<MemberedOrbits>, OdBatchError> {
-        self.groups
-            .iter()
-            .filter_map(|group| group.to_membered_orbits(observations).transpose())
-            .collect()
-    }
-
-    /// Typed group failures in deterministic group order.
-    pub fn failures(&self) -> impl Iterator<Item = &OrbitDeterminationFailure> {
-        self.groups
-            .iter()
-            .filter_map(|group| group.failure.as_ref())
+        let mut output = Vec::with_capacity(self.fitted_orbits.len());
+        for group in &self.groups {
+            let Some(orbit) = self.group_orbit(group) else {
+                continue;
+            };
+            let membered = MemberedOrbits {
+                orbits: orbit.orbit.clone(),
+                provenance: vec![Some(orbit.provenance.clone())],
+                observations: observations.clone(),
+                members: member_batch_from_records(self.group_members(group)),
+            };
+            validate_member_input(&membered, true)?;
+            output.push(membered);
+        }
+        Ok(output)
     }
 
     pub fn is_empty(&self) -> bool {
@@ -2190,7 +2315,7 @@ fn make_provenance(
 fn prepare_association_groups(
     groups: &[AssociationGroup],
     input: &OdObservationBatch,
-    config: &OdConfig,
+    pipeline: &ObservationPipeline,
     provider: &dyn TimeScaleProvider,
 ) -> Result<Vec<(PreparedObservations, ObserverBatch)>, OdBatchError> {
     groups
@@ -2220,7 +2345,7 @@ fn prepare_association_groups(
                 .map(|&row| input.source.astcat[row].clone())
                 .collect::<Vec<_>>();
             let prepared =
-                prepare_observations(&observed, &obs_code, &band, &astcat, config, provider)?;
+                prepare_observations(&observed, &obs_code, &band, &astcat, pipeline, provider)?;
             Ok((prepared, observers))
         })
         .collect()
@@ -2273,20 +2398,18 @@ enum BatchPreparation<P> {
     Ready(P),
 }
 
-struct PreparedAssociatedBatch<'a> {
+struct PreparedAssociatedBatch<'a, C> {
     input: &'a AssociatedObservations,
-    config: OdConfig,
+    config: C,
     groups: Vec<AssociationGroup>,
     prepared_groups: Vec<(PreparedObservations, ObserverBatch)>,
 }
 
-fn prepare_associated_batch<'a>(
+fn prepare_associated_batch<'a, C: Clone>(
     input: &'a AssociatedObservations,
-    config: &OdConfig,
-) -> Result<Option<PreparedAssociatedBatch<'a>>, OdBatchError> {
-    config
-        .validate()
-        .map_err(|message| OdBatchError::new(OdBatchErrorCode::InvalidConfiguration, message))?;
+    config: &C,
+    pipeline: &ObservationPipeline,
+) -> Result<Option<PreparedAssociatedBatch<'a, C>>, OdBatchError> {
     let groups = plan_associations(&input.observations.source.id, &input.associations)
         .map_err(|message| OdBatchError::new(OdBatchErrorCode::InvalidInput, message))?;
     if groups.is_empty() {
@@ -2294,7 +2417,7 @@ fn prepare_associated_batch<'a>(
     }
     validate_problem(&input.observations)?;
     let prepared_groups =
-        prepare_association_groups(&groups, &input.observations, config, &ErfaTimeProvider)?;
+        prepare_association_groups(&groups, &input.observations, pipeline, &ErfaTimeProvider)?;
     Ok(Some(PreparedAssociatedBatch {
         input,
         config: config.clone(),
@@ -2305,24 +2428,29 @@ fn prepare_associated_batch<'a>(
 
 /// Validated, transformed IOD input whose configuration cannot be swapped.
 struct PreparedIod<'a> {
-    inner: PreparedAssociatedBatch<'a>,
+    inner: PreparedAssociatedBatch<'a, IodRunConfig>,
 }
 
 /// Perform every provider-independent IOD check and transform exactly once.
 fn prepare_iod<'a>(
     input: &'a AssociatedObservations,
-    config: &OdConfig,
+    config: &IodRunConfig,
 ) -> Result<BatchPreparation<PreparedIod<'a>>, OdBatchError> {
-    Ok(match prepare_associated_batch(input, config)? {
-        Some(inner) => BatchPreparation::Ready(PreparedIod { inner }),
-        None => BatchPreparation::Empty,
-    })
+    config
+        .validate()
+        .map_err(|message| OdBatchError::new(OdBatchErrorCode::InvalidConfiguration, message))?;
+    Ok(
+        match prepare_associated_batch(input, config, config.observation_pipeline())? {
+            Some(inner) => BatchPreparation::Ready(PreparedIod { inner }),
+            None => BatchPreparation::Empty,
+        },
+    )
 }
 
 impl PreparedIod<'_> {
     /// Execute the prepared IOD batch with metadata derived from `provider`.
     fn execute(self, provider: &OdPropagator<'_>) -> Result<OdBatchResult, OdBatchError> {
-        let fit = *self.inner.config.for_iod().correction_fit();
+        let fit = *self.inner.config.stage().correction_fit();
         with_stage_predictor(provider, fit, |service, context| {
             service.metadata.validate()?;
             run_iod_prepared(
@@ -2333,14 +2461,14 @@ impl PreparedIod<'_> {
                 self.inner.groups,
                 self.inner.prepared_groups,
             )
+            .map(WorkingBatchResult::finish)
         })
     }
 }
 
-/// Canonical batch IOD over deterministic first-appearance association groups.
-pub fn run_iod<S: OdPropagatorSource + ?Sized>(
+fn run_iod_with_source<S: OdPropagatorSource + ?Sized>(
     input: &AssociatedObservations,
-    config: &OdConfig,
+    config: &IodRunConfig,
     source: &S,
 ) -> Result<OdBatchResult, OdBatchError> {
     match prepare_iod(input, config)? {
@@ -2351,17 +2479,26 @@ pub fn run_iod<S: OdPropagatorSource + ?Sized>(
     }
 }
 
+/// Canonical batch IOD over deterministic first-appearance association groups.
+pub fn run_iod(
+    input: &AssociatedObservations,
+    config: &IodRunConfig,
+    provider: &OdPropagator<'_>,
+) -> Result<OdBatchResult, OdBatchError> {
+    run_iod_with_source(input, config, provider)
+}
+
 fn run_iod_prepared(
     input: &AssociatedObservations,
-    config: &OdConfig,
+    config: &IodRunConfig,
     service: &PredictionService<'_>,
     context: &OdExecutionContext<'_>,
     groups: Vec<AssociationGroup>,
     prepared_groups: Vec<(PreparedObservations, ObserverBatch)>,
-) -> Result<OdBatchResult, OdBatchError> {
-    let configuration = CanonicalConfiguration::from_od(config)?;
+) -> Result<WorkingBatchResult, OdBatchError> {
+    let configuration = CanonicalConfiguration::from_iod(config)?;
     let config_sha = config.configuration_sha256();
-    let mut output = OdBatchResult {
+    let mut output = WorkingBatchResult {
         groups: Vec::with_capacity(groups.len()),
         providers: OdStageProviders {
             iod: Some(service.metadata.clone()),
@@ -2384,7 +2521,7 @@ fn run_iod_prepared(
             service.predictor,
             &prepared,
             &observers,
-            config,
+            config.stage(),
             context.time_provider,
             context.translation_provider,
         );
@@ -2429,7 +2566,7 @@ fn run_iod_prepared(
                         &outlier,
                     )
                 });
-                output.groups.push(OdGroupResult {
+                output.groups.push(WorkingGroupResult {
                     group_id: group.group_id,
                     orbit_id,
                     row_indices: group.source_indices,
@@ -2451,7 +2588,7 @@ fn run_iod_prepared(
                     &error,
                     group.source_indices.len(),
                 );
-                output.groups.push(OdGroupResult {
+                output.groups.push(WorkingGroupResult {
                     group_id: group.group_id,
                     orbit_id,
                     row_indices: group.source_indices,
@@ -2472,7 +2609,7 @@ fn run_iod_prepared(
 
 /// Validated, transformed exact IOD-plus-refinement input.
 struct PreparedOd<'a> {
-    inner: PreparedAssociatedBatch<'a>,
+    inner: PreparedAssociatedBatch<'a, OdConfig>,
 }
 
 /// Perform every provider-independent `run_od` check and transform exactly once.
@@ -2480,16 +2617,21 @@ fn prepare_od<'a>(
     input: &'a AssociatedObservations,
     config: &OdConfig,
 ) -> Result<BatchPreparation<PreparedOd<'a>>, OdBatchError> {
-    Ok(match prepare_associated_batch(input, config)? {
-        Some(inner) => BatchPreparation::Ready(PreparedOd { inner }),
-        None => BatchPreparation::Empty,
-    })
+    config
+        .validate()
+        .map_err(|message| OdBatchError::new(OdBatchErrorCode::InvalidConfiguration, message))?;
+    Ok(
+        match prepare_associated_batch(input, config, config.observation_pipeline())? {
+            Some(inner) => BatchPreparation::Ready(PreparedOd { inner }),
+            None => BatchPreparation::Empty,
+        },
+    )
 }
 
 impl PreparedOd<'_> {
     /// Execute the prepared exact composition with one actual backend.
     fn execute(self, provider: &OdPropagator<'_>) -> Result<OdBatchResult, OdBatchError> {
-        let iod_fit = *self.inner.config.for_iod().correction_fit();
+        let iod_fit = *self.inner.config.iod_stage().correction_fit();
         let refinement = *self.inner.config.for_refinement().refinement();
         let refinement_fit = match refinement {
             adam_core_rs_coords::RefinementConfig::WorstResidual(value) => value.fit,
@@ -2506,8 +2648,7 @@ impl PreparedOd<'_> {
     }
 }
 
-/// Canonical exact composition: one preparation, IOD, then refinement.
-pub fn run_od<S: OdPropagatorSource + ?Sized>(
+fn run_od_with_source<S: OdPropagatorSource + ?Sized>(
     input: &AssociatedObservations,
     config: &OdConfig,
     source: &S,
@@ -2520,8 +2661,17 @@ pub fn run_od<S: OdPropagatorSource + ?Sized>(
     }
 }
 
+/// Canonical exact composition: one preparation, IOD, then refinement.
+pub fn run_od(
+    input: &AssociatedObservations,
+    config: &OdConfig,
+    provider: &OdPropagator<'_>,
+) -> Result<OdBatchResult, OdBatchError> {
+    run_od_with_source(input, config, provider)
+}
+
 fn run_od_prepared(
-    prepared: PreparedAssociatedBatch<'_>,
+    prepared: PreparedAssociatedBatch<'_, OdConfig>,
     iod_service: &PredictionService<'_>,
     refinement_service: &PredictionService<'_>,
     context: &OdExecutionContext<'_>,
@@ -2535,13 +2685,14 @@ fn run_od_prepared(
     iod_service.metadata.validate()?;
     refinement_service.metadata.validate()?;
     let configuration = CanonicalConfiguration::from_od(&config)?;
+    let iod_config = config.for_iod();
     let refinement_observers = prepared_groups
         .iter()
         .map(|(_, observers)| observers.clone())
         .collect::<Vec<_>>();
     let mut output = run_iod_prepared(
         input,
-        &config,
+        &iod_config,
         iod_service,
         context,
         groups,
@@ -2566,7 +2717,7 @@ fn run_od_prepared(
             &seed,
             &group.prepared,
             &observers,
-            &config,
+            &config.for_refinement(),
             context.time_provider,
             context.translation_provider,
         ) {
@@ -2639,7 +2790,7 @@ fn run_od_prepared(
             Err(error) => return Err(error.into()),
         }
     }
-    Ok(output)
+    Ok(output.finish())
 }
 
 fn materialized_iod_orbit(
@@ -2949,6 +3100,18 @@ fn validate_iod_seed_provenance(row: usize, provenance: &OdProvenance) -> Result
     if provenance.route != OdRoute::RunIod {
         return Ok(());
     }
+    if provenance
+        .configuration
+        .value
+        .get("schema")
+        .and_then(Value::as_str)
+        != Some("adam-core-iod-run-config/v1")
+    {
+        return Err(OdBatchError::new(
+            OdBatchErrorCode::InvalidProvenance,
+            format!("seed IOD configuration at orbit row {row} is not a canonical IOD-stage configuration"),
+        ));
+    }
     provenance
         .configuration
         .declared_science_sha256()
@@ -3084,15 +3247,6 @@ fn prepare_refinement<'a>(
             .as_ref()
             .expect("validated provenance");
         if seed_provenance.route == OdRoute::RunIod {
-            if seed_provenance.configuration.refinement_value() != Some(&config.canonical_value()) {
-                return Err(OdBatchError::new(
-                    OdBatchErrorCode::InvalidProvenance,
-                    format!(
-                        "seed IOD refinement configuration at orbit row {} does not match the requested refinement",
-                        group.orbit_index
-                    ),
-                ));
-            }
             let actual = group_input_fingerprint(
                 group_id,
                 &input.observations.source,
@@ -3134,8 +3288,7 @@ impl PreparedRefinement<'_> {
     }
 }
 
-/// Refine explicit orbit/member groups using persisted prepared astrometry.
-pub fn refine<S: OdPropagatorSource + ?Sized>(
+fn refine_with_source<S: OdPropagatorSource + ?Sized>(
     input: &MemberedOrbits,
     config: &RefinementRunConfig,
     source: &S,
@@ -3146,6 +3299,15 @@ pub fn refine<S: OdPropagatorSource + ?Sized>(
             source.with_propagator(|provider| prepared.execute(provider))
         }
     }
+}
+
+/// Refine explicit orbit/member groups using persisted prepared astrometry.
+pub fn refine(
+    input: &MemberedOrbits,
+    config: &RefinementRunConfig,
+    provider: &OdPropagator<'_>,
+) -> Result<OdBatchResult, OdBatchError> {
+    refine_with_source(input, config, provider)
 }
 
 fn refine_prepared(
@@ -3162,7 +3324,7 @@ fn refine_prepared(
     service.metadata.validate()?;
     let configuration = CanonicalConfiguration::from_refinement(config)?;
     let refinement = *config.refinement();
-    let mut output = OdBatchResult {
+    let mut output = WorkingBatchResult {
         groups: Vec::with_capacity(groups.len()),
         providers: OdStageProviders {
             refinement: Some(service.metadata.clone()),
@@ -3194,7 +3356,7 @@ fn refine_prepared(
                     OdRoute::Refine
                 };
                 let effective_configuration = if effective_route == OdRoute::RunOd {
-                    seed_provenance.configuration.clone()
+                    CanonicalConfiguration::compose_od(&seed_provenance.configuration, config)?
                 } else {
                     configuration.clone()
                 };
@@ -3248,7 +3410,7 @@ fn refine_prepared(
                     &input.observations,
                     &outlier,
                 );
-                output.groups.push(OdGroupResult {
+                output.groups.push(WorkingGroupResult {
                     group_id: group_id.clone(),
                     orbit_id: group.orbit_id.clone(),
                     row_indices: group.source_indices,
@@ -3284,7 +3446,7 @@ fn refine_prepared(
                     &error,
                     group.source_indices.len(),
                 );
-                output.groups.push(OdGroupResult {
+                output.groups.push(WorkingGroupResult {
                     group_id,
                     orbit_id: group.orbit_id,
                     row_indices: group.source_indices,
@@ -3300,20 +3462,20 @@ fn refine_prepared(
             Err(error) => return Err(error.into()),
         }
     }
-    Ok(output)
+    Ok(output.finish())
 }
 
 /// Validated evaluation input that owns the exact checked configuration.
 struct PreparedEvaluation<'a> {
     inner: PreparedMemberBatch<'a>,
-    config: OdConfig,
+    config: EvaluationConfig,
 }
 
 /// Validate persisted members and evaluation configuration before acquiring a
 /// propagation backend.
 fn prepare_evaluation<'a>(
     input: &'a MemberedOrbits,
-    config: &OdConfig,
+    config: &EvaluationConfig,
 ) -> Result<BatchPreparation<PreparedEvaluation<'a>>, OdBatchError> {
     config
         .validate()
@@ -3321,7 +3483,7 @@ fn prepare_evaluation<'a>(
     Ok(match prepare_member_batch(input, true)? {
         Some(inner) => BatchPreparation::Ready(PreparedEvaluation {
             inner,
-            config: config.clone(),
+            config: *config,
         }),
         None => BatchPreparation::Empty,
     })
@@ -3330,21 +3492,16 @@ fn prepare_evaluation<'a>(
 impl PreparedEvaluation<'_> {
     /// Execute using stage settings and identity derived from `provider`.
     fn execute(self, provider: &OdPropagator<'_>) -> Result<OdBatchResult, OdBatchError> {
-        let refinement = *self.config.for_refinement().refinement();
-        let fit = match refinement {
-            adam_core_rs_coords::RefinementConfig::WorstResidual(value) => value.fit,
-            adam_core_rs_coords::RefinementConfig::Cmc2003(value) => value.fit,
-        };
+        let fit = *self.config.prediction_fit();
         with_stage_predictor(provider, fit, |service, _context| {
             evaluate_prepared(self.inner, &self.config, service)
         })
     }
 }
 
-/// Evaluate explicit orbit/member groups without changing their states.
-pub fn evaluate_orbits<S: OdPropagatorSource + ?Sized>(
+fn evaluate_orbits_with_source<S: OdPropagatorSource + ?Sized>(
     input: &MemberedOrbits,
-    config: &OdConfig,
+    config: &EvaluationConfig,
     source: &S,
 ) -> Result<OdBatchResult, OdBatchError> {
     match prepare_evaluation(input, config)? {
@@ -3355,9 +3512,18 @@ pub fn evaluate_orbits<S: OdPropagatorSource + ?Sized>(
     }
 }
 
+/// Evaluate explicit orbit/member groups without changing their states.
+pub fn evaluate_orbits(
+    input: &MemberedOrbits,
+    config: &EvaluationConfig,
+    provider: &OdPropagator<'_>,
+) -> Result<OdBatchResult, OdBatchError> {
+    evaluate_orbits_with_source(input, config, provider)
+}
+
 fn evaluate_prepared(
     prepared: PreparedMemberBatch<'_>,
-    config: &OdConfig,
+    config: &EvaluationConfig,
     service: &PredictionService<'_>,
 ) -> Result<OdBatchResult, OdBatchError> {
     let PreparedMemberBatch {
@@ -3366,9 +3532,9 @@ fn evaluate_prepared(
         prepared_groups,
     } = prepared;
     service.metadata.validate()?;
-    let configuration = CanonicalConfiguration::from_od(config)?;
-    let parameters = config.for_evaluation().covariance_dimension() as i64;
-    let mut output = OdBatchResult {
+    let configuration = CanonicalConfiguration::from_evaluation(config)?;
+    let parameters = config.covariance_dimension() as i64;
+    let mut output = WorkingBatchResult {
         groups: Vec::with_capacity(groups.len()),
         providers: OdStageProviders {
             evaluation: Some(service.metadata.clone()),
@@ -3435,7 +3601,7 @@ fn evaluate_prepared(
                     &input.observations,
                     &ignore,
                 );
-                output.groups.push(OdGroupResult {
+                output.groups.push(WorkingGroupResult {
                     group_id: group_id.clone(),
                     orbit_id: group.orbit_id.clone(),
                     row_indices: group.source_indices,
@@ -3465,7 +3631,7 @@ fn evaluate_prepared(
                     &error,
                     group.source_indices.len(),
                 );
-                output.groups.push(OdGroupResult {
+                output.groups.push(WorkingGroupResult {
                     group_id,
                     orbit_id: group.orbit_id,
                     row_indices: group.source_indices,
@@ -3481,7 +3647,72 @@ fn evaluate_prepared(
             Err(error) => return Err(error.into()),
         }
     }
-    Ok(output)
+    Ok(output.finish())
+}
+
+/// Feature-gated deferred acquisition bridge used only by `adam_core_py`.
+///
+/// It is excluded from the ordinary Rust API and delegates every scientific
+/// operation to the same private preparation/execution implementation as the
+/// four primary workflows.
+#[cfg(feature = "python-bindings")]
+#[doc(hidden)]
+pub mod python_bindings {
+    use super::*;
+
+    pub trait ProviderSource {
+        fn with_propagator<R>(
+            &self,
+            operation: impl for<'provider> FnOnce(
+                &'provider OdPropagator<'provider>,
+            ) -> Result<R, OdBatchError>,
+        ) -> Result<R, OdBatchError>;
+    }
+
+    struct Adapter<'a, S: ?Sized>(&'a S);
+
+    impl<S: ProviderSource + ?Sized> super::OdPropagatorSource for Adapter<'_, S> {
+        fn with_propagator<R>(
+            &self,
+            operation: impl for<'provider> FnOnce(
+                &'provider OdPropagator<'provider>,
+            ) -> Result<R, OdBatchError>,
+        ) -> Result<R, OdBatchError> {
+            self.0.with_propagator(operation)
+        }
+    }
+
+    pub fn run_iod<S: ProviderSource + ?Sized>(
+        input: &AssociatedObservations,
+        config: &IodRunConfig,
+        source: &S,
+    ) -> Result<OdBatchResult, OdBatchError> {
+        super::run_iod_with_source(input, config, &Adapter(source))
+    }
+
+    pub fn run_od<S: ProviderSource + ?Sized>(
+        input: &AssociatedObservations,
+        config: &OdConfig,
+        source: &S,
+    ) -> Result<OdBatchResult, OdBatchError> {
+        super::run_od_with_source(input, config, &Adapter(source))
+    }
+
+    pub fn refine<S: ProviderSource + ?Sized>(
+        input: &MemberedOrbits,
+        config: &RefinementRunConfig,
+        source: &S,
+    ) -> Result<OdBatchResult, OdBatchError> {
+        super::refine_with_source(input, config, &Adapter(source))
+    }
+
+    pub fn evaluate_orbits<S: ProviderSource + ?Sized>(
+        input: &MemberedOrbits,
+        config: &EvaluationConfig,
+        source: &S,
+    ) -> Result<OdBatchResult, OdBatchError> {
+        super::evaluate_orbits_with_source(input, config, &Adapter(source))
+    }
 }
 
 #[cfg(test)]
@@ -3538,7 +3769,7 @@ mod tests {
     fn explicit_config() -> OdConfig {
         OdConfig::explicit(
             ObservationPipeline::as_supplied(),
-            IodRunConfig::new(
+            IodStageConfig::new(
                 IodConfig {
                     max_triplets: Some(3),
                     rchi2_threshold: 50.0,
@@ -3548,7 +3779,6 @@ mod tests {
             )
             .expect("IOD config"),
             RefinementRunConfig::core_v1(),
-            EvaluationConfig::six_dimensional(),
         )
         .expect("explicit OD config")
     }
@@ -3947,7 +4177,7 @@ mod tests {
             },
         };
         let provider = OdPropagator::two_body();
-        assert!(run_iod(&associated, &config, &provider)
+        assert!(run_iod(&associated, &config.for_iod(), &provider)
             .expect("empty IOD")
             .is_empty());
         assert!(run_od(&associated, &config, &provider)
@@ -3957,9 +4187,11 @@ mod tests {
         assert!(refine(&membered, &config.for_refinement(), &provider)
             .expect("empty refinement")
             .is_empty());
-        assert!(evaluate_orbits(&membered, &config, &provider)
-            .expect("empty evaluation")
-            .is_empty());
+        assert!(
+            evaluate_orbits(&membered, &EvaluationConfig::core_v1(), &provider)
+                .expect("empty evaluation")
+                .is_empty()
+        );
     }
 
     #[test]
@@ -3986,7 +4218,7 @@ mod tests {
         };
         let config = explicit_config();
         let provider = OdPropagator::two_body();
-        let iod = run_iod(&input, &config, &provider).expect("scientific IOD failures");
+        let iod = run_iod(&input, &config.for_iod(), &provider).expect("scientific IOD failures");
         assert_eq!(
             iod.groups
                 .iter()
@@ -3996,20 +4228,21 @@ mod tests {
         );
         assert_eq!(iod.groups[0].row_indices, [0, 1, 2]);
         assert_eq!(iod.groups[1].row_indices, [1, 2]);
-        assert!(iod
-            .groups
-            .iter()
-            .all(|group| group.failure.as_ref().is_some_and(|failure| {
+        assert!(iod.groups.iter().all(|group| {
+            iod.group_failure(group).is_some_and(|failure| {
                 failure.stage == OdStage::Iod && failure.code == OdGroupFailureCode::NoSolution
-            })));
+            })
+        }));
         let composed = run_od(&input, &config, &provider).expect("composed scientific failures");
         assert_eq!(composed.groups.len(), iod.groups.len());
-        for (iod, composed) in iod.groups.iter().zip(&composed.groups) {
-            assert_eq!(composed.group_id, iod.group_id);
-            assert_eq!(composed.row_indices, iod.row_indices);
+        for (iod_group, composed_group) in iod.groups.iter().zip(&composed.groups) {
+            assert_eq!(composed_group.group_id, iod_group.group_id);
+            assert_eq!(composed_group.row_indices, iod_group.row_indices);
             assert_eq!(
-                composed.failure.as_ref().map(|failure| &failure.code),
-                iod.failure.as_ref().map(|failure| &failure.code)
+                composed
+                    .group_failure(composed_group)
+                    .map(|failure| &failure.code),
+                iod.group_failure(iod_group).map(|failure| &failure.code)
             );
         }
     }
@@ -4043,7 +4276,7 @@ mod tests {
         };
         let config = explicit_config();
         let provider = OdPropagator::two_body();
-        let iod = run_iod(&input, &config, &provider).expect("two-group scientific IOD");
+        let iod = run_iod(&input, &config.for_iod(), &provider).expect("two-group scientific IOD");
         assert_eq!(iod.fitted_orbits().count(), 2);
         assert!(iod.failures().next().is_none());
 
@@ -4053,10 +4286,11 @@ mod tests {
         let external_backend = unsafe { ExternalPropagator::from_raw(external_table.table()) }
             .expect("reference external backend");
         let external_provider = OdPropagator::external(&external_backend);
-        let external_iod = run_iod(&input, &config, &external_provider).expect("external IOD");
+        let external_iod =
+            run_iod(&input, &config.for_iod(), &external_provider).expect("external IOD");
         assert!(
             external_iod
-                .providers
+                .providers()
                 .iod
                 .as_ref()
                 .expect("external metadata")
@@ -4076,14 +4310,19 @@ mod tests {
         .expect("external composed OD");
         for (fused, composed) in external_fused.groups.iter().zip(&external_composed.groups) {
             assert_eq!(
-                fused.orbit.as_ref().expect("external fused orbit").orbit,
-                composed
-                    .orbit
-                    .as_ref()
+                external_fused
+                    .group_orbit(fused)
+                    .expect("external fused orbit")
+                    .orbit,
+                external_composed
+                    .group_orbit(composed)
                     .expect("external composed orbit")
                     .orbit
             );
-            assert_eq!(fused.members.len(), composed.members.len());
+            assert_eq!(
+                external_fused.group_members(fused).len(),
+                external_composed.group_members(composed).len()
+            );
         }
 
         let original_input = iod
@@ -4138,14 +4377,14 @@ mod tests {
         );
 
         let source = CountingSource::new();
-        let refined = refine(&relabelled, &config.for_refinement(), &source)
+        let refined = refine_with_source(&relabelled, &config.for_refinement(), &source)
             .expect("refine directly relabelled seed");
         assert_eq!(source.calls(), 1);
         assert_eq!(refined.groups[0].group_id, "multi-one");
         assert_eq!(refined.groups[0].orbit_id(), "user-visible-label");
         assert_eq!(refined.groups[1].group_id, "multi-two");
         assert_eq!(refined.groups[1].orbit_id(), original_ids[1]);
-        let evaluated = evaluate_orbits(&relabelled, &config, &provider)
+        let evaluated = evaluate_orbits(&relabelled, &EvaluationConfig::core_v1(), &provider)
             .expect("evaluate directly relabelled seed");
         assert_eq!(evaluated.groups[0].orbit_id(), "user-visible-label");
         assert_eq!(evaluated.groups[1].orbit_id(), original_ids[1]);
@@ -4153,15 +4392,20 @@ mod tests {
         let fused = run_od(&input, &config, &provider).expect("fused OD");
         let composed =
             refine(&original_input, &config.for_refinement(), &provider).expect("composed OD");
-        for (fused, composed) in fused.groups.iter().zip(&composed.groups) {
-            let fused_orbit = fused.orbit.as_ref().expect("fused orbit");
-            let composed_orbit = composed.orbit.as_ref().expect("composed orbit");
+        for (fused_group, composed_group) in fused.groups.iter().zip(&composed.groups) {
+            let fused_orbit = fused.group_orbit(fused_group).expect("fused orbit");
+            let composed_orbit = composed
+                .group_orbit(composed_group)
+                .expect("composed orbit");
             assert_eq!(fused_orbit.orbit, composed_orbit.orbit);
             assert_eq!(
                 fused_orbit.provenance.provenance_fingerprint,
                 composed_orbit.provenance.provenance_fingerprint
             );
-            assert_eq!(fused.members.len(), composed.members.len());
+            assert_eq!(
+                fused.group_members(fused_group).len(),
+                composed.group_members(composed_group).len()
+            );
         }
 
         if let Some(bias) = std::env::var_os("ADAM_CORE_EFCC18_BIAS") {
@@ -4170,7 +4414,7 @@ mod tests {
             let profile = profiles::CORE_OD_V1
                 .bind(&bindings)
                 .expect("CORE_OD_V1 binding");
-            let profile_iod = run_iod(&input, &profile, &provider).expect("profile IOD");
+            let profile_iod = run_iod(&input, &profile.for_iod(), &provider).expect("profile IOD");
             let profile_fused = run_od(&input, &profile, &provider).expect("profile fused OD");
             let profile_input = profile_iod
                 .to_membered_orbits(&observations)
@@ -4180,10 +4424,15 @@ mod tests {
                 .expect("profile composed OD");
             for (fused, composed) in profile_fused.groups.iter().zip(&profile_composed.groups) {
                 assert_eq!(
-                    fused.orbit.as_ref().map(|value| &value.orbit),
-                    composed.orbit.as_ref().map(|value| &value.orbit)
+                    profile_fused.group_orbit(fused).map(|value| &value.orbit),
+                    profile_composed
+                        .group_orbit(composed)
+                        .map(|value| &value.orbit)
                 );
-                assert_eq!(fused.members.len(), composed.members.len());
+                assert_eq!(
+                    profile_fused.group_members(fused).len(),
+                    profile_composed.group_members(composed).len()
+                );
             }
         }
 
@@ -4206,7 +4455,7 @@ mod tests {
         ] {
             let source = CountingSource::new();
             assert_eq!(
-                refine(&invalid, &config.for_refinement(), &source)
+                refine_with_source(&invalid, &config.for_refinement(), &source)
                     .expect_err("invalid relational labels")
                     .code,
                 OdBatchErrorCode::InvalidInput
@@ -4260,25 +4509,21 @@ mod tests {
 
     #[test]
     fn iod_seed_provenance_requires_declared_science_identity() {
-        let mut value = json!({"iod": {}, "refinement": {}, "evaluation": {}});
-        let science = CanonicalConfiguration::from_value(value.clone())
-            .expect("configuration")
-            .science_sha256
-            .clone();
-        value
-            .as_object_mut()
-            .expect("configuration object")
-            .insert("configuration_sha256".to_string(), Value::String(science));
+        let configuration = explicit_config().for_iod();
         let mut provenance = run_od_provenance();
         provenance.route = OdRoute::RunIod;
         provenance.configuration =
-            CanonicalConfiguration::from_value(value).expect("declared configuration");
+            CanonicalConfiguration::from_iod(&configuration).expect("declared configuration");
         validate_iod_seed_provenance(0, &provenance).expect("declared science identity is valid");
 
-        provenance.configuration = CanonicalConfiguration::from_value(
-            json!({"iod": {}, "refinement": {}, "evaluation": {}}),
-        )
-        .expect("configuration without declared digest");
+        let mut value: Value =
+            serde_json::from_str(&configuration.provenance_json()).expect("configuration JSON");
+        value
+            .as_object_mut()
+            .expect("configuration object")
+            .remove("configuration_sha256");
+        provenance.configuration = CanonicalConfiguration::from_value(value)
+            .expect("configuration without declared digest");
         assert_eq!(
             validate_iod_seed_provenance(0, &provenance)
                 .expect_err("science digest remains mandatory")
@@ -4317,7 +4562,7 @@ mod tests {
             &observations.source.observatory_code,
             &observations.source.filter,
             &observations.source.astcat,
-            &config,
+            config.observation_pipeline(),
             &ErfaTimeProvider,
         )
         .expect("prepared observations");
@@ -4334,37 +4579,41 @@ mod tests {
         provenance.provenance_fingerprint = provenance_consistency_digest(&provenance);
         let original = AstrometryRecord::from_snapshot(&prepared.original, 0);
         let used = AstrometryRecord::from_snapshot(&prepared.used, 0);
-        let group = OdGroupResult {
-            group_id: "group".to_string(),
-            orbit_id: "fit".to_string(),
-            row_indices: vec![0],
-            input_orbit_index: None,
-            member_indices: Vec::new(),
-            prepared,
-            orbit: Some(FittedOrbitRecord {
-                orbit: orbit.clone(),
+        let result = WorkingBatchResult {
+            groups: vec![WorkingGroupResult {
                 group_id: "group".to_string(),
-                input_orbit_index: None,
-                iod: None,
-                refined: None,
-                evaluation: None,
-                provenance,
-            }),
-            members: vec![FittedOrbitMemberRecord {
                 orbit_id: "fit".to_string(),
-                observation_id: "obs-0".to_string(),
-                source_index: 0,
-                input_member_index: None,
-                input_fingerprint: "4".repeat(64),
-                membership_fingerprint: "5".repeat(64),
-                original,
-                used,
-                outlier: false,
+                row_indices: vec![0],
+                input_orbit_index: None,
+                member_indices: Vec::new(),
+                prepared,
+                orbit: Some(FittedOrbitRecord {
+                    orbit: orbit.clone(),
+                    group_id: "group".to_string(),
+                    input_orbit_index: None,
+                    iod: None,
+                    refined: None,
+                    evaluation: None,
+                    provenance,
+                }),
+                members: vec![FittedOrbitMemberRecord {
+                    orbit_id: "fit".to_string(),
+                    observation_id: "obs-0".to_string(),
+                    source_index: 0,
+                    input_member_index: None,
+                    input_fingerprint: "4".repeat(64),
+                    membership_fingerprint: "5".repeat(64),
+                    original,
+                    used,
+                    outlier: false,
+                }],
+                failure: None,
+                iod: None,
             }],
-            failure: None,
-            iod: None,
-        };
-        let converted = group
+            providers: OdStageProviders::default(),
+        }
+        .finish();
+        let converted = result
             .to_membered_orbits(&observations)
             .expect("conversion")
             .expect("successful group");

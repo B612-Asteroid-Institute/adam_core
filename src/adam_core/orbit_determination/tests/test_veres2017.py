@@ -3,8 +3,7 @@
 import pytest
 
 from ..config import (
-    EvaluationConfig,
-    IodRunConfig,
+    IodStageConfig,
     OdConfig,
     RefinementRunConfig,
     ResourceBindings,
@@ -22,9 +21,8 @@ def test_fill_transform_requires_versioned_station_catalog_resource() -> None:
             observation_pipeline=ObservationPipeline.ordered(
                 [FillMissingAstrometricUncertainty()]
             ),
-            iod=IodRunConfig.core_v1(),
+            iod=IodStageConfig.core_v1(),
             refinement=RefinementRunConfig.core_v1(),
-            evaluation=EvaluationConfig.six_dimensional(),
             resources=ResourceBindings({}),
         )
 

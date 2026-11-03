@@ -3,10 +3,10 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use adam_core_rs_coords::{
-    EvaluationConfig, IodRunConfig, ObservationPipeline, ObservationTransform, OdConfig,
-    OdConfigError, OdProfile, RefinementRunConfig, ResidualCovarianceOperation, ResourceBindings,
-    ResourceRequirement, ResourceSlot, ASTEROID_INSTITUTE_OD_V1, CORE_OD_V1, EFCC18_BIAS_RESOURCE,
-    V2_FULL_RESOURCE, V2_SIGMA_FILL_RESOURCE,
+    EvaluationConfig, IodRunConfig, IodStageConfig, ObservationPipeline, ObservationTransform,
+    OdConfig, OdConfigError, OdProfile, RefinementRunConfig, ResidualCovarianceOperation,
+    ResourceBindings, ResourceRequirement, ResourceSlot, ASTEROID_INSTITUTE_OD_V1, CORE_OD_V1,
+    EFCC18_BIAS_RESOURCE, V2_FULL_RESOURCE, V2_SIGMA_FILL_RESOURCE,
 };
 use pyo3::exceptions::{PyTypeError, PyValueError};
 use pyo3::prelude::*;
@@ -112,6 +112,31 @@ impl PyOdConfig {
     }
 }
 
+#[pyclass(name = "IodStageConfig", frozen)]
+#[derive(Clone)]
+pub(crate) struct PyIodStageConfig {
+    pub(crate) inner: IodStageConfig,
+}
+
+#[pymethods]
+impl PyIodStageConfig {
+    #[staticmethod]
+    fn core_v1() -> Self {
+        Self {
+            inner: IodStageConfig::core_v1(),
+        }
+    }
+
+    #[getter]
+    fn canonical_json(&self) -> String {
+        self.inner.canonical_json()
+    }
+
+    fn validate(&self) -> PyResult<()> {
+        self.inner.validate().map_err(value_error)
+    }
+}
+
 #[pyclass(name = "IodRunConfig", frozen)]
 #[derive(Clone)]
 pub(crate) struct PyIodRunConfig {
@@ -120,16 +145,16 @@ pub(crate) struct PyIodRunConfig {
 
 #[pymethods]
 impl PyIodRunConfig {
-    #[staticmethod]
-    fn core_v1() -> Self {
-        Self {
-            inner: IodRunConfig::core_v1(),
-        }
+    #[getter]
+    fn profile_name(&self) -> Option<String> {
+        self.inner
+            .profile_identity()
+            .map(|profile| profile.name.to_string())
     }
 
     #[getter]
-    fn canonical_json(&self) -> String {
-        self.inner.canonical_json()
+    fn provenance_json(&self) -> String {
+        self.inner.provenance_json()
     }
 
     fn validate(&self) -> PyResult<()> {
@@ -165,21 +190,26 @@ impl PyRefinementRunConfig {
 #[pyclass(name = "EvaluationConfig", frozen)]
 #[derive(Clone, Copy)]
 pub(crate) struct PyEvaluationConfig {
-    inner: EvaluationConfig,
+    pub(crate) inner: EvaluationConfig,
 }
 
 #[pymethods]
 impl PyEvaluationConfig {
     #[staticmethod]
-    fn six_dimensional() -> Self {
+    fn core_v1() -> Self {
         Self {
-            inner: EvaluationConfig::six_dimensional(),
+            inner: EvaluationConfig::core_v1(),
         }
     }
 
     #[getter]
     fn covariance_dimension(&self) -> usize {
         self.inner.covariance_dimension()
+    }
+
+    #[getter]
+    fn canonical_json(&self) -> String {
+        self.inner.canonical_json()
     }
 
     fn validate(&self) -> PyResult<()> {
@@ -339,35 +369,39 @@ fn parse_definitions(raw: &str) -> PyResult<Vec<ObservationTransform>> {
         .collect()
 }
 
-#[pyfunction]
-#[pyo3(signature = (transforms_json, resource_paths, iod, refinement, evaluation))]
-fn explicit_od_config(
+fn explicit_pipeline(
     transforms_json: Option<&str>,
     resource_paths: BTreeMap<String, String>,
-    iod: PyRef<'_, PyIodRunConfig>,
-    refinement: PyRef<'_, PyRefinementRunConfig>,
-    evaluation: PyRef<'_, PyEvaluationConfig>,
-) -> PyResult<PyOdConfig> {
+) -> PyResult<ObservationPipeline> {
     let resource_bindings = bindings(resource_paths)?;
-    let pipeline = match transforms_json {
+    match transforms_json {
         None => {
             if resource_bindings.slots().next().is_some() {
                 return Err(OdResourceValidationError::new_err(
                     "as-supplied pipeline does not use resource bindings",
                 ));
             }
-            ObservationPipeline::as_supplied()
+            Ok(ObservationPipeline::as_supplied())
         }
         Some(raw) => {
             ObservationPipeline::bind_explicit(parse_definitions(raw)?, &resource_bindings)
-                .map_err(od_config_error)?
+                .map_err(od_config_error)
         }
-    };
+    }
+}
+
+#[pyfunction]
+#[pyo3(signature = (transforms_json, resource_paths, iod, refinement))]
+fn explicit_od_config(
+    transforms_json: Option<&str>,
+    resource_paths: BTreeMap<String, String>,
+    iod: PyRef<'_, PyIodStageConfig>,
+    refinement: PyRef<'_, PyRefinementRunConfig>,
+) -> PyResult<PyOdConfig> {
     let config = OdConfig::explicit(
-        pipeline,
+        explicit_pipeline(transforms_json, resource_paths)?,
         iod.inner.clone(),
         refinement.inner,
-        evaluation.inner,
     )
     .map_err(od_config_error)?;
     Ok(PyOdConfig {
@@ -376,9 +410,24 @@ fn explicit_od_config(
 }
 
 #[pyfunction]
-fn iod_run_config_from_json(raw: &str) -> PyResult<PyIodRunConfig> {
-    Ok(PyIodRunConfig {
-        inner: IodRunConfig::from_json(raw).map_err(OdConfigurationError::new_err)?,
+#[pyo3(signature = (transforms_json, resource_paths, iod))]
+fn explicit_iod_run_config(
+    transforms_json: Option<&str>,
+    resource_paths: BTreeMap<String, String>,
+    iod: PyRef<'_, PyIodStageConfig>,
+) -> PyResult<PyIodRunConfig> {
+    let config = IodRunConfig::explicit(
+        explicit_pipeline(transforms_json, resource_paths)?,
+        iod.inner.clone(),
+    )
+    .map_err(od_config_error)?;
+    Ok(PyIodRunConfig { inner: config })
+}
+
+#[pyfunction]
+fn iod_stage_config_from_json(raw: &str) -> PyResult<PyIodStageConfig> {
+    Ok(PyIodStageConfig {
+        inner: IodStageConfig::from_json(raw).map_err(OdConfigurationError::new_err)?,
     })
 }
 
@@ -390,15 +439,15 @@ fn refinement_run_config_from_json(raw: &str) -> PyResult<PyRefinementRunConfig>
 }
 
 #[pyfunction]
-fn evaluation_config(covariance_dimension: usize) -> PyResult<PyEvaluationConfig> {
+fn evaluation_config_from_json(raw: &str) -> PyResult<PyEvaluationConfig> {
     Ok(PyEvaluationConfig {
-        inner: EvaluationConfig::new(covariance_dimension)
-            .map_err(OdConfigurationError::new_err)?,
+        inner: EvaluationConfig::from_json(raw).map_err(OdConfigurationError::new_err)?,
     })
 }
 
 pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyOdConfig>()?;
+    m.add_class::<PyIodStageConfig>()?;
     m.add_class::<PyIodRunConfig>()?;
     m.add_class::<PyRefinementRunConfig>()?;
     m.add_class::<PyEvaluationConfig>()?;
@@ -406,9 +455,10 @@ pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(od_profile_requirements, m)?)?;
     m.add_function(wrap_pyfunction!(bind_od_profile, m)?)?;
     m.add_function(wrap_pyfunction!(explicit_od_config, m)?)?;
-    m.add_function(wrap_pyfunction!(iod_run_config_from_json, m)?)?;
+    m.add_function(wrap_pyfunction!(explicit_iod_run_config, m)?)?;
+    m.add_function(wrap_pyfunction!(iod_stage_config_from_json, m)?)?;
     m.add_function(wrap_pyfunction!(refinement_run_config_from_json, m)?)?;
-    m.add_function(wrap_pyfunction!(evaluation_config, m)?)?;
+    m.add_function(wrap_pyfunction!(evaluation_config_from_json, m)?)?;
     m.add(
         "OdConfigurationError",
         m.py().get_type::<OdConfigurationError>(),

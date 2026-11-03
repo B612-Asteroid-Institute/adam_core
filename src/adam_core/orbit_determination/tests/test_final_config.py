@@ -3,6 +3,7 @@ from __future__ import annotations
 import dataclasses
 import hashlib
 import importlib.metadata
+import inspect
 import json
 import sys
 import types
@@ -15,14 +16,15 @@ import adam_core.orbit_determination as od
 from adam_core import _rust_native
 from adam_core.observations import Associations, SourceCatalog
 from adam_core.orbit_determination import algorithms
+from adam_core.orbit_determination import config as config_module
+from adam_core.orbit_determination import workflows as workflows_module
 
 
 def _as_supplied() -> od.OdConfig:
     return od.OdConfig.explicit(
         observation_pipeline=od.ObservationPipeline.as_supplied(),
-        iod=od.IodRunConfig.core_v1(),
+        iod=od.IodStageConfig.core_v1(),
         refinement=od.RefinementRunConfig.core_v1(),
-        evaluation=od.EvaluationConfig.six_dimensional(),
         resources=od.ResourceBindings({}),
     )
 
@@ -42,12 +44,43 @@ def test_primary_batch_names_are_exported_without_one_group_aliases() -> None:
         assert not hasattr(algorithms, name)
 
 
-def test_iod_projection_retains_the_explicit_bound_workflow_context() -> None:
+def test_python_workflow_signatures_and_config_state_do_not_drift() -> None:
+    expected = {
+        "run_iod": ["observations", "associations", "propagator", "config"],
+        "run_od": ["observations", "associations", "propagator", "config"],
+        "refine": ["orbits", "members", "observations", "propagator", "config"],
+        "evaluate_orbits": [
+            "orbits",
+            "members",
+            "observations",
+            "propagator",
+            "config",
+        ],
+    }
+    for name, parameters in expected.items():
+        assert list(inspect.signature(getattr(od, name)).parameters) == parameters
+    assert "_workflow_native" not in inspect.getsource(config_module)
+    assert "_workflow_native" not in inspect.getsource(workflows_module)
+
+
+def test_stage_configs_are_self_contained_without_hidden_workflow_state() -> None:
     config = _as_supplied()
-    assert config.for_iod()._workflow_native is config._native
-    assert config.for_evaluation()._workflow_native is config._native
-    assert od.IodRunConfig.core_v1()._workflow_native is None
-    assert od.EvaluationConfig.six_dimensional()._workflow_native is None
+    iod = config.for_iod()
+    assert isinstance(iod, od.IodRunConfig)
+    assert iod.observation_pipeline == config.observation_pipeline
+    assert iod.iod == config.iod
+    assert iod.resources == config.resources
+    assert not hasattr(iod, "_workflow_native")
+    evaluation = config.for_evaluation()
+    assert evaluation.prediction_fit == config.refinement.refinement.fit
+    assert not hasattr(evaluation, "_workflow_native")
+
+    direct = od.IodRunConfig(
+        od.ObservationPipeline.as_supplied(),
+        od.IodStageConfig.core_v1(),
+        od.ResourceBindings({}),
+    )
+    assert direct.provenance["schema"] == "adam-core-iod-run-config/v1"
 
 
 def test_empty_batch_returns_three_typed_empty_tables_without_provider_binding() -> (
@@ -95,7 +128,7 @@ def test_removed_legacy_modules_and_native_routes_have_no_aliases() -> None:
 
 
 def test_complete_stage_configs_are_explicitly_constructible() -> None:
-    core_iod = od.IodRunConfig.core_v1()
+    core_iod = od.IodStageConfig.core_v1()
     search = dataclasses.replace(core_iod.search_correction_ranging, min_obs=7)
     two_body = dataclasses.replace(
         core_iod.candidate_correction_fit.two_body,
@@ -109,7 +142,7 @@ def test_complete_stage_configs_are_explicitly_constructible() -> None:
         f_scale=1.2,
         two_body=two_body,
     )
-    explicit_iod = od.IodRunConfig(search, fit)
+    explicit_iod = od.IodStageConfig(search, fit)
     assert explicit_iod.search_correction_ranging.min_obs == 7
     native_iod = json.loads(explicit_iod._native.canonical_json)
     assert native_iod["candidate_correction_fit"]["loss"] == "huber"
@@ -132,13 +165,15 @@ def test_complete_stage_configs_are_explicitly_constructible() -> None:
         json.loads(explicit_refinement._native.canonical_json)["method"]
         == "worst_residual"
     )
-    assert od.EvaluationConfig(6).covariance_dimension == 6
+    evaluation = od.EvaluationConfig(6, fit)
+    assert evaluation.covariance_dimension == 6
+    assert evaluation.prediction_fit == fit
     with pytest.raises(od.OdConfigurationError):
-        od.EvaluationConfig(5)
+        od.EvaluationConfig(5, fit)
 
 
 def test_core_constants_match_d21_effective_values_exactly() -> None:
-    iod = od.IodRunConfig.core_v1().candidate_correction_fit.two_body
+    iod = od.IodStageConfig.core_v1().candidate_correction_fit.two_body
     refinement = od.RefinementRunConfig.core_v1().refinement
     assert isinstance(refinement, od.Cmc2003Refinement)
     for two_body in (iod, refinement.fit.two_body):
@@ -255,9 +290,8 @@ def test_resource_errors_are_typed_aggregate_and_slot_correct(tmp_path: Path) ->
             observation_pipeline=od.ObservationPipeline.ordered(
                 [od.NightlyBatchDeweighting(4)]
             ),
-            iod=od.IodRunConfig.core_v1(),
+            iod=od.IodStageConfig.core_v1(),
             refinement=od.RefinementRunConfig.core_v1(),
-            evaluation=od.EvaluationConfig(6),
             resources=od.ResourceBindings(
                 {"efcc18_catalog_bias_table": tmp_path / "unused"}
             ),
@@ -265,9 +299,8 @@ def test_resource_errors_are_typed_aggregate_and_slot_correct(tmp_path: Path) ->
 
 
 def test_native_transform_json_is_strict() -> None:
-    iod = od.IodRunConfig.core_v1()._native
+    iod = od.IodStageConfig.core_v1()._native
     refinement = od.RefinementRunConfig.core_v1()._native
-    evaluation = od.EvaluationConfig(6)._native
     with pytest.raises(ValueError, match="exactly"):
         _rust_native.explicit_od_config(
             json.dumps(
@@ -282,7 +315,6 @@ def test_native_transform_json_is_strict() -> None:
             {},
             iod,
             refinement,
-            evaluation,
         )
     with pytest.raises(ValueError, match="exactly"):
         _rust_native.explicit_od_config(
@@ -290,5 +322,4 @@ def test_native_transform_json_is_strict() -> None:
             {},
             iod,
             refinement,
-            evaluation,
         )

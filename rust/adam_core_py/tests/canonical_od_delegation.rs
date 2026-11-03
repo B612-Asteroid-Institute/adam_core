@@ -48,7 +48,7 @@ fn canonical_bindings_only_decode_delegate_and_marshal() {
     ];
     for (name, next, workflow) in cases {
         let section = function_section(source, name, next);
-        assert!(section.contains(&format!("adam_core::od::{workflow}")));
+        assert!(section.contains(&format!("canonical_bindings::{workflow}")));
         assert!(section.contains("PyCanonicalProviderSource::new"));
         assert!(section.contains("run_canonical_workflow"));
         for forbidden in [
@@ -62,6 +62,7 @@ fn canonical_bindings_only_decode_delegate_and_marshal() {
             "prepare_refinement",
             "prepare_evaluation",
             "prepared.execute",
+            "OdPropagatorSource",
         ] {
             assert!(
                 !section.contains(forbidden),

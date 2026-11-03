@@ -3,8 +3,7 @@
 import pytest
 
 from ..config import (
-    EvaluationConfig,
-    IodRunConfig,
+    IodStageConfig,
     OdConfig,
     RefinementRunConfig,
     ResourceBindings,
@@ -21,9 +20,8 @@ def test_efcc18_requires_its_semantic_resource_slot() -> None:
             observation_pipeline=ObservationPipeline.ordered(
                 [Efcc18CatalogBiasCorrection(())]
             ),
-            iod=IodRunConfig.core_v1(),
+            iod=IodStageConfig.core_v1(),
             refinement=RefinementRunConfig.core_v1(),
-            evaluation=EvaluationConfig.six_dimensional(),
             resources=ResourceBindings({}),
         )
 

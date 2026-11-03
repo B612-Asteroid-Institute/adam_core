@@ -744,7 +744,7 @@ def test_seed_configuration_content_must_match_its_science_sha_before_provider(
     assert len(failures) == 0
 
     changed = json.loads(orbits.provenance.configuration[0].as_py())
-    changed["evaluation"]["covariance_dimension"] = 5
+    changed["iod"]["search_correction_ranging"]["min_obs"] = 5
     # Keep the stale science hash deliberately, then recompute the public,
     # unkeyed consistency digest over the altered complete configuration.
     assert (
@@ -832,7 +832,8 @@ def test_equivalent_seed_json_is_canonicalized_before_composed_provenance(
     fused = run_od(source, associations, None, config)
     _assert_exact_results(fused, composed)
     emitted = composed[0].provenance.configuration[0].as_py()
-    assert emitted == raw
+    assert emitted == fused[0].provenance.configuration[0].as_py()
+    assert emitted != raw
     assert emitted == json.dumps(json.loads(emitted), separators=(",", ":"))
 
 
