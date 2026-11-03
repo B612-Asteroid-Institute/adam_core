@@ -605,6 +605,80 @@ def test_consistently_renamed_iod_seed_is_accepted_and_preserved(
     )
 
 
+@pytest.mark.parametrize("route", ["refine", "evaluate"])
+def test_one_direct_label_edit_in_a_multi_orbit_batch_is_preserved(
+    pure_iod_orbit: PureIodOrbit, provider_counter: type[_Counter], route: str
+) -> None:
+    source, ids = _source_and_ids(pure_iod_orbit)
+    associations = Associations.from_kwargs(
+        detection_id=ids + ids,
+        object_id=["g-1"] * len(ids) + ["g-2"] * len(ids),
+    )
+    config = _config()
+    orbits, members, failures = run_iod(source, associations, None, config.for_iod())
+    assert len(failures) == 0
+    original_ids = orbits.orbit_id.to_pylist()
+    relabelled = "one-direct-edit"
+    edited_orbits = orbits.set_column(
+        "orbit_id",
+        pa.array([relabelled, original_ids[1]], type=pa.large_string()),
+    )
+    edited_member_ids = [
+        relabelled if value == original_ids[0] else value
+        for value in members.orbit_id.to_pylist()
+    ]
+    edited_members = members.set_column(
+        "orbit_id", pa.array(edited_member_ids, type=pa.large_string())
+    )
+
+    if route == "refine":
+        baseline = refine(
+            orbits, members, source, TwoBodyPropagator(), config.for_refinement()
+        )
+        edited = refine(
+            edited_orbits,
+            edited_members,
+            source,
+            TwoBodyPropagator(),
+            config.for_refinement(),
+        )
+    else:
+        baseline = evaluate_orbits(
+            orbits, members, source, TwoBodyPropagator(), config.for_evaluation()
+        )
+        edited = evaluate_orbits(
+            edited_orbits,
+            edited_members,
+            source,
+            TwoBodyPropagator(),
+            config.for_evaluation(),
+        )
+
+    baseline_orbits, baseline_members, baseline_failures = baseline
+    edited_orbits_out, edited_members_out, edited_failures = edited
+    assert len(baseline_failures) == len(edited_failures) == 0
+    assert provider_counter.calls == 2
+    assert edited_orbits_out.orbit_id.to_pylist() == [relabelled, original_ids[1]]
+    assert edited_orbits_out.object_id.to_pylist() == ["g-1", "g-2"]
+    assert edited_members_out.orbit_id.to_pylist() == edited_member_ids
+    assert (
+        edited_orbits_out.provenance.input_fingerprint.to_pylist()
+        == baseline_orbits.provenance.input_fingerprint.to_pylist()
+    )
+    assert (
+        edited_orbits_out.provenance.state_fingerprint.to_pylist()
+        == baseline_orbits.provenance.state_fingerprint.to_pylist()
+    )
+    assert (
+        edited_orbits_out.provenance.provenance_fingerprint.to_pylist()
+        == baseline_orbits.provenance.provenance_fingerprint.to_pylist()
+    )
+    assert (
+        edited_members_out.membership_fingerprint.to_pylist()
+        == baseline_members.membership_fingerprint.to_pylist()
+    )
+
+
 @pytest.mark.parametrize("mutation", ["dangling", "empty", "duplicate"])
 def test_inconsistent_or_ambiguous_orbit_labels_fail_before_provider(
     pure_iod_orbit: PureIodOrbit,

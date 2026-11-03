@@ -12,13 +12,17 @@
 //! `FittedOrbitMembers` without further computation. Driver errors map to
 //! `ValueError` (invalid input) or `RuntimeError` (backend failure).
 
-use crate::coordinates::{read_orbit_ipc, write_orbit_ipc, ErfaTimeProvider};
+use crate::coordinates::{read_orbit_ipc, write_orbit_ipc};
 use crate::od_config::{PyIodRunConfig, PyOdConfig, PyRefinementRunConfig};
-use crate::od_support::{od_error, LockingSpiceTranslation};
+use crate::od_support::od_error;
+use adam_core::od::algorithms::{
+    canonical_stage_settings, external_provider_metadata, two_body_provider_metadata,
+    ErfaTimeProvider, GlobalSpiceTranslation as LockingSpiceTranslation,
+};
 use adam_core::od::{
-    AssociatedObservations, AstrometryColumns, BatchPreparation, CoreBuildIdentity,
-    FittedOrbitMembersBatch, MemberedOrbits, OdBatchError, OdBatchResult, OdGroupResult,
-    OdObservationBatch, OdPropagator, OdProvenance, OdRoute, ProviderMetadata,
+    AssociatedObservations, AstrometryColumns, CoreBuildIdentity, FittedOrbitMembersBatch,
+    MemberedOrbits, OdBatchError, OdBatchResult, OdGroupResult, OdObservationBatch, OdPropagator,
+    OdPropagatorSource, OdProvenance, OdRoute, ProviderMetadata,
 };
 use adam_core_rs_coords::od::algorithms::{
     prepare_observations, refine_with_predictor, run_od_with_predictors, PreparedObservations,
@@ -31,8 +35,8 @@ use adam_core_rs_coords::propagation::{
     AstrometrySnapshot, BackendIdentity, Cmc2003FitConfig, CovariancePropagation, EphemerisOptions,
     EpochPolicy, ExternalPropagator, ExternalPropagatorV2, IodCandidate, IodCandidateFailure,
     IodResult, IterativeFitConfig, JacobianMethod, PropagationOptions, PropagationResultValue,
-    Propagator, RangingResult, RangingSample, RefinementConfig, TwoBodyPropagator,
-    TwoBodyPropagatorConfig, WhitenedFitConfig, WhitenedFitOutput, EXTERNAL_PROPAGATOR_CAPSULE,
+    RangingResult, RangingSample, RefinementConfig, TwoBodyPropagator, TwoBodyPropagatorConfig,
+    WhitenedFitConfig, WhitenedFitOutput, EXTERNAL_PROPAGATOR_CAPSULE,
 };
 use adam_core_rs_coords::{
     validate_loss, AssociationBatch, CoordinateBatch as DataCoordinateBatch, IntoNestedRecordBatch,
@@ -47,6 +51,7 @@ use pyo3::prelude::*;
 use pyo3::types::{PyBytes, PyCapsule, PyDict, PyList, PyTuple};
 use serde::Deserialize;
 use std::hint::black_box;
+use std::sync::Mutex;
 use std::time::Instant;
 
 fn value_error(message: impl Into<String>) -> PyErr {
@@ -196,20 +201,12 @@ fn parse_fit_settings(settings: Option<&Bound<'_, PyDict>>) -> PyResult<FitSetti
 /// from that configuration; only non-configurable OD conventions remain fixed
 /// here (UTC output, no stellar aberration, no propagated covariance).
 fn fit_settings_from_config(config: WhitenedFitConfig) -> PyResult<FitSettings> {
-    config.validate().map_err(value_error)?;
-    let mut settings = parse_fit_settings(None)?;
-    let two_body = config.two_body;
-    settings.options.lt_tol = two_body.lt_tol;
-    settings.options.max_iter = two_body.ephemeris_max_iter;
-    settings.options.tol = two_body.ephemeris_tol;
-    settings.options.max_lt_iter = two_body.max_lt_iter;
-    settings.propagator = TwoBodyPropagator::new(TwoBodyPropagatorConfig {
-        max_iter: two_body.propagation_max_iter,
-        tol: two_body.propagation_tol,
+    let runtime = canonical_stage_settings(config).map_err(batch_error)?;
+    Ok(FitSettings {
+        config,
+        options: runtime.options,
+        propagator: runtime.two_body,
     })
-    .map_err(|err| value_error(format!("invalid typed propagator config: {err}")))?;
-    settings.config = config;
-    Ok(settings)
 }
 
 /// The refinement defaults of the Rust config types: ``fit``
@@ -390,59 +387,6 @@ impl PySource {
     }
 }
 
-fn external_provider_metadata(propagator: &ExternalPropagator) -> ProviderMetadata {
-    let identity = propagator.identity();
-    ProviderMetadata {
-        name: identity.name.clone(),
-        version: identity.version.clone(),
-        abi_version: propagator.abi_version(),
-        identity_validated_by_capsule: true,
-        capabilities: propagator.capabilities(),
-        known_capabilities: propagator.known_capabilities(),
-        integration_time_scale: propagator.integration_scale().as_str().to_string(),
-        two_body_dynamics: identity.two_body_dynamics,
-        configuration_fingerprint: propagator
-            .configuration_fingerprint()
-            .expect("PySource requires metadata")
-            .to_string(),
-        data_fingerprint: propagator
-            .data_fingerprint()
-            .expect("PySource requires metadata")
-            .to_string(),
-    }
-}
-
-fn two_body_provider_metadata(settings: &FitSettings) -> ProviderMetadata {
-    let identity = settings.propagator.backend();
-    let mut capabilities = adam_core_rs_coords::propagation::EXTERNAL_PROPAGATOR_CAP_THREAD_SAFE;
-    if settings.propagator.supports_stm() {
-        capabilities |= adam_core_rs_coords::propagation::EXTERNAL_PROPAGATOR_CAP_STM;
-    }
-    if settings.propagator.supports_non_gravitational_parameters() {
-        capabilities |= adam_core_rs_coords::propagation::EXTERNAL_PROPAGATOR_CAP_NON_GRAVITATIONAL;
-    }
-    ProviderMetadata {
-        name: identity.name,
-        version: identity.version,
-        abi_version: adam_core_rs_coords::propagation::EXTERNAL_PROPAGATOR_ABI_VERSION,
-        identity_validated_by_capsule: false,
-        capabilities,
-        known_capabilities: capabilities,
-        integration_time_scale: settings
-            .propagator
-            .integration_time_scale()
-            .as_str()
-            .to_string(),
-        two_body_dynamics: identity.two_body_dynamics,
-        configuration_fingerprint:
-            adam_core_rs_coords::propagation::two_body_reference::configuration_fingerprint(
-                settings.propagator.config(),
-            ),
-        data_fingerprint: adam_core_rs_coords::propagation::two_body_reference::DATA_FINGERPRINT
-            .to_string(),
-    }
-}
-
 fn provider_metadata_dict<'py>(
     py: Python<'py>,
     metadata: &ProviderMetadata,
@@ -476,10 +420,10 @@ fn native_provider_metadata<'py>(
 ) -> PyResult<Bound<'py, PyDict>> {
     let settings = parse_fit_settings(fit_settings)?;
     let source = propagator.map(PySource::new).transpose()?;
-    let metadata = source.as_ref().map_or_else(
-        || two_body_provider_metadata(&settings),
-        |source| external_provider_metadata(&source.propagator),
-    );
+    let metadata = match &source {
+        Some(source) => external_provider_metadata(&source.propagator).map_err(batch_error)?,
+        None => two_body_provider_metadata(&settings.propagator),
+    };
     provider_metadata_dict(py, &metadata)
 }
 
@@ -522,10 +466,10 @@ fn run_with_predictor<R: Send, E: DriverError>(
     driver: impl for<'p> FnOnce(&'p dyn SphericalPredictor, &'p ProviderMetadata) -> Result<R, E> + Send,
 ) -> PyResult<(R, ProviderMetadata)> {
     let source = propagator.map(PySource::new).transpose()?;
-    let metadata = source.as_ref().map_or_else(
-        || two_body_provider_metadata(settings),
-        |source| external_provider_metadata(&source.propagator),
-    );
+    let metadata = match &source {
+        Some(source) => external_provider_metadata(&source.propagator).map_err(batch_error)?,
+        None => two_body_provider_metadata(&settings.propagator),
+    };
     let output = py
         .allow_threads(|| {
             if let Some(source) = &source {
@@ -544,22 +488,69 @@ fn run_with_predictor<R: Send, E: DriverError>(
     Ok((output, metadata))
 }
 
-fn run_with_canonical_provider<R: Send>(
-    py: Python<'_>,
-    propagator: Option<&Bound<'_, PyAny>>,
-    driver: impl for<'p> FnOnce(&'p OdPropagator<'p>) -> Result<R, OdBatchError> + Send,
-) -> PyResult<R> {
-    let source = propagator.map(PySource::new).transpose()?;
-    py.allow_threads(|| {
-        if let Some(source) = &source {
-            let provider = OdPropagator::external(&source.propagator);
-            driver(&provider)
-        } else {
-            driver(&OdPropagator::two_body())
-        }
-    })
-    .map_err(batch_error)
+/// Lazy canonical provider source. The Python object is retained without
+/// resolving its capsule until adam_core has completed static validation.
+struct PyCanonicalProviderSource {
+    propagator: Option<Py<PyAny>>,
+    resolution_error: Mutex<Option<PyErr>>,
 }
+
+impl PyCanonicalProviderSource {
+    fn new(propagator: Option<&Bound<'_, PyAny>>) -> Self {
+        Self {
+            propagator: propagator.map(|value| value.clone().unbind()),
+            resolution_error: Mutex::new(None),
+        }
+    }
+
+    fn take_resolution_error(&self) -> Option<PyErr> {
+        self.resolution_error
+            .lock()
+            .expect("provider error lock")
+            .take()
+    }
+}
+
+impl OdPropagatorSource for PyCanonicalProviderSource {
+    fn with_propagator<R>(
+        &self,
+        operation: impl for<'provider> FnOnce(
+            &'provider OdPropagator<'provider>,
+        ) -> Result<R, OdBatchError>,
+    ) -> Result<R, OdBatchError> {
+        let source = match Python::with_gil(|py| {
+            self.propagator
+                .as_ref()
+                .map(|value| PySource::new(value.bind(py)))
+                .transpose()
+        }) {
+            Ok(source) => source,
+            Err(error) => {
+                let message = error.to_string();
+                *self.resolution_error.lock().expect("provider error lock") = Some(error);
+                return Err(OdBatchError::invalid_provider_identity(message));
+            }
+        };
+        if let Some(source) = &source {
+            operation(&OdPropagator::external(&source.propagator))
+        } else {
+            operation(&OdPropagator::two_body())
+        }
+    }
+}
+
+fn run_canonical_workflow<R: Send>(
+    py: Python<'_>,
+    source: &PyCanonicalProviderSource,
+    workflow: impl FnOnce() -> Result<R, OdBatchError> + Send,
+) -> PyResult<R> {
+    let result = py.allow_threads(workflow);
+    if let Some(error) = source.take_resolution_error() {
+        return Err(error);
+    }
+    result.map_err(batch_error)
+}
+
 // ---------------------------------------------------------------------------
 // Output dicts
 // ---------------------------------------------------------------------------
@@ -1652,7 +1643,7 @@ fn typed_provenance_dict<'py>(
 fn typed_group_dict<'py>(py: Python<'py>, group: &OdGroupResult) -> PyResult<Bound<'py, PyDict>> {
     let out = PyDict::new(py);
     out.set_item("group_id", &group.group_id)?;
-    out.set_item("orbit_id", &group.orbit_id)?;
+    out.set_item("orbit_id", group.orbit_id())?;
     out.set_item("row_indices", &group.row_indices)?;
     out.set_item("member_indices", &group.member_indices)?;
     out.set_item(
@@ -1763,20 +1754,10 @@ fn run_iod_batch_ipc<'py>(
     observers_ipc: &Bound<'py, PyBytes>,
     config: PyRef<'py, PyOdConfig>,
 ) -> PyResult<Bound<'py, PyDict>> {
-    config.inner.validate().map_err(value_error)?;
-    CoreBuildIdentity::current().map_err(batch_error)?;
     let owned_config = config.inner.clone();
     drop(config);
     let source = decode_source_catalog(source_ipc)?;
     let associations = decode_association_batch(associations_ipc)?;
-    let groups =
-        adam_core::od::plan_associations(&source.id, &associations).map_err(value_error)?;
-    if groups.is_empty() {
-        let out = PyDict::new(py);
-        out.set_item("groups", PyList::empty(py))?;
-        out.set_item("provider", py.None())?;
-        return Ok(out);
-    }
     let problem = decode_observations(observed_ipc, observers_ipc)?;
     let input = AssociatedObservations {
         observations: OdObservationBatch {
@@ -1786,12 +1767,10 @@ fn run_iod_batch_ipc<'py>(
         },
         associations,
     };
-    let prepared = match adam_core::od::prepare_iod(&input, &owned_config).map_err(batch_error)? {
-        BatchPreparation::Ready(prepared) => prepared,
-        BatchPreparation::Empty => unreachable!("non-empty association plan became empty"),
-    };
-    let result =
-        run_with_canonical_provider(py, propagator, |provider| prepared.execute(provider))?;
+    let provider_source = PyCanonicalProviderSource::new(propagator);
+    let result = run_canonical_workflow(py, &provider_source, || {
+        adam_core::od::run_iod(&input, &owned_config, &provider_source)
+    })?;
     let out = PyDict::new(py);
     out.set_item("groups", typed_groups_list(py, &result)?)?;
     out.set_item(
@@ -1817,20 +1796,10 @@ fn run_od_batch_ipc<'py>(
     observers_ipc: &Bound<'py, PyBytes>,
     config: PyRef<'py, PyOdConfig>,
 ) -> PyResult<Bound<'py, PyDict>> {
-    config.inner.validate().map_err(value_error)?;
-    CoreBuildIdentity::current().map_err(batch_error)?;
     let owned_config = config.inner.clone();
     drop(config);
     let source = decode_source_catalog(source_ipc)?;
     let associations = decode_association_batch(associations_ipc)?;
-    let groups =
-        adam_core::od::plan_associations(&source.id, &associations).map_err(value_error)?;
-    if groups.is_empty() {
-        let out = PyDict::new(py);
-        out.set_item("groups", PyList::empty(py))?;
-        out.set_item("provider", py.None())?;
-        return Ok(out);
-    }
     let problem = decode_observations(observed_ipc, observers_ipc)?;
     let input = AssociatedObservations {
         observations: OdObservationBatch {
@@ -1840,12 +1809,10 @@ fn run_od_batch_ipc<'py>(
         },
         associations,
     };
-    let prepared = match adam_core::od::prepare_od(&input, &owned_config).map_err(batch_error)? {
-        BatchPreparation::Ready(prepared) => prepared,
-        BatchPreparation::Empty => unreachable!("non-empty association plan became empty"),
-    };
-    let result =
-        run_with_canonical_provider(py, propagator, |provider| prepared.execute(provider))?;
+    let provider_source = PyCanonicalProviderSource::new(propagator);
+    let result = run_canonical_workflow(py, &provider_source, || {
+        adam_core::od::run_od(&input, &owned_config, &provider_source)
+    })?;
     let out = PyDict::new(py);
     out.set_item("groups", typed_groups_list(py, &result)?)?;
     let providers = PyDict::new(py);
@@ -1918,21 +1885,10 @@ fn refine_batch_ipc<'py>(
     used_cov_lonlat: Vec<Option<f64>>,
     config: PyRef<'py, PyRefinementRunConfig>,
 ) -> PyResult<Bound<'py, PyDict>> {
-    config.inner.validate().map_err(value_error)?;
-    CoreBuildIdentity::current().map_err(batch_error)?;
     let owned_config = config.inner;
     drop(config);
     let orbits = decode_orbit(orbit_ipc)?;
     let source = decode_source_catalog(source_ipc)?;
-    let groups =
-        adam_core::od::plan_orbit_members(&orbits, &source.id, &member_orbit_ids, &member_obs_ids)
-            .map_err(value_error)?;
-    if groups.is_empty() {
-        let out = PyDict::new(py);
-        out.set_item("groups", PyList::empty(py))?;
-        out.set_item("provider", py.None())?;
-        return Ok(out);
-    }
     let problem = decode_observations(observed_ipc, observers_ipc)?;
     let provenance = parse_typed_orbit_provenance(&seed_iod_provenance, &orbits)?;
     let member_count = member_orbit_ids.len();
@@ -1970,13 +1926,10 @@ fn refine_batch_ipc<'py>(
             },
         },
     };
-    let prepared =
-        match adam_core::od::prepare_refinement(&input, &owned_config).map_err(batch_error)? {
-            BatchPreparation::Ready(prepared) => prepared,
-            BatchPreparation::Empty => unreachable!("non-empty member plan became empty"),
-        };
-    let result =
-        run_with_canonical_provider(py, propagator, |provider| prepared.execute(provider))?;
+    let provider_source = PyCanonicalProviderSource::new(propagator);
+    let result = run_canonical_workflow(py, &provider_source, || {
+        adam_core::od::refine(&input, &owned_config, &provider_source)
+    })?;
     let out = PyDict::new(py);
     out.set_item("groups", typed_groups_list(py, &result)?)?;
     out.set_item(
@@ -2028,21 +1981,10 @@ fn evaluate_orbits_batch_ipc<'py>(
     used_cov_lonlat: Vec<Option<f64>>,
     config: PyRef<'py, PyOdConfig>,
 ) -> PyResult<Bound<'py, PyDict>> {
-    config.inner.validate().map_err(value_error)?;
-    CoreBuildIdentity::current().map_err(batch_error)?;
     let owned_config = config.inner.clone();
     drop(config);
     let orbits = decode_orbit(orbit_ipc)?;
     let source = decode_source_catalog(source_ipc)?;
-    let groups =
-        adam_core::od::plan_orbit_members(&orbits, &source.id, &member_orbit_ids, &member_obs_ids)
-            .map_err(value_error)?;
-    if groups.is_empty() {
-        let out = PyDict::new(py);
-        out.set_item("groups", PyList::empty(py))?;
-        out.set_item("provider", py.None())?;
-        return Ok(out);
-    }
     let problem = decode_observations(observed_ipc, observers_ipc)?;
     let provenance = parse_typed_orbit_provenance(&orbit_provenance, &orbits)?;
     let input = MemberedOrbits {
@@ -2079,13 +2021,10 @@ fn evaluate_orbits_batch_ipc<'py>(
             },
         },
     };
-    let prepared =
-        match adam_core::od::prepare_evaluation(&input, &owned_config).map_err(batch_error)? {
-            BatchPreparation::Ready(prepared) => prepared,
-            BatchPreparation::Empty => unreachable!("non-empty member plan became empty"),
-        };
-    let result =
-        run_with_canonical_provider(py, propagator, |provider| prepared.execute(provider))?;
+    let provider_source = PyCanonicalProviderSource::new(propagator);
+    let result = run_canonical_workflow(py, &provider_source, || {
+        adam_core::od::evaluate_orbits(&input, &owned_config, &provider_source)
+    })?;
     let out = PyDict::new(py);
     out.set_item("groups", typed_groups_list(py, &result)?)?;
     out.set_item(

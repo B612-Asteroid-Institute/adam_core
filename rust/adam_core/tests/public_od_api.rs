@@ -1,16 +1,15 @@
 #[allow(dead_code)]
 fn canonical_workflows_are_callable() {
-    let _ = adam_core::run_iod;
-    let _ = adam_core::run_od;
-    let _ = adam_core::refine;
-    let _ = adam_core::evaluate_orbits;
+    let _ = adam_core::run_iod::<adam_core::od::OdPropagator<'static>>;
+    let _ = adam_core::run_od::<adam_core::od::OdPropagator<'static>>;
+    let _ = adam_core::refine::<adam_core::od::OdPropagator<'static>>;
+    let _ = adam_core::evaluate_orbits::<adam_core::od::OdPropagator<'static>>;
 
-    let _ = adam_core::od::run_iod;
-    let _ = adam_core::od::run_od;
-    let _ = adam_core::od::refine;
-    let _ = adam_core::od::evaluate_orbits;
+    let _ = adam_core::od::run_iod::<adam_core::od::OdPropagator<'static>>;
+    let _ = adam_core::od::run_od::<adam_core::od::OdPropagator<'static>>;
+    let _ = adam_core::od::refine::<adam_core::od::OdPropagator<'static>>;
+    let _ = adam_core::od::evaluate_orbits::<adam_core::od::OdPropagator<'static>>;
     let _ = adam_core::od::OdPropagator::two_body();
-    let _ = adam_core::od::OrbitIdRename::new("old", "new");
 }
 
 #[test]
@@ -32,6 +31,16 @@ fn canonical_workflows_have_deliberate_root_and_module_exports() {
 fn removed_public_preparation_seams_are_not_reintroduced() {
     let core = include_str!("../src/od.rs");
     for forbidden in [
+        "pub enum BatchPreparation",
+        "pub struct PreparedIod",
+        "pub struct PreparedOd",
+        "pub struct PreparedRefinement",
+        "pub struct PreparedEvaluation",
+        "pub fn prepare_iod",
+        "pub fn prepare_od",
+        "pub fn prepare_refinement",
+        "pub fn prepare_evaluation",
+        "pub fn execute",
         "pub fn prepare_associated_batch",
         "pub fn run_iod_from_prepared",
         "pub fn run_od_from_prepared",
@@ -39,6 +48,8 @@ fn removed_public_preparation_seams_are_not_reintroduced() {
         "pub fn prepare_evaluation_batch",
         "pub fn refine_from_prepared",
         "pub fn evaluate_orbits_from_prepared",
+        "pub struct OrbitIdRename",
+        "pub fn renamed_orbit_ids",
         "#[doc(hidden)]",
     ] {
         assert!(!core.contains(forbidden), "reintroduced seam: {forbidden}");
