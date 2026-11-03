@@ -10,6 +10,7 @@ fn canonical_workflows_are_callable() {
     let _ = adam_core::od::refine;
     let _ = adam_core::od::evaluate_orbits;
     let _ = adam_core::od::OdPropagator::two_body();
+    let _ = adam_core::od::OrbitIdRename::new("old", "new");
 }
 
 #[test]

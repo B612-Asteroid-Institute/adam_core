@@ -10,7 +10,10 @@
 //! Each workflow accepts an [`crate::od::OdPropagator`] whose identity is derived from
 //! the actual two-body implementation or validated propagation-only ABI-v2
 //! capsule. Preparation remains available without a provider and returns an
-//! opaque value that owns the exact checked configuration.
+//! opaque value that owns the exact checked configuration. Fitted `orbit_id`
+//! values are mutable relational labels; immutable association identity remains
+//! in each record's `group_id` / orbit `object_id`, and [`crate::od::OrbitIdRename`] updates
+//! orbit/member foreign keys atomically.
 //!
 //! ```no_run
 //! use adam_core::{run_iod, od::{AssociatedObservations, OdConfig, OdPropagator}};
@@ -46,6 +49,7 @@ use adam_core_rs_coords::{
 use adam_core_rs_spice::global_backend;
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
+use std::collections::{HashMap, HashSet};
 use std::fmt;
 
 /// Predictor-level numerical building blocks used by the canonical workflows.
@@ -724,6 +728,150 @@ pub struct MemberedOrbits {
     pub members: FittedOrbitMembersBatch,
     /// One persisted, validated provenance value per input orbit.
     pub provenance: Vec<Option<OdProvenance>>,
+}
+
+/// One atomic relational-label change for a fitted orbit.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OrbitIdRename {
+    old: String,
+    new: String,
+}
+
+impl OrbitIdRename {
+    /// Construct a rename. Empty labels are rejected before any input changes.
+    pub fn new(old: impl Into<String>, new: impl Into<String>) -> Result<Self, OdBatchError> {
+        let rename = Self {
+            old: old.into(),
+            new: new.into(),
+        };
+        if rename.old.trim().is_empty() || rename.new.trim().is_empty() {
+            return Err(OdBatchError::new(
+                OdBatchErrorCode::InvalidInput,
+                "orbit ID rename labels must be non-empty",
+            ));
+        }
+        Ok(rename)
+    }
+
+    /// Existing relational label.
+    pub fn old(&self) -> &str {
+        &self.old
+    }
+
+    /// Replacement relational label.
+    pub fn new_label(&self) -> &str {
+        &self.new
+    }
+}
+
+fn checked_orbit_id_renames(
+    current: &[String],
+    renames: &[OrbitIdRename],
+) -> Result<HashMap<String, String>, OdBatchError> {
+    let mut current_ids = HashSet::with_capacity(current.len());
+    for (row, value) in current.iter().enumerate() {
+        if value.trim().is_empty() {
+            return Err(OdBatchError::new(
+                OdBatchErrorCode::InvalidInput,
+                format!("orbit ID at row {row} is empty"),
+            ));
+        }
+        if !current_ids.insert(value.as_str()) {
+            return Err(OdBatchError::new(
+                OdBatchErrorCode::InvalidInput,
+                format!("orbit ID {value:?} is not unique"),
+            ));
+        }
+    }
+    let mut mapping = HashMap::with_capacity(renames.len());
+    let mut targets = HashSet::with_capacity(renames.len());
+    for rename in renames {
+        if rename.old.trim().is_empty() || rename.new.trim().is_empty() {
+            return Err(OdBatchError::new(
+                OdBatchErrorCode::InvalidInput,
+                "orbit ID rename labels must be non-empty",
+            ));
+        }
+        if !current_ids.contains(rename.old.as_str()) {
+            return Err(OdBatchError::new(
+                OdBatchErrorCode::InvalidInput,
+                format!("orbit ID rename references unknown label {:?}", rename.old),
+            ));
+        }
+        if mapping
+            .insert(rename.old.clone(), rename.new.clone())
+            .is_some()
+        {
+            return Err(OdBatchError::new(
+                OdBatchErrorCode::InvalidInput,
+                format!("orbit ID rename repeats source label {:?}", rename.old),
+            ));
+        }
+        if !targets.insert(rename.new.as_str()) {
+            return Err(OdBatchError::new(
+                OdBatchErrorCode::InvalidInput,
+                format!("orbit ID rename target {:?} is not unique", rename.new),
+            ));
+        }
+    }
+    let missing = current
+        .iter()
+        .filter(|value| !mapping.contains_key(value.as_str()))
+        .cloned()
+        .collect::<Vec<_>>();
+    if !missing.is_empty() {
+        return Err(OdBatchError::new(
+            OdBatchErrorCode::InvalidInput,
+            format!(
+                "orbit ID rename mapping is partial; missing {}",
+                missing.join(", ")
+            ),
+        ));
+    }
+    Ok(mapping)
+}
+
+impl MemberedOrbits {
+    /// Return a copy with every orbit/member foreign key renamed atomically.
+    ///
+    /// The mapping must cover every orbit exactly once. Scientific,
+    /// membership, state, configuration, provider, resource, and provenance
+    /// fingerprints are intentionally unchanged because labels are relational.
+    pub fn renamed_orbit_ids(&self, renames: &[OrbitIdRename]) -> Result<Self, OdBatchError> {
+        self.members.validate_lengths(false)?;
+        plan_orbit_members(
+            &self.orbits,
+            &self.observations.source.id,
+            &self.members.orbit_id,
+            &self.members.observation_id,
+        )
+        .map_err(|message| OdBatchError::new(OdBatchErrorCode::InvalidInput, message))?;
+        let current = self
+            .orbits
+            .orbit_id
+            .iter()
+            .map(|value| value.0.clone())
+            .collect::<Vec<_>>();
+        let mapping = checked_orbit_id_renames(&current, renames)?;
+        let mut output = self.clone();
+        for orbit_id in &mut output.orbits.orbit_id {
+            orbit_id.0 = mapping[orbit_id.0.as_str()].clone();
+        }
+        for orbit_id in &mut output.members.orbit_id {
+            *orbit_id = mapping[orbit_id.as_str()].clone();
+        }
+        output.orbits.validate().map_err(|error| {
+            OdBatchError::new(OdBatchErrorCode::InvalidInput, error.to_string())
+        })?;
+        plan_orbit_members(
+            &output.orbits,
+            &output.observations.source.id,
+            &output.members.orbit_id,
+            &output.members.observation_id,
+        )
+        .map_err(|message| OdBatchError::new(OdBatchErrorCode::InvalidInput, message))?;
+        Ok(output)
+    }
 }
 
 /// Canonical workflow route recorded in provenance.
@@ -1410,6 +1558,64 @@ impl OdBatchResult {
             .collect()
     }
 
+    /// Return a copy whose materialized fitted-orbit labels and every member
+    /// foreign key are renamed atomically.
+    pub fn renamed_orbit_ids(&self, renames: &[OrbitIdRename]) -> Result<Self, OdBatchError> {
+        let current = self
+            .groups
+            .iter()
+            .filter_map(|group| group.orbit.as_ref().map(|_| group.orbit_id.clone()))
+            .collect::<Vec<_>>();
+        let mapping = checked_orbit_id_renames(&current, renames)?;
+        for group in self.groups.iter().filter(|group| group.orbit.is_some()) {
+            let fitted = group.orbit.as_ref().expect("filtered successful group");
+            if fitted.orbit_id != group.orbit_id
+                || fitted.orbit.len() != 1
+                || fitted.orbit.orbit_id[0].0 != group.orbit_id
+                || group
+                    .members
+                    .iter()
+                    .any(|member| member.orbit_id != group.orbit_id)
+            {
+                return Err(OdBatchError::new(
+                    OdBatchErrorCode::InvalidInput,
+                    format!(
+                        "fitted group {:?} has inconsistent orbit/member relational labels",
+                        group.group_id
+                    ),
+                ));
+            }
+        }
+        let mut output = self.clone();
+        for group in output
+            .groups
+            .iter_mut()
+            .filter(|group| group.orbit.is_some())
+        {
+            let old = group.orbit_id.clone();
+            let new = mapping[old.as_str()].clone();
+            group.orbit_id = new.clone();
+            for member in &mut group.members {
+                member.orbit_id = new.clone();
+            }
+            let fitted = group.orbit.as_mut().expect("filtered successful group");
+            fitted.orbit_id = new.clone();
+            fitted.orbit.orbit_id[0].0 = new.clone();
+            fitted.orbit.validate().map_err(|error| {
+                OdBatchError::new(OdBatchErrorCode::InvalidInput, error.to_string())
+            })?;
+            if let Some(failure) = &mut group.failure {
+                if failure.orbit_id.as_deref() == Some(old.as_str()) {
+                    failure.orbit_id = Some(new.clone());
+                }
+                if failure.input_orbit_id.as_deref() == Some(old.as_str()) {
+                    failure.input_orbit_id = Some(new);
+                }
+            }
+        }
+        Ok(output)
+    }
+
     /// Typed group failures in deterministic group order.
     pub fn failures(&self) -> impl Iterator<Item = &OrbitDeterminationFailure> {
         self.groups
@@ -1657,13 +1863,15 @@ fn member_input_fingerprints(
 
 fn membership_fingerprint(
     group_id: &str,
-    orbit_id: &str,
     observation_id: &str,
     member_fingerprint: &str,
 ) -> String {
     let mut digest = Sha256::new();
-    digest.update(b"adam-core-od-membership-pair/v1\0");
-    for value in [group_id, orbit_id, observation_id, member_fingerprint] {
+    // v2 deliberately excludes the mutable relational orbit_id label. The
+    // immutable association group, observation identity, and prepared member
+    // content remain covered.
+    digest.update(b"adam-core-od-membership-pair/v2\0");
+    for value in [group_id, observation_id, member_fingerprint] {
         fingerprint_string(&mut digest, value);
     }
     format!("{:x}", digest.finalize())
@@ -1743,11 +1951,16 @@ fn group_input_fingerprint(
     member_outlier: Option<&[bool]>,
 ) -> String {
     let mut digest = Sha256::new();
-    digest.update(b"adam-core-od-input/v1\0");
+    // Preserve the established IOD hypothesis fingerprint. Orbit-consuming
+    // routes use v2, whose scientific identity excludes mutable orbit labels.
+    digest.update(if input_orbit.is_some() {
+        b"adam-core-od-input/v2\0".as_slice()
+    } else {
+        b"adam-core-od-input/v1\0".as_slice()
+    });
     fingerprint_string(&mut digest, group_id);
     if let Some((orbits, row)) = input_orbit {
         digest.update([1]);
-        fingerprint_string(&mut digest, &orbits.orbit_id[row].0);
         fingerprint_optional_string(
             &mut digest,
             orbits.object_id[row].as_ref().map(|value| value.0.as_str()),
@@ -1772,7 +1985,7 @@ fn group_input_fingerprint(
     format!("{:x}", digest.finalize())
 }
 
-fn canonical_orbit_id(group_id: &str, config_sha256: &str, input_fingerprint: &str) -> String {
+fn default_orbit_id(group_id: &str, config_sha256: &str, input_fingerprint: &str) -> String {
     let mut digest = Sha256::new();
     digest.update(b"adam-core-od-orbit/v1\0");
     for value in [group_id, config_sha256, input_fingerprint] {
@@ -2087,7 +2300,6 @@ fn member_records(
                 input_member_index: member_indices.get(row).copied(),
                 membership_fingerprint: membership_fingerprint(
                     group_id,
-                    orbit_id,
                     &input.source.id[source_index],
                     &fingerprint,
                 ),
@@ -2221,7 +2433,7 @@ fn run_iod_prepared(
             None,
             None,
         );
-        let orbit_id = canonical_orbit_id(&group.group_id, &config_sha, &input_fingerprint);
+        let orbit_id = default_orbit_id(&group.group_id, &config_sha, &input_fingerprint);
         let result = run_iod_with_predictor(
             service.predictor,
             &prepared,
@@ -2782,7 +2994,6 @@ fn prepare_member_groups(
                 }
                 let membership = membership_fingerprint(
                     group_id,
-                    &group.orbit_id,
                     &input.observations.source.id[source_row],
                     fingerprint,
                 );
@@ -2798,19 +3009,15 @@ fn prepare_member_groups(
         .collect()
 }
 
-fn validate_iod_seed_identity(
+fn validate_iod_seed_provenance(
     orbits: &OrbitBatch,
     row: usize,
     provenance: &OdProvenance,
 ) -> Result<(), OdBatchError> {
-    // Only IOD-route identifiers are content-addressed from the original
-    // association hypothesis. Later routes deliberately preserve the seed
-    // identifier while changing state/configuration and remain protected by
-    // state, input, membership, build, provider, and provenance digests.
     if provenance.route != OdRoute::RunIod {
         return Ok(());
     }
-    let config_sha = provenance
+    provenance
         .configuration
         .declared_science_sha256()
         .ok_or_else(|| {
@@ -2821,23 +3028,17 @@ fn validate_iod_seed_identity(
                 ),
             )
         })?;
-    let object_id = orbits.object_id[row]
+    let group_id = orbits.object_id[row]
         .as_ref()
         .map(|value| value.0.as_str())
+        .filter(|value| !value.trim().is_empty())
         .ok_or_else(|| {
             OdBatchError::new(
                 OdBatchErrorCode::InvalidProvenance,
                 format!("seed IOD orbit at row {row} requires its association group object_id"),
             )
         })?;
-    if orbits.orbit_id[row].0
-        != canonical_orbit_id(object_id, config_sha, &provenance.input_fingerprint)
-    {
-        return Err(OdBatchError::new(
-            OdBatchErrorCode::InvalidProvenance,
-            format!("seed IOD orbit ID at row {row} is inconsistent with its canonical provenance"),
-        ));
-    }
+    let _ = group_id;
     Ok(())
 }
 
@@ -2852,6 +3053,27 @@ fn validate_member_input(
         .orbits
         .validate()
         .map_err(|error| OdBatchError::new(OdBatchErrorCode::InvalidInput, error.to_string()))?;
+    let mut group_ids = HashSet::with_capacity(input.orbits.len());
+    for (row, object_id) in input.orbits.object_id.iter().enumerate() {
+        let group_id = object_id
+            .as_ref()
+            .map(|value| value.0.as_str())
+            .filter(|value| !value.trim().is_empty())
+            .ok_or_else(|| {
+                OdBatchError::new(
+                    OdBatchErrorCode::InvalidProvenance,
+                    format!(
+                        "canonical orbit row {row} requires its immutable association group object_id"
+                    ),
+                )
+            })?;
+        if !group_ids.insert(group_id) {
+            return Err(OdBatchError::new(
+                OdBatchErrorCode::InvalidInput,
+                format!("association group object_id {group_id:?} is not unique"),
+            ));
+        }
+    }
     if input.provenance.len() != input.orbits.len() {
         return Err(OdBatchError::new(
             OdBatchErrorCode::InvalidProvenance,
@@ -2883,7 +3105,7 @@ fn validate_member_input(
                 format!("orbit row {row} does not match its state fingerprint"),
             ));
         }
-        validate_iod_seed_identity(&input.orbits, row, provenance)?;
+        validate_iod_seed_provenance(&input.orbits, row, provenance)?;
     }
     plan_orbit_members(
         &input.orbits,
@@ -3374,13 +3596,23 @@ fn evaluate_prepared(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use adam_core_rs_coords::propagation::generate_ephemeris_barycentric;
     use adam_core_rs_coords::{Epoch, ObservatoryCode, TimeColumn};
+    use adam_core_rs_spice::{SpkWriter, Type9Segment};
+    use std::path::PathBuf;
 
     fn explicit_config() -> OdConfig {
         OdConfig::explicit(
             ObservationPipeline::as_supplied(),
-            IodRunConfig::new(IodConfig::default(), WhitenedFitConfig::default())
-                .expect("IOD config"),
+            IodRunConfig::new(
+                IodConfig {
+                    max_triplets: Some(3),
+                    rchi2_threshold: 50.0,
+                    ..IodConfig::default()
+                },
+                WhitenedFitConfig::default(),
+            )
+            .expect("IOD config"),
             RefinementRunConfig::core_v1(),
             EvaluationConfig::six_dimensional(),
         )
@@ -3474,6 +3706,198 @@ mod tests {
                 catalog_id: vec!["test".to_string(); rows],
                 astcat: vec![None; rows],
                 photcat: vec![None; rows],
+            },
+            observed,
+            observers,
+        }
+    }
+
+    struct IdentityTimeProvider;
+
+    impl TimeScaleProvider for IdentityTimeProvider {
+        fn rescale(
+            &self,
+            times: &TimeArray,
+            new_scale: TimeScale,
+        ) -> Result<TimeArray, SchemaError> {
+            TimeArray::new(new_scale, times.epochs.clone())
+        }
+    }
+
+    struct ZeroTranslationProvider;
+
+    impl OriginTranslationProvider for ZeroTranslationProvider {
+        fn origin_translation_vectors(
+            &self,
+            origins: &OriginArray,
+            _target_origin: &OriginId,
+            _frame: DataFrame,
+            _times: &TimeArray,
+        ) -> Result<Vec<[f64; 6]>, SchemaError> {
+            Ok(vec![[0.0; 6]; origins.len()])
+        }
+    }
+
+    fn zero_sun_spk() -> PathBuf {
+        let path =
+            std::env::temp_dir().join(format!("adam-core-od-zero-sun-{}.bsp", std::process::id()));
+        let start_et = (59_000.0 - 51_544.5) * 86_400.0;
+        let end_et = (61_000.0 - 51_544.5) * 86_400.0;
+        let mut writer = SpkWriter::new_spk("adam-core-od-test");
+        writer
+            .add_type9(Type9Segment {
+                target: 10,
+                center: 0,
+                frame_id: 1,
+                start_et,
+                end_et,
+                segment_id: "ZERO SUN".to_string(),
+                degree: 1,
+                states: vec![0.0; 12],
+                epochs: vec![start_et, end_et],
+            })
+            .expect("zero-Sun SPK segment");
+        writer.write(&path).expect("zero-Sun SPK");
+        global_backend()
+            .lock()
+            .expect("SPICE backend")
+            .furnsh(&path)
+            .expect("furnish zero-Sun SPK");
+        path
+    }
+
+    fn scientific_observation_batch() -> OdObservationBatch {
+        const ROWS: usize = 12;
+        const NANOS_PER_DAY: f64 = 86_400_000_000_000.0;
+        let offsets = (0..ROWS)
+            .map(|row| 0.3 + 3.0 * (row / 3) as f64 + 0.2 * (row % 3) as f64)
+            .collect::<Vec<_>>();
+        let times = TimeArray::new(
+            TimeScale::Tdb,
+            offsets
+                .iter()
+                .map(|offset| Epoch::new(60_002, (offset * NANOS_PER_DAY) as i64))
+                .collect(),
+        )
+        .expect("scientific times");
+        let observers = ObserverBatch::new(
+            (0..ROWS)
+                .map(|row| ObservatoryCode(format!("T{row:02}")))
+                .collect(),
+            CoordinateBatch::cartesian(
+                offsets
+                    .iter()
+                    .map(|offset| {
+                        let theta = 0.35 + 0.01725 * offset;
+                        [
+                            theta.cos(),
+                            theta.sin(),
+                            0.0,
+                            -0.01725 * theta.sin(),
+                            0.01725 * theta.cos(),
+                            0.0,
+                        ]
+                    })
+                    .collect(),
+                DataFrame::Ecliptic,
+                OriginArray::repeat(OriginId::from_code("SUN"), ROWS),
+                Some(times.clone()),
+                None,
+            )
+            .expect("scientific observer coordinates"),
+        )
+        .expect("scientific observers");
+        let truth = one_row_orbit("truth", Some("truth-group"));
+        let mut truth = truth;
+        truth.coordinates.values =
+            CoordinateValues::Cartesian(vec![[1.2, 0.1, 0.05, -0.002, 0.016, 0.001]]);
+        truth.coordinates.times =
+            Some(TimeArray::new(TimeScale::Tdb, vec![Epoch::new(60_000, 0)]).expect("truth epoch"));
+        let predicted = generate_ephemeris_barycentric(
+            &TwoBodyPropagator::default(),
+            &truth,
+            &observers,
+            &EphemerisOptions {
+                propagation: PropagationOptions {
+                    chunk_size: None,
+                    thread_limit: None,
+                    epoch_policy: EpochPolicy::CrossProduct,
+                    covariance: CovariancePropagation::None,
+                },
+                output_time_scale: TimeScale::Tdb,
+                ..EphemerisOptions::default()
+            },
+            &IdentityTimeProvider,
+            &ZeroTranslationProvider,
+        )
+        .expect("scientific observations")
+        .ephemeris
+        .coordinates;
+        let mut values = predicted.values.raw_values().to_vec();
+        for value in &mut values {
+            value[0] = f64::NAN;
+            value[3] = f64::NAN;
+            value[4] = f64::NAN;
+            value[5] = f64::NAN;
+        }
+        let sigma = 0.5 / 3600.0;
+        let mut covariance = vec![f64::NAN; ROWS * 36];
+        for row in 0..ROWS {
+            covariance[row * 36 + 7] = sigma * sigma;
+            covariance[row * 36 + 14] = sigma * sigma;
+        }
+        let observed = CoordinateBatch::new(
+            CoordinateValues::Spherical(values.clone()),
+            predicted.frame,
+            predicted.origins,
+            predicted.times.clone(),
+            Some(
+                CovarianceBatch::new(
+                    ROWS,
+                    6,
+                    covariance,
+                    CovarianceUnits::Coordinate(CoordinateRepresentation::Spherical),
+                )
+                .expect("scientific covariance"),
+            ),
+        )
+        .expect("scientific observed coordinates");
+        let epochs = predicted.times.expect("predicted times").epochs;
+        let time = TimeColumn {
+            scale: TimeScale::Tdb,
+            days: epochs.iter().map(|epoch| epoch.days).collect(),
+            nanos: epochs.iter().map(|epoch| epoch.nanos).collect(),
+            validity: None,
+        };
+        OdObservationBatch {
+            source: SourceCatalogBatch {
+                id: (0..ROWS).map(|row| format!("science-{row}")).collect(),
+                exposure_id: vec![None; ROWS],
+                time: time.clone(),
+                ra: values.iter().map(|value| value[1]).collect(),
+                dec: values.iter().map(|value| value[2]).collect(),
+                ra_sigma: vec![Some(sigma); ROWS],
+                dec_sigma: vec![Some(sigma); ROWS],
+                radec_corr: vec![Some(0.0); ROWS],
+                mag: vec![None; ROWS],
+                mag_sigma: vec![None; ROWS],
+                fwhm: vec![None; ROWS],
+                a: vec![None; ROWS],
+                a_sigma: vec![None; ROWS],
+                b: vec![None; ROWS],
+                b_sigma: vec![None; ROWS],
+                pa: vec![None; ROWS],
+                pa_sigma: vec![None; ROWS],
+                observatory_code: observers.code.iter().map(|code| code.0.clone()).collect(),
+                filter: vec![None; ROWS],
+                exposure_start_time: time,
+                exposure_duration: vec![None; ROWS],
+                exposure_seeing: vec![None; ROWS],
+                exposure_depth_5sigma: vec![None; ROWS],
+                object_id: vec![None; ROWS],
+                catalog_id: vec!["test".to_string(); ROWS],
+                astcat: vec![None; ROWS],
+                photcat: vec![None; ROWS],
             },
             observed,
             observers,
@@ -3661,6 +4085,189 @@ mod tests {
     }
 
     #[test]
+    fn mutable_orbit_labels_rename_atomically_without_changing_science() {
+        let kernel = zero_sun_spk();
+        let observations = scientific_observation_batch();
+        let associations = AssociationBatch {
+            detection_id: observations.source.id.clone(),
+            object_id: vec![Some("original-group".to_string()); observations.source.len()],
+        };
+        let input = AssociatedObservations {
+            observations: observations.clone(),
+            associations,
+        };
+        let config = explicit_config();
+        let provider = OdPropagator::two_body();
+        let iod = run_iod(&input, &config, &provider).expect("scientific IOD");
+        assert!(iod.failures().next().is_none());
+        let seed = iod.groups[0].orbit.as_ref().expect("IOD orbit");
+        let old_id = seed.orbit_id.clone();
+        let old_input = seed.provenance.input_fingerprint.clone();
+        let old_state = seed.provenance.state_fingerprint.clone();
+        let old_provenance = seed.provenance.provenance_fingerprint.clone();
+        let old_membership = iod.groups[0]
+            .members
+            .iter()
+            .map(|member| member.membership_fingerprint.clone())
+            .collect::<Vec<_>>();
+        let rename = OrbitIdRename::new(&old_id, "user-visible-label").expect("rename");
+        let renamed = iod
+            .renamed_orbit_ids(std::slice::from_ref(&rename))
+            .expect("renamed result");
+        let renamed_orbit = renamed.groups[0].orbit.as_ref().expect("renamed orbit");
+        assert_eq!(renamed.groups[0].group_id, "original-group");
+        assert_eq!(renamed_orbit.group_id, "original-group");
+        assert_eq!(
+            renamed_orbit.orbit.object_id[0]
+                .as_ref()
+                .map(|value| value.0.as_str()),
+            Some("original-group")
+        );
+        assert_eq!(renamed_orbit.orbit_id, "user-visible-label");
+        assert_eq!(renamed_orbit.orbit.orbit_id[0].0, "user-visible-label");
+        assert!(renamed.groups[0]
+            .members
+            .iter()
+            .all(|member| member.orbit_id == "user-visible-label"));
+        assert_eq!(renamed_orbit.provenance.input_fingerprint, old_input);
+        assert_eq!(renamed_orbit.provenance.state_fingerprint, old_state);
+        assert_eq!(
+            renamed_orbit.provenance.provenance_fingerprint,
+            old_provenance
+        );
+        assert_eq!(
+            renamed.groups[0]
+                .members
+                .iter()
+                .map(|member| member.membership_fingerprint.clone())
+                .collect::<Vec<_>>(),
+            old_membership
+        );
+
+        let original_input = iod
+            .to_membered_groups(&observations)
+            .expect("original membered")
+            .remove(0);
+        let renamed_input = original_input
+            .renamed_orbit_ids(std::slice::from_ref(&rename))
+            .expect("renamed membered input");
+        assert_eq!(renamed_input.orbits.orbit_id[0].0, "user-visible-label");
+        assert!(renamed_input
+            .members
+            .orbit_id
+            .iter()
+            .all(|value| value == "user-visible-label"));
+        assert_eq!(
+            renamed_input.members.membership_fingerprint,
+            original_input.members.membership_fingerprint
+        );
+
+        let refined = refine(&renamed_input, &config.for_refinement(), &provider)
+            .expect("refine renamed seed");
+        assert_eq!(refined.groups[0].group_id, "original-group");
+        assert_eq!(refined.groups[0].orbit_id, "user-visible-label");
+        let evaluated =
+            evaluate_orbits(&renamed_input, &config, &provider).expect("evaluate renamed seed");
+        assert_eq!(evaluated.groups[0].group_id, "original-group");
+        assert_eq!(evaluated.groups[0].orbit_id, "user-visible-label");
+
+        let fused = run_od(&input, &config, &provider).expect("fused OD");
+        let composed =
+            refine(&original_input, &config.for_refinement(), &provider).expect("composed OD");
+        let fused_orbit = fused.groups[0].orbit.as_ref().expect("fused orbit");
+        let composed_orbit = composed.groups[0].orbit.as_ref().expect("composed orbit");
+        assert_eq!(fused_orbit.orbit_id, composed_orbit.orbit_id);
+        assert_eq!(
+            fused_orbit.provenance.provenance_fingerprint,
+            composed_orbit.provenance.provenance_fingerprint
+        );
+        assert_eq!(
+            fused_orbit.orbit.coordinates.values.raw_values()[0].map(f64::to_bits),
+            composed_orbit.orbit.coordinates.values.raw_values()[0].map(f64::to_bits)
+        );
+        assert_eq!(
+            fused.groups[0]
+                .members
+                .iter()
+                .map(|member| (
+                    &member.orbit_id,
+                    &member.membership_fingerprint,
+                    member.outlier
+                ))
+                .collect::<Vec<_>>(),
+            composed.groups[0]
+                .members
+                .iter()
+                .map(|member| (
+                    &member.orbit_id,
+                    &member.membership_fingerprint,
+                    member.outlier
+                ))
+                .collect::<Vec<_>>()
+        );
+
+        assert!(original_input.renamed_orbit_ids(&[]).is_err());
+        assert!(original_input
+            .renamed_orbit_ids(&[OrbitIdRename::new("unknown", "new").expect("mapping")])
+            .is_err());
+        assert!(OrbitIdRename::new(&old_id, "").is_err());
+        let mut dangling = original_input.clone();
+        dangling.members.orbit_id[0] = "dangling".to_string();
+        assert!(dangling
+            .renamed_orbit_ids(std::slice::from_ref(&rename))
+            .is_err());
+
+        let multi = run_iod(
+            &AssociatedObservations {
+                observations: observations.clone(),
+                associations: AssociationBatch {
+                    detection_id: observations
+                        .source
+                        .id
+                        .iter()
+                        .chain(&observations.source.id)
+                        .cloned()
+                        .collect(),
+                    object_id: std::iter::repeat_n(
+                        Some("multi-one".to_string()),
+                        observations.source.len(),
+                    )
+                    .chain(std::iter::repeat_n(
+                        Some("multi-two".to_string()),
+                        observations.source.len(),
+                    ))
+                    .collect(),
+                },
+            },
+            &config,
+            &provider,
+        )
+        .expect("two-group IOD");
+        assert_eq!(multi.fitted_orbits().count(), 2);
+        let multi_ids = multi
+            .fitted_orbits()
+            .map(|orbit| orbit.orbit_id.clone())
+            .collect::<Vec<_>>();
+        assert!(multi
+            .renamed_orbit_ids(&[
+                OrbitIdRename::new(&multi_ids[0], "duplicate").expect("first rename"),
+                OrbitIdRename::new(&multi_ids[1], "duplicate").expect("second rename"),
+            ])
+            .is_err());
+        assert!(multi
+            .renamed_orbit_ids(&[
+                OrbitIdRename::new(&multi_ids[0], "only-one").expect("partial rename")
+            ])
+            .is_err());
+
+        global_backend()
+            .lock()
+            .expect("SPICE backend")
+            .unload(&kernel);
+        std::fs::remove_file(kernel).expect("remove zero-Sun SPK");
+    }
+
+    #[test]
     fn stable_enums_round_trip_through_their_public_strings() {
         for code in [
             OdBatchErrorCode::InvalidInput,
@@ -3705,31 +4312,34 @@ mod tests {
     }
 
     #[test]
-    fn relabelled_iod_seed_is_rejected_from_content_addressed_identity() {
+    fn iod_seed_provenance_requires_science_identity_but_not_a_fixed_label() {
         let mut value = json!({"iod": {}, "refinement": {}, "evaluation": {}});
         let science = CanonicalConfiguration::from_value(value.clone())
             .expect("configuration")
             .science_sha256
             .clone();
-        value.as_object_mut().expect("configuration object").insert(
-            "configuration_sha256".to_string(),
-            Value::String(science.clone()),
-        );
-        let configuration =
-            CanonicalConfiguration::from_value(value).expect("declared configuration");
-        let input_fingerprint = "2".repeat(64);
-        let expected = canonical_orbit_id("group", &science, &input_fingerprint);
+        value
+            .as_object_mut()
+            .expect("configuration object")
+            .insert("configuration_sha256".to_string(), Value::String(science));
         let mut provenance = run_od_provenance();
         provenance.route = OdRoute::RunIod;
-        provenance.configuration = configuration;
-        provenance.input_fingerprint = input_fingerprint;
-        let canonical = one_row_orbit(&expected, Some("group"));
-        validate_iod_seed_identity(&canonical, 0, &provenance).expect("canonical IOD identity");
-        let relabelled = one_row_orbit("relabelled", Some("group"));
-        let error = validate_iod_seed_identity(&relabelled, 0, &provenance)
-            .expect_err("relabelled seed must fail closed");
-        assert_eq!(error.code, OdBatchErrorCode::InvalidProvenance);
-        assert!(error.message.contains("orbit ID"));
+        provenance.configuration =
+            CanonicalConfiguration::from_value(value).expect("declared configuration");
+        let relabelled = one_row_orbit("user-label", Some("group"));
+        validate_iod_seed_provenance(&relabelled, 0, &provenance)
+            .expect("mutable label is not scientific identity");
+
+        provenance.configuration = CanonicalConfiguration::from_value(
+            json!({"iod": {}, "refinement": {}, "evaluation": {}}),
+        )
+        .expect("configuration without declared digest");
+        assert_eq!(
+            validate_iod_seed_provenance(&relabelled, 0, &provenance)
+                .expect_err("science digest remains mandatory")
+                .code,
+            OdBatchErrorCode::InvalidProvenance
+        );
     }
 
     #[test]

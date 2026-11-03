@@ -36,11 +36,11 @@ def _put_digest_string(digest: "hashlib._Hash", value: str) -> None:
 
 
 def _membership_fingerprint(
-    group_id: str, orbit_id: str, observation_id: str, input_fingerprint: str
+    group_id: str, observation_id: str, input_fingerprint: str
 ) -> str:
     digest = hashlib.sha256()
-    digest.update(b"adam-core-od-membership-pair/v1\0")
-    for value in (group_id, orbit_id, observation_id, input_fingerprint):
+    digest.update(b"adam-core-od-membership-pair/v2\0")
+    for value in (group_id, observation_id, input_fingerprint):
         _put_digest_string(digest, value)
     return digest.hexdigest()
 
@@ -524,7 +524,7 @@ def test_composed_seed_fields_have_a_validated_consistency_digest(
 
 
 @pytest.mark.parametrize("route", ["refine", "evaluate"])
-def test_relabelled_iod_seed_is_rejected_before_provider(
+def test_consistently_renamed_iod_seed_is_accepted_and_preserved(
     pure_iod_orbit: PureIodOrbit, provider_counter: type[_Counter], route: str
 ) -> None:
     source, ids = _source_and_ids(pure_iod_orbit)
@@ -534,53 +534,129 @@ def test_relabelled_iod_seed_is_rejected_before_provider(
     config = _config()
     orbits, members, failures = run_iod(source, associations, None, config.for_iod())
     assert len(failures) == 0
+    old_id = orbits.orbit_id[0].as_py()
     relabelled_id = "relabelled-seed"
-    forged = orbits.set_column(
+    renamed_orbits = orbits.set_column(
         "orbit_id", pa.array([relabelled_id], type=pa.large_string())
     )
-    member_observation_ids = members.obs_id.to_pylist()
-    member_input_fingerprints = members.input_fingerprint.to_pylist()
-    forged_members = members.set_column(
+    renamed_members = members.set_column(
         "orbit_id",
         pa.array([relabelled_id] * len(members), type=pa.large_string()),
-    ).set_column(
-        "membership_fingerprint",
-        pa.array(
-            [
-                _membership_fingerprint("g", relabelled_id, obs_id, input_fingerprint)
-                for obs_id, input_fingerprint in zip(
-                    member_observation_ids,
-                    member_input_fingerprints,
-                    strict=True,
-                )
-            ],
-            type=pa.large_string(),
-        ),
     )
+    assert old_id != relabelled_id
+    assert renamed_orbits.object_id.to_pylist() == ["g"]
+    expected_membership = [
+        _membership_fingerprint("g", obs_id, input_fingerprint)
+        for obs_id, input_fingerprint in zip(
+            members.obs_id.to_pylist(),
+            members.input_fingerprint.to_pylist(),
+            strict=True,
+        )
+    ]
+    assert members.membership_fingerprint.to_pylist() == expected_membership
+    assert renamed_members.membership_fingerprint.to_pylist() == expected_membership
+
     if route == "refine":
-
-        def call() -> BatchResult:
-            return refine(
-                forged,
-                forged_members,
-                source,
-                TwoBodyPropagator(),
-                config.for_refinement(),
-            )
-
+        baseline = refine(orbits, members, source, None, config.for_refinement())
+        renamed = refine(
+            renamed_orbits,
+            renamed_members,
+            source,
+            None,
+            config.for_refinement(),
+        )
     else:
+        baseline = evaluate_orbits(
+            orbits, members, source, None, config.for_evaluation()
+        )
+        renamed = evaluate_orbits(
+            renamed_orbits,
+            renamed_members,
+            source,
+            None,
+            config.for_evaluation(),
+        )
 
-        def call() -> BatchResult:
-            return evaluate_orbits(
-                forged,
-                forged_members,
-                source,
-                TwoBodyPropagator(),
-                config.for_evaluation(),
-            )
+    baseline_orbits, baseline_members, baseline_failures = baseline
+    renamed_out, renamed_out_members, renamed_failures = renamed
+    assert len(baseline_failures) == len(renamed_failures) == 0
+    assert provider_counter.calls == 0
+    assert renamed_out.orbit_id.to_pylist() == [relabelled_id]
+    assert renamed_out.object_id.to_pylist() == ["g"]
+    assert renamed_out_members.orbit_id.to_pylist() == [relabelled_id] * len(
+        renamed_out_members
+    )
+    assert (
+        renamed_out.provenance.input_fingerprint.to_pylist()
+        == baseline_orbits.provenance.input_fingerprint.to_pylist()
+    )
+    assert (
+        renamed_out.provenance.state_fingerprint.to_pylist()
+        == baseline_orbits.provenance.state_fingerprint.to_pylist()
+    )
+    assert (
+        renamed_out.provenance.provenance_fingerprint.to_pylist()
+        == baseline_orbits.provenance.provenance_fingerprint.to_pylist()
+    )
+    assert (
+        renamed_out_members.membership_fingerprint.to_pylist()
+        == baseline_members.membership_fingerprint.to_pylist()
+        == expected_membership
+    )
 
-    with pytest.raises(ValueError, match="orbit ID.*canonical provenance"):
-        call()
+
+@pytest.mark.parametrize("mutation", ["dangling", "empty", "duplicate"])
+def test_inconsistent_or_ambiguous_orbit_labels_fail_before_provider(
+    pure_iod_orbit: PureIodOrbit,
+    provider_counter: type[_Counter],
+    mutation: str,
+) -> None:
+    source, ids = _source_and_ids(pure_iod_orbit)
+    config = _config()
+    if mutation == "duplicate":
+        associations = Associations.from_kwargs(
+            detection_id=ids + ids,
+            object_id=["g-1"] * len(ids) + ["g-2"] * len(ids),
+        )
+    else:
+        associations = Associations.from_kwargs(
+            detection_id=ids, object_id=["g"] * len(ids)
+        )
+    orbits, members, failures = run_iod(source, associations, None, config.for_iod())
+    assert len(failures) == 0
+
+    if mutation == "dangling":
+        forged_orbits = orbits.set_column(
+            "orbit_id", pa.array(["renamed"], type=pa.large_string())
+        )
+        forged_members = members
+        expected = "unknown orbit_id"
+    elif mutation == "empty":
+        forged_orbits = orbits.set_column(
+            "orbit_id", pa.array([""], type=pa.large_string())
+        )
+        forged_members = members.set_column(
+            "orbit_id", pa.array([""] * len(members), type=pa.large_string())
+        )
+        expected = "orbit ID.*empty"
+    else:
+        forged_orbits = orbits.set_column(
+            "orbit_id", pa.array(["duplicate", "duplicate"], type=pa.large_string())
+        )
+        forged_members = members.set_column(
+            "orbit_id",
+            pa.array(["duplicate"] * len(members), type=pa.large_string()),
+        )
+        expected = "orbit ID.*not unique"
+
+    with pytest.raises(ValueError, match=expected):
+        evaluate_orbits(
+            forged_orbits,
+            forged_members,
+            source,
+            TwoBodyPropagator(),
+            config.for_evaluation(),
+        )
     assert provider_counter.calls == 0
 
 
