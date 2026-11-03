@@ -35,6 +35,16 @@ def _put_digest_string(digest: "hashlib._Hash", value: str) -> None:
     digest.update(encoded)
 
 
+def _membership_fingerprint(
+    group_id: str, orbit_id: str, observation_id: str, input_fingerprint: str
+) -> str:
+    digest = hashlib.sha256()
+    digest.update(b"adam-core-od-membership-pair/v1\0")
+    for value in (group_id, orbit_id, observation_id, input_fingerprint):
+        _put_digest_string(digest, value)
+    return digest.hexdigest()
+
+
 def _put_optional_digest_string(digest: "hashlib._Hash", value: str | None) -> None:
     if value is None:
         digest.update(b"\x00")
@@ -510,6 +520,67 @@ def test_composed_seed_fields_have_a_validated_consistency_digest(
             TwoBodyPropagator(),
             config.for_refinement(),
         )
+    assert provider_counter.calls == 0
+
+
+@pytest.mark.parametrize("route", ["refine", "evaluate"])
+def test_relabelled_iod_seed_is_rejected_before_provider(
+    pure_iod_orbit: PureIodOrbit, provider_counter: type[_Counter], route: str
+) -> None:
+    source, ids = _source_and_ids(pure_iod_orbit)
+    associations = Associations.from_kwargs(
+        detection_id=ids, object_id=["g"] * len(ids)
+    )
+    config = _config()
+    orbits, members, failures = run_iod(source, associations, None, config.for_iod())
+    assert len(failures) == 0
+    relabelled_id = "relabelled-seed"
+    forged = orbits.set_column(
+        "orbit_id", pa.array([relabelled_id], type=pa.large_string())
+    )
+    member_observation_ids = members.obs_id.to_pylist()
+    member_input_fingerprints = members.input_fingerprint.to_pylist()
+    forged_members = members.set_column(
+        "orbit_id",
+        pa.array([relabelled_id] * len(members), type=pa.large_string()),
+    ).set_column(
+        "membership_fingerprint",
+        pa.array(
+            [
+                _membership_fingerprint("g", relabelled_id, obs_id, input_fingerprint)
+                for obs_id, input_fingerprint in zip(
+                    member_observation_ids,
+                    member_input_fingerprints,
+                    strict=True,
+                )
+            ],
+            type=pa.large_string(),
+        ),
+    )
+    if route == "refine":
+
+        def call() -> BatchResult:
+            return refine(
+                forged,
+                forged_members,
+                source,
+                TwoBodyPropagator(),
+                config.for_refinement(),
+            )
+
+    else:
+
+        def call() -> BatchResult:
+            return evaluate_orbits(
+                forged,
+                forged_members,
+                source,
+                TwoBodyPropagator(),
+                config.for_evaluation(),
+            )
+
+    with pytest.raises(ValueError, match="orbit ID.*canonical provenance"):
+        call()
     assert provider_counter.calls == 0
 
 

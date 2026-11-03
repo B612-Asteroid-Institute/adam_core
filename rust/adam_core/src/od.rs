@@ -7,36 +7,43 @@
 //!
 //! # Example
 //!
-//! The four workflows are generic only over the propagation-only origin
-//! translation service; their scientific inputs and outputs remain concrete
-//! typed Rust values.
+//! Each workflow accepts an [`crate::od::OdPropagator`] whose identity is derived from
+//! the actual two-body implementation or validated propagation-only ABI-v2
+//! capsule. Preparation remains available without a provider and returns an
+//! opaque value that owns the exact checked configuration.
 //!
 //! ```no_run
-//! use adam_core::{evaluate_orbits, refine, run_iod, run_od};
-//! use adam_core::coords::translation::OriginTranslationProvider;
+//! use adam_core::{run_iod, od::{AssociatedObservations, OdConfig, OdPropagator}};
 //!
-//! fn bind_workflows<T: OriginTranslationProvider>() {
-//!     let _ = run_iod::<T>;
-//!     let _ = run_od::<T>;
-//!     let _ = refine::<T>;
-//!     let _ = evaluate_orbits::<T>;
+//! fn run(input: &AssociatedObservations, config: &OdConfig) {
+//!     let provider = OdPropagator::two_body();
+//!     let result = run_iod(input, config, &provider);
+//!     # let _ = result;
 //! }
 //! ```
 
 use adam_core_rs_coords::od::algorithms::{
     prepare_observations, refine_with_predictor, run_iod_with_predictor, PreparedObservations,
 };
-use adam_core_rs_coords::propagation::adapter::{refine_with, SphericalPredictor};
+use adam_core_rs_coords::propagation::adapter::{
+    refine_with, PropagatorPredictor, SphericalPredictor,
+};
 use adam_core_rs_coords::propagation::{
-    evaluate_orbit, AstrometrySnapshot, FitEvaluation, GroupScientificFailureCode, IodResult,
-    PropagationError, RefinedOutput,
+    evaluate_orbit, two_body_reference, AstrometrySnapshot, CovariancePropagation,
+    EphemerisOptions, EpochPolicy, ExternalPropagator, FitEvaluation, GroupScientificFailureCode,
+    IodResult, PropagationError, PropagationOptions, Propagator, RefinedOutput, TwoBodyPropagator,
+    TwoBodyPropagatorConfig, EXTERNAL_PROPAGATOR_ABI_VERSION,
+    EXTERNAL_PROPAGATOR_CAP_NON_GRAVITATIONAL, EXTERNAL_PROPAGATOR_CAP_STM,
+    EXTERNAL_PROPAGATOR_CAP_THREAD_SAFE,
 };
 use adam_core_rs_coords::translation::OriginTranslationProvider;
 use adam_core_rs_coords::types::time::TimeScaleProvider;
 use adam_core_rs_coords::{
-    AssociationBatch, CoordinateBatch, CoordinateValues, CovarianceBatch, ObserverBatch,
-    OrbitBatch, SchemaError, SourceCatalogBatch,
+    AssociationBatch, CoordinateBatch, CoordinateRepresentation, CoordinateValues, CovarianceBatch,
+    CovarianceUnits, DataFrame, ObjectId, ObserverBatch, OrbitBatch, OrbitId, OriginArray,
+    OriginId, SchemaError, SourceCatalogBatch, TimeArray, TimeScale,
 };
+use adam_core_rs_spice::global_backend;
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use std::fmt;
@@ -54,6 +61,9 @@ pub mod profiles {
     pub use adam_core_rs_coords::od::profiles::*;
 }
 
+pub use adam_core_rs_coords::propagation::IodConfig;
+pub use adam_core_rs_coords::{IterativeFitConfig, RefinementConfig, WhitenedFitConfig};
+
 pub use adam_core_rs_coords::od::{
     plan_associations, plan_orbit_members, AssociationGroup, EvaluationConfig, IodRunConfig,
     ObservationPipeline, ObservationTransform, OdConfig, OdConfigError, OrbitMemberGroup,
@@ -62,6 +72,7 @@ pub use adam_core_rs_coords::od::{
 };
 
 /// Stable classification for invocation-fatal batch errors.
+#[non_exhaustive]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OdBatchErrorCode {
     /// A decoded typed batch is internally inconsistent.
@@ -74,8 +85,14 @@ pub enum OdBatchErrorCode {
     InvalidProviderIdentity,
     /// Persisted orbit/member provenance is missing, malformed, or inconsistent.
     InvalidProvenance,
-    /// A propagation, resource, protocol, or other invocation-fatal service error.
+    /// Invalid propagation request, schema, or numerical service error.
     Propagation,
+    /// Fatal propagation backend operation or coverage failure.
+    Backend,
+    /// Fatal propagation ABI or protocol failure.
+    Protocol,
+    /// Runtime service setup failure, such as thread-pool construction.
+    Runtime,
 }
 
 impl OdBatchErrorCode {
@@ -88,6 +105,34 @@ impl OdBatchErrorCode {
             Self::InvalidProviderIdentity => "invalid_provider_identity",
             Self::InvalidProvenance => "invalid_provenance",
             Self::Propagation => "propagation",
+            Self::Backend => "backend",
+            Self::Protocol => "protocol",
+            Self::Runtime => "runtime",
+        }
+    }
+}
+
+impl fmt::Display for OdBatchErrorCode {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(self.as_str())
+    }
+}
+
+impl std::str::FromStr for OdBatchErrorCode {
+    type Err = String;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+            "invalid_input" => Ok(Self::InvalidInput),
+            "invalid_configuration" => Ok(Self::InvalidConfiguration),
+            "invalid_build_identity" => Ok(Self::InvalidBuildIdentity),
+            "invalid_provider_identity" => Ok(Self::InvalidProviderIdentity),
+            "invalid_provenance" => Ok(Self::InvalidProvenance),
+            "propagation" => Ok(Self::Propagation),
+            "backend" => Ok(Self::Backend),
+            "protocol" => Ok(Self::Protocol),
+            "runtime" => Ok(Self::Runtime),
+            _ => Err(format!("unknown OD batch error code {value:?}")),
         }
     }
 }
@@ -113,8 +158,16 @@ impl OdBatchError {
     }
 
     fn propagation(source: PropagationError) -> Self {
+        let code = match &source {
+            PropagationError::Backend(_) | PropagationError::RowFailure(_) => {
+                OdBatchErrorCode::Backend
+            }
+            PropagationError::BackendProtocol(_) => OdBatchErrorCode::Protocol,
+            PropagationError::ThreadPool(_) => OdBatchErrorCode::Runtime,
+            _ => OdBatchErrorCode::Propagation,
+        };
         Self {
-            code: OdBatchErrorCode::Propagation,
+            code,
             message: source.to_string(),
             source: Some(source),
         }
@@ -157,7 +210,15 @@ pub struct CoreBuildIdentity {
 }
 
 impl CoreBuildIdentity {
+    /// Return the identity embedded by the adam-core crate build.
+    pub fn current() -> Result<Self, OdBatchError> {
+        Self::new(env!("CARGO_PKG_VERSION"), env!("ADAM_CORE_BUILD_COMMIT"))
+    }
+
     /// Construct and fail closed on an inexact source identity.
+    ///
+    /// Canonical workflow callers do not use this constructor; it exists for
+    /// validation of persisted provenance decoded by foreign-language bindings.
     pub fn new(
         version: impl Into<String>,
         commit: impl Into<String>,
@@ -267,19 +328,295 @@ impl ProviderMetadata {
     }
 }
 
-/// One prediction stage and its complete identity.
-pub struct PredictionService<'a> {
-    /// Predictor implementation. It is propagation-only; no fit callback exists.
-    pub predictor: &'a dyn SphericalPredictor,
-    /// Fail-closed provider identity.
-    pub metadata: ProviderMetadata,
+/// Canonical propagation backend for public OD workflows.
+///
+/// Stage options and provider provenance are derived inside Rust from the
+/// typed workflow configuration and this actual backend. Arbitrary predictors
+/// remain available only through [`algorithms`].
+pub struct OdPropagator<'a> {
+    backend: OdPropagatorBackend<'a>,
 }
 
-/// Shared non-prediction services and build identity for a batch invocation.
-pub struct OdExecutionContext<'a, T: OriginTranslationProvider> {
-    pub build: &'a CoreBuildIdentity,
-    pub time_provider: &'a dyn TimeScaleProvider,
-    pub translation_provider: &'a T,
+enum OdPropagatorBackend<'a> {
+    TwoBody,
+    External(&'a ExternalPropagator),
+}
+
+impl OdPropagator<'static> {
+    /// Use adam-core's built-in two-body propagator. Each stage receives the
+    /// exact tolerances and iteration limits declared by its typed config.
+    pub const fn two_body() -> Self {
+        Self {
+            backend: OdPropagatorBackend::TwoBody,
+        }
+    }
+}
+
+impl<'a> OdPropagator<'a> {
+    /// Select a propagation-only ABI backend without resolving its identity.
+    /// Identity and ABI-v2 provenance validation happen only after static
+    /// preparation establishes that the batch is non-empty.
+    pub const fn external(propagator: &'a ExternalPropagator) -> Self {
+        Self {
+            backend: OdPropagatorBackend::External(propagator),
+        }
+    }
+
+    fn external_metadata(&self) -> Result<ProviderMetadata, OdBatchError> {
+        let OdPropagatorBackend::External(propagator) = self.backend else {
+            return Err(OdBatchError::new(
+                OdBatchErrorCode::InvalidProviderIdentity,
+                "external provider metadata requested for the two-body backend",
+            ));
+        };
+        if propagator.configuration_fingerprint().is_none()
+            || propagator.data_fingerprint().is_none()
+        {
+            return Err(OdBatchError::new(
+                OdBatchErrorCode::InvalidProviderIdentity,
+                "native OD requires the ABI v2 provenance metadata suffix (configuration_fingerprint and data_fingerprint); this provider is propagation-compatible but not provenance-complete",
+            ));
+        }
+        let identity = propagator.identity();
+        let metadata = ProviderMetadata {
+            name: identity.name.clone(),
+            version: identity.version.clone(),
+            abi_version: propagator.abi_version(),
+            identity_validated_by_capsule: true,
+            capabilities: propagator.capabilities(),
+            known_capabilities: propagator.known_capabilities(),
+            integration_time_scale: propagator.integration_scale().as_str().to_string(),
+            two_body_dynamics: identity.two_body_dynamics,
+            configuration_fingerprint: propagator
+                .configuration_fingerprint()
+                .expect("metadata presence checked above")
+                .to_string(),
+            data_fingerprint: propagator
+                .data_fingerprint()
+                .expect("metadata presence checked above")
+                .to_string(),
+        };
+        metadata.validate()?;
+        Ok(metadata)
+    }
+}
+
+/// Canonical ERFA-backed time-scale conversion used by public OD workflows.
+#[derive(Debug, Clone, Copy, Default)]
+struct ErfaTimeProvider;
+
+impl TimeScaleProvider for ErfaTimeProvider {
+    fn rescale(&self, times: &TimeArray, new_scale: TimeScale) -> Result<TimeArray, SchemaError> {
+        times.rescale(new_scale)
+    }
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+struct GlobalSpiceTranslation;
+
+impl OriginTranslationProvider for GlobalSpiceTranslation {
+    fn origin_translation_vectors(
+        &self,
+        origins: &OriginArray,
+        target_origin: &OriginId,
+        frame: DataFrame,
+        times: &TimeArray,
+    ) -> Result<Vec<[f64; 6]>, SchemaError> {
+        let backend = global_backend().lock().map_err(|_| {
+            SchemaError::InvalidRecordBatch("SPICE backend lock is poisoned".to_string())
+        })?;
+        OriginTranslationProvider::origin_translation_vectors(
+            &*backend,
+            origins,
+            target_origin,
+            frame,
+            times,
+        )
+    }
+}
+
+struct PredictionService<'a> {
+    predictor: &'a dyn SphericalPredictor,
+    metadata: ProviderMetadata,
+}
+
+struct OdExecutionContext<'a> {
+    build: &'a CoreBuildIdentity,
+    time_provider: &'a ErfaTimeProvider,
+    translation_provider: &'a GlobalSpiceTranslation,
+}
+
+struct StageSettings {
+    options: EphemerisOptions,
+    two_body: TwoBodyPropagator,
+}
+
+fn stage_settings(config: WhitenedFitConfig) -> Result<StageSettings, OdBatchError> {
+    config
+        .validate()
+        .map_err(|message| OdBatchError::new(OdBatchErrorCode::InvalidConfiguration, message))?;
+    let two_body = config.two_body;
+    let options = EphemerisOptions {
+        propagation: PropagationOptions {
+            chunk_size: None,
+            thread_limit: None,
+            epoch_policy: EpochPolicy::CrossProduct,
+            covariance: CovariancePropagation::None,
+        },
+        lt_tol: two_body.lt_tol,
+        max_iter: two_body.ephemeris_max_iter,
+        tol: two_body.ephemeris_tol,
+        stellar_aberration: false,
+        max_lt_iter: two_body.max_lt_iter,
+        output_time_scale: TimeScale::Utc,
+        include_aberrated_coordinates: false,
+        ..EphemerisOptions::default()
+    };
+    let two_body = TwoBodyPropagator::new(TwoBodyPropagatorConfig {
+        max_iter: two_body.propagation_max_iter,
+        tol: two_body.propagation_tol,
+    })?;
+    Ok(StageSettings { options, two_body })
+}
+
+fn two_body_metadata(propagator: &TwoBodyPropagator) -> ProviderMetadata {
+    let identity = propagator.backend();
+    let mut capabilities = EXTERNAL_PROPAGATOR_CAP_THREAD_SAFE;
+    if propagator.supports_stm() {
+        capabilities |= EXTERNAL_PROPAGATOR_CAP_STM;
+    }
+    if propagator.supports_non_gravitational_parameters() {
+        capabilities |= EXTERNAL_PROPAGATOR_CAP_NON_GRAVITATIONAL;
+    }
+    ProviderMetadata {
+        name: identity.name,
+        version: identity.version,
+        abi_version: EXTERNAL_PROPAGATOR_ABI_VERSION,
+        identity_validated_by_capsule: false,
+        capabilities,
+        known_capabilities: capabilities,
+        integration_time_scale: propagator.integration_time_scale().as_str().to_string(),
+        two_body_dynamics: identity.two_body_dynamics,
+        configuration_fingerprint: two_body_reference::configuration_fingerprint(
+            propagator.config(),
+        ),
+        data_fingerprint: two_body_reference::DATA_FINGERPRINT.to_string(),
+    }
+}
+
+fn with_stage_predictor<R>(
+    provider: &OdPropagator<'_>,
+    config: WhitenedFitConfig,
+    driver: impl FnOnce(&PredictionService<'_>, &OdExecutionContext<'_>) -> Result<R, OdBatchError>,
+) -> Result<R, OdBatchError> {
+    let settings = stage_settings(config)?;
+    let build = CoreBuildIdentity::current()?;
+    let time = ErfaTimeProvider;
+    let translation = GlobalSpiceTranslation;
+    let context = OdExecutionContext {
+        build: &build,
+        time_provider: &time,
+        translation_provider: &translation,
+    };
+    match &provider.backend {
+        OdPropagatorBackend::TwoBody => {
+            let predictor = PropagatorPredictor {
+                propagator: &settings.two_body,
+                options: &settings.options,
+                provider: &time,
+                translation_provider: &translation,
+            };
+            let service = PredictionService {
+                predictor: &predictor,
+                metadata: two_body_metadata(&settings.two_body),
+            };
+            driver(&service, &context)
+        }
+        OdPropagatorBackend::External(propagator) => {
+            let predictor = PropagatorPredictor {
+                propagator: *propagator,
+                options: &settings.options,
+                provider: &time,
+                translation_provider: &translation,
+            };
+            let service = PredictionService {
+                predictor: &predictor,
+                metadata: provider.external_metadata()?,
+            };
+            driver(&service, &context)
+        }
+    }
+}
+
+fn with_stage_predictors<R>(
+    provider: &OdPropagator<'_>,
+    iod_config: WhitenedFitConfig,
+    refinement_config: WhitenedFitConfig,
+    driver: impl FnOnce(
+        &PredictionService<'_>,
+        &PredictionService<'_>,
+        &OdExecutionContext<'_>,
+    ) -> Result<R, OdBatchError>,
+) -> Result<R, OdBatchError> {
+    let iod = stage_settings(iod_config)?;
+    let refinement = stage_settings(refinement_config)?;
+    let build = CoreBuildIdentity::current()?;
+    let time = ErfaTimeProvider;
+    let translation = GlobalSpiceTranslation;
+    let context = OdExecutionContext {
+        build: &build,
+        time_provider: &time,
+        translation_provider: &translation,
+    };
+    match &provider.backend {
+        OdPropagatorBackend::TwoBody => {
+            let iod_predictor = PropagatorPredictor {
+                propagator: &iod.two_body,
+                options: &iod.options,
+                provider: &time,
+                translation_provider: &translation,
+            };
+            let refinement_predictor = PropagatorPredictor {
+                propagator: &refinement.two_body,
+                options: &refinement.options,
+                provider: &time,
+                translation_provider: &translation,
+            };
+            let iod_service = PredictionService {
+                predictor: &iod_predictor,
+                metadata: two_body_metadata(&iod.two_body),
+            };
+            let refinement_service = PredictionService {
+                predictor: &refinement_predictor,
+                metadata: two_body_metadata(&refinement.two_body),
+            };
+            driver(&iod_service, &refinement_service, &context)
+        }
+        OdPropagatorBackend::External(propagator) => {
+            let iod_predictor = PropagatorPredictor {
+                propagator: *propagator,
+                options: &iod.options,
+                provider: &time,
+                translation_provider: &translation,
+            };
+            let refinement_predictor = PropagatorPredictor {
+                propagator: *propagator,
+                options: &refinement.options,
+                provider: &time,
+                translation_provider: &translation,
+            };
+            let metadata = provider.external_metadata()?;
+            let iod_service = PredictionService {
+                predictor: &iod_predictor,
+                metadata: metadata.clone(),
+            };
+            let refinement_service = PredictionService {
+                predictor: &refinement_predictor,
+                metadata,
+            };
+            driver(&iod_service, &refinement_service, &context)
+        }
+    }
 }
 
 /// Typed observation/source input shared by all four workflows.
@@ -298,7 +635,7 @@ pub struct AssociatedObservations {
 }
 
 /// Typed nullable astrometry columns persisted for explicit fitted members.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct AstrometryColumns {
     pub lon: Vec<Option<f64>>,
     pub lat: Vec<Option<f64>>,
@@ -390,6 +727,7 @@ pub struct MemberedOrbits {
 }
 
 /// Canonical workflow route recorded in provenance.
+#[non_exhaustive]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OdRoute {
     RunIod,
@@ -409,12 +747,33 @@ impl OdRoute {
     }
 }
 
+impl fmt::Display for OdRoute {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(self.as_str())
+    }
+}
+
+impl std::str::FromStr for OdRoute {
+    type Err = String;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+            "run_iod" => Ok(Self::RunIod),
+            "run_od" => Ok(Self::RunOd),
+            "refine" => Ok(Self::Refine),
+            "evaluate_orbits" => Ok(Self::EvaluateOrbits),
+            _ => Err(format!("unknown OD route {value:?}")),
+        }
+    }
+}
+
 /// Validated path-free canonical configuration identity.
 #[derive(Debug, Clone)]
 pub struct CanonicalConfiguration {
     value: Value,
     science_sha256: String,
     complete_sha256: String,
+    declared_science_sha256: bool,
 }
 
 impl CanonicalConfiguration {
@@ -449,6 +808,7 @@ impl CanonicalConfiguration {
             .get("configuration_sha256")
             .and_then(Value::as_str)
             .map(str::to_string);
+        let declared_science_sha256 = declared.is_some();
         let science_sha256 = if let Some(declared) = declared {
             if !is_sha256(&declared) {
                 return Err(OdBatchError::new(
@@ -488,6 +848,7 @@ impl CanonicalConfiguration {
             value,
             science_sha256,
             complete_sha256,
+            declared_science_sha256,
         })
     }
 
@@ -497,6 +858,12 @@ impl CanonicalConfiguration {
 
     pub fn complete_sha256(&self) -> &str {
         &self.complete_sha256
+    }
+
+    /// The declared science digest carried by complete OD configurations.
+    pub fn declared_science_sha256(&self) -> Option<&str> {
+        self.declared_science_sha256
+            .then_some(self.science_sha256.as_str())
     }
 
     /// Canonical JSON used only at serialization boundaries.
@@ -703,7 +1070,46 @@ impl OdProvenance {
     }
 }
 
+/// Stable canonical workflow stages used by typed group failures.
+#[non_exhaustive]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OdStage {
+    Iod,
+    Refinement,
+    Evaluation,
+}
+
+impl OdStage {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Iod => "iod",
+            Self::Refinement => "refinement",
+            Self::Evaluation => "evaluation",
+        }
+    }
+}
+
+impl fmt::Display for OdStage {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(self.as_str())
+    }
+}
+
+impl std::str::FromStr for OdStage {
+    type Err = String;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+            "iod" => Ok(Self::Iod),
+            "refinement" => Ok(Self::Refinement),
+            "evaluation" => Ok(Self::Evaluation),
+            _ => Err(format!("unknown OD stage {value:?}")),
+        }
+    }
+}
+
 /// Stable group-local scientific/fitting failure classifications.
+#[non_exhaustive]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum OdGroupFailureCode {
     NoSolution,
@@ -721,13 +1127,36 @@ impl OdGroupFailureCode {
     }
 }
 
+impl fmt::Display for OdGroupFailureCode {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(self.as_str())
+    }
+}
+
+impl std::str::FromStr for OdGroupFailureCode {
+    type Err = String;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+            "no_solution" => Ok(Self::NoSolution),
+            "not_converged" => Ok(Self::NotConverged),
+            "rank_deficient" => Ok(Self::Scientific(GroupScientificFailureCode::RankDeficient)),
+            "no_included_observations" => Ok(Self::Scientific(
+                GroupScientificFailureCode::NoIncludedObservations,
+            )),
+            "no_fit_pass" => Ok(Self::Scientific(GroupScientificFailureCode::NoFitPass)),
+            _ => Err(format!("unknown OD group failure code {value:?}")),
+        }
+    }
+}
+
 /// Typed per-group failure. These values continue the surrounding batch.
 #[derive(Debug, Clone)]
 pub struct OrbitDeterminationFailure {
     pub group_id: String,
     pub orbit_id: Option<String>,
     pub input_orbit_id: Option<String>,
-    pub stage: &'static str,
+    pub stage: OdStage,
     pub code: OdGroupFailureCode,
     pub message: String,
     pub num_obs: usize,
@@ -746,6 +1175,8 @@ pub struct OrbitDeterminationFailure {
 /// Rust-owned fitted-orbit record for one successful group disposition.
 #[derive(Debug, Clone)]
 pub struct FittedOrbitRecord {
+    /// Materialized one-row fitted/evaluated orbit, including covariance when fitted.
+    pub orbit: OrbitBatch,
     pub group_id: String,
     pub orbit_id: String,
     pub input_orbit_index: Option<usize>,
@@ -753,6 +1184,32 @@ pub struct FittedOrbitRecord {
     pub refined: Option<RefinedOutput>,
     pub evaluation: Option<FitEvaluation>,
     pub provenance: OdProvenance,
+}
+
+/// Named astrometric values persisted before and after the observation pipeline.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct AstrometryRecord {
+    pub lon: f64,
+    pub lat: f64,
+    pub sigma_lon: f64,
+    pub sigma_lat: f64,
+    pub variance_lon: f64,
+    pub variance_lat: f64,
+    pub cov_lonlat: f64,
+}
+
+impl AstrometryRecord {
+    fn from_snapshot(snapshot: &AstrometrySnapshot, row: usize) -> Self {
+        Self {
+            lon: snapshot.lon[row],
+            lat: snapshot.lat[row],
+            sigma_lon: snapshot.sigma_lon[row],
+            sigma_lat: snapshot.sigma_lat[row],
+            variance_lon: snapshot.variance_lon[row],
+            variance_lat: snapshot.variance_lat[row],
+            cov_lonlat: snapshot.cov_lonlat[row],
+        }
+    }
 }
 
 /// Rust-owned explicit fitted-orbit membership record.
@@ -764,8 +1221,8 @@ pub struct FittedOrbitMemberRecord {
     pub input_member_index: Option<usize>,
     pub input_fingerprint: String,
     pub membership_fingerprint: String,
-    pub original: [f64; 7],
-    pub used: [f64; 7],
+    pub original: AstrometryRecord,
+    pub used: AstrometryRecord,
     pub outlier: bool,
 }
 
@@ -783,6 +1240,135 @@ pub struct OdGroupResult {
     pub failure: Option<OrbitDeterminationFailure>,
     /// IOD diagnostics are retained even when no fitted orbit exists.
     pub iod: Option<IodResult>,
+}
+
+impl OdGroupResult {
+    /// Convert one successful group losslessly into the typed input accepted by
+    /// [`refine`] and [`evaluate_orbits`]. No diagnostics parsing or state
+    /// reconstruction is required.
+    pub fn to_membered_orbits(
+        &self,
+        observations: &OdObservationBatch,
+    ) -> Result<Option<MemberedOrbits>, OdBatchError> {
+        let Some(fitted) = &self.orbit else {
+            return Ok(None);
+        };
+        let astrometry_columns = |used: bool| AstrometryColumns {
+            lon: self
+                .members
+                .iter()
+                .map(|member| {
+                    Some(if used {
+                        member.used.lon
+                    } else {
+                        member.original.lon
+                    })
+                })
+                .collect(),
+            lat: self
+                .members
+                .iter()
+                .map(|member| {
+                    Some(if used {
+                        member.used.lat
+                    } else {
+                        member.original.lat
+                    })
+                })
+                .collect(),
+            sigma_lon: self
+                .members
+                .iter()
+                .map(|member| {
+                    Some(if used {
+                        member.used.sigma_lon
+                    } else {
+                        member.original.sigma_lon
+                    })
+                })
+                .collect(),
+            sigma_lat: self
+                .members
+                .iter()
+                .map(|member| {
+                    Some(if used {
+                        member.used.sigma_lat
+                    } else {
+                        member.original.sigma_lat
+                    })
+                })
+                .collect(),
+            variance_lon: self
+                .members
+                .iter()
+                .map(|member| {
+                    Some(if used {
+                        member.used.variance_lon
+                    } else {
+                        member.original.variance_lon
+                    })
+                })
+                .collect(),
+            variance_lat: self
+                .members
+                .iter()
+                .map(|member| {
+                    Some(if used {
+                        member.used.variance_lat
+                    } else {
+                        member.original.variance_lat
+                    })
+                })
+                .collect(),
+            cov_lonlat: self
+                .members
+                .iter()
+                .map(|member| {
+                    Some(if used {
+                        member.used.cov_lonlat
+                    } else {
+                        member.original.cov_lonlat
+                    })
+                })
+                .collect(),
+        };
+        let output = MemberedOrbits {
+            orbits: fitted.orbit.clone(),
+            provenance: vec![Some(fitted.provenance.clone())],
+            observations: observations.clone(),
+            members: FittedOrbitMembersBatch {
+                orbit_id: self
+                    .members
+                    .iter()
+                    .map(|member| member.orbit_id.clone())
+                    .collect(),
+                observation_id: self
+                    .members
+                    .iter()
+                    .map(|member| member.observation_id.clone())
+                    .collect(),
+                outlier: self
+                    .members
+                    .iter()
+                    .map(|member| Some(member.outlier))
+                    .collect(),
+                input_fingerprint: self
+                    .members
+                    .iter()
+                    .map(|member| Some(member.input_fingerprint.clone()))
+                    .collect(),
+                membership_fingerprint: self
+                    .members
+                    .iter()
+                    .map(|member| Some(member.membership_fingerprint.clone()))
+                    .collect(),
+                original_astrometry: astrometry_columns(false),
+                used_astrometry: astrometry_columns(true),
+            },
+        };
+        validate_member_input(&output, true, &fitted.provenance.adam_core)?;
+        Ok(Some(output))
+    }
 }
 
 /// Provider identities used by a canonical batch invocation.
@@ -810,6 +1396,18 @@ impl OdBatchResult {
     /// Explicit membership records in deterministic group/source-row order.
     pub fn fitted_orbit_members(&self) -> impl Iterator<Item = &FittedOrbitMemberRecord> {
         self.groups.iter().flat_map(|group| group.members.iter())
+    }
+
+    /// Convert every successful group into a directly reusable typed member
+    /// batch while preserving deterministic group order.
+    pub fn to_membered_groups(
+        &self,
+        observations: &OdObservationBatch,
+    ) -> Result<Vec<MemberedOrbits>, OdBatchError> {
+        self.groups
+            .iter()
+            .filter_map(|group| group.to_membered_orbits(observations).transpose())
+            .collect()
     }
 
     /// Typed group failures in deterministic group order.
@@ -1251,7 +1849,7 @@ fn iod_failure(group_id: &str, result: &IodResult, n: usize) -> Option<OrbitDete
         group_id: group_id.to_string(),
         orbit_id: None,
         input_orbit_id: None,
-        stage: "iod",
+        stage: OdStage::Iod,
         code: OdGroupFailureCode::NoSolution,
         message: output
             .not_found_reason
@@ -1274,7 +1872,7 @@ fn scientific_failure(
     group_id: &str,
     orbit_id: Option<&str>,
     input_orbit_id: Option<&str>,
-    stage: &'static str,
+    stage: OdStage,
     error: &PropagationError,
     n: usize,
 ) -> OrbitDeterminationFailure {
@@ -1311,7 +1909,7 @@ fn refinement_failure(
         group_id: group_id.to_string(),
         orbit_id: Some(orbit_id.to_string()),
         input_orbit_id: input_orbit_id.map(str::to_string),
-        stage: "refinement",
+        stage: OdStage::Refinement,
         code: OdGroupFailureCode::NotConverged,
         message: format!(
             "refinement did not converge (status_code={})",
@@ -1494,55 +2092,38 @@ fn member_records(
                     &fingerprint,
                 ),
                 input_fingerprint: fingerprint,
-                original: [
-                    prepared.original.lon[row],
-                    prepared.original.lat[row],
-                    prepared.original.sigma_lon[row],
-                    prepared.original.sigma_lat[row],
-                    prepared.original.variance_lon[row],
-                    prepared.original.variance_lat[row],
-                    prepared.original.cov_lonlat[row],
-                ],
-                used: [
-                    prepared.used.lon[row],
-                    prepared.used.lat[row],
-                    prepared.used.sigma_lon[row],
-                    prepared.used.sigma_lat[row],
-                    prepared.used.variance_lon[row],
-                    prepared.used.variance_lat[row],
-                    prepared.used.cov_lonlat[row],
-                ],
+                original: AstrometryRecord::from_snapshot(&prepared.original, row),
+                used: AstrometryRecord::from_snapshot(&prepared.used, row),
                 outlier: outlier.get(row).copied().unwrap_or(false),
             }
         })
         .collect()
 }
 
-/// Validated and transformed association groups ready for IOD execution.
-///
-/// Fields remain private so callers cannot bypass canonical planning or mutate
-/// prepared observations between validation and execution.
-#[doc(hidden)]
-pub struct PreparedAssociatedBatch<'a> {
+/// Result of static batch preparation before a propagation backend is acquired.
+pub enum BatchPreparation<P> {
+    /// The canonical input contains no groups and requires no provider.
+    Empty,
+    /// Static validation and one-time observation preparation succeeded.
+    Ready(P),
+}
+
+struct PreparedAssociatedBatch<'a> {
     input: &'a AssociatedObservations,
-    config: &'a OdConfig,
+    config: OdConfig,
     build: CoreBuildIdentity,
     groups: Vec<AssociationGroup>,
     prepared_groups: Vec<(PreparedObservations, ObserverBatch)>,
 }
 
-/// Validate, plan, and transform associated observations before a prediction
-/// provider is acquired. `None` is the canonical empty-batch result.
-#[doc(hidden)]
-pub fn prepare_associated_batch<'a, T: OriginTranslationProvider>(
+fn prepare_associated_batch<'a>(
     input: &'a AssociatedObservations,
-    config: &'a OdConfig,
-    context: &OdExecutionContext<'_, T>,
+    config: &OdConfig,
 ) -> Result<Option<PreparedAssociatedBatch<'a>>, OdBatchError> {
     config
         .validate()
         .map_err(|message| OdBatchError::new(OdBatchErrorCode::InvalidConfiguration, message))?;
-    context.build.validate()?;
+    let build = CoreBuildIdentity::current()?;
     let groups = plan_associations(&input.observations.source.id, &input.associations)
         .map_err(|message| OdBatchError::new(OdBatchErrorCode::InvalidInput, message))?;
     if groups.is_empty() {
@@ -1550,60 +2131,73 @@ pub fn prepare_associated_batch<'a, T: OriginTranslationProvider>(
     }
     validate_problem(&input.observations)?;
     let prepared_groups =
-        prepare_association_groups(&groups, &input.observations, config, context.time_provider)?;
+        prepare_association_groups(&groups, &input.observations, config, &ErfaTimeProvider)?;
     Ok(Some(PreparedAssociatedBatch {
         input,
-        config,
-        build: context.build.clone(),
+        config: config.clone(),
+        build,
         groups,
         prepared_groups,
     }))
 }
 
-/// Canonical batch IOD over deterministic first-appearance association groups.
-pub fn run_iod<T: OriginTranslationProvider>(
-    input: &AssociatedObservations,
-    config: &OdConfig,
-    service: &PredictionService<'_>,
-    context: &OdExecutionContext<'_, T>,
-) -> Result<OdBatchResult, OdBatchError> {
-    let Some(prepared) = prepare_associated_batch(input, config, context)? else {
-        return Ok(OdBatchResult::default());
-    };
-    run_iod_from_prepared(prepared, service, context)
+/// Validated, transformed IOD input whose configuration cannot be swapped.
+pub struct PreparedIod<'a> {
+    inner: PreparedAssociatedBatch<'a>,
 }
 
-/// Execute IOD from a Rust-owned validated preparation without rerunning the
-/// observation pipeline.
-#[doc(hidden)]
-pub fn run_iod_from_prepared<T: OriginTranslationProvider>(
-    prepared: PreparedAssociatedBatch<'_>,
-    service: &PredictionService<'_>,
-    context: &OdExecutionContext<'_, T>,
-) -> Result<OdBatchResult, OdBatchError> {
-    context.build.validate()?;
-    if prepared.build != *context.build {
-        return Err(OdBatchError::new(
-            OdBatchErrorCode::InvalidBuildIdentity,
-            "OD preparation and execution Core identities differ",
-        ));
+/// Perform every provider-independent IOD check and transform exactly once.
+pub fn prepare_iod<'a>(
+    input: &'a AssociatedObservations,
+    config: &OdConfig,
+) -> Result<BatchPreparation<PreparedIod<'a>>, OdBatchError> {
+    Ok(match prepare_associated_batch(input, config)? {
+        Some(inner) => BatchPreparation::Ready(PreparedIod { inner }),
+        None => BatchPreparation::Empty,
+    })
+}
+
+impl PreparedIod<'_> {
+    /// Execute the prepared IOD batch with metadata derived from `provider`.
+    pub fn execute(self, provider: &OdPropagator<'_>) -> Result<OdBatchResult, OdBatchError> {
+        let fit = *self.inner.config.for_iod().correction_fit();
+        with_stage_predictor(provider, fit, |service, context| {
+            if self.inner.build != *context.build {
+                return Err(OdBatchError::new(
+                    OdBatchErrorCode::InvalidBuildIdentity,
+                    "OD preparation and execution Core identities differ",
+                ));
+            }
+            service.metadata.validate()?;
+            run_iod_prepared(
+                self.inner.input,
+                &self.inner.config,
+                service,
+                context,
+                self.inner.groups,
+                self.inner.prepared_groups,
+            )
+        })
     }
-    service.metadata.validate()?;
-    run_iod_prepared(
-        prepared.input,
-        prepared.config,
-        service,
-        context,
-        prepared.groups,
-        prepared.prepared_groups,
-    )
 }
 
-fn run_iod_prepared<T: OriginTranslationProvider>(
+/// Canonical batch IOD over deterministic first-appearance association groups.
+pub fn run_iod(
+    input: &AssociatedObservations,
+    config: &OdConfig,
+    provider: &OdPropagator<'_>,
+) -> Result<OdBatchResult, OdBatchError> {
+    match prepare_iod(input, config)? {
+        BatchPreparation::Empty => Ok(OdBatchResult::default()),
+        BatchPreparation::Ready(prepared) => prepared.execute(provider),
+    }
+}
+
+fn run_iod_prepared(
     input: &AssociatedObservations,
     config: &OdConfig,
     service: &PredictionService<'_>,
-    context: &OdExecutionContext<'_, T>,
+    context: &OdExecutionContext<'_>,
     groups: Vec<AssociationGroup>,
     prepared_groups: Vec<(PreparedObservations, ObserverBatch)>,
 ) -> Result<OdBatchResult, OdBatchError> {
@@ -1653,15 +2247,20 @@ fn run_iod_prepared<T: OriginTranslationProvider>(
                     None,
                     state_fingerprint,
                 );
-                let orbit = iod.accepted.is_some().then(|| FittedOrbitRecord {
-                    group_id: group.group_id.clone(),
-                    orbit_id: orbit_id.clone(),
-                    input_orbit_index: None,
-                    iod: Some(iod.clone()),
-                    refined: None,
-                    evaluation: None,
-                    provenance,
-                });
+                let orbit = if iod.accepted.is_some() {
+                    Some(FittedOrbitRecord {
+                        orbit: materialized_iod_orbit(&iod, &group.group_id, &orbit_id)?,
+                        group_id: group.group_id.clone(),
+                        orbit_id: orbit_id.clone(),
+                        input_orbit_index: None,
+                        iod: Some(iod.clone()),
+                        refined: None,
+                        evaluation: None,
+                        provenance,
+                    })
+                } else {
+                    None
+                };
                 let members = orbit.as_ref().map_or_else(Vec::new, |_| {
                     let outlier = iod.to_output(group.source_indices.len()).outlier;
                     member_records(
@@ -1692,7 +2291,7 @@ fn run_iod_prepared<T: OriginTranslationProvider>(
                     &group.group_id,
                     None,
                     None,
-                    "iod",
+                    OdStage::Iod,
                     &error,
                     group.source_indices.len(),
                 );
@@ -1715,29 +2314,59 @@ fn run_iod_prepared<T: OriginTranslationProvider>(
     Ok(output)
 }
 
-/// Canonical exact composition: prepare once, IOD, then refinement over the
-/// same prepared observations without rerunning transforms.
-pub fn run_od<T: OriginTranslationProvider>(
-    input: &AssociatedObservations,
-    config: &OdConfig,
-    iod_service: &PredictionService<'_>,
-    refinement_service: &PredictionService<'_>,
-    context: &OdExecutionContext<'_, T>,
-) -> Result<OdBatchResult, OdBatchError> {
-    let Some(prepared) = prepare_associated_batch(input, config, context)? else {
-        return Ok(OdBatchResult::default());
-    };
-    run_od_from_prepared(prepared, iod_service, refinement_service, context)
+/// Validated, transformed exact IOD-plus-refinement input.
+pub struct PreparedOd<'a> {
+    inner: PreparedAssociatedBatch<'a>,
 }
 
-/// Execute exact IOD-plus-refinement composition from one Rust-owned prepared
-/// association batch.
-#[doc(hidden)]
-pub fn run_od_from_prepared<T: OriginTranslationProvider>(
+/// Perform every provider-independent `run_od` check and transform exactly once.
+pub fn prepare_od<'a>(
+    input: &'a AssociatedObservations,
+    config: &OdConfig,
+) -> Result<BatchPreparation<PreparedOd<'a>>, OdBatchError> {
+    Ok(match prepare_associated_batch(input, config)? {
+        Some(inner) => BatchPreparation::Ready(PreparedOd { inner }),
+        None => BatchPreparation::Empty,
+    })
+}
+
+impl PreparedOd<'_> {
+    /// Execute the prepared exact composition with one actual backend.
+    pub fn execute(self, provider: &OdPropagator<'_>) -> Result<OdBatchResult, OdBatchError> {
+        let iod_fit = *self.inner.config.for_iod().correction_fit();
+        let refinement = *self.inner.config.for_refinement().refinement();
+        let refinement_fit = match refinement {
+            adam_core_rs_coords::RefinementConfig::WorstResidual(value) => value.fit,
+            adam_core_rs_coords::RefinementConfig::Cmc2003(value) => value.fit,
+        };
+        with_stage_predictors(
+            provider,
+            iod_fit,
+            refinement_fit,
+            |iod_service, refinement_service, context| {
+                run_od_prepared(self.inner, iod_service, refinement_service, context)
+            },
+        )
+    }
+}
+
+/// Canonical exact composition: one preparation, IOD, then refinement.
+pub fn run_od(
+    input: &AssociatedObservations,
+    config: &OdConfig,
+    provider: &OdPropagator<'_>,
+) -> Result<OdBatchResult, OdBatchError> {
+    match prepare_od(input, config)? {
+        BatchPreparation::Empty => Ok(OdBatchResult::default()),
+        BatchPreparation::Ready(prepared) => prepared.execute(provider),
+    }
+}
+
+fn run_od_prepared(
     prepared: PreparedAssociatedBatch<'_>,
     iod_service: &PredictionService<'_>,
     refinement_service: &PredictionService<'_>,
-    context: &OdExecutionContext<'_, T>,
+    context: &OdExecutionContext<'_>,
 ) -> Result<OdBatchResult, OdBatchError> {
     let PreparedAssociatedBatch {
         input,
@@ -1755,13 +2384,19 @@ pub fn run_od_from_prepared<T: OriginTranslationProvider>(
     }
     iod_service.metadata.validate()?;
     refinement_service.metadata.validate()?;
-    let configuration = CanonicalConfiguration::from_od(config)?;
+    let configuration = CanonicalConfiguration::from_od(&config)?;
     let refinement_observers = prepared_groups
         .iter()
         .map(|(_, observers)| observers.clone())
         .collect::<Vec<_>>();
-    let mut output =
-        run_iod_prepared(input, config, iod_service, context, groups, prepared_groups)?;
+    let mut output = run_iod_prepared(
+        input,
+        &config,
+        iod_service,
+        context,
+        groups,
+        prepared_groups,
+    )?;
     output.providers.refinement = Some(refinement_service.metadata.clone());
 
     for (group, observers) in output.groups.iter_mut().zip(refinement_observers) {
@@ -1781,7 +2416,7 @@ pub fn run_od_from_prepared<T: OriginTranslationProvider>(
             &seed,
             &group.prepared,
             &observers,
-            config,
+            &config,
             context.time_provider,
             context.translation_provider,
         ) {
@@ -1824,6 +2459,13 @@ pub fn run_od_from_prepared<T: OriginTranslationProvider>(
                     &outlier,
                 );
                 group.orbit = Some(FittedOrbitRecord {
+                    orbit: materialized_fit_orbit(
+                        seed.clone(),
+                        &group.group_id,
+                        &group.orbit_id,
+                        refined.fit.state,
+                        refined.fit.covariance,
+                    )?,
                     group_id: group.group_id.clone(),
                     orbit_id: group.orbit_id.clone(),
                     input_orbit_index: None,
@@ -1839,7 +2481,7 @@ pub fn run_od_from_prepared<T: OriginTranslationProvider>(
                     &group.group_id,
                     None,
                     Some(&group.orbit_id),
-                    "refinement",
+                    OdStage::Refinement,
                     &error,
                     group.row_indices.len(),
                 ));
@@ -1850,6 +2492,43 @@ pub fn run_od_from_prepared<T: OriginTranslationProvider>(
         }
     }
     Ok(output)
+}
+
+fn materialized_iod_orbit(
+    iod: &IodResult,
+    group_id: &str,
+    orbit_id: &str,
+) -> Result<OrbitBatch, OdBatchError> {
+    let mut orbit = iod.seed_orbit()?.ok_or_else(|| {
+        OdBatchError::new(
+            OdBatchErrorCode::InvalidInput,
+            "accepted IOD diagnostics do not contain an orbit",
+        )
+    })?;
+    orbit.orbit_id = vec![OrbitId(orbit_id.to_string())];
+    orbit.object_id = vec![Some(ObjectId(group_id.to_string()))];
+    orbit.validate()?;
+    Ok(orbit)
+}
+
+fn materialized_fit_orbit(
+    mut orbit: OrbitBatch,
+    group_id: &str,
+    orbit_id: &str,
+    state: [f64; 6],
+    covariance: [f64; 36],
+) -> Result<OrbitBatch, OdBatchError> {
+    orbit.orbit_id = vec![OrbitId(orbit_id.to_string())];
+    orbit.object_id = vec![Some(ObjectId(group_id.to_string()))];
+    orbit.coordinates.values = CoordinateValues::Cartesian(vec![state]);
+    orbit.coordinates.covariance = Some(CovarianceBatch::new(
+        1,
+        6,
+        covariance.to_vec(),
+        CovarianceUnits::Coordinate(CoordinateRepresentation::Cartesian),
+    )?);
+    orbit.validate()?;
+    Ok(orbit)
 }
 
 fn orbit_group_id<'a>(orbits: &'a OrbitBatch, row: usize, fallback: &'a str) -> &'a str {
@@ -2119,6 +2798,49 @@ fn prepare_member_groups(
         .collect()
 }
 
+fn validate_iod_seed_identity(
+    orbits: &OrbitBatch,
+    row: usize,
+    provenance: &OdProvenance,
+) -> Result<(), OdBatchError> {
+    // Only IOD-route identifiers are content-addressed from the original
+    // association hypothesis. Later routes deliberately preserve the seed
+    // identifier while changing state/configuration and remain protected by
+    // state, input, membership, build, provider, and provenance digests.
+    if provenance.route != OdRoute::RunIod {
+        return Ok(());
+    }
+    let config_sha = provenance
+        .configuration
+        .declared_science_sha256()
+        .ok_or_else(|| {
+            OdBatchError::new(
+                OdBatchErrorCode::InvalidProvenance,
+                format!(
+                    "seed IOD configuration at orbit row {row} has no valid configuration_sha256"
+                ),
+            )
+        })?;
+    let object_id = orbits.object_id[row]
+        .as_ref()
+        .map(|value| value.0.as_str())
+        .ok_or_else(|| {
+            OdBatchError::new(
+                OdBatchErrorCode::InvalidProvenance,
+                format!("seed IOD orbit at row {row} requires its association group object_id"),
+            )
+        })?;
+    if orbits.orbit_id[row].0
+        != canonical_orbit_id(object_id, config_sha, &provenance.input_fingerprint)
+    {
+        return Err(OdBatchError::new(
+            OdBatchErrorCode::InvalidProvenance,
+            format!("seed IOD orbit ID at row {row} is inconsistent with its canonical provenance"),
+        ));
+    }
+    Ok(())
+}
+
 fn validate_member_input(
     input: &MemberedOrbits,
     require_outlier: bool,
@@ -2161,6 +2883,7 @@ fn validate_member_input(
                 format!("orbit row {row} does not match its state fingerprint"),
             ));
         }
+        validate_iod_seed_identity(&input.orbits, row, provenance)?;
     }
     plan_orbit_members(
         &input.orbits,
@@ -2171,32 +2894,59 @@ fn validate_member_input(
     .map_err(|message| OdBatchError::new(OdBatchErrorCode::InvalidInput, message))
 }
 
-/// Validated member groups with persisted astrometry restored for execution.
-#[doc(hidden)]
-pub struct PreparedMemberBatch<'a> {
+struct PreparedMemberBatch<'a> {
     input: &'a MemberedOrbits,
     build: CoreBuildIdentity,
     groups: Vec<OrbitMemberGroup>,
     prepared_groups: Vec<(PreparedObservations, ObserverBatch)>,
 }
 
-/// Validate refinement inputs and seed provenance before acquiring a provider.
-#[doc(hidden)]
-pub fn prepare_refinement_batch<'a, T: OriginTranslationProvider>(
+fn prepare_member_batch<'a>(
     input: &'a MemberedOrbits,
-    config: &RefinementRunConfig,
-    context: &OdExecutionContext<'_, T>,
+    require_outlier: bool,
 ) -> Result<Option<PreparedMemberBatch<'a>>, OdBatchError> {
-    config
-        .validate()
-        .map_err(|message| OdBatchError::new(OdBatchErrorCode::InvalidConfiguration, message))?;
-    let groups = validate_member_input(input, false, context.build)?;
+    let build = CoreBuildIdentity::current()?;
+    let groups = validate_member_input(input, require_outlier, &build)?;
     if groups.is_empty() {
         return Ok(None);
     }
     validate_problem(&input.observations)?;
+    if require_outlier {
+        if let Some(row) = input.members.outlier.iter().position(Option::is_none) {
+            return Err(OdBatchError::new(
+                OdBatchErrorCode::InvalidInput,
+                format!("FittedOrbitMembers outlier is null at row {row}"),
+            ));
+        }
+    }
     let prepared_groups = prepare_member_groups(&groups, input)?;
-    for (group, (prepared, _)) in groups.iter().zip(&prepared_groups) {
+    Ok(Some(PreparedMemberBatch {
+        input,
+        build,
+        groups,
+        prepared_groups,
+    }))
+}
+
+/// Validated refinement input that owns the exact checked configuration.
+pub struct PreparedRefinement<'a> {
+    inner: PreparedMemberBatch<'a>,
+    config: RefinementRunConfig,
+}
+
+/// Validate persisted members, seed identity, and refinement configuration
+/// before acquiring a propagation backend.
+pub fn prepare_refinement<'a>(
+    input: &'a MemberedOrbits,
+    config: &RefinementRunConfig,
+) -> Result<BatchPreparation<PreparedRefinement<'a>>, OdBatchError> {
+    config
+        .validate()
+        .map_err(|message| OdBatchError::new(OdBatchErrorCode::InvalidConfiguration, message))?;
+    let Some(inner) = prepare_member_batch(input, false)? else {
+        return Ok(BatchPreparation::Empty);
+    };
+    for (group, (prepared, _)) in inner.groups.iter().zip(&inner.prepared_groups) {
         let group_id = orbit_group_id(&input.orbits, group.orbit_index, &group.orbit_id);
         let seed_provenance = input.provenance[group.orbit_index]
             .as_ref()
@@ -2206,7 +2956,7 @@ pub fn prepare_refinement_batch<'a, T: OriginTranslationProvider>(
                 return Err(OdBatchError::new(
                     OdBatchErrorCode::InvalidProvenance,
                     format!(
-                        "seed IOD refinement configuration at orbit row {} does not match",
+                        "seed IOD refinement configuration at orbit row {} does not match the requested refinement",
                         group.orbit_index
                     ),
                 ));
@@ -2232,64 +2982,43 @@ pub fn prepare_refinement_batch<'a, T: OriginTranslationProvider>(
             }
         }
     }
-    Ok(Some(PreparedMemberBatch {
-        input,
-        build: context.build.clone(),
-        groups,
-        prepared_groups,
+    Ok(BatchPreparation::Ready(PreparedRefinement {
+        inner,
+        config: *config,
     }))
 }
 
-/// Validate evaluation inputs before acquiring a provider.
-#[doc(hidden)]
-pub fn prepare_evaluation_batch<'a, T: OriginTranslationProvider>(
-    input: &'a MemberedOrbits,
-    config: &OdConfig,
-    context: &OdExecutionContext<'_, T>,
-) -> Result<Option<PreparedMemberBatch<'a>>, OdBatchError> {
-    config
-        .validate()
-        .map_err(|message| OdBatchError::new(OdBatchErrorCode::InvalidConfiguration, message))?;
-    let groups = validate_member_input(input, true, context.build)?;
-    if groups.is_empty() {
-        return Ok(None);
+impl PreparedRefinement<'_> {
+    /// Execute using stage settings and identity derived from `provider`.
+    pub fn execute(self, provider: &OdPropagator<'_>) -> Result<OdBatchResult, OdBatchError> {
+        let refinement = *self.config.refinement();
+        let fit = match refinement {
+            adam_core_rs_coords::RefinementConfig::WorstResidual(value) => value.fit,
+            adam_core_rs_coords::RefinementConfig::Cmc2003(value) => value.fit,
+        };
+        with_stage_predictor(provider, fit, |service, context| {
+            refine_prepared(self.inner, &self.config, service, context)
+        })
     }
-    validate_problem(&input.observations)?;
-    if let Some(row) = input.members.outlier.iter().position(Option::is_none) {
-        return Err(OdBatchError::new(
-            OdBatchErrorCode::InvalidInput,
-            format!("FittedOrbitMembers outlier is null at row {row}"),
-        ));
-    }
-    let prepared_groups = prepare_member_groups(&groups, input)?;
-    Ok(Some(PreparedMemberBatch {
-        input,
-        build: context.build.clone(),
-        groups,
-        prepared_groups,
-    }))
 }
 
 /// Refine explicit orbit/member groups using persisted prepared astrometry.
-pub fn refine<T: OriginTranslationProvider>(
+pub fn refine(
     input: &MemberedOrbits,
     config: &RefinementRunConfig,
-    service: &PredictionService<'_>,
-    context: &OdExecutionContext<'_, T>,
+    provider: &OdPropagator<'_>,
 ) -> Result<OdBatchResult, OdBatchError> {
-    let Some(prepared) = prepare_refinement_batch(input, config, context)? else {
-        return Ok(OdBatchResult::default());
-    };
-    refine_from_prepared(prepared, config, service, context)
+    match prepare_refinement(input, config)? {
+        BatchPreparation::Empty => Ok(OdBatchResult::default()),
+        BatchPreparation::Ready(prepared) => prepared.execute(provider),
+    }
 }
 
-/// Execute refinement from a Rust-owned validated member preparation.
-#[doc(hidden)]
-pub fn refine_from_prepared<T: OriginTranslationProvider>(
+fn refine_prepared(
     prepared: PreparedMemberBatch<'_>,
     config: &RefinementRunConfig,
     service: &PredictionService<'_>,
-    context: &OdExecutionContext<'_, T>,
+    context: &OdExecutionContext<'_>,
 ) -> Result<OdBatchResult, OdBatchError> {
     let PreparedMemberBatch {
         input,
@@ -2403,6 +3132,13 @@ pub fn refine_from_prepared<T: OriginTranslationProvider>(
                     member_indices: group.member_indices,
                     prepared,
                     orbit: Some(FittedOrbitRecord {
+                        orbit: materialized_fit_orbit(
+                            seed,
+                            &group_id,
+                            &group.orbit_id,
+                            refined.fit.state,
+                            refined.fit.covariance,
+                        )?,
                         group_id,
                         orbit_id: group.orbit_id,
                         input_orbit_index: Some(group.orbit_index),
@@ -2421,7 +3157,7 @@ pub fn refine_from_prepared<T: OriginTranslationProvider>(
                     &group_id,
                     None,
                     Some(&group.orbit_id),
-                    "refinement",
+                    OdStage::Refinement,
                     &error,
                     group.source_indices.len(),
                 );
@@ -2444,26 +3180,61 @@ pub fn refine_from_prepared<T: OriginTranslationProvider>(
     Ok(output)
 }
 
-/// Evaluate explicit orbit/member groups without changing their states.
-pub fn evaluate_orbits<T: OriginTranslationProvider>(
-    input: &MemberedOrbits,
-    config: &OdConfig,
-    service: &PredictionService<'_>,
-    context: &OdExecutionContext<'_, T>,
-) -> Result<OdBatchResult, OdBatchError> {
-    let Some(prepared) = prepare_evaluation_batch(input, config, context)? else {
-        return Ok(OdBatchResult::default());
-    };
-    evaluate_orbits_from_prepared(prepared, config, service, context)
+/// Validated evaluation input that owns the exact checked configuration.
+pub struct PreparedEvaluation<'a> {
+    inner: PreparedMemberBatch<'a>,
+    config: OdConfig,
 }
 
-/// Execute evaluation from a Rust-owned validated member preparation.
-#[doc(hidden)]
-pub fn evaluate_orbits_from_prepared<T: OriginTranslationProvider>(
+/// Validate persisted members and evaluation configuration before acquiring a
+/// propagation backend.
+pub fn prepare_evaluation<'a>(
+    input: &'a MemberedOrbits,
+    config: &OdConfig,
+) -> Result<BatchPreparation<PreparedEvaluation<'a>>, OdBatchError> {
+    config
+        .validate()
+        .map_err(|message| OdBatchError::new(OdBatchErrorCode::InvalidConfiguration, message))?;
+    Ok(match prepare_member_batch(input, true)? {
+        Some(inner) => BatchPreparation::Ready(PreparedEvaluation {
+            inner,
+            config: config.clone(),
+        }),
+        None => BatchPreparation::Empty,
+    })
+}
+
+impl PreparedEvaluation<'_> {
+    /// Execute using stage settings and identity derived from `provider`.
+    pub fn execute(self, provider: &OdPropagator<'_>) -> Result<OdBatchResult, OdBatchError> {
+        let refinement = *self.config.for_refinement().refinement();
+        let fit = match refinement {
+            adam_core_rs_coords::RefinementConfig::WorstResidual(value) => value.fit,
+            adam_core_rs_coords::RefinementConfig::Cmc2003(value) => value.fit,
+        };
+        with_stage_predictor(provider, fit, |service, context| {
+            evaluate_prepared(self.inner, &self.config, service, context)
+        })
+    }
+}
+
+/// Evaluate explicit orbit/member groups without changing their states.
+pub fn evaluate_orbits(
+    input: &MemberedOrbits,
+    config: &OdConfig,
+    provider: &OdPropagator<'_>,
+) -> Result<OdBatchResult, OdBatchError> {
+    match prepare_evaluation(input, config)? {
+        BatchPreparation::Empty => Ok(OdBatchResult::default()),
+        BatchPreparation::Ready(prepared) => prepared.execute(provider),
+    }
+}
+
+fn evaluate_prepared(
     prepared: PreparedMemberBatch<'_>,
     config: &OdConfig,
     service: &PredictionService<'_>,
-    context: &OdExecutionContext<'_, T>,
+    context: &OdExecutionContext<'_>,
 ) -> Result<OdBatchResult, OdBatchError> {
     let PreparedMemberBatch {
         input,
@@ -2558,6 +3329,7 @@ pub fn evaluate_orbits_from_prepared<T: OriginTranslationProvider>(
                     member_indices: group.member_indices,
                     prepared,
                     orbit: Some(FittedOrbitRecord {
+                        orbit,
                         group_id,
                         orbit_id: group.orbit_id,
                         input_orbit_index: Some(group.orbit_index),
@@ -2576,7 +3348,7 @@ pub fn evaluate_orbits_from_prepared<T: OriginTranslationProvider>(
                     &group_id,
                     None,
                     Some(&group.orbit_id),
-                    "evaluation",
+                    OdStage::Evaluation,
                     &error,
                     group.source_indices.len(),
                 );
@@ -2602,6 +3374,140 @@ pub fn evaluate_orbits_from_prepared<T: OriginTranslationProvider>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use adam_core_rs_coords::{Epoch, ObservatoryCode, TimeColumn};
+
+    fn explicit_config() -> OdConfig {
+        OdConfig::explicit(
+            ObservationPipeline::as_supplied(),
+            IodRunConfig::new(IodConfig::default(), WhitenedFitConfig::default())
+                .expect("IOD config"),
+            RefinementRunConfig::core_v1(),
+            EvaluationConfig::six_dimensional(),
+        )
+        .expect("explicit OD config")
+    }
+
+    fn observation_batch(rows: usize) -> OdObservationBatch {
+        let epochs = (0..rows)
+            .map(|row| Epoch::new(60_002 + row as i64, 10_000_000_000))
+            .collect::<Vec<_>>();
+        let times = TimeArray::new(TimeScale::Tdb, epochs.clone()).expect("times");
+        let mut covariance = vec![f64::NAN; rows * 36];
+        for row in 0..rows {
+            covariance[row * 36 + 7] = 1.0e-8;
+            covariance[row * 36 + 14] = 1.0e-8;
+        }
+        let observed = CoordinateBatch::spherical(
+            (0..rows)
+                .map(|row| {
+                    [
+                        f64::NAN,
+                        10.0 + row as f64,
+                        5.0,
+                        f64::NAN,
+                        f64::NAN,
+                        f64::NAN,
+                    ]
+                })
+                .collect(),
+            DataFrame::Equatorial,
+            OriginArray::repeat(OriginId::from_code("SUN"), rows),
+            Some(times.clone()),
+            Some(
+                CovarianceBatch::new(
+                    rows,
+                    6,
+                    covariance,
+                    CovarianceUnits::Coordinate(CoordinateRepresentation::Spherical),
+                )
+                .expect("observation covariance"),
+            ),
+        )
+        .expect("observations");
+        let codes = (0..rows)
+            .map(|row| ObservatoryCode(format!("T{row:02}")))
+            .collect::<Vec<_>>();
+        let observers = ObserverBatch::new(
+            codes.clone(),
+            CoordinateBatch::cartesian(
+                vec![[0.0; 6]; rows],
+                DataFrame::Ecliptic,
+                OriginArray::repeat(OriginId::from_code("SUN"), rows),
+                Some(times),
+                None,
+            )
+            .expect("observer coordinates"),
+        )
+        .expect("observers");
+        let time = TimeColumn {
+            scale: TimeScale::Tdb,
+            days: epochs.iter().map(|epoch| epoch.days).collect(),
+            nanos: epochs.iter().map(|epoch| epoch.nanos).collect(),
+            validity: None,
+        };
+        OdObservationBatch {
+            source: SourceCatalogBatch {
+                id: (0..rows).map(|row| format!("obs-{row}")).collect(),
+                exposure_id: vec![None; rows],
+                time: time.clone(),
+                ra: (0..rows).map(|row| 10.0 + row as f64).collect(),
+                dec: vec![5.0; rows],
+                ra_sigma: vec![Some(1.0e-4); rows],
+                dec_sigma: vec![Some(1.0e-4); rows],
+                radec_corr: vec![Some(0.0); rows],
+                mag: vec![None; rows],
+                mag_sigma: vec![None; rows],
+                fwhm: vec![None; rows],
+                a: vec![None; rows],
+                a_sigma: vec![None; rows],
+                b: vec![None; rows],
+                b_sigma: vec![None; rows],
+                pa: vec![None; rows],
+                pa_sigma: vec![None; rows],
+                observatory_code: codes.into_iter().map(|code| code.0).collect(),
+                filter: vec![None; rows],
+                exposure_start_time: time,
+                exposure_duration: vec![None; rows],
+                exposure_seeing: vec![None; rows],
+                exposure_depth_5sigma: vec![None; rows],
+                object_id: vec![None; rows],
+                catalog_id: vec!["test".to_string(); rows],
+                astcat: vec![None; rows],
+                photcat: vec![None; rows],
+            },
+            observed,
+            observers,
+        }
+    }
+
+    fn empty_membered_orbits() -> MemberedOrbits {
+        MemberedOrbits {
+            orbits: OrbitBatch::new(
+                Vec::new(),
+                Vec::new(),
+                CoordinateBatch::cartesian(
+                    Vec::new(),
+                    DataFrame::Ecliptic,
+                    OriginArray::new(Vec::new()),
+                    None,
+                    None,
+                )
+                .expect("empty coordinates"),
+            )
+            .expect("empty orbits"),
+            provenance: Vec::new(),
+            observations: observation_batch(0),
+            members: FittedOrbitMembersBatch {
+                orbit_id: Vec::new(),
+                observation_id: Vec::new(),
+                outlier: Vec::new(),
+                input_fingerprint: Vec::new(),
+                membership_fingerprint: Vec::new(),
+                original_astrometry: AstrometryColumns::default(),
+                used_astrometry: AstrometryColumns::default(),
+            },
+        }
+    }
 
     fn provider(name: &str) -> ProviderMetadata {
         ProviderMetadata {
@@ -2658,6 +3564,316 @@ mod tests {
         };
         provenance.provenance_fingerprint = provenance_consistency_digest(&provenance);
         provenance
+    }
+
+    fn one_row_orbit(orbit_id: &str, object_id: Option<&str>) -> OrbitBatch {
+        OrbitBatch::new(
+            vec![OrbitId(orbit_id.to_string())],
+            vec![object_id.map(|value| ObjectId(value.to_string()))],
+            CoordinateBatch::cartesian(
+                vec![[1.0, 2.0, 3.0, 4.0, 5.0, 6.0]],
+                DataFrame::Ecliptic,
+                OriginArray::repeat(OriginId::from_code("SUN"), 1),
+                None,
+                None,
+            )
+            .expect("one-row Cartesian coordinates"),
+        )
+        .expect("one-row orbit")
+    }
+
+    #[test]
+    fn public_workflows_execute_empty_batches_without_provider_resolution() {
+        let config = explicit_config();
+        let associated = AssociatedObservations {
+            observations: observation_batch(0),
+            associations: AssociationBatch {
+                detection_id: Vec::new(),
+                object_id: Vec::new(),
+            },
+        };
+        let provider = OdPropagator::two_body();
+        assert!(run_iod(&associated, &config, &provider)
+            .expect("empty IOD")
+            .is_empty());
+        assert!(run_od(&associated, &config, &provider)
+            .expect("empty OD")
+            .is_empty());
+        let membered = empty_membered_orbits();
+        assert!(refine(&membered, &config.for_refinement(), &provider)
+            .expect("empty refinement")
+            .is_empty());
+        assert!(evaluate_orbits(&membered, &config, &provider)
+            .expect("empty evaluation")
+            .is_empty());
+    }
+
+    #[test]
+    fn public_iod_and_od_preserve_overlap_order_and_continue_scientific_failures() {
+        let observations = observation_batch(3);
+        let input = AssociatedObservations {
+            associations: AssociationBatch {
+                detection_id: vec![
+                    "obs-2".to_string(),
+                    "obs-0".to_string(),
+                    "obs-1".to_string(),
+                    "obs-2".to_string(),
+                    "obs-1".to_string(),
+                ],
+                object_id: vec![
+                    Some("first".to_string()),
+                    Some("first".to_string()),
+                    Some("first".to_string()),
+                    Some("second".to_string()),
+                    Some("second".to_string()),
+                ],
+            },
+            observations,
+        };
+        let config = explicit_config();
+        let provider = OdPropagator::two_body();
+        let iod = run_iod(&input, &config, &provider).expect("scientific IOD failures");
+        assert_eq!(
+            iod.groups
+                .iter()
+                .map(|group| group.group_id.as_str())
+                .collect::<Vec<_>>(),
+            ["first", "second"]
+        );
+        assert_eq!(iod.groups[0].row_indices, [0, 1, 2]);
+        assert_eq!(iod.groups[1].row_indices, [1, 2]);
+        assert!(iod
+            .groups
+            .iter()
+            .all(|group| group.failure.as_ref().is_some_and(|failure| {
+                failure.stage == OdStage::Iod && failure.code == OdGroupFailureCode::NoSolution
+            })));
+        let composed = run_od(&input, &config, &provider).expect("composed scientific failures");
+        assert_eq!(composed.groups.len(), iod.groups.len());
+        for (iod, composed) in iod.groups.iter().zip(&composed.groups) {
+            assert_eq!(composed.group_id, iod.group_id);
+            assert_eq!(composed.row_indices, iod.row_indices);
+            assert_eq!(
+                composed.failure.as_ref().map(|failure| &failure.code),
+                iod.failure.as_ref().map(|failure| &failure.code)
+            );
+        }
+    }
+
+    #[test]
+    fn stable_enums_round_trip_through_their_public_strings() {
+        for code in [
+            OdBatchErrorCode::InvalidInput,
+            OdBatchErrorCode::InvalidConfiguration,
+            OdBatchErrorCode::InvalidBuildIdentity,
+            OdBatchErrorCode::InvalidProviderIdentity,
+            OdBatchErrorCode::InvalidProvenance,
+            OdBatchErrorCode::Propagation,
+            OdBatchErrorCode::Backend,
+            OdBatchErrorCode::Protocol,
+            OdBatchErrorCode::Runtime,
+        ] {
+            assert_eq!(code.as_str().parse::<OdBatchErrorCode>(), Ok(code));
+            assert_eq!(code.to_string(), code.as_str());
+        }
+        for route in [
+            OdRoute::RunIod,
+            OdRoute::RunOd,
+            OdRoute::Refine,
+            OdRoute::EvaluateOrbits,
+        ] {
+            assert_eq!(route.as_str().parse::<OdRoute>(), Ok(route));
+            assert_eq!(route.to_string(), route.as_str());
+        }
+        for stage in [OdStage::Iod, OdStage::Refinement, OdStage::Evaluation] {
+            assert_eq!(stage.as_str().parse::<OdStage>(), Ok(stage));
+            assert_eq!(stage.to_string(), stage.as_str());
+        }
+        for code in [
+            OdGroupFailureCode::NoSolution,
+            OdGroupFailureCode::NotConverged,
+            OdGroupFailureCode::Scientific(GroupScientificFailureCode::RankDeficient),
+            OdGroupFailureCode::Scientific(GroupScientificFailureCode::NoIncludedObservations),
+            OdGroupFailureCode::Scientific(GroupScientificFailureCode::NoFitPass),
+        ] {
+            assert_eq!(
+                code.as_str().parse::<OdGroupFailureCode>(),
+                Ok(code.clone())
+            );
+            assert_eq!(code.to_string(), code.as_str());
+        }
+    }
+
+    #[test]
+    fn relabelled_iod_seed_is_rejected_from_content_addressed_identity() {
+        let mut value = json!({"iod": {}, "refinement": {}, "evaluation": {}});
+        let science = CanonicalConfiguration::from_value(value.clone())
+            .expect("configuration")
+            .science_sha256
+            .clone();
+        value.as_object_mut().expect("configuration object").insert(
+            "configuration_sha256".to_string(),
+            Value::String(science.clone()),
+        );
+        let configuration =
+            CanonicalConfiguration::from_value(value).expect("declared configuration");
+        let input_fingerprint = "2".repeat(64);
+        let expected = canonical_orbit_id("group", &science, &input_fingerprint);
+        let mut provenance = run_od_provenance();
+        provenance.route = OdRoute::RunIod;
+        provenance.configuration = configuration;
+        provenance.input_fingerprint = input_fingerprint;
+        let canonical = one_row_orbit(&expected, Some("group"));
+        validate_iod_seed_identity(&canonical, 0, &provenance).expect("canonical IOD identity");
+        let relabelled = one_row_orbit("relabelled", Some("group"));
+        let error = validate_iod_seed_identity(&relabelled, 0, &provenance)
+            .expect_err("relabelled seed must fail closed");
+        assert_eq!(error.code, OdBatchErrorCode::InvalidProvenance);
+        assert!(error.message.contains("orbit ID"));
+    }
+
+    #[test]
+    fn materialized_fit_orbit_carries_state_and_covariance() {
+        let seed = one_row_orbit("seed", Some("seed-object"));
+        let state = [6.0, 5.0, 4.0, 3.0, 2.0, 1.0];
+        let covariance = std::array::from_fn(|index| index as f64);
+        let fitted = materialized_fit_orbit(seed, "group", "fit", state, covariance)
+            .expect("materialized fit");
+        assert_eq!(fitted.orbit_id[0].0, "fit");
+        assert_eq!(
+            fitted.object_id[0].as_ref().map(|value| value.0.as_str()),
+            Some("group")
+        );
+        assert_eq!(
+            fitted.coordinates.values.cartesian(),
+            Some([state].as_slice())
+        );
+        let stored = fitted.coordinates.covariance.expect("fit covariance");
+        assert_eq!(stored.dimension, 6);
+        assert_eq!(stored.values_row_major, covariance);
+    }
+
+    #[test]
+    fn successful_group_converts_losslessly_to_refine_and_evaluate_input() {
+        let observations = observation_batch(1);
+        let config = explicit_config();
+        let prepared = prepare_observations(
+            &observations.observed,
+            &observations.source.observatory_code,
+            &observations.source.filter,
+            &observations.source.astcat,
+            &config,
+            &ErfaTimeProvider,
+        )
+        .expect("prepared observations");
+        let orbit = materialized_fit_orbit(
+            one_row_orbit("seed", Some("group")),
+            "group",
+            "fit",
+            [6.0, 5.0, 4.0, 3.0, 2.0, 1.0],
+            [0.0; 36],
+        )
+        .expect("materialized fit");
+        let mut provenance = run_od_provenance();
+        provenance.state_fingerprint = Some(orbit_state_fingerprint(&orbit, 0, None, None));
+        provenance.provenance_fingerprint = provenance_consistency_digest(&provenance);
+        let original = AstrometryRecord::from_snapshot(&prepared.original, 0);
+        let used = AstrometryRecord::from_snapshot(&prepared.used, 0);
+        let group = OdGroupResult {
+            group_id: "group".to_string(),
+            orbit_id: "fit".to_string(),
+            row_indices: vec![0],
+            input_orbit_index: None,
+            member_indices: Vec::new(),
+            prepared,
+            orbit: Some(FittedOrbitRecord {
+                orbit: orbit.clone(),
+                group_id: "group".to_string(),
+                orbit_id: "fit".to_string(),
+                input_orbit_index: None,
+                iod: None,
+                refined: None,
+                evaluation: None,
+                provenance,
+            }),
+            members: vec![FittedOrbitMemberRecord {
+                orbit_id: "fit".to_string(),
+                observation_id: "obs-0".to_string(),
+                source_index: 0,
+                input_member_index: None,
+                input_fingerprint: "4".repeat(64),
+                membership_fingerprint: "5".repeat(64),
+                original,
+                used,
+                outlier: false,
+            }],
+            failure: None,
+            iod: None,
+        };
+        let converted = group
+            .to_membered_orbits(&observations)
+            .expect("conversion")
+            .expect("successful group");
+        assert_eq!(converted.orbits, orbit);
+        assert_eq!(converted.provenance.len(), 1);
+        assert_eq!(converted.members.observation_id, ["obs-0"]);
+        assert_eq!(
+            converted.members.original_astrometry.lon,
+            [Some(original.lon)]
+        );
+        assert_eq!(converted.members.used_astrometry.lon, [Some(used.lon)]);
+    }
+
+    #[test]
+    fn canonical_two_body_identity_and_options_are_derived_from_typed_config() {
+        let mut config = WhitenedFitConfig::default();
+        config.two_body.propagation_max_iter += 3;
+        config.two_body.propagation_tol *= 2.0;
+        config.two_body.lt_tol *= 3.0;
+        config.two_body.ephemeris_max_iter += 4;
+        config.two_body.ephemeris_tol *= 5.0;
+        config.two_body.max_lt_iter += 6;
+        let settings = stage_settings(config).expect("settings");
+        assert_eq!(
+            settings.two_body.config().max_iter,
+            config.two_body.propagation_max_iter
+        );
+        assert_eq!(
+            settings.two_body.config().tol,
+            config.two_body.propagation_tol
+        );
+        assert_eq!(settings.options.lt_tol, config.two_body.lt_tol);
+        assert_eq!(
+            settings.options.max_iter,
+            config.two_body.ephemeris_max_iter
+        );
+        assert_eq!(settings.options.tol, config.two_body.ephemeris_tol);
+        assert_eq!(settings.options.max_lt_iter, config.two_body.max_lt_iter);
+        assert!(!settings.options.stellar_aberration);
+        assert_eq!(settings.options.output_time_scale, TimeScale::Utc);
+        let expected = two_body_metadata(&settings.two_body);
+        with_stage_predictor(&OdPropagator::two_body(), config, |service, context| {
+            assert_eq!(service.metadata, expected);
+            assert_eq!(*context.build, CoreBuildIdentity::current()?);
+            Ok(())
+        })
+        .expect("canonical provider binding");
+    }
+
+    #[test]
+    fn fatal_service_errors_keep_backend_protocol_and_runtime_codes() {
+        assert_eq!(
+            OdBatchError::from(PropagationError::Backend("coverage".to_string())).code,
+            OdBatchErrorCode::Backend
+        );
+        assert_eq!(
+            OdBatchError::from(PropagationError::BackendProtocol("abi".to_string())).code,
+            OdBatchErrorCode::Protocol
+        );
+        assert_eq!(
+            OdBatchError::from(PropagationError::ThreadPool("pool".to_string())).code,
+            OdBatchErrorCode::Runtime
+        );
     }
 
     #[test]

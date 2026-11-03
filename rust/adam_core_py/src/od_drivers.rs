@@ -16,9 +16,9 @@ use crate::coordinates::{read_orbit_ipc, write_orbit_ipc, ErfaTimeProvider};
 use crate::od_config::{PyIodRunConfig, PyOdConfig, PyRefinementRunConfig};
 use crate::od_support::{od_error, LockingSpiceTranslation};
 use adam_core::od::{
-    AssociatedObservations, AstrometryColumns, CoreBuildIdentity, FittedOrbitMembersBatch,
-    MemberedOrbits, OdBatchError, OdBatchResult, OdExecutionContext, OdGroupResult,
-    OdObservationBatch, OdProvenance, OdRoute, PredictionService, ProviderMetadata,
+    AssociatedObservations, AstrometryColumns, BatchPreparation, CoreBuildIdentity,
+    FittedOrbitMembersBatch, MemberedOrbits, OdBatchError, OdBatchResult, OdGroupResult,
+    OdObservationBatch, OdPropagator, OdProvenance, OdRoute, ProviderMetadata,
 };
 use adam_core_rs_coords::od::algorithms::{
     prepare_observations, refine_with_predictor, run_od_with_predictors, PreparedObservations,
@@ -544,56 +544,21 @@ fn run_with_predictor<R: Send, E: DriverError>(
     Ok((output, metadata))
 }
 
-fn run_with_stage_predictors<R: Send, E: DriverError>(
+fn run_with_canonical_provider<R: Send>(
     py: Python<'_>,
     propagator: Option<&Bound<'_, PyAny>>,
-    iod_settings: &FitSettings,
-    refinement_settings: &FitSettings,
-    driver: impl for<'p> FnOnce(
-            &'p dyn SphericalPredictor,
-            &'p dyn SphericalPredictor,
-            &'p ProviderMetadata,
-            &'p ProviderMetadata,
-        ) -> Result<R, E>
-        + Send,
-) -> PyResult<(R, ProviderMetadata, ProviderMetadata)> {
+    driver: impl for<'p> FnOnce(&'p OdPropagator<'p>) -> Result<R, OdBatchError> + Send,
+) -> PyResult<R> {
     let source = propagator.map(PySource::new).transpose()?;
-    let (iod_metadata, refinement_metadata) = source.as_ref().map_or_else(
-        || {
-            (
-                two_body_provider_metadata(iod_settings),
-                two_body_provider_metadata(refinement_settings),
-            )
-        },
-        |source| {
-            let metadata = external_provider_metadata(&source.propagator);
-            (metadata.clone(), metadata)
-        },
-    );
-    let output = py
-        .allow_threads(|| {
-            if let Some(source) = &source {
-                let iod = external_predictor(&source.propagator, iod_settings);
-                let refinement = external_predictor(&source.propagator, refinement_settings);
-                driver(&iod, &refinement, &iod_metadata, &refinement_metadata)
-            } else {
-                let iod = PropagatorPredictor {
-                    propagator: &iod_settings.propagator,
-                    options: &iod_settings.options,
-                    provider: &ErfaTimeProvider,
-                    translation_provider: &LockingSpiceTranslation,
-                };
-                let refinement = PropagatorPredictor {
-                    propagator: &refinement_settings.propagator,
-                    options: &refinement_settings.options,
-                    provider: &ErfaTimeProvider,
-                    translation_provider: &LockingSpiceTranslation,
-                };
-                driver(&iod, &refinement, &iod_metadata, &refinement_metadata)
-            }
-        })
-        .map_err(DriverError::into_py_error)?;
-    Ok((output, iod_metadata, refinement_metadata))
+    py.allow_threads(|| {
+        if let Some(source) = &source {
+            let provider = OdPropagator::external(&source.propagator);
+            driver(&provider)
+        } else {
+            driver(&OdPropagator::two_body())
+        }
+    })
+    .map_err(batch_error)
 }
 // ---------------------------------------------------------------------------
 // Output dicts
@@ -1338,21 +1303,6 @@ fn decode_association_batch(raw: &Bound<'_, PyBytes>) -> PyResult<AssociationBat
         .map_err(|error| value_error(format!("failed to decode Associations: {error}")))
 }
 
-fn checked_build_identity() -> PyResult<(&'static str, &'static str)> {
-    let version = env!("CARGO_PKG_VERSION");
-    let commit = env!("ADAM_CORE_BUILD_COMMIT");
-    if commit.len() != 40
-        || !commit
-            .bytes()
-            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
-    {
-        return Err(PyValueError::new_err(
-            "canonical OD requires an exact clean adam-core build identity",
-        ));
-    }
-    Ok((version, commit))
-}
-
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct OrbitProvenanceInput {
@@ -1433,7 +1383,7 @@ fn validate_backend_identity(
         (Some(backend), Some(provider)) if backend == provider.backend_label() => Ok(()),
         (None, None) => Ok(()),
         _ => Err(value_error(format!(
-            "orbit provenance at row {row} has a {stage} backend identity inconsistent with its consistency digest"
+            "orbit provenance at row {row} has an inconsistent {stage} backend identity relative to its consistency digest"
         ))),
     }
 }
@@ -1500,7 +1450,8 @@ fn parse_typed_orbit_provenance(
                 Some("evaluate_orbits") => OdRoute::EvaluateOrbits,
                 other => {
                     return Err(value_error(format!(
-                        "orbit provenance at row {row} has unknown route {other:?}"
+                        "orbit provenance at row {row} has unknown route {}",
+                        other.unwrap_or("<missing>")
                     )))
                 }
             };
@@ -1602,7 +1553,7 @@ fn batch_error(error: OdBatchError) -> PyErr {
     if let Some(source) = error.source {
         od_error(source)
     } else {
-        value_error(error.to_string())
+        value_error(error.message)
     }
 }
 
@@ -1614,7 +1565,7 @@ fn typed_failure_dict<'py>(
     out.set_item("group_id", &failure.group_id)?;
     out.set_item("orbit_id", failure.orbit_id.as_deref())?;
     out.set_item("input_orbit_id", failure.input_orbit_id.as_deref())?;
-    out.set_item("stage", failure.stage)?;
+    out.set_item("stage", failure.stage.as_str())?;
     out.set_item("code", failure.code.as_str())?;
     out.set_item("message", &failure.message)?;
     out.set_item("recoverable", failure.best_state_retained)?;
@@ -1813,12 +1764,19 @@ fn run_iod_batch_ipc<'py>(
     config: PyRef<'py, PyOdConfig>,
 ) -> PyResult<Bound<'py, PyDict>> {
     config.inner.validate().map_err(value_error)?;
-    let (version, commit) = checked_build_identity()?;
-    let build = CoreBuildIdentity::new(version, commit).map_err(batch_error)?;
+    CoreBuildIdentity::current().map_err(batch_error)?;
     let owned_config = config.inner.clone();
     drop(config);
     let source = decode_source_catalog(source_ipc)?;
     let associations = decode_association_batch(associations_ipc)?;
+    let groups =
+        adam_core::od::plan_associations(&source.id, &associations).map_err(value_error)?;
+    if groups.is_empty() {
+        let out = PyDict::new(py);
+        out.set_item("groups", PyList::empty(py))?;
+        out.set_item("provider", py.None())?;
+        return Ok(out);
+    }
     let problem = decode_observations(observed_ipc, observers_ipc)?;
     let input = AssociatedObservations {
         observations: OdObservationBatch {
@@ -1828,33 +1786,12 @@ fn run_iod_batch_ipc<'py>(
         },
         associations,
     };
-    let preparation_context = OdExecutionContext {
-        build: &build,
-        time_provider: &ErfaTimeProvider,
-        translation_provider: &LockingSpiceTranslation,
+    let prepared = match adam_core::od::prepare_iod(&input, &owned_config).map_err(batch_error)? {
+        BatchPreparation::Ready(prepared) => prepared,
+        BatchPreparation::Empty => unreachable!("non-empty association plan became empty"),
     };
-    let Some(prepared) =
-        adam_core::od::prepare_associated_batch(&input, &owned_config, &preparation_context)
-            .map_err(batch_error)?
-    else {
-        let out = PyDict::new(py);
-        out.set_item("groups", PyList::empty(py))?;
-        out.set_item("provider", py.None())?;
-        return Ok(out);
-    };
-    let settings = fit_settings_from_config(*owned_config.for_iod().correction_fit())?;
-    let (result, _) = run_with_predictor(py, propagator, &settings, |predictor, metadata| {
-        let service = PredictionService {
-            predictor,
-            metadata: metadata.clone(),
-        };
-        let execution_context = OdExecutionContext {
-            build: &build,
-            time_provider: &ErfaTimeProvider,
-            translation_provider: &LockingSpiceTranslation,
-        };
-        adam_core::od::run_iod_from_prepared(prepared, &service, &execution_context)
-    })?;
+    let result =
+        run_with_canonical_provider(py, propagator, |provider| prepared.execute(provider))?;
     let out = PyDict::new(py);
     out.set_item("groups", typed_groups_list(py, &result)?)?;
     out.set_item(
@@ -1881,12 +1818,19 @@ fn run_od_batch_ipc<'py>(
     config: PyRef<'py, PyOdConfig>,
 ) -> PyResult<Bound<'py, PyDict>> {
     config.inner.validate().map_err(value_error)?;
-    let (version, commit) = checked_build_identity()?;
-    let build = CoreBuildIdentity::new(version, commit).map_err(batch_error)?;
+    CoreBuildIdentity::current().map_err(batch_error)?;
     let owned_config = config.inner.clone();
     drop(config);
     let source = decode_source_catalog(source_ipc)?;
     let associations = decode_association_batch(associations_ipc)?;
+    let groups =
+        adam_core::od::plan_associations(&source.id, &associations).map_err(value_error)?;
+    if groups.is_empty() {
+        let out = PyDict::new(py);
+        out.set_item("groups", PyList::empty(py))?;
+        out.set_item("provider", py.None())?;
+        return Ok(out);
+    }
     let problem = decode_observations(observed_ipc, observers_ipc)?;
     let input = AssociatedObservations {
         observations: OdObservationBatch {
@@ -1896,54 +1840,12 @@ fn run_od_batch_ipc<'py>(
         },
         associations,
     };
-    let preparation_context = OdExecutionContext {
-        build: &build,
-        time_provider: &ErfaTimeProvider,
-        translation_provider: &LockingSpiceTranslation,
+    let prepared = match adam_core::od::prepare_od(&input, &owned_config).map_err(batch_error)? {
+        BatchPreparation::Ready(prepared) => prepared,
+        BatchPreparation::Empty => unreachable!("non-empty association plan became empty"),
     };
-    let Some(prepared) =
-        adam_core::od::prepare_associated_batch(&input, &owned_config, &preparation_context)
-            .map_err(batch_error)?
-    else {
-        let out = PyDict::new(py);
-        out.set_item("groups", PyList::empty(py))?;
-        out.set_item("provider", py.None())?;
-        return Ok(out);
-    };
-    let iod_settings = fit_settings_from_config(*owned_config.for_iod().correction_fit())?;
-    let refinement = *owned_config.for_refinement().refinement();
-    let refinement_fit = match refinement {
-        RefinementConfig::WorstResidual(value) => value.fit,
-        RefinementConfig::Cmc2003(value) => value.fit,
-    };
-    let refinement_settings = fit_settings_from_config(refinement_fit)?;
-    let (result, _, _) = run_with_stage_predictors(
-        py,
-        propagator,
-        &iod_settings,
-        &refinement_settings,
-        |iod_predictor, refinement_predictor, iod_metadata, refinement_metadata| {
-            let iod_service = PredictionService {
-                predictor: iod_predictor,
-                metadata: iod_metadata.clone(),
-            };
-            let refinement_service = PredictionService {
-                predictor: refinement_predictor,
-                metadata: refinement_metadata.clone(),
-            };
-            let execution_context = OdExecutionContext {
-                build: &build,
-                time_provider: &ErfaTimeProvider,
-                translation_provider: &LockingSpiceTranslation,
-            };
-            adam_core::od::run_od_from_prepared(
-                prepared,
-                &iod_service,
-                &refinement_service,
-                &execution_context,
-            )
-        },
-    )?;
+    let result =
+        run_with_canonical_provider(py, propagator, |provider| prepared.execute(provider))?;
     let out = PyDict::new(py);
     out.set_item("groups", typed_groups_list(py, &result)?)?;
     let providers = PyDict::new(py);
@@ -2017,12 +1919,20 @@ fn refine_batch_ipc<'py>(
     config: PyRef<'py, PyRefinementRunConfig>,
 ) -> PyResult<Bound<'py, PyDict>> {
     config.inner.validate().map_err(value_error)?;
-    let (version, commit) = checked_build_identity()?;
-    let build = CoreBuildIdentity::new(version, commit).map_err(batch_error)?;
+    CoreBuildIdentity::current().map_err(batch_error)?;
     let owned_config = config.inner;
     drop(config);
     let orbits = decode_orbit(orbit_ipc)?;
     let source = decode_source_catalog(source_ipc)?;
+    let groups =
+        adam_core::od::plan_orbit_members(&orbits, &source.id, &member_orbit_ids, &member_obs_ids)
+            .map_err(value_error)?;
+    if groups.is_empty() {
+        let out = PyDict::new(py);
+        out.set_item("groups", PyList::empty(py))?;
+        out.set_item("provider", py.None())?;
+        return Ok(out);
+    }
     let problem = decode_observations(observed_ipc, observers_ipc)?;
     let provenance = parse_typed_orbit_provenance(&seed_iod_provenance, &orbits)?;
     let member_count = member_orbit_ids.len();
@@ -2060,37 +1970,13 @@ fn refine_batch_ipc<'py>(
             },
         },
     };
-    let preparation_context = OdExecutionContext {
-        build: &build,
-        time_provider: &ErfaTimeProvider,
-        translation_provider: &LockingSpiceTranslation,
-    };
-    let Some(prepared) =
-        adam_core::od::prepare_refinement_batch(&input, &owned_config, &preparation_context)
-            .map_err(batch_error)?
-    else {
-        let out = PyDict::new(py);
-        out.set_item("groups", PyList::empty(py))?;
-        out.set_item("provider", py.None())?;
-        return Ok(out);
-    };
-    let fit = match *owned_config.refinement() {
-        RefinementConfig::WorstResidual(value) => value.fit,
-        RefinementConfig::Cmc2003(value) => value.fit,
-    };
-    let settings = fit_settings_from_config(fit)?;
-    let (result, _) = run_with_predictor(py, propagator, &settings, |predictor, metadata| {
-        let service = PredictionService {
-            predictor,
-            metadata: metadata.clone(),
+    let prepared =
+        match adam_core::od::prepare_refinement(&input, &owned_config).map_err(batch_error)? {
+            BatchPreparation::Ready(prepared) => prepared,
+            BatchPreparation::Empty => unreachable!("non-empty member plan became empty"),
         };
-        let execution_context = OdExecutionContext {
-            build: &build,
-            time_provider: &ErfaTimeProvider,
-            translation_provider: &LockingSpiceTranslation,
-        };
-        adam_core::od::refine_from_prepared(prepared, &owned_config, &service, &execution_context)
-    })?;
+    let result =
+        run_with_canonical_provider(py, propagator, |provider| prepared.execute(provider))?;
     let out = PyDict::new(py);
     out.set_item("groups", typed_groups_list(py, &result)?)?;
     out.set_item(
@@ -2143,12 +2029,20 @@ fn evaluate_orbits_batch_ipc<'py>(
     config: PyRef<'py, PyOdConfig>,
 ) -> PyResult<Bound<'py, PyDict>> {
     config.inner.validate().map_err(value_error)?;
-    let (version, commit) = checked_build_identity()?;
-    let build = CoreBuildIdentity::new(version, commit).map_err(batch_error)?;
+    CoreBuildIdentity::current().map_err(batch_error)?;
     let owned_config = config.inner.clone();
     drop(config);
     let orbits = decode_orbit(orbit_ipc)?;
     let source = decode_source_catalog(source_ipc)?;
+    let groups =
+        adam_core::od::plan_orbit_members(&orbits, &source.id, &member_orbit_ids, &member_obs_ids)
+            .map_err(value_error)?;
+    if groups.is_empty() {
+        let out = PyDict::new(py);
+        out.set_item("groups", PyList::empty(py))?;
+        out.set_item("provider", py.None())?;
+        return Ok(out);
+    }
     let problem = decode_observations(observed_ipc, observers_ipc)?;
     let provenance = parse_typed_orbit_provenance(&orbit_provenance, &orbits)?;
     let input = MemberedOrbits {
@@ -2185,43 +2079,13 @@ fn evaluate_orbits_batch_ipc<'py>(
             },
         },
     };
-    let preparation_context = OdExecutionContext {
-        build: &build,
-        time_provider: &ErfaTimeProvider,
-        translation_provider: &LockingSpiceTranslation,
-    };
-    let Some(prepared) =
-        adam_core::od::prepare_evaluation_batch(&input, &owned_config, &preparation_context)
-            .map_err(batch_error)?
-    else {
-        let out = PyDict::new(py);
-        out.set_item("groups", PyList::empty(py))?;
-        out.set_item("provider", py.None())?;
-        return Ok(out);
-    };
-    let refinement = *owned_config.for_refinement().refinement();
-    let evaluation_fit = match refinement {
-        RefinementConfig::WorstResidual(value) => value.fit,
-        RefinementConfig::Cmc2003(value) => value.fit,
-    };
-    let settings = fit_settings_from_config(evaluation_fit)?;
-    let (result, _) = run_with_predictor(py, propagator, &settings, |predictor, metadata| {
-        let service = PredictionService {
-            predictor,
-            metadata: metadata.clone(),
+    let prepared =
+        match adam_core::od::prepare_evaluation(&input, &owned_config).map_err(batch_error)? {
+            BatchPreparation::Ready(prepared) => prepared,
+            BatchPreparation::Empty => unreachable!("non-empty member plan became empty"),
         };
-        let execution_context = OdExecutionContext {
-            build: &build,
-            time_provider: &ErfaTimeProvider,
-            translation_provider: &LockingSpiceTranslation,
-        };
-        adam_core::od::evaluate_orbits_from_prepared(
-            prepared,
-            &owned_config,
-            &service,
-            &execution_context,
-        )
-    })?;
+    let result =
+        run_with_canonical_provider(py, propagator, |provider| prepared.execute(provider))?;
     let out = PyDict::new(py);
     out.set_item("groups", typed_groups_list(py, &result)?)?;
     out.set_item(
