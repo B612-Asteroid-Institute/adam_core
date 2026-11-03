@@ -30,7 +30,7 @@ from ...time import Timestamp
 from .._pipeline import apply_pipeline_once
 from ..algorithms import fitting as dc
 from ..algorithms import rejection
-from ..algorithms.fitting import fit_least_squares
+from ..algorithms.fitting import fit_least_squares, iterative_fit
 from ..algorithms.rejection import cmc2003_fit_detailed
 from ..config import OdConfig, ResourceBindings
 from ..evaluate import OrbitDeterminationObservations, OrbitDeterminationPhotometry
@@ -393,6 +393,71 @@ class TestDifferentialCorrectionKernels:
                 np.array([10.0, 12.0, 400.0, 11.0, 401.0]), 180.0
             ).tolist()
             == expected["apparitions"]
+        )
+
+
+def _default_fit_state_weight_cases(
+    observations: OrbitDeterminationObservations,
+    contaminated: OrbitDeterminationObservations,
+    propagator: TwoBodyPropagator,
+) -> dict[str, tuple[np.ndarray, np.ndarray]]:
+    result = cmc2003_fit_detailed(_guess_orbit(), contaminated, propagator)
+    fits = {
+        "linear_clean": fit_least_squares(_guess_orbit(), observations, propagator),
+        "linear_contaminated": fit_least_squares(
+            _guess_orbit(), contaminated, propagator
+        ),
+        "huber_contaminated": fit_least_squares(
+            _guess_orbit(), contaminated, propagator, loss="huber"
+        ),
+        "iterative": iterative_fit(_guess_orbit(), contaminated, propagator),
+        "cmc2003": (result.fitted_orbit, result.fitted_orbit_members),
+    }
+    return {
+        name: (
+            np.asarray(_fit_summary(*fit)["state"], dtype=np.float64).view(np.uint64),
+            np.asarray(_fit_summary(*fit)["weight"], dtype=np.float64).view(np.uint64),
+        )
+        for name, fit in fits.items()
+    }
+
+
+def test_dict_fit_defaults_match_approved_d21_state_and_weights_bitwise(
+    fixture: dict[str, Any],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """All five public fits equal explicit pre-7418 d21 settings bit-for-bit."""
+
+    inputs = fixture["inputs"]
+    observations = _observations(inputs)
+    contaminated = _observations(inputs, with_outliers=True)
+    propagator = TwoBodyPropagator()
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        actual = _default_fit_state_weight_cases(observations, contaminated, propagator)
+
+        original = dc._fit_settings
+
+        def pinned(*args: Any, **kwargs: Any) -> dict[str, object]:
+            settings = original(*args, **kwargs)
+            settings.update(lt_tol=1.0e-12, eph_max_iter=1_000, max_lt_iter=10)
+            return settings
+
+        monkeypatch.setattr(dc, "_fit_settings", pinned)
+        monkeypatch.setattr(rejection, "_fit_settings", pinned)
+        expected = _default_fit_state_weight_cases(
+            observations, contaminated, propagator
+        )
+
+    assert actual.keys() == expected.keys()
+    for name in actual:
+        actual_state, actual_weight = actual[name]
+        expected_state, expected_weight = expected[name]
+        np.testing.assert_array_equal(
+            actual_state, expected_state, err_msg=f"{name} state"
+        )
+        np.testing.assert_array_equal(
+            actual_weight, expected_weight, err_msg=f"{name} weight"
         )
 
 

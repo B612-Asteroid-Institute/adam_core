@@ -115,11 +115,25 @@ fn setting<'py, T: FromPyObject<'py>>(
     }
 }
 
+/// The exact pre-0.7 defaults of the dict-driven public fit routes.
+///
+/// Their fit and propagation defaults came from [`WhitenedFitConfig`], while
+/// their light-time/ephemeris defaults came from [`EphemerisOptions`]. Keep
+/// that split explicit: [`TwoBodyModelConfig::default`] has different values.
+fn dict_fit_defaults() -> WhitenedFitConfig {
+    let mut defaults = WhitenedFitConfig::default();
+    let ephemeris = EphemerisOptions::default();
+    defaults.two_body.lt_tol = ephemeris.lt_tol;
+    defaults.two_body.ephemeris_max_iter = ephemeris.max_iter;
+    defaults.two_body.max_lt_iter = ephemeris.max_lt_iter;
+    defaults
+}
+
 /// Build one typed fit configuration from dictionary overrides, then derive
 /// all runtime settings through Core's canonical stage constructor. The legacy
 /// stellar-aberration knob is the sole explicit post-construction difference.
 fn parse_fit_settings(settings: Option<&Bound<'_, PyDict>>) -> PyResult<FitSettings> {
-    let fit_defaults = WhitenedFitConfig::default();
+    let fit_defaults = dict_fit_defaults();
     let ephemeris_defaults = EphemerisOptions::default();
     let loss: String = setting(settings, "loss", fit_defaults.loss.as_str().to_string())?;
     let f_scale: f64 = setting(settings, "f_scale", fit_defaults.f_scale)?;
@@ -2339,6 +2353,47 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn dict_fit_defaults_preserve_pre_0_7_ephemeris_values_bitwise() {
+        let actual = dict_fit_defaults();
+        let fit = WhitenedFitConfig::default();
+        let ephemeris = EphemerisOptions::default();
+
+        assert_eq!(actual.loss, fit.loss);
+        assert_eq!(actual.f_scale.to_bits(), fit.f_scale.to_bits());
+        assert_eq!(actual.jacobian, fit.jacobian);
+        assert_eq!(actual.validate_covariance, fit.validate_covariance);
+        assert_eq!(actual.xtol.to_bits(), fit.xtol.to_bits());
+        assert_eq!(actual.ftol.to_bits(), fit.ftol.to_bits());
+        assert_eq!(actual.gtol.to_bits(), fit.gtol.to_bits());
+        assert_eq!(actual.max_iterations, fit.max_iterations);
+        assert_eq!(actual.max_nfev, fit.max_nfev);
+        assert_eq!(
+            actual.two_body.propagation_max_iter,
+            fit.two_body.propagation_max_iter
+        );
+        assert_eq!(
+            actual.two_body.propagation_tol.to_bits(),
+            fit.two_body.propagation_tol.to_bits()
+        );
+        assert_eq!(
+            actual.two_body.ephemeris_tol.to_bits(),
+            fit.two_body.ephemeris_tol.to_bits()
+        );
+
+        assert_eq!(actual.two_body.lt_tol.to_bits(), 1.0e-12_f64.to_bits());
+        assert_eq!(actual.two_body.ephemeris_max_iter, 1_000);
+        assert_eq!(actual.two_body.max_lt_iter, 10);
+        assert_eq!(actual.two_body.lt_tol.to_bits(), ephemeris.lt_tol.to_bits());
+        assert_eq!(actual.two_body.ephemeris_max_iter, ephemeris.max_iter);
+        assert_eq!(actual.two_body.max_lt_iter, ephemeris.max_lt_iter);
+
+        let runtime = canonical_stage_settings(actual).expect("legacy defaults are valid");
+        assert_eq!(runtime.options.lt_tol.to_bits(), 1.0e-12_f64.to_bits());
+        assert_eq!(runtime.options.max_iter, 1_000);
+        assert_eq!(runtime.options.max_lt_iter, 10);
+    }
 
     #[test]
     fn provider_identity_compares_canonical_cargo_prerelease_spelling_exactly() {
