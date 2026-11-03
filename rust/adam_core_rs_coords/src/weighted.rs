@@ -7,10 +7,9 @@
 //!
 //! Both written as tight rust loops with the row-sequential access
 //! pattern. Auto-vectorizes well for typical D=6 (compiler unrolls the
-//! inner dim loop into a SIMD FMA chain). Tried via `faer::matmul` but
-//! its GEMM dispatch overhead is too high for the small-D shape — the
-//! hand-rolled loop wins ~3-5× at n=100k. Faer remains in the workspace
-//! for upcoming Cholesky/eigen needs (Wave E2 follow-up #148).
+//! inner dim loop into a SIMD FMA chain). A `faer::matmul` experiment had
+//! too much dispatch overhead for this small-D shape, so this crate keeps
+//! no dense-linalg dependency for these hand-rolled kernels.
 //!
 //! Used by `coordinates/variants.py::create_coordinate_variants` and the
 //! sigma-point reconstruction step in `covariances.py`.

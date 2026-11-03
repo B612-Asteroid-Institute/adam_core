@@ -11,7 +11,7 @@ description = "SPICE kernel loading, state queries, and SPK products for adam-co
 [dependencies]
 adam_core_rs_coords = { version = "=0.7.0", path = "../adam_core_rs_coords" }
 rayon = "1"
-faer = "0.22"
+faer = { version = "0.22", default-features = false, features = ["std", "linalg"] }
 serde_json = "1"
 spicekit = "0.2.3"
 thiserror = "2"

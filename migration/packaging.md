@@ -1,6 +1,6 @@
 # adam-core Rust Packaging Notes
 
-Last updated: 2026-10-21.
+Last updated: 2026-11-03.
 
 ## Supported Build Path
 
@@ -38,12 +38,30 @@ Last updated: 2026-10-21.
 - `pdm run wheel-build` remains the sole authoritative build command.
 - A clean-wheel validation with uv must run outside the repository and pass
   `--no-config`, for example `uv pip install --no-config --python <venv-python>
-  dist/adam_core-0.7.0-<python>-<abi>-<platform>.whl`. The inherited workspace
-  override can otherwise resolve public `adam-core==0.6.1` instead of the local
-  0.7.0 wheel.
+  dist/adam_core-0.7.0-<python>-<abi>-<platform>.whl`. Running outside the
+  checkout prevents workspace source configuration from replacing the wheel
+  under test.
 - Validate the installed distribution/native identity and run
   `uv pip check --no-config --python <venv-python>` after installation.
 - Do not use `maturin develop --uv` as release evidence.
+
+## Core-before-Assist compatibility sequencing
+
+- Core pull requests do not claim compatibility with the frozen Assist 0.5
+  candidate: that candidate declares Core 0.6 requirements and cannot
+  legitimately exercise Core 0.7 provider ABI v2.
+- `.github/workflows/tier1-dependent-smoke.yml` is therefore manual-only. It
+  requires an exact 40-hex Assist revision, verifies the checkout, and uses
+  `pip check` to enforce the dependent's unmodified Core requirement. Add no
+  pull-request or scheduled trigger until a separately reviewed compatible
+  Assist candidate exists.
+- Removing the former `tier1-smoke` pull-request job also removes that check
+  context from new PR commits. Repository administrators must confirm it is
+  not listed as a required branch-protection check; the protection API requires
+  authenticated administration access and cannot be audited from an ordinary
+  public checkout.
+- The release-candidate wheel matrix remains a separate exact-ref workflow and
+  is unchanged; release pairing still requires its explicit Assist SHA input.
 
 ## Expected Validation Shape
 

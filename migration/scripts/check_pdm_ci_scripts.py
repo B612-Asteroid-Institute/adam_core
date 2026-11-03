@@ -22,6 +22,8 @@ PYPROJECT = REPO_ROOT / "pyproject.toml"
 UV_LOCK = REPO_ROOT / "uv.lock"
 WORKFLOW_DIR = REPO_ROOT / ".github" / "workflows"
 RELEASE_WORKFLOW = WORKFLOW_DIR / "release-candidate-wheel-matrix.yml"
+TIER1_WORKFLOW = WORKFLOW_DIR / "tier1-dependent-smoke.yml"
+RUST_CRATE_WORKFLOW = WORKFLOW_DIR / "rust-crate-release-candidate.yml"
 EXPECTED_BUILD_TOOLS = [
     "maturin==1.15.0",
     "packaging==25.0",
@@ -539,6 +541,104 @@ def _release_workflow_failures(project: dict[str, Any]) -> list[str]:
     return failures
 
 
+def _rust_msrv_dependency_failures() -> list[str]:
+    failures: list[str] = []
+    coords_manifest = tomllib.loads(
+        (REPO_ROOT / "rust/adam_core_rs_coords/Cargo.toml").read_text(encoding="utf-8")
+    )
+    spice_manifest = tomllib.loads(
+        (REPO_ROOT / "rust/adam_core_rs_spice/Cargo.toml").read_text(encoding="utf-8")
+    )
+    if "faer" in coords_manifest.get("dependencies", {}):
+        failures.append("coords manifest must not retain its unused faer dependency")
+    expected_faer = {
+        "version": "0.22",
+        "default-features": False,
+        "features": ["std", "linalg"],
+    }
+    if spice_manifest.get("dependencies", {}).get("faer") != expected_faer:
+        failures.append(
+            "spice manifest faer dependency must use only std+linalg without defaults"
+        )
+
+    lock = tomllib.loads((REPO_ROOT / "Cargo.lock").read_text(encoding="utf-8"))
+    resolved = {package.get("name") for package in lock.get("package", [])}
+    forbidden = {"ar_archive_writer", "npyz", "pest_stack_guard", "psm"}
+    leaked = sorted(forbidden & resolved)
+    if leaked:
+        failures.append(
+            "Cargo.lock retains incompatible optional faer chain: " + ", ".join(leaked)
+        )
+
+    workflow = RUST_CRATE_WORKFLOW.read_text(encoding="utf-8")
+    for required in (
+        'faer feature "linalg"',
+        'faer feature "std"',
+        'faer feature "(default|npy|rand|rayon|sparse|sparse-linalg)"',
+        '"ar_archive_writer"',
+        '"npyz"',
+        '"pest_stack_guard"',
+        '"psm"',
+    ):
+        if required not in workflow:
+            failures.append(
+                f"Rust clean-consumer workflow must assert dependency contract {required!r}"
+            )
+    return failures
+
+
+def _tier1_exact_ref_failures() -> list[str]:
+    if not TIER1_WORKFLOW.is_file():
+        return ["Tier-1 exact-ref workflow is missing"]
+    text = TIER1_WORKFLOW.read_text(encoding="utf-8")
+    trigger = text.split("permissions:", 1)[0]
+    failures: list[str] = []
+    if "pull_request:" in trigger or "schedule:" in trigger:
+        failures.append(
+            "Tier-1 compatibility must be manual-only until compatible Assist exists"
+        )
+    for required in (
+        "workflow_dispatch:",
+        "adam_assist_ref:",
+        "required: true",
+        "ADAM_ASSIST_REF: ${{ inputs.adam_assist_ref }}",
+        "ref: ${{ env.ADAM_ASSIST_REF }}",
+        '[[ "$ADAM_ASSIST_REF" =~ ^[0-9a-f]{40}$ ]]',
+        'test "$(git -C dependent rev-parse HEAD)" = "$ADAM_ASSIST_REF"',
+        "Verify dependent declares Core 0.7 compatibility",
+        'Version("0.7.0") in core[0].specifier',
+    ):
+        if required not in text:
+            failures.append(f"Tier-1 exact-ref workflow is missing {required!r}")
+    if "c06164a18e8d90d8bf83d7ab58e479dc97e1be41" in text:
+        failures.append(
+            "Tier-1 workflow must not pin the Core-0.6-only Assist revision"
+        )
+    if "dependent/pyproject.toml" not in text:
+        failures.append("Tier-1 workflow must inspect the dependent's own metadata")
+    if text.count("-m pip check") < 2:
+        failures.append(
+            "Tier-1 workflow must enforce the dependent's declared requirements in both environments"
+        )
+    if 'assist_version == "0.5.0"' in text:
+        failures.append(
+            "Tier-1 workflow must not claim a frozen Assist version is compatible"
+        )
+
+    release = RELEASE_WORKFLOW.read_text(encoding="utf-8")
+    for required in (
+        "adam_assist_ref:",
+        "ADAM_ASSIST_REF: ${{ inputs.adam_assist_ref }}",
+        "ref: ${{ env.ADAM_ASSIST_REF }}",
+        '[[ "$ADAM_ASSIST_REF" =~ ^[0-9a-f]{40}$ ]]',
+    ):
+        if required not in release:
+            failures.append(
+                f"release-candidate exact-ref matrix lost required contract {required!r}"
+            )
+    return failures
+
+
 def _required_workflow_artifact_failures(
     workflows: list[tuple[Path, str]],
 ) -> list[str]:
@@ -580,6 +680,8 @@ def main() -> None:
     failures.extend(_required_workflow_artifact_failures(workflows))
     failures.extend(_release_workflow_failures(project))
     failures.extend(_uv_lock_failures(project))
+    failures.extend(_rust_msrv_dependency_failures())
+    failures.extend(_tier1_exact_ref_failures())
 
     if failures:
         print("PDM/CI script preflight failed:", file=sys.stderr)

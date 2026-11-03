@@ -105,6 +105,15 @@ jobs:
           cargo check --manifest-path "$consumer/Cargo.toml"
           cargo metadata --format-version 1 --manifest-path "$consumer/Cargo.toml" \
             > "$consumer/metadata.json"
+          cargo tree --manifest-path "$consumer/Cargo.toml" --edges features \
+            > "$consumer/features.txt"
+          grep -F 'faer feature "linalg"' "$consumer/features.txt"
+          grep -F 'faer feature "std"' "$consumer/features.txt"
+          if grep -E 'faer feature "(default|npy|rand|rayon|sparse|sparse-linalg)"' \
+            "$consumer/features.txt"; then
+            echo "unexpected faer feature in clean MSRV resolution" >&2
+            exit 1
+          fi
           python - "$consumer/metadata.json" <<'PY'
           import json
           import sys
@@ -134,12 +143,20 @@ jobs:
           forbidden = {
               package["name"]: package["version"]
               for package in packages
-              if package["name"] in {"zip", "zopfli"}
+              if package["name"]
+              in {
+                  "ar_archive_writer",
+                  "npyz",
+                  "pest_stack_guard",
+                  "psm",
+                  "zip",
+                  "zopfli",
+              }
           }
           assert not forbidden, forbidden
           print(
-              "clean Rust 1.87 consumer resolved ICU4X 2.2.0 and rawzip 0.5.2 "
-              "exactly without zip or zopfli"
+              "clean Rust 1.87 consumer resolved minimal faer, ICU4X 2.2.0, "
+              "and rawzip 0.5.2 without incompatible optional chains"
           )
           PY
       - name: Upload exact crate publication set

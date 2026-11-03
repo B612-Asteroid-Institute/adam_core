@@ -210,12 +210,27 @@ def test_kernel_data_constrains_icu_for_clean_rust_1_87_consumers() -> None:
         "features": ["rust_backend"],
     }
 
+    with (ROOT / "rust/adam_core_rs_coords/Cargo.toml").open("rb") as source:
+        coords_dependencies = tomllib.load(source)["dependencies"]
+    with (ROOT / "rust/adam_core_rs_spice/Cargo.toml").open("rb") as source:
+        spice_dependencies = tomllib.load(source)["dependencies"]
+    assert "faer" not in coords_dependencies
+    assert spice_dependencies["faer"] == {
+        "version": "0.22",
+        "default-features": False,
+        "features": ["std", "linalg"],
+    }
+
     workflow = (ROOT / ".github/workflows/rust-crate-release-candidate.yml").read_text()
     assert "Verify clean no-lock Rust 1.87 consumer resolution" in workflow
     assert 'test ! -e "$consumer/Cargo.lock"' in workflow
     assert 'rustc --version | grep -F "rustc 1.87.0"' in workflow
-    assert "clean Rust 1.87 consumer resolved ICU4X 2.2.0 and rawzip 0.5.2" in workflow
-    assert 'if package["name"] in {"zip", "zopfli"}' in workflow
+    assert "clean Rust 1.87 consumer resolved minimal faer, ICU4X 2.2.0" in workflow
+    for forbidden in ("ar_archive_writer", "npyz", "pest_stack_guard", "psm"):
+        assert f'"{forbidden}"' in workflow
+    assert 'faer feature "linalg"' in workflow
+    assert 'faer feature "std"' in workflow
+    assert 'faer feature "(default|npy|rand|rayon|sparse|sparse-linalg)"' in workflow
     assert 'cargo package -p "$crate" --locked' in workflow
     assert 'RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps' in workflow
     assert "Latest-stable Rust compatibility (non-authoritative)" in workflow
@@ -569,7 +584,6 @@ def test_rust_ci_is_reproducible_and_downstream_sources_are_exact() -> None:
     nightly = (workflows / "nightly-rust-benchmark.yml").read_text()
     release_matrix = (workflows / "release-candidate-wheel-matrix.yml").read_text()
     tier1 = (workflows / "tier1-dependent-smoke.yml").read_text()
-    assist_sha = "c06164a18e8d90d8bf83d7ab58e479dc97e1be41"
 
     assert "dtolnay/rust-toolchain@1.87.0" in normal_ci
     assert "components: rustfmt, clippy" in normal_ci
@@ -577,7 +591,20 @@ def test_rust_ci_is_reproducible_and_downstream_sources_are_exact() -> None:
     assert "components: rustfmt, clippy" in crate_ci
     assert "dtolnay/rust-toolchain@1.87.0" in tier1
     assert "adam_assist_ref:" in release_matrix
-    assert assist_sha in tier1
+    tier1_trigger = tier1.split("permissions:", 1)[0]
+    assert "workflow_dispatch:" in tier1_trigger
+    assert "pull_request:" not in tier1_trigger
+    assert "schedule:" not in tier1_trigger
+    assert "adam_assist_ref:" in tier1_trigger
+    assert "required: true" in tier1_trigger
+    assert "c06164a18e8d90d8bf83d7ab58e479dc97e1be41" not in tier1
+    assert "ADAM_ASSIST_REF: ${{ inputs.adam_assist_ref }}" in tier1
+    assert "ref: ${{ env.ADAM_ASSIST_REF }}" in tier1
+    assert '[[ "$ADAM_ASSIST_REF" =~ ^[0-9a-f]{40}$ ]]' in tier1
+    assert 'test "$(git -C dependent rev-parse HEAD)" = "$ADAM_ASSIST_REF"' in tier1
+    assert "Verify dependent declares Core 0.7 compatibility" in tier1
+    assert 'Version("0.7.0") in core[0].specifier' in tier1
+    assert "dependent/pyproject.toml" in tier1
     assert "adam-assist" not in normal_ci
     assert "adam_assist" not in normal_ci
     assert "adam-assist" not in nightly
@@ -605,9 +632,9 @@ def test_rust_ci_is_reproducible_and_downstream_sources_are_exact() -> None:
         tier1.count('assert version("adam-core") == adam_core.__version__ == "0.7.0"')
         == 2
     )
-    assert (
-        tier1.count('assert version("adam-assist") == assist_version == "0.5.0"') == 2
-    )
+    assert tier1.count('assert version("adam-assist") == assist_version') == 2
+    assert 'assist_version == "0.5.0"' not in tier1
+    assert tier1.count("-m pip check") == 2
     assert "Run Core integration tests with the reference propagator" in tier1
     assert "for test_path in \\" in tier1
     assert 'pdm run test -- "$test_path"' in tier1
@@ -653,7 +680,7 @@ def test_rust_ci_is_reproducible_and_downstream_sources_are_exact() -> None:
     assert matrix_preparer < release_matrix.index("Build adam-assist manylinux wheel")
     assert matrix_preparer < release_matrix.index("Build adam-assist native wheel")
     assert 'version("adam-core") == adam_core.__version__ == "0.7.0"' in tier1
-    assert 'version("adam-assist") == assist_version == "0.5.0"' in tier1
+    assert 'version("adam-assist") == assist_version' in tier1
 
     for workflow in workflows.glob("*.yml"):
         source = workflow.read_text()
