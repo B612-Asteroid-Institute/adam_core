@@ -185,11 +185,14 @@ pub mod profiles {
 pub use adam_core_rs_coords::propagation::IodConfig;
 pub use adam_core_rs_coords::{IterativeFitConfig, RefinementConfig, WhitenedFitConfig};
 
+use adam_core_rs_coords::od::{
+    plan_associations, plan_orbit_members, AssociationGroup, OrbitMemberGroup,
+};
 pub use adam_core_rs_coords::od::{
-    plan_associations, plan_orbit_members, AssociationGroup, EvaluationConfig, IodRunConfig,
-    ObservationPipeline, ObservationTransform, OdConfig, OdConfigError, OrbitMemberGroup,
-    RefinementRunConfig, ResidualCovarianceOperation, ResourceBindings, ResourceProblem,
-    ResourceRequirement, ResourceSlot, ResourceValidationError, ValidatedResourceIdentity,
+    EvaluationConfig, IodRunConfig, ObservationPipeline, ObservationTransform, OdConfig,
+    OdConfigError, RefinementRunConfig, ResidualCovarianceOperation, ResourceBindings,
+    ResourceProblem, ResourceRequirement, ResourceSlot, ResourceValidationError,
+    ValidatedResourceIdentity,
 };
 
 /// Stable classification for invocation-fatal batch errors.
@@ -336,9 +339,23 @@ pub struct CoreBuildIdentity {
 }
 
 impl CoreBuildIdentity {
-    /// Return the identity embedded by the adam-core crate build.
+    /// Return the raw identity embedded by the compiled `adam_core` crate.
+    ///
+    /// This accessor deliberately does not validate the commit so diagnostic
+    /// bindings can report `unknown` or `dirty:<commit>` exactly as compiled.
+    /// Canonical scientific workflows use [`Self::current`] and fail closed.
+    pub fn compiled() -> Self {
+        Self {
+            version: env!("CARGO_PKG_VERSION").to_owned(),
+            commit: env!("ADAM_CORE_BUILD_COMMIT").to_owned(),
+        }
+    }
+
+    /// Return and validate the identity embedded by the `adam_core` crate build.
     pub fn current() -> Result<Self, OdBatchError> {
-        Self::new(env!("CARGO_PKG_VERSION"), env!("ADAM_CORE_BUILD_COMMIT"))
+        let identity = Self::compiled();
+        identity.validate()?;
+        Ok(identity)
     }
 
     /// Construct and fail closed on an inexact source identity.
@@ -1323,118 +1340,11 @@ impl OdGroupResult {
         let Some(fitted) = &self.orbit else {
             return Ok(None);
         };
-        let astrometry_columns = |used: bool| AstrometryColumns {
-            lon: self
-                .members
-                .iter()
-                .map(|member| {
-                    Some(if used {
-                        member.used.lon
-                    } else {
-                        member.original.lon
-                    })
-                })
-                .collect(),
-            lat: self
-                .members
-                .iter()
-                .map(|member| {
-                    Some(if used {
-                        member.used.lat
-                    } else {
-                        member.original.lat
-                    })
-                })
-                .collect(),
-            sigma_lon: self
-                .members
-                .iter()
-                .map(|member| {
-                    Some(if used {
-                        member.used.sigma_lon
-                    } else {
-                        member.original.sigma_lon
-                    })
-                })
-                .collect(),
-            sigma_lat: self
-                .members
-                .iter()
-                .map(|member| {
-                    Some(if used {
-                        member.used.sigma_lat
-                    } else {
-                        member.original.sigma_lat
-                    })
-                })
-                .collect(),
-            variance_lon: self
-                .members
-                .iter()
-                .map(|member| {
-                    Some(if used {
-                        member.used.variance_lon
-                    } else {
-                        member.original.variance_lon
-                    })
-                })
-                .collect(),
-            variance_lat: self
-                .members
-                .iter()
-                .map(|member| {
-                    Some(if used {
-                        member.used.variance_lat
-                    } else {
-                        member.original.variance_lat
-                    })
-                })
-                .collect(),
-            cov_lonlat: self
-                .members
-                .iter()
-                .map(|member| {
-                    Some(if used {
-                        member.used.cov_lonlat
-                    } else {
-                        member.original.cov_lonlat
-                    })
-                })
-                .collect(),
-        };
         let output = MemberedOrbits {
             orbits: fitted.orbit.clone(),
             provenance: vec![Some(fitted.provenance.clone())],
             observations: observations.clone(),
-            members: FittedOrbitMembersBatch {
-                orbit_id: self
-                    .members
-                    .iter()
-                    .map(|member| member.orbit_id.clone())
-                    .collect(),
-                observation_id: self
-                    .members
-                    .iter()
-                    .map(|member| member.observation_id.clone())
-                    .collect(),
-                outlier: self
-                    .members
-                    .iter()
-                    .map(|member| Some(member.outlier))
-                    .collect(),
-                input_fingerprint: self
-                    .members
-                    .iter()
-                    .map(|member| Some(member.input_fingerprint.clone()))
-                    .collect(),
-                membership_fingerprint: self
-                    .members
-                    .iter()
-                    .map(|member| Some(member.membership_fingerprint.clone()))
-                    .collect(),
-                original_astrometry: astrometry_columns(false),
-                used_astrometry: astrometry_columns(true),
-            },
+            members: member_batch_from_records(&self.members),
         };
         validate_member_input(&output, true, &fitted.provenance.adam_core)?;
         Ok(Some(output))
@@ -3133,11 +3043,7 @@ fn prepare_member_groups(
         .collect()
 }
 
-fn validate_iod_seed_provenance(
-    orbits: &OrbitBatch,
-    row: usize,
-    provenance: &OdProvenance,
-) -> Result<(), OdBatchError> {
+fn validate_iod_seed_provenance(row: usize, provenance: &OdProvenance) -> Result<(), OdBatchError> {
     if provenance.route != OdRoute::RunIod {
         return Ok(());
     }
@@ -3150,16 +3056,6 @@ fn validate_iod_seed_provenance(
                 format!(
                     "seed IOD configuration at orbit row {row} has no valid configuration_sha256"
                 ),
-            )
-        })?;
-    orbits.object_id[row]
-        .as_ref()
-        .map(|value| value.0.as_str())
-        .filter(|value| !value.trim().is_empty())
-        .ok_or_else(|| {
-            OdBatchError::new(
-                OdBatchErrorCode::InvalidProvenance,
-                format!("seed IOD orbit at row {row} requires its association group object_id"),
             )
         })?;
     Ok(())
@@ -3228,7 +3124,7 @@ fn validate_member_input(
                 format!("orbit row {row} does not match its state fingerprint"),
             ));
         }
-        validate_iod_seed_provenance(&input.orbits, row, provenance)?;
+        validate_iod_seed_provenance(row, provenance)?;
     }
     plan_orbit_members(
         &input.orbits,
@@ -4496,7 +4392,7 @@ mod tests {
     }
 
     #[test]
-    fn iod_seed_provenance_requires_science_identity_but_not_a_fixed_label() {
+    fn iod_seed_provenance_requires_declared_science_identity() {
         let mut value = json!({"iod": {}, "refinement": {}, "evaluation": {}});
         let science = CanonicalConfiguration::from_value(value.clone())
             .expect("configuration")
@@ -4510,16 +4406,14 @@ mod tests {
         provenance.route = OdRoute::RunIod;
         provenance.configuration =
             CanonicalConfiguration::from_value(value).expect("declared configuration");
-        let relabelled = one_row_orbit("user-label", Some("group"));
-        validate_iod_seed_provenance(&relabelled, 0, &provenance)
-            .expect("mutable label is not scientific identity");
+        validate_iod_seed_provenance(0, &provenance).expect("declared science identity is valid");
 
         provenance.configuration = CanonicalConfiguration::from_value(
             json!({"iod": {}, "refinement": {}, "evaluation": {}}),
         )
         .expect("configuration without declared digest");
         assert_eq!(
-            validate_iod_seed_provenance(&relabelled, 0, &provenance)
+            validate_iod_seed_provenance(0, &provenance)
                 .expect_err("science digest remains mandatory")
                 .code,
             OdBatchErrorCode::InvalidProvenance

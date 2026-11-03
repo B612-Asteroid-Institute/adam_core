@@ -362,7 +362,10 @@ def test_explicit_evaluation_subset_and_stage_provenance(
     assert evaluated_members.obs_id.to_pylist() == subset.obs_id.to_pylist()
     assert evaluated.num_obs.to_pylist() == [4]
     provenance = evaluated.provenance
-    assert provenance.adam_core_build[0].as_py()
+    assert _rust_native.build_identity() == (
+        provenance.adam_core_version[0].as_py(),
+        provenance.adam_core_build[0].as_py(),
+    )
     assert provenance.evaluation_backend[0].as_py()
     assert provenance.evaluation_provider[0].as_py()
     assert provenance.state_fingerprint[0].as_py()

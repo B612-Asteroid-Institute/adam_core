@@ -10,6 +10,18 @@ fn function_section<'a>(source: &'a str, name: &str, next: &str) -> &'a str {
 }
 
 #[test]
+fn binding_build_identity_comes_only_from_compiled_core() {
+    let binding = include_str!("../src/lib.rs");
+    assert!(binding.contains("CoreBuildIdentity::compiled()"));
+    assert!(!binding.contains("env!(\"ADAM_CORE_BUILD_COMMIT\")"));
+
+    let build = include_str!("../build.rs");
+    assert!(!build.contains("rustc-env=ADAM_CORE_BUILD_COMMIT"));
+    assert!(!build.contains("resolve_commit"));
+    assert!(build.contains("validate_release_attestation(&repo, &commit)"));
+}
+
+#[test]
 fn canonical_bindings_only_decode_delegate_and_marshal() {
     let source = include_str!("../src/od_drivers.rs");
     let cases = [

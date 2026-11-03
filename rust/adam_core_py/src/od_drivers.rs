@@ -32,17 +32,16 @@ use adam_core_rs_coords::propagation::adapter::{
     validate_fit_covariance_with, PropagatorPredictor, SphericalPredictor,
 };
 use adam_core_rs_coords::propagation::{
-    AstrometrySnapshot, BackendIdentity, Cmc2003FitConfig, CovariancePropagation, EphemerisOptions,
-    EpochPolicy, ExternalPropagator, ExternalPropagatorV2, IodCandidate, IodCandidateFailure,
-    IodResult, IterativeFitConfig, JacobianMethod, PropagationOptions, PropagationResultValue,
-    RangingResult, RangingSample, RefinementConfig, TwoBodyPropagator, TwoBodyPropagatorConfig,
-    WhitenedFitConfig, WhitenedFitOutput, EXTERNAL_PROPAGATOR_CAPSULE,
+    AstrometrySnapshot, BackendIdentity, Cmc2003FitConfig, EphemerisOptions, ExternalPropagator,
+    ExternalPropagatorV2, IodCandidate, IodCandidateFailure, IodResult, IterativeFitConfig,
+    JacobianMethod, PropagationResultValue, RangingResult, RangingSample, RefinementConfig,
+    TwoBodyPropagator, WhitenedFitConfig, WhitenedFitOutput, EXTERNAL_PROPAGATOR_CAPSULE,
 };
 use adam_core_rs_coords::{
     validate_loss, AssociationBatch, CoordinateBatch as DataCoordinateBatch, IntoNestedRecordBatch,
     ObserverBatch as DataObserverBatch, OdConfig, OrbitBatch as DataOrbitBatch, SourceCatalogBatch,
-    TimeScale, TryFromNestedRecordBatch, TwoBodyModelConfig, CMC2003_APPARITION_GAP_DAYS,
-    CMC2003_CHI2_FRAC, CMC2003_CHI2_RECOVER, CMC2003_CHI2_REJECT, CMC2003_MAX_ITERATIONS,
+    TryFromNestedRecordBatch, TwoBodyModelConfig, CMC2003_APPARITION_GAP_DAYS, CMC2003_CHI2_FRAC,
+    CMC2003_CHI2_RECOVER, CMC2003_CHI2_REJECT, CMC2003_MAX_ITERATIONS,
     CMC2003_MAX_REJECTED_FRACTION, CMC2003_PSD_FLOOR_FRAC,
 };
 use numpy::{IntoPyArray, PyReadonlyArray2};
@@ -116,14 +115,12 @@ fn setting<'py, T: FromPyObject<'py>>(
     }
 }
 
-/// `fit_settings` over the Rust defaults: `WhitenedFitConfig::default()` for
-/// the solver, `EphemerisOptions::default()` for the light-time /
-/// aberration settings and `TwoBodyPropagatorConfig::default()` for the
-/// Kepler solver. The dict only overrides them; no number lives here.
+/// Build one typed fit configuration from dictionary overrides, then derive
+/// all runtime settings through Core's canonical stage constructor. The legacy
+/// stellar-aberration knob is the sole explicit post-construction difference.
 fn parse_fit_settings(settings: Option<&Bound<'_, PyDict>>) -> PyResult<FitSettings> {
     let fit_defaults = WhitenedFitConfig::default();
     let ephemeris_defaults = EphemerisOptions::default();
-    let propagation_defaults = TwoBodyPropagatorConfig::default();
     let loss: String = setting(settings, "loss", fit_defaults.loss.as_str().to_string())?;
     let f_scale: f64 = setting(settings, "f_scale", fit_defaults.f_scale)?;
     let loss = validate_loss(&loss, f_scale).map_err(value_error)?;
@@ -133,17 +130,25 @@ fn parse_fit_settings(settings: Option<&Bound<'_, PyDict>>) -> PyResult<FitSetti
         fit_defaults.jacobian.as_str().to_string(),
     )?;
     let jacobian = JacobianMethod::parse(&jacobian).map_err(value_error)?;
-    let lt_tol: f64 = setting(settings, "lt_tol", ephemeris_defaults.lt_tol)?;
-    let eph_max_iter: usize = setting(settings, "eph_max_iter", ephemeris_defaults.max_iter)?;
-    let eph_tol: f64 = setting(settings, "eph_tol", ephemeris_defaults.tol)?;
+    let lt_tol: f64 = setting(settings, "lt_tol", fit_defaults.two_body.lt_tol)?;
+    let eph_max_iter: usize = setting(
+        settings,
+        "eph_max_iter",
+        fit_defaults.two_body.ephemeris_max_iter,
+    )?;
+    let eph_tol: f64 = setting(settings, "eph_tol", fit_defaults.two_body.ephemeris_tol)?;
     let stellar_aberration: bool = setting(
         settings,
         "stellar_aberration",
         ephemeris_defaults.stellar_aberration,
     )?;
-    let max_lt_iter: usize = setting(settings, "max_lt_iter", ephemeris_defaults.max_lt_iter)?;
-    let prop_max_iter: usize = setting(settings, "prop_max_iter", propagation_defaults.max_iter)?;
-    let prop_tol: f64 = setting(settings, "prop_tol", propagation_defaults.tol)?;
+    let max_lt_iter: usize = setting(settings, "max_lt_iter", fit_defaults.two_body.max_lt_iter)?;
+    let prop_max_iter: usize = setting(
+        settings,
+        "prop_max_iter",
+        fit_defaults.two_body.propagation_max_iter,
+    )?;
+    let prop_tol: f64 = setting(settings, "prop_tol", fit_defaults.two_body.propagation_tol)?;
     let config = WhitenedFitConfig {
         loss,
         f_scale,
@@ -167,33 +172,9 @@ fn parse_fit_settings(settings: Option<&Bound<'_, PyDict>>) -> PyResult<FitSetti
             max_lt_iter,
         },
     };
-    config.validate().map_err(value_error)?;
-    let options = EphemerisOptions {
-        propagation: PropagationOptions {
-            chunk_size: None,
-            thread_limit: None,
-            epoch_policy: EpochPolicy::CrossProduct,
-            covariance: CovariancePropagation::None,
-        },
-        lt_tol,
-        max_iter: eph_max_iter,
-        tol: eph_tol,
-        stellar_aberration,
-        max_lt_iter,
-        output_time_scale: TimeScale::Utc,
-        include_aberrated_coordinates: false,
-        ..EphemerisOptions::default()
-    };
-    let propagator = TwoBodyPropagator::new(TwoBodyPropagatorConfig {
-        max_iter: prop_max_iter,
-        tol: prop_tol,
-    })
-    .map_err(|err| value_error(format!("invalid propagator config: {err}")))?;
-    Ok(FitSettings {
-        config,
-        options,
-        propagator,
-    })
+    let mut runtime = fit_settings_from_config(config)?;
+    runtime.options.stellar_aberration = stellar_aberration;
+    Ok(runtime)
 }
 
 /// Build the fixed ephemeris/provider adapter around an authoritative typed

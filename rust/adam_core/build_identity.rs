@@ -257,6 +257,31 @@ mod tests {
     }
 
     #[test]
+    fn unpackaged_source_copy_ignores_clean_and_dirty_unrelated_repository() {
+        let temp = TempDir::new("source-copy");
+        init_consumer(&temp.0);
+        let manifest = temp.0.join("third_party/adam_core/rust/adam_core");
+        fs::create_dir_all(manifest.join("src")).expect("source-copy directories");
+        fs::write(
+            manifest.join("Cargo.toml"),
+            "[package]\nname='adam_core'\nversion='0.7.0'\n",
+        )
+        .expect("source-copy manifest");
+        fs::write(manifest.join("src/lib.rs"), "pub fn marker() {}\n").expect("source-copy source");
+        git(&temp.0, &["add", "."]);
+        git(&temp.0, &["commit", "-qm", "source copy"]);
+
+        let (clean, checkout) = resolve_commit(&manifest, None).expect("clean source copy");
+        assert_eq!(clean, "unknown");
+        assert!(checkout.is_none());
+
+        fs::write(temp.0.join("README"), "dirty consumer\n").expect("dirty consumer");
+        let (dirty, checkout) = resolve_commit(&manifest, None).expect("dirty source copy");
+        assert_eq!(dirty, "unknown");
+        assert!(checkout.is_none());
+    }
+
+    #[test]
     fn dirty_package_vcs_info_is_rejected() {
         let temp = TempDir::new("package-dirty");
         let manifest = temp.0.join("adam_core-0.7.0");

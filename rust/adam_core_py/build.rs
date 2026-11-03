@@ -3,97 +3,6 @@ use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-fn git_commit(repo: &PathBuf) -> Option<String> {
-    let output = Command::new("git")
-        .args([
-            "-c",
-            &format!("safe.directory={}", repo.display()),
-            "rev-parse",
-            "HEAD",
-        ])
-        .current_dir(repo)
-        .output()
-        .ok()?;
-    if !output.status.success() {
-        return None;
-    }
-    let value = String::from_utf8(output.stdout).ok()?.trim().to_owned();
-    (value.len() == 40 && value.bytes().all(|byte| byte.is_ascii_hexdigit())).then_some(value)
-}
-
-fn relevant_untracked_path(path: &str) -> bool {
-    (path.starts_with("src/adam_core/") && !path.contains("/tests/") && path.ends_with(".py"))
-        || (path.starts_with("rust/")
-            && (path.contains("/src/")
-                || path.ends_with("/Cargo.toml")
-                || path.ends_with("/build.rs")))
-}
-
-fn relevant_untracked_files(repo: &PathBuf) -> Option<Vec<String>> {
-    let output = Command::new("git")
-        .args([
-            "-c",
-            &format!("safe.directory={}", repo.display()),
-            "ls-files",
-            "--others",
-            "--exclude-standard",
-            "-z",
-            "--",
-            "src/adam_core",
-            "rust",
-        ])
-        .current_dir(repo)
-        .output()
-        .ok()?;
-    if !output.status.success() {
-        return None;
-    }
-    let mut relevant = Vec::new();
-    for raw in output
-        .stdout
-        .split(|byte| *byte == 0)
-        .filter(|raw| !raw.is_empty())
-    {
-        let path = std::str::from_utf8(raw).ok()?;
-        if relevant_untracked_path(path) {
-            relevant.push(path.to_owned());
-        }
-    }
-    relevant.sort_unstable();
-    Some(relevant)
-}
-
-fn git_dirty(repo: &PathBuf) -> Option<bool> {
-    // Tracked edits/staging anywhere in Core affect the source identity. The
-    // exact adam-assist checkout used by the release workflow is a separate
-    // repository and is deliberately outside Core's identity.
-    let tracked = Command::new("git")
-        .args([
-            "-c",
-            &format!("safe.directory={}", repo.display()),
-            "status",
-            "--porcelain",
-            "--untracked-files=no",
-            "--",
-            ".",
-            ":(exclude)adam-assist",
-        ])
-        .current_dir(repo)
-        .output()
-        .ok()?;
-    if !tracked.status.success() {
-        return None;
-    }
-    if !tracked.stdout.is_empty() {
-        return Some(true);
-    }
-
-    // Only untracked files that can enter the Python package or a Rust crate
-    // make the build dirty. Tests, caches, wheelhouse/, documentation output,
-    // generated extensions, and the nested Assist checkout do not.
-    relevant_untracked_files(repo).map(|paths| !paths.is_empty())
-}
-
 fn release_attestation_path(repo: &PathBuf) -> Option<PathBuf> {
     let output = Command::new("git")
         .args([
@@ -294,43 +203,6 @@ fn main() {
         .join("../..")
         .canonicalize()
         .expect("repository path");
-    let discovered = git_commit(&repo);
-    let supplied = std::env::var("ADAM_CORE_BUILD_COMMIT").ok();
-    if let Some(expected) = &supplied {
-        assert!(
-            expected.len() == 40
-                && expected
-                    .bytes()
-                    .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte)),
-            "ADAM_CORE_BUILD_COMMIT must be a 40-character lowercase hexadecimal commit"
-        );
-    }
-    if let (Some(expected), Some(actual)) = (&supplied, &discovered) {
-        assert_eq!(
-            expected, actual,
-            "ADAM_CORE_BUILD_COMMIT does not match source checkout"
-        );
-    }
-    let commit = match (supplied, discovered, git_dirty(&repo)) {
-        (Some(commit), _, Some(false)) => commit,
-        (Some(_), _, Some(true)) => {
-            panic!("release-supplied ADAM_CORE_BUILD_COMMIT cannot identify a dirty checkout")
-        }
-        (Some(commit), _, None) => commit,
-        (None, Some(commit), Some(true)) => format!("dirty:{commit}"),
-        (None, Some(commit), _) => commit,
-        (None, None, _) => "unknown".to_string(),
-    };
-    if std::env::var_os("ADAM_CORE_RELEASE_BUILD").is_some() {
-        assert!(
-            commit.len() == 40
-                && commit
-                    .bytes()
-                    .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte)),
-            "release artifacts require an exact clean adam-core source commit"
-        );
-    }
-    println!("cargo:rustc-env=ADAM_CORE_BUILD_COMMIT={commit}");
     for (source, target) in [
         ("PROFILE", "ADAM_CORE_CARGO_PROFILE"),
         ("OPT_LEVEL", "ADAM_CORE_CARGO_OPT_LEVEL"),
@@ -368,6 +240,8 @@ fn main() {
         }
     }
     if std::env::var_os("ADAM_CORE_RELEASE_BUILD").is_some() {
+        let commit = std::env::var("ADAM_CORE_BUILD_COMMIT")
+            .expect("release attestation requires ADAM_CORE_BUILD_COMMIT");
         validate_release_attestation(&repo, &commit);
     }
     println!("cargo:rerun-if-env-changed=ADAM_CORE_RELEASE_INVENTORY_DIGEST");

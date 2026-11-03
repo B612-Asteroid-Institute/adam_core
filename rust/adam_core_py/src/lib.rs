@@ -31,8 +31,9 @@ mod trajectory;
 mod variant_ephemeris;
 
 #[pyfunction]
-fn build_identity() -> (&'static str, &'static str) {
-    (env!("CARGO_PKG_VERSION"), env!("ADAM_CORE_BUILD_COMMIT"))
+fn build_identity() -> (String, String) {
+    let identity = adam_core::od::CoreBuildIdentity::compiled();
+    (identity.version, identity.commit)
 }
 
 /// Compile-time Cargo profile metadata for benchmark/release evidence.

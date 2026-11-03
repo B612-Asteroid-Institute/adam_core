@@ -1,3 +1,4 @@
+use adam_core::od::algorithms::ErfaTimeProvider;
 use adam_core_rs_coords::local_frames::{
     local_frame_covariances, local_frame_jacobians, LocalFrame,
 };
@@ -26,7 +27,7 @@ use adam_core_rs_coords::{
     IntoNestedRecordBatch, LeastSquaresConfig, NonGravitationalParametersBatch as DataNonGravBatch,
     ObserverBatch as DataObserverBatch, OrbitBatch as DataOrbitBatch,
     OrbitVariantBatch as DataOrbitVariantBatch, OrbitVariantSamplingMethod, OriginArray, OriginId,
-    Representation as CoordsRepresentation, SchemaError, TimeArray, TimeScale, TimeScaleProvider,
+    Representation as CoordsRepresentation, SchemaError, TimeArray, TimeScale,
     TryFromNestedRecordBatch,
 };
 use adam_core_rs_spice::global_backend;
@@ -1681,21 +1682,6 @@ fn orbits_propagate_2body_ipc<'py>(
         .map_err(|err| PyValueError::new_err(format!("failed to encode OrbitBatch: {err}")))?;
     let bytes = write_orbit_ipc(&out)?;
     Ok(PyBytes::new(py, &bytes))
-}
-
-/// Provider-owned time rescaling for the typed propagation adapter: delegates
-/// to the ERFA-backed `TimeArray::rescale` service (UTC/TAI/TT/TDB supported;
-/// UT1/GPS fail loudly pending provider contracts).
-pub(crate) struct ErfaTimeProvider;
-
-impl TimeScaleProvider for ErfaTimeProvider {
-    fn rescale(
-        &self,
-        times: &TimeArray,
-        new_scale: TimeScale,
-    ) -> adam_core_rs_coords::types::SchemaResult<TimeArray> {
-        times.rescale(new_scale)
-    }
 }
 
 struct TypedPropagationBatchOutput {
