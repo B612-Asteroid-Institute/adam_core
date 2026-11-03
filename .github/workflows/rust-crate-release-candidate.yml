@@ -108,8 +108,9 @@ jobs:
           cargo tree --manifest-path "$consumer/Cargo.toml" --edges features \
             > "$consumer/features.txt"
           grep -F 'faer feature "linalg"' "$consumer/features.txt"
+          grep -F 'faer feature "rayon"' "$consumer/features.txt"
           grep -F 'faer feature "std"' "$consumer/features.txt"
-          if grep -E 'faer feature "(default|npy|rand|rayon|sparse|sparse-linalg)"' \
+          if grep -E 'faer feature "(default|npy|rand|sparse|sparse-linalg)"' \
             "$consumer/features.txt"; then
             echo "unexpected faer feature in clean MSRV resolution" >&2
             exit 1
@@ -155,8 +156,8 @@ jobs:
           }
           assert not forbidden, forbidden
           print(
-              "clean Rust 1.87 consumer resolved minimal faer, ICU4X 2.2.0, "
-              "and rawzip 0.5.2 without incompatible optional chains"
+              "clean Rust 1.87 consumer resolved faer std+linalg+rayon, "
+              "ICU4X 2.2.0, and rawzip 0.5.2 without incompatible optional chains"
           )
           PY
       - name: Upload exact crate publication set

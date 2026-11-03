@@ -218,19 +218,20 @@ def test_kernel_data_constrains_icu_for_clean_rust_1_87_consumers() -> None:
     assert spice_dependencies["faer"] == {
         "version": "0.22",
         "default-features": False,
-        "features": ["std", "linalg"],
+        "features": ["std", "linalg", "rayon"],
     }
 
     workflow = (ROOT / ".github/workflows/rust-crate-release-candidate.yml").read_text()
     assert "Verify clean no-lock Rust 1.87 consumer resolution" in workflow
     assert 'test ! -e "$consumer/Cargo.lock"' in workflow
     assert 'rustc --version | grep -F "rustc 1.87.0"' in workflow
-    assert "clean Rust 1.87 consumer resolved minimal faer, ICU4X 2.2.0" in workflow
+    assert "clean Rust 1.87 consumer resolved faer std+linalg+rayon" in workflow
     for forbidden in ("ar_archive_writer", "npyz", "pest_stack_guard", "psm"):
         assert f'"{forbidden}"' in workflow
     assert 'faer feature "linalg"' in workflow
+    assert 'faer feature "rayon"' in workflow
     assert 'faer feature "std"' in workflow
-    assert 'faer feature "(default|npy|rand|rayon|sparse|sparse-linalg)"' in workflow
+    assert 'faer feature "(default|npy|rand|sparse|sparse-linalg)"' in workflow
     assert 'cargo package -p "$crate" --locked' in workflow
     assert 'RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps' in workflow
     assert "Latest-stable Rust compatibility (non-authoritative)" in workflow
@@ -600,11 +601,26 @@ def test_rust_ci_is_reproducible_and_downstream_sources_are_exact() -> None:
     assert "c06164a18e8d90d8bf83d7ab58e479dc97e1be41" not in tier1
     assert "ADAM_ASSIST_REF: ${{ inputs.adam_assist_ref }}" in tier1
     assert "ref: ${{ env.ADAM_ASSIST_REF }}" in tier1
-    assert '[[ "$ADAM_ASSIST_REF" =~ ^[0-9a-f]{40}$ ]]' in tier1
+    assert tier1.count('[[ "$ADAM_ASSIST_REF" =~ ^[0-9a-f]{40}$ ]]') == 1
     assert 'test "$(git -C dependent rev-parse HEAD)" = "$ADAM_ASSIST_REF"' in tier1
-    assert "Verify dependent declares Core 0.7 compatibility" in tier1
-    assert 'Version("0.7.0") in core[0].specifier' in tier1
-    assert "dependent/pyproject.toml" in tier1
+    syntax_name = "Validate requested dependent revision syntax"
+    checkout_name = "Checkout requested dependent revision"
+    revision_name = "Verify exact dependent revision"
+    install_name = "Install test and exact build dependencies"
+    metadata_name = "Verify dependent declares Core 0.7 compatibility"
+    assert (
+        tier1.index(syntax_name)
+        < tier1.index(checkout_name)
+        < tier1.index(revision_name)
+    )
+    assert tier1.index(install_name) < tier1.index(metadata_name)
+    metadata_start = tier1.index(metadata_name)
+    metadata_end = tier1.index("\n      - name:", metadata_start)
+    metadata_block = tier1[metadata_start:metadata_end]
+    assert "pdm run python - <<'PY'" in metadata_block
+    assert "\n          python - <<'PY'" not in metadata_block
+    assert 'Version("0.7.0") in core[0].specifier' in metadata_block
+    assert "dependent/pyproject.toml" in metadata_block
     assert "adam-assist" not in normal_ci
     assert "adam_assist" not in normal_ci
     assert "adam-assist" not in nightly

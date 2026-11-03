@@ -23,6 +23,11 @@ jobs:
     steps:
       - name: Checkout adam_core
         uses: actions/checkout@v4
+      - name: Validate requested dependent revision syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$ADAM_ASSIST_REF" =~ ^[0-9a-f]{40}$ ]]
       - name: Set up Rust at the public-crate MSRV
         uses: dtolnay/rust-toolchain@1.87.0
         with:
@@ -48,11 +53,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          [[ "$ADAM_ASSIST_REF" =~ ^[0-9a-f]{40}$ ]]
           test "$(git -C dependent rev-parse HEAD)" = "$ADAM_ASSIST_REF"
       - name: Verify dependent declares Core 0.7 compatibility
         run: |
-          python - <<'PY'
+          pdm run python - <<'PY'
           import tomllib
           from packaging.requirements import Requirement
           from packaging.utils import canonicalize_name

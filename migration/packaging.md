@@ -51,15 +51,17 @@ Last updated: 2026-11-03.
   candidate: that candidate declares Core 0.6 requirements and cannot
   legitimately exercise Core 0.7 provider ABI v2.
 - `.github/workflows/tier1-dependent-smoke.yml` is therefore manual-only. It
-  requires an exact 40-hex Assist revision, verifies the checkout, and uses
-  `pip check` to enforce the dependent's unmodified Core requirement. Add no
-  pull-request or scheduled trigger until a separately reviewed compatible
-  Assist candidate exists.
+  rejects a non-40-hex Assist revision before dependent checkout, verifies the
+  resulting HEAD, and checks the dependent's Core requirement with the
+  installed PDM interpreter after the exact test/build dependency install.
+  `pip check` then enforces that unmodified requirement. Add no pull-request or
+  scheduled trigger until a separately reviewed compatible Assist candidate
+  exists.
 - Removing the former `tier1-smoke` pull-request job also removes that check
-  context from new PR commits. Repository administrators must confirm it is
-  not listed as a required branch-protection check; the protection API requires
-  authenticated administration access and cannot be audited from an ordinary
-  public checkout.
+  context from new PR commits. Public repository API results verified on
+  2026-11-03 showed that `main` was unprotected and that no repository rulesets
+  applied, so no required `tier1-smoke` context existed at that date. Recheck
+  branch protection and rulesets if repository policy changes.
 - The release-candidate wheel matrix remains a separate exact-ref workflow and
   is unchanged; release pairing still requires its explicit Assist SHA input.
 

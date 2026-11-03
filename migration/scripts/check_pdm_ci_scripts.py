@@ -201,6 +201,10 @@ def _workflow_pdm_run_failures(
     failures: list[str] = []
     for match in re.finditer(r"\bpdm\s+run\s+([A-Za-z0-9_.:-]+)", text):
         script = match.group(1)
+        if script == "python":
+            # `pdm run python` deliberately selects the installed project
+            # interpreter; unlike other names it is an executable, not a script.
+            continue
         if script not in script_names:
             failures.append(f"{source}: `pdm run {script}` has no matching PDM script")
     return failures
@@ -554,11 +558,11 @@ def _rust_msrv_dependency_failures() -> list[str]:
     expected_faer = {
         "version": "0.22",
         "default-features": False,
-        "features": ["std", "linalg"],
+        "features": ["std", "linalg", "rayon"],
     }
     if spice_manifest.get("dependencies", {}).get("faer") != expected_faer:
         failures.append(
-            "spice manifest faer dependency must use only std+linalg without defaults"
+            "spice manifest faer dependency must use std+linalg+rayon without defaults"
         )
 
     lock = tomllib.loads((REPO_ROOT / "Cargo.lock").read_text(encoding="utf-8"))
@@ -573,8 +577,9 @@ def _rust_msrv_dependency_failures() -> list[str]:
     workflow = RUST_CRATE_WORKFLOW.read_text(encoding="utf-8")
     for required in (
         'faer feature "linalg"',
+        'faer feature "rayon"',
         'faer feature "std"',
-        'faer feature "(default|npy|rand|rayon|sparse|sparse-linalg)"',
+        'faer feature "(default|npy|rand|sparse|sparse-linalg)"',
         '"ar_archive_writer"',
         '"npyz"',
         '"pest_stack_guard"',
@@ -605,7 +610,9 @@ def _tier1_exact_ref_failures() -> list[str]:
         "ref: ${{ env.ADAM_ASSIST_REF }}",
         '[[ "$ADAM_ASSIST_REF" =~ ^[0-9a-f]{40}$ ]]',
         'test "$(git -C dependent rev-parse HEAD)" = "$ADAM_ASSIST_REF"',
+        "Validate requested dependent revision syntax",
         "Verify dependent declares Core 0.7 compatibility",
+        "pdm run python - <<'PY'",
         'Version("0.7.0") in core[0].specifier',
     ):
         if required not in text:
@@ -616,6 +623,36 @@ def _tier1_exact_ref_failures() -> list[str]:
         )
     if "dependent/pyproject.toml" not in text:
         failures.append("Tier-1 workflow must inspect the dependent's own metadata")
+
+    step_names = {
+        "install": "Install test and exact build dependencies",
+        "syntax": "Validate requested dependent revision syntax",
+        "checkout": "Checkout requested dependent revision",
+        "revision": "Verify exact dependent revision",
+        "metadata": "Verify dependent declares Core 0.7 compatibility",
+    }
+    positions = {key: text.find(value) for key, value in step_names.items()}
+    if all(position >= 0 for position in positions.values()):
+        if not positions["syntax"] < positions["checkout"] < positions["revision"]:
+            failures.append(
+                "Tier-1 must validate exact-ref syntax before checkout and HEAD after checkout"
+            )
+        if not positions["install"] < positions["metadata"]:
+            failures.append(
+                "Tier-1 dependent metadata validation must follow the PDM dependency install"
+            )
+        metadata_end = text.find("\n      - name:", positions["metadata"] + 1)
+        metadata_block = text[
+            positions["metadata"] : metadata_end if metadata_end >= 0 else None
+        ]
+        if "pdm run python - <<'PY'" not in metadata_block:
+            failures.append(
+                "Tier-1 dependent metadata validation must use the installed PDM interpreter"
+            )
+        if "\n          python - <<'PY'" in metadata_block:
+            failures.append(
+                "Tier-1 dependent metadata validation must not use bare system Python"
+            )
     if text.count("-m pip check") < 2:
         failures.append(
             "Tier-1 workflow must enforce the dependent's declared requirements in both environments"
