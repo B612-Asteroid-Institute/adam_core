@@ -519,6 +519,16 @@ separately supplied licensed resources are deliberately outside this module.</p>
 <dd><p>Validate all resource bytes/structure and expand natively.</p>
 <p>Validation is aggregate and precedes pipeline/provider work. Absolute
 paths select local files but are excluded from canonical provenance.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#TypeError" title="(in Python v3.15)"><strong>TypeError</strong></a> – If <code class="docutils literal notranslate"><span class="pre">resources</span></code> is not a <code class="docutils literal notranslate"><span class="pre">ResourceBindings</span></code> value.</p></li>
+<li><p><a class="reference internal" href="adam_core.orbit_determination.config.html#adam_core.orbit_determination.config.OdConfigurationError" title="adam_core.orbit_determination.config.OdConfigurationError"><strong>OdConfigurationError</strong></a> – If the named immutable profile definition is inconsistent.</p></li>
+<li><p><a class="reference internal" href="adam_core.orbit_determination.config.html#adam_core.orbit_determination.config.OdResourceValidationError" title="adam_core.orbit_determination.config.OdResourceValidationError"><strong>OdResourceValidationError</strong></a> – If required slots are missing or any bound resource fails identity,
+    schema, structural, swapped-slot, duplicate-slot, or unused checks.</p></li>
+</ul>
+</dd>
+</dl>
 </dd></dl>
 
 </dd></dl>

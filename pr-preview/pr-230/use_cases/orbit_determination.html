@@ -450,59 +450,149 @@
         <article role="main" id="furo-main-content">
           <section id="orbit-determination">
 <h1>Orbit determination<a class="headerlink" href="#orbit-determination" title="Link to this heading">¶</a></h1>
-<p>Core 0.7’s canonical batch functions are <code class="docutils literal notranslate"><span class="pre">run_iod</span></code>, <code class="docutils literal notranslate"><span class="pre">run_od</span></code>, <code class="docutils literal notranslate"><span class="pre">refine</span></code>,
-and <code class="docutils literal notranslate"><span class="pre">evaluate_orbits</span></code>. Each returns <code class="docutils literal notranslate"><span class="pre">FittedOrbits</span></code>,
-<code class="docutils literal notranslate"><span class="pre">FittedOrbitMembers</span></code>, and typed <code class="docutils literal notranslate"><span class="pre">OrbitDeterminationFailures</span></code>. Raw IOD/OD
-uses a <code class="docutils literal notranslate"><span class="pre">SourceCatalog</span></code> plus explicit <code class="docutils literal notranslate"><span class="pre">Associations</span></code>; refinement and
-evaluation use explicit <code class="docutils literal notranslate"><span class="pre">FittedOrbitMembers</span></code>. One object is one group through
-the same batch path; there are no primary one-group aliases.</p>
-<section id="rust-owned-configuration-and-execution">
-<h2>Rust-owned configuration and execution<a class="headerlink" href="#rust-owned-configuration-and-execution" title="Link to this heading">¶</a></h2>
-<p>Core Rust owns complete OD configuration, profile expansion, ordered
-observation transforms, resource validation/parsing, fitting and rejection
-settings, and path-free canonical configuration provenance. Python declares
-immutable values, binds explicit local paths, marshals tables, and assembles
-result tables. A propagation provider supplies only its negotiated native
-capsule.</p>
-<p>The complete fused configuration is <code class="docutils literal notranslate"><span class="pre">OdConfig</span></code>. <code class="docutils literal notranslate"><span class="pre">run_od</span></code> receives it
-directly; <code class="docutils literal notranslate"><span class="pre">run_iod</span></code> receives its bound <code class="docutils literal notranslate"><span class="pre">config.for_iod()</span></code> projection.
-Standalone <code class="docutils literal notranslate"><span class="pre">refine</span></code> receives <code class="docutils literal notranslate"><span class="pre">RefinementRunConfig</span></code> and
-<code class="docutils literal notranslate"><span class="pre">evaluate_orbits</span></code> receives an independent <code class="docutils literal notranslate"><span class="pre">EvaluationConfig</span></code> (often
-<code class="docutils literal notranslate"><span class="pre">config.for_evaluation()</span></code>). The types have deliberately separate scopes:</p>
+<p>Core 0.7 has four canonical orbit-determination (OD) workflows. The Python and
+standalone Rust entry points call the same Rust orchestration:</p>
+<div class="table-wrapper colwidths-given docutils container" id="id1">
+<table class="docutils align-default" id="id1">
+<caption><span class="caption-text">Canonical OD workflows</span><a class="headerlink" href="#id1" title="Link to this table">¶</a></caption>
+<colgroup>
+<col style="width: 13.0%" />
+<col style="width: 25.0%" />
+<col style="width: 22.0%" />
+<col style="width: 20.0%" />
+<col style="width: 20.0%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Workflow</p></th>
+<th class="head"><p>Input</p></th>
+<th class="head"><p>Configuration</p></th>
+<th class="head"><p>Provider</p></th>
+<th class="head"><p>Result</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">run_iod</span></code></p></td>
+<td><p>Python <code class="docutils literal notranslate"><span class="pre">SourceCatalog</span></code> + <code class="docutils literal notranslate"><span class="pre">Associations</span></code>; Rust
+<code class="docutils literal notranslate"><span class="pre">AssociatedObservations</span></code></p></td>
+<td><p>Bound <code class="docutils literal notranslate"><span class="pre">IodRunConfig</span></code></p></td>
+<td><p>Python <code class="docutils literal notranslate"><span class="pre">Propagator</span> <span class="pre">|</span> <span class="pre">None</span></code>; Rust <code class="docutils literal notranslate"><span class="pre">&amp;OdPropagator</span></code></p></td>
+<td><p>Fitted orbits, fitted members, typed failures</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">run_od</span></code></p></td>
+<td><p>Python <code class="docutils literal notranslate"><span class="pre">SourceCatalog</span></code> + <code class="docutils literal notranslate"><span class="pre">Associations</span></code>; Rust
+<code class="docutils literal notranslate"><span class="pre">AssociatedObservations</span></code></p></td>
+<td><p>Bound <code class="docutils literal notranslate"><span class="pre">OdConfig</span></code></p></td>
+<td><p>Python <code class="docutils literal notranslate"><span class="pre">Propagator</span> <span class="pre">|</span> <span class="pre">None</span></code>; Rust <code class="docutils literal notranslate"><span class="pre">&amp;OdPropagator</span></code></p></td>
+<td><p>Fitted orbits, fitted members, typed failures</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">refine</span></code></p></td>
+<td><p>Python <code class="docutils literal notranslate"><span class="pre">FittedOrbits</span></code> + <code class="docutils literal notranslate"><span class="pre">FittedOrbitMembers</span></code> + <code class="docutils literal notranslate"><span class="pre">SourceCatalog</span></code>;
+Rust <code class="docutils literal notranslate"><span class="pre">MemberedOrbits</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">RefinementRunConfig</span></code></p></td>
+<td><p>Python <code class="docutils literal notranslate"><span class="pre">Propagator</span> <span class="pre">|</span> <span class="pre">None</span></code>; Rust <code class="docutils literal notranslate"><span class="pre">&amp;OdPropagator</span></code></p></td>
+<td><p>Fitted orbits, fitted members, typed failures</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">evaluate_orbits</span></code></p></td>
+<td><p>Python <code class="docutils literal notranslate"><span class="pre">FittedOrbits</span></code> + <code class="docutils literal notranslate"><span class="pre">FittedOrbitMembers</span></code> + <code class="docutils literal notranslate"><span class="pre">SourceCatalog</span></code>;
+Rust <code class="docutils literal notranslate"><span class="pre">MemberedOrbits</span></code></p></td>
+<td><p>Independent <code class="docutils literal notranslate"><span class="pre">EvaluationConfig</span></code></p></td>
+<td><p>Python <code class="docutils literal notranslate"><span class="pre">Propagator</span> <span class="pre">|</span> <span class="pre">None</span></code>; Rust <code class="docutils literal notranslate"><span class="pre">&amp;OdPropagator</span></code></p></td>
+<td><p>Fitted orbits, fitted members, typed failures</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>Every Python call returns exactly
+<code class="docutils literal notranslate"><span class="pre">(FittedOrbits,</span> <span class="pre">FittedOrbitMembers,</span> <span class="pre">OrbitDeterminationFailures)</span></code>. Rust returns
+<code class="docutils literal notranslate"><span class="pre">OdBatchResult</span></code> with immutable slices for those same three products and an
+owning <code class="docutils literal notranslate"><span class="pre">into_products()</span></code> conversion. A one-object request is one batch group;
+there are no canonical one-group aliases.</p>
+<section id="python-table-contract">
+<h2>Python table contract<a class="headerlink" href="#python-table-contract" title="Link to this heading">¶</a></h2>
+<p>Raw IOD and OD consume these table shapes:</p>
 <ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">IodStageConfig</span></code> owns search, selection, velocity, acceptance, correction,
-ranging, candidate-fit, solver, Jacobian, covariance, and two-body settings;</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">IodRunConfig</span></code> binds one <code class="docutils literal notranslate"><span class="pre">IodStageConfig</span></code> to an ordered, already-bound
-<code class="docutils literal notranslate"><span class="pre">ObservationPipeline</span></code> and optional immutable profile identity;</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">OdConfig</span></code> binds one <code class="docutils literal notranslate"><span class="pre">IodStageConfig</span></code>, one <code class="docutils literal notranslate"><span class="pre">RefinementRunConfig</span></code>
-(complete CMC2003 or worst-residual settings), and one ordered pipeline;</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">EvaluationConfig</span></code> independently owns covariance dimension and the exact
-prediction-fit settings used for residual evaluation.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">SourceCatalog</span> <span class="pre">(N)</span></code> requires unique, non-blank <code class="docutils literal notranslate"><span class="pre">id</span></code> and non-null
+<code class="docutils literal notranslate"><span class="pre">time</span></code>, <code class="docutils literal notranslate"><span class="pre">ra</span></code>, <code class="docutils literal notranslate"><span class="pre">dec</span></code>, <code class="docutils literal notranslate"><span class="pre">observatory_code</span></code>, and <code class="docutils literal notranslate"><span class="pre">catalog_id</span></code> values.
+The configured pipeline must leave finite positive angular uncertainty.
+Present OD covariances are validated as dimension six before snapshots,
+transforms, indexing, or variance interpretation.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">Associations</span> <span class="pre">(M)</span></code> requires non-null <code class="docutils literal notranslate"><span class="pre">detection_id</span></code> and <code class="docutils literal notranslate"><span class="pre">object_id</span></code>.
+Detection IDs reference <code class="docutils literal notranslate"><span class="pre">SourceCatalog.id</span></code>. A detection may belong to
+several hypotheses, but the same <code class="docutils literal notranslate"><span class="pre">(object_id,</span> <span class="pre">detection_id)</span></code> pair may not
+be repeated.</p></li>
 </ul>
-<p>Explicit callers construct <code class="docutils literal notranslate"><span class="pre">IodRunConfig(pipeline,</span> <span class="pre">iod_stage,</span> <span class="pre">resources)</span></code>
-or <code class="docutils literal notranslate"><span class="pre">OdConfig.explicit(...)</span></code> only after choosing every scientific setting.
-<code class="docutils literal notranslate"><span class="pre">EvaluationConfig(6,</span> <span class="pre">prediction_fit)</span></code> is directly constructible and does not
-carry a hidden <code class="docutils literal notranslate"><span class="pre">OdConfig</span></code>.</p>
-<p>Python exposes typed immutable declarations such as <code class="docutils literal notranslate"><span class="pre">IodSearchConfig</span></code>,
-<code class="docutils literal notranslate"><span class="pre">SpanSearchConfig</span></code>, <code class="docutils literal notranslate"><span class="pre">CorrectionConfig</span></code>, <code class="docutils literal notranslate"><span class="pre">RangingConfig</span></code>,
-<code class="docutils literal notranslate"><span class="pre">WhitenedFitConfig</span></code>, <code class="docutils literal notranslate"><span class="pre">TwoBodyFitConfig</span></code>, <code class="docutils literal notranslate"><span class="pre">Cmc2003Refinement</span></code>, and
-<code class="docutils literal notranslate"><span class="pre">WorstResidualRefinement</span></code>. Their canonical JSON is parsed, validated, and
-re-emitted by Rust; Python does not maintain a second validation/default path.
-There is no implicit scientific <code class="docutils literal notranslate"><span class="pre">Default</span></code> at the high-level boundary.</p>
-<section id="python-batch-example">
-<h3>Python batch example<a class="headerlink" href="#python-batch-example" title="Link to this heading">¶</a></h3>
-<p>The public Core profile uses the installed public EFCC18 data package only to
-obtain an explicit path; Rust validates that file before adopting a propagation
-provider:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.orbit_determination</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+<p>Refinement and evaluation consume:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">FittedOrbits</span> <span class="pre">(O)</span></code> with unique, non-blank <code class="docutils literal notranslate"><span class="pre">orbit_id</span></code>, an exact Cartesian
+state and six-dimensional covariance, and complete canonical configuration,
+input, state, provider, and consistency provenance;</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">FittedOrbitMembers</span> <span class="pre">(K)</span></code> with <code class="docutils literal notranslate"><span class="pre">orbit_id</span></code>/<code class="docutils literal notranslate"><span class="pre">obs_id</span></code> foreign keys,
+<code class="docutils literal notranslate"><span class="pre">original_astrometry</span></code>, <code class="docutils literal notranslate"><span class="pre">used_astrometry</span></code>, <code class="docutils literal notranslate"><span class="pre">input_fingerprint</span></code>, and
+<code class="docutils literal notranslate"><span class="pre">membership_fingerprint</span></code> for every row; and</p></li>
+<li><p>the original <code class="docutils literal notranslate"><span class="pre">SourceCatalog</span> <span class="pre">(N)</span></code>. Source IDs, detection metadata, epochs,
+observer geometry, and original astrometry must still match the persisted
+fingerprints.</p></li>
+</ul>
+<p>Every input orbit needs at least one explicit member. Evaluation may receive a
+validated subset of those members. Old tables lacking the canonical handoff
+columns must be regenerated by <code class="docutils literal notranslate"><span class="pre">run_iod</span></code> or <code class="docutils literal notranslate"><span class="pre">run_od</span></code>; Core does not guess
+missing scientific identity.</p>
+</section>
+<section id="python-explicit-one-group-iod">
+<h2>Python: explicit one-group IOD<a class="headerlink" href="#python-explicit-one-group-iod" title="Link to this heading">¶</a></h2>
+<p>This example deliberately selects no transforms, no resource slots, and the
+built-in two-body provider. <code class="docutils literal notranslate"><span class="pre">None</span></code> is an explicit provider choice, not an
+omitted argument. The named Core-v1 stage values are loaded from Rust; they are
+not a function default.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.observations</span><span class="w"> </span><span class="kn">import</span> <span class="n">Associations</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.orbit_determination</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">IodRunConfig</span><span class="p">,</span>
+    <span class="n">IodStageConfig</span><span class="p">,</span>
+    <span class="n">ObservationPipeline</span><span class="p">,</span>
+    <span class="n">ResourceBindings</span><span class="p">,</span>
+    <span class="n">run_iod</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="n">one_group</span> <span class="o">=</span> <span class="n">Associations</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
+    <span class="n">detection_id</span><span class="o">=</span><span class="n">source_catalog</span><span class="o">.</span><span class="n">id</span><span class="p">,</span>
+    <span class="n">object_id</span><span class="o">=</span><span class="p">[</span><span class="s2">"hypothesis-1"</span><span class="p">]</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="n">source_catalog</span><span class="p">),</span>
+<span class="p">)</span>
+<span class="n">iod_config</span> <span class="o">=</span> <span class="n">IodRunConfig</span><span class="p">(</span>
+    <span class="n">ObservationPipeline</span><span class="o">.</span><span class="n">as_supplied</span><span class="p">(),</span>
+    <span class="n">IodStageConfig</span><span class="o">.</span><span class="n">core_v1</span><span class="p">(),</span>
+    <span class="n">ResourceBindings</span><span class="p">({}),</span>
+<span class="p">)</span>
+<span class="n">propagator</span> <span class="o">=</span> <span class="kc">None</span>  <span class="c1"># Explicitly select Core's built-in two-body provider.</span>
+
+<span class="n">fitted_orbits</span><span class="p">,</span> <span class="n">fitted_members</span><span class="p">,</span> <span class="n">failures</span> <span class="o">=</span> <span class="n">run_iod</span><span class="p">(</span>
+    <span class="n">source_catalog</span><span class="p">,</span>
+    <span class="n">one_group</span><span class="p">,</span>
+    <span class="n">propagator</span><span class="p">,</span>
+    <span class="n">iod_config</span><span class="p">,</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">ObservationPipeline.as_supplied()</span></code> is the only manual no-transform
+operation. Its canonical provenance records <code class="docutils literal notranslate"><span class="pre">transforms=[]</span></code>. Do not pass an
+empty callback list, a model dictionary, or a profile name as a substitute.</p>
+</section>
+<section id="python-batch-od-with-the-public-profile">
+<h2>Python: batch OD with the public profile<a class="headerlink" href="#python-batch-od-with-the-public-profile" title="Link to this heading">¶</a></h2>
+<p>The public profile helper is the one intentional Python convenience that
+locates the installed public EFCC18 package’s exported path. It converts that
+location into an explicit <code class="docutils literal notranslate"><span class="pre">ResourceBindings</span></code> value and passes the path to
+Rust, which verifies the file before acquiring a provider. No canonical OD
+workflow performs package discovery, download, cache lookup, or fallback for OD
+semantic resources. Profiles never choose a propagator.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.orbit_determination</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">CORE_OD_V1</span><span class="p">,</span>
     <span class="n">core_od_v1_resource_bindings</span><span class="p">,</span>
     <span class="n">run_od</span><span class="p">,</span>
 <span class="p">)</span>
 
-<span class="c1"># source_catalog is a SourceCatalog and associations is an Associations</span>
-<span class="c1"># table. The propagator supplies propagation only.</span>
 <span class="n">config</span> <span class="o">=</span> <span class="n">CORE_OD_V1</span><span class="o">.</span><span class="n">bind</span><span class="p">(</span><span class="n">core_od_v1_resource_bindings</span><span class="p">())</span>
+<span class="n">propagator</span> <span class="o">=</span> <span class="kc">None</span>  <span class="c1"># Or a propagation-only native capsule provider.</span>
+
 <span class="n">fitted_orbits</span><span class="p">,</span> <span class="n">fitted_members</span><span class="p">,</span> <span class="n">failures</span> <span class="o">=</span> <span class="n">run_od</span><span class="p">(</span>
     <span class="n">source_catalog</span><span class="p">,</span>
     <span class="n">associations</span><span class="p">,</span>
@@ -511,174 +601,364 @@ provider:</p>
 <span class="p">)</span>
 </pre></div>
 </div>
-<p>Use <code class="docutils literal notranslate"><span class="pre">config.for_iod()</span></code>, <code class="docutils literal notranslate"><span class="pre">config.for_refinement()</span></code>, and
-<code class="docutils literal notranslate"><span class="pre">config.for_evaluation()</span></code> for the corresponding standalone stage. Never omit
-<code class="docutils literal notranslate"><span class="pre">config</span></code> and never pass a profile itself where a bound stage configuration is
-required.</p>
+<p>Groups follow first appearance of <code class="docutils literal notranslate"><span class="pre">Associations.object_id</span></code>. Rows inside each
+group follow <code class="docutils literal notranslate"><span class="pre">SourceCatalog</span></code> order. Overlap is intentional:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.observations</span><span class="w"> </span><span class="kn">import</span> <span class="n">Associations</span>
+
+<span class="n">overlapping</span> <span class="o">=</span> <span class="n">Associations</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
+    <span class="n">detection_id</span><span class="o">=</span><span class="p">[</span><span class="s2">"obs-1"</span><span class="p">,</span> <span class="s2">"obs-2"</span><span class="p">,</span> <span class="s2">"obs-2"</span><span class="p">,</span> <span class="s2">"obs-3"</span><span class="p">],</span>
+    <span class="n">object_id</span><span class="o">=</span><span class="p">[</span><span class="s2">"short-arc"</span><span class="p">,</span> <span class="s2">"short-arc"</span><span class="p">,</span> <span class="s2">"long-arc"</span><span class="p">,</span> <span class="s2">"long-arc"</span><span class="p">],</span>
+<span class="p">)</span>
+<span class="n">orbits</span><span class="p">,</span> <span class="n">members</span><span class="p">,</span> <span class="n">failures</span> <span class="o">=</span> <span class="n">run_od</span><span class="p">(</span>
+    <span class="n">source_catalog</span><span class="p">,</span>
+    <span class="n">overlapping</span><span class="p">,</span>
+    <span class="n">propagator</span><span class="p">,</span>
+    <span class="n">config</span><span class="p">,</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p>One hypothesis may fail scientifically while a later one succeeds. Inspect the
+three products together: failure rows retain the original group identity and
+stage counters; successful membership rows state exactly which observations
+belong to each emitted orbit.</p>
 </section>
+<section id="python-iod-handoff-and-later-refinement">
+<h2>Python: IOD handoff and later refinement<a class="headerlink" href="#python-iod-handoff-and-later-refinement" title="Link to this heading">¶</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">run_iod</span></code> persists original and used astrometry, exact variances, complete
+memberships, and fingerprints. Save the orbit and member tables together, then
+refine them without running the observation pipeline again:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.orbit_determination</span><span class="w"> </span><span class="kn">import</span> <span class="n">refine</span><span class="p">,</span> <span class="n">run_iod</span>
+
+<span class="n">iod_orbits</span><span class="p">,</span> <span class="n">iod_members</span><span class="p">,</span> <span class="n">iod_failures</span> <span class="o">=</span> <span class="n">run_iod</span><span class="p">(</span>
+    <span class="n">source_catalog</span><span class="p">,</span>
+    <span class="n">associations</span><span class="p">,</span>
+    <span class="n">propagator</span><span class="p">,</span>
+    <span class="n">config</span><span class="o">.</span><span class="n">for_iod</span><span class="p">(),</span>
+<span class="p">)</span>
+
+<span class="n">refined_orbits</span><span class="p">,</span> <span class="n">refined_members</span><span class="p">,</span> <span class="n">refine_failures</span> <span class="o">=</span> <span class="n">refine</span><span class="p">(</span>
+    <span class="n">iod_orbits</span><span class="p">,</span>
+    <span class="n">iod_members</span><span class="p">,</span>
+    <span class="n">source_catalog</span><span class="p">,</span>
+    <span class="n">propagator</span><span class="p">,</span>
+    <span class="n">config</span><span class="o">.</span><span class="n">for_refinement</span><span class="p">(),</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p>The complete composed outcome contains <code class="docutils literal notranslate"><span class="pre">iod_failures</span></code> plus the outputs and
+failures for seeds that reached refinement. Internally, fused <code class="docutils literal notranslate"><span class="pre">run_od</span></code> is the
+same composition: prepare once, run IOD, then refine accepted states on the
+same rows. A matching direct and composed route has equal scientific products
+and canonical OD provenance. If a different valid refinement configuration is
+chosen, composition becomes explicitly unprofiled rather than claiming the
+original named profile.</p>
 </section>
-<section id="observation-pipelines">
-<h2>Observation pipelines<a class="headerlink" href="#observation-pipelines" title="Link to this heading">¶</a></h2>
-<p>The closed transform set is:</p>
+<section id="python-evaluate-complete-groups-or-a-member-subset">
+<h2>Python: evaluate complete groups or a member subset<a class="headerlink" href="#python-evaluate-complete-groups-or-a-member-subset" title="Link to this heading">¶</a></h2>
+<p>Evaluation has its own configuration. It does not change states or reuse a full
+<code class="docutils literal notranslate"><span class="pre">OdConfig</span></code> as hidden state.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">pyarrow.compute</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pc</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.orbit_determination</span><span class="w"> </span><span class="kn">import</span> <span class="n">evaluate_orbits</span>
+
+<span class="n">selected_id</span> <span class="o">=</span> <span class="n">fitted_orbits</span><span class="o">.</span><span class="n">orbit_id</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">as_py</span><span class="p">()</span>
+<span class="n">one_orbit</span> <span class="o">=</span> <span class="n">fitted_orbits</span><span class="o">.</span><span class="n">apply_mask</span><span class="p">(</span>
+    <span class="n">pc</span><span class="o">.</span><span class="n">equal</span><span class="p">(</span><span class="n">fitted_orbits</span><span class="o">.</span><span class="n">orbit_id</span><span class="p">,</span> <span class="n">selected_id</span><span class="p">)</span>
+<span class="p">)</span>
+<span class="n">selected_members</span> <span class="o">=</span> <span class="n">fitted_members</span><span class="o">.</span><span class="n">apply_mask</span><span class="p">(</span>
+    <span class="n">pc</span><span class="o">.</span><span class="n">equal</span><span class="p">(</span><span class="n">fitted_members</span><span class="o">.</span><span class="n">orbit_id</span><span class="p">,</span> <span class="n">selected_id</span><span class="p">)</span>
+<span class="p">)</span>
+
+<span class="n">evaluated_orbits</span><span class="p">,</span> <span class="n">evaluated_members</span><span class="p">,</span> <span class="n">evaluation_failures</span> <span class="o">=</span> <span class="n">evaluate_orbits</span><span class="p">(</span>
+    <span class="n">one_orbit</span><span class="p">,</span>
+    <span class="n">selected_members</span><span class="p">,</span>
+    <span class="n">source_catalog</span><span class="p">,</span>
+    <span class="n">propagator</span><span class="p">,</span>
+    <span class="n">config</span><span class="o">.</span><span class="n">for_evaluation</span><span class="p">(),</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p>A smaller validated subset of <code class="docutils literal notranslate"><span class="pre">selected_members</span></code> is also permitted.
+Evaluation reports residuals, solution/outlier flags, statistics, and
+independent evaluation-route provenance. It does not copy prior-stage backend
+fields as if those stages executed again.</p>
+</section>
+<section id="mutable-orbit-labels">
+<h2>Mutable orbit labels<a class="headerlink" href="#mutable-orbit-labels" title="Link to this heading">¶</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">orbit_id</span></code> is mutable relational data. Immutable association identity lives
+in the orbit <code class="docutils literal notranslate"><span class="pre">object_id</span></code>/native group identity and Rust-owned fingerprints.
+To relabel a handoff, edit the selected <code class="docutils literal notranslate"><span class="pre">FittedOrbits.orbit_id</span></code> and every
+matching <code class="docutils literal notranslate"><span class="pre">FittedOrbitMembers.orbit_id</span></code> together, then call <code class="docutils literal notranslate"><span class="pre">refine</span></code> or
+<code class="docutils literal notranslate"><span class="pre">evaluate_orbits</span></code>:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">pyarrow</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pa</span>
+
+<span class="n">old_id</span> <span class="o">=</span> <span class="n">fitted_orbits</span><span class="o">.</span><span class="n">orbit_id</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">as_py</span><span class="p">()</span>
+<span class="n">new_id</span> <span class="o">=</span> <span class="s2">"analyst-label"</span>
+<span class="n">fitted_orbits</span> <span class="o">=</span> <span class="n">fitted_orbits</span><span class="o">.</span><span class="n">set_column</span><span class="p">(</span>
+    <span class="s2">"orbit_id"</span><span class="p">,</span>
+    <span class="n">pa</span><span class="o">.</span><span class="n">array</span><span class="p">(</span>
+        <span class="p">[</span><span class="n">new_id</span> <span class="k">if</span> <span class="n">value</span> <span class="o">==</span> <span class="n">old_id</span> <span class="k">else</span> <span class="n">value</span>
+         <span class="k">for</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">fitted_orbits</span><span class="o">.</span><span class="n">orbit_id</span><span class="o">.</span><span class="n">to_pylist</span><span class="p">()],</span>
+        <span class="nb">type</span><span class="o">=</span><span class="n">pa</span><span class="o">.</span><span class="n">large_string</span><span class="p">(),</span>
+    <span class="p">),</span>
+<span class="p">)</span>
+<span class="n">fitted_members</span> <span class="o">=</span> <span class="n">fitted_members</span><span class="o">.</span><span class="n">set_column</span><span class="p">(</span>
+    <span class="s2">"orbit_id"</span><span class="p">,</span>
+    <span class="n">pa</span><span class="o">.</span><span class="n">array</span><span class="p">(</span>
+        <span class="p">[</span><span class="n">new_id</span> <span class="k">if</span> <span class="n">value</span> <span class="o">==</span> <span class="n">old_id</span> <span class="k">else</span> <span class="n">value</span>
+         <span class="k">for</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">fitted_members</span><span class="o">.</span><span class="n">orbit_id</span><span class="o">.</span><span class="n">to_pylist</span><span class="p">()],</span>
+        <span class="nb">type</span><span class="o">=</span><span class="n">pa</span><span class="o">.</span><span class="n">large_string</span><span class="p">(),</span>
+    <span class="p">),</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p>There is no rename API. Core validates the foreign keys before provider work; a
+partial, duplicate, blank, or dangling relabel fails atomically.</p>
+</section>
+<section id="profiles-pipelines-and-resources">
+<h2>Profiles, pipelines, and resources<a class="headerlink" href="#profiles-pipelines-and-resources" title="Link to this heading">¶</a></h2>
+<p>Core Rust owns complete OD configuration, profile expansion, transform order,
+resource validation/parsing, numerical settings, and path-free canonical
+configuration provenance. Python constructs immutable declarations, binds local
+paths, marshals typed tables, and assembles typed results.</p>
+<p>The configuration types have separate scopes. Their constructors perform
+scientific validation and raise <code class="docutils literal notranslate"><span class="pre">OdConfigurationError</span></code>; constructors and
+profile binding raise <code class="docutils literal notranslate"><span class="pre">OdResourceValidationError</span></code> for aggregate semantic
+resource failures. The workflow calls receive only already-validated values,
+so their invocation-time exceptions are <code class="docutils literal notranslate"><span class="pre">TypeError</span></code> for wrong public Python
+types; <code class="docutils literal notranslate"><span class="pre">ValueError</span></code> for static input failures and provider descriptor,
+identity, complete-provenance-suffix, or unknown-capability validation at the
+Python/Core layer; and <code class="docutils literal notranslate"><span class="pre">RuntimeError</span></code> for ABI-v2 table-contract violations,
+callback statuses, malformed responses, and backend failures. Both
+<code class="docutils literal notranslate"><span class="pre">ValueError</span></code> and <code class="docutils literal notranslate"><span class="pre">RuntimeError</span></code> may occur during provider acquisition before
+any callback executes: the validation layer, not acquisition-versus-execution
+timing, determines the class. The complete deterministic split is enumerated
+below.</p>
 <ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">FillMissingAstrometricUncertainty</span></code>;</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">Efcc18CatalogBiasCorrection</span></code>;</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">StationBandResidualCovarianceAdjustment</span></code> with explicit Add/Replace and a
-minimum residual count;</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">NightlyBatchDeweighting</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">IodStageConfig</span></code> is the complete search/selection/velocity/acceptance/
+correction/ranging/candidate-fit declaration. It has no pipeline or resource
+binding.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">IodRunConfig</span></code> binds one <code class="docutils literal notranslate"><span class="pre">IodStageConfig</span></code> to an ordered
+<code class="docutils literal notranslate"><span class="pre">ObservationPipeline</span></code>, exact resources, and optional immutable profile
+identity.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">OdConfig</span></code> contains that pipeline plus IOD and <code class="docutils literal notranslate"><span class="pre">RefinementRunConfig</span></code>
+declarations. It deliberately has no implicit <code class="docutils literal notranslate"><span class="pre">Default</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">RefinementRunConfig</span></code> contains the complete fit/Jacobian/covariance/
+rejection declaration.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">EvaluationConfig</span></code> independently contains covariance dimension and exact
+prediction-fit settings.</p></li>
 </ul>
-<p>Declaration order and repeated transforms are authoritative. Python callbacks,
-dynamic registration, model dictionaries, and external science plugin ABIs are
-not supported. Deliberate no-transform behavior is expressed only by
-<code class="docutils literal notranslate"><span class="pre">ObservationPipeline.as_supplied()</span></code> and is recorded as <code class="docutils literal notranslate"><span class="pre">transforms=[]</span></code>.</p>
-</section>
-<section id="profiles-and-resources">
-<h2>Profiles and resources<a class="headerlink" href="#profiles-and-resources" title="Link to this heading">¶</a></h2>
-<p><code class="docutils literal notranslate"><span class="pre">CORE_OD_V1</span></code> and <code class="docutils literal notranslate"><span class="pre">ASTEROID_INSTITUTE_OD_V1</span></code> are immutable path-free Rust
-profile definitions. A caller binds every required semantic slot explicitly:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.orbit_determination</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+<p>The closed transform set is <code class="docutils literal notranslate"><span class="pre">FillMissingAstrometricUncertainty</span></code>,
+<code class="docutils literal notranslate"><span class="pre">Efcc18CatalogBiasCorrection</span></code>,
+<code class="docutils literal notranslate"><span class="pre">StationBandResidualCovarianceAdjustment</span></code> (explicit Add/Replace and minimum
+count), and <code class="docutils literal notranslate"><span class="pre">NightlyBatchDeweighting</span></code>. Order and repetition are authoritative.
+Python callbacks, dynamically registered transforms, model dictionaries,
+profile-selected propagators, and resource fallback are not supported.</p>
+<p><code class="docutils literal notranslate"><span class="pre">CORE_OD_V1</span></code> applies EFCC18 correction and nightly deweighting. It does not
+fill missing uncertainty. <code class="docutils literal notranslate"><span class="pre">ASTEROID_INSTITUTE_OD_V1</span></code> additionally uses the
+semantic station/catalog uncertainty and station/band residual-covariance
+slots. Deployment and distribution are outside Core; callers separately
+provision local files and bind all semantic slots explicitly:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.orbit_determination</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">ASTEROID_INSTITUTE_OD_V1</span><span class="p">,</span>
     <span class="n">ResourceBindings</span><span class="p">,</span>
 <span class="p">)</span>
 
-<span class="n">config</span> <span class="o">=</span> <span class="n">ASTEROID_INSTITUTE_OD_V1</span><span class="o">.</span><span class="n">bind</span><span class="p">(</span>
-    <span class="n">ResourceBindings</span><span class="p">(</span>
-        <span class="p">{</span>
-            <span class="s2">"efcc18_catalog_bias_table"</span><span class="p">:</span> <span class="n">efcc18_path</span><span class="p">,</span>
-            <span class="s2">"station_catalog_uncertainty_table"</span><span class="p">:</span> <span class="n">station_sigma_path</span><span class="p">,</span>
-            <span class="s2">"station_band_residual_covariance_table"</span><span class="p">:</span> <span class="n">station_covariance_path</span><span class="p">,</span>
-        <span class="p">}</span>
-    <span class="p">)</span>
+<span class="n">resources</span> <span class="o">=</span> <span class="n">ResourceBindings</span><span class="p">(</span>
+    <span class="p">{</span>
+        <span class="s2">"efcc18_catalog_bias_table"</span><span class="p">:</span> <span class="n">Path</span><span class="p">(</span><span class="s2">"/srv/od/bias.dat"</span><span class="p">),</span>
+        <span class="s2">"station_catalog_uncertainty_table"</span><span class="p">:</span> <span class="n">Path</span><span class="p">(</span><span class="s2">"/srv/od/station.parquet"</span><span class="p">),</span>
+        <span class="s2">"station_band_residual_covariance_table"</span><span class="p">:</span> <span class="n">Path</span><span class="p">(</span>
+            <span class="s2">"/srv/od/residual-covariance.parquet"</span>
+        <span class="p">),</span>
+    <span class="p">}</span>
 <span class="p">)</span>
+<span class="n">institute_config</span> <span class="o">=</span> <span class="n">ASTEROID_INSTITUTE_OD_V1</span><span class="o">.</span><span class="n">bind</span><span class="p">(</span><span class="n">resources</span><span class="p">)</span>
 </pre></div>
 </div>
-<p>The Institute profile applies those resources in this exact order: fill
-missing uncertainty, EFCC18 correction, station/band residual covariance Add
-with minimum count 30, then nightly deweighting with cap 4. <code class="docutils literal notranslate"><span class="pre">CORE_OD_V1</span></code>
-applies EFCC18 correction and nightly deweighting only. It intentionally has no
-missing-uncertainty fallback while public-profile qualification remains open;
-inputs without finite positive astrometric variances fail rather than receiving
-an invented default.</p>
-<p>Validation checks semantic slot, product/version, schema/version, SHA-256, byte
-size, row count/structure, and table schema. Missing, corrupt, swapped, parse,
-and structural failures are typed and aggregated by slot before science work.
-Unused bindings fail. Absolute paths are never included in profile or bound
-configuration fingerprints.</p>
-<p>The profiles preserve the accepted d21 effective numerical constants:
-<code class="docutils literal notranslate"><span class="pre">lt_tol=1e-12</span></code>, ephemeris maximum iterations 1000, and light-time maximum
-iterations 10. Changing settings, transform order, resource bytes, or schemas
-requires a new version/fingerprint decision.</p>
-<p>Choose <code class="docutils literal notranslate"><span class="pre">CORE_OD_V1</span></code> when observations already carry finite positive
-astrometric uncertainty and the public EFCC18 correction plus nightly
-batch-deweighting policy is appropriate. Choose
-<code class="docutils literal notranslate"><span class="pre">ASTEROID_INSTITUTE_OD_V1</span></code> only when the separately supplied, licensed
-station resources are available and its fill/add/deweight policy is appropriate
-for the data. The names do not establish comparative accuracy, and Core 0.7
-does not make a profile-superiority claim.</p>
-<section id="standalone-rust-resource-validation">
-<h3>Standalone Rust resource validation<a class="headerlink" href="#standalone-rust-resource-validation" title="Link to this heading">¶</a></h3>
-<p>Rust does not import Python packages or discover resources. Pass absolute paths
-through semantic slots:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>use adam_core::coords::{ResourceBindings, ResourceSlot, CORE_OD_V1};
+<p>Validation aggregates missing, unused, swapped, corrupt, schema, identity, and
+structural problems by slot before transforms, propagation, or fitting.
+Absolute paths are excluded from fingerprints and provenance. A named profile
+never falls back to another profile or to an explicit configuration.</p>
+</section>
+<section id="standalone-rust-workflows">
+<h2>Standalone Rust workflows<a class="headerlink" href="#standalone-rust-workflows" title="Link to this heading">¶</a></h2>
+<p>Standalone Rust uses typed values directly; it does not require Python, PyO3,
+Arrow IPC, or a capsule for the built-in provider. Both the root and module
+paths deliberately expose the same four implementations:</p>
+<div class="highlight-rust notranslate"><div class="highlight"><pre><span></span><span class="k">use</span><span class="w"> </span><span class="n">adam_core</span><span class="p">::{</span><span class="n">run_iod</span><span class="p">,</span><span class="w"> </span><span class="n">run_od</span><span class="p">,</span><span class="w"> </span><span class="n">refine</span><span class="p">,</span><span class="w"> </span><span class="n">evaluate_orbits</span><span class="p">};</span>
+<span class="k">use</span><span class="w"> </span><span class="n">adam_core</span><span class="p">::</span><span class="n">od</span><span class="p">::{</span>
+<span class="w">    </span><span class="n">AssociatedObservations</span><span class="p">,</span><span class="w"> </span><span class="n">EvaluationConfig</span><span class="p">,</span><span class="w"> </span><span class="n">IodRunConfig</span><span class="p">,</span><span class="w"> </span><span class="n">IodStageConfig</span><span class="p">,</span>
+<span class="w">    </span><span class="n">MemberedOrbits</span><span class="p">,</span><span class="w"> </span><span class="n">ObservationPipeline</span><span class="p">,</span><span class="w"> </span><span class="n">OdConfig</span><span class="p">,</span><span class="w"> </span><span class="n">OdPropagator</span><span class="p">,</span>
+<span class="w">    </span><span class="n">RefinementRunConfig</span><span class="p">,</span>
+<span class="p">};</span>
 
-let bindings = ResourceBindings::new().bind(
-    ResourceSlot::Efcc18CatalogBiasTable,
-    "/absolute/path/to/bias.dat",
-);
-let config = CORE_OD_V1.bind(&amp;bindings)?;
+<span class="k">fn</span><span class="w"> </span><span class="nf">workflows</span><span class="p">(</span>
+<span class="w">    </span><span class="n">associated</span><span class="p">:</span><span class="w"> </span><span class="kp">&amp;</span><span class="nc">AssociatedObservations</span><span class="p">,</span>
+<span class="w">    </span><span class="n">membered</span><span class="p">:</span><span class="w"> </span><span class="kp">&amp;</span><span class="nc">MemberedOrbits</span><span class="p">,</span>
+<span class="p">)</span><span class="w"> </span><span class="p">-&gt;</span><span class="w"> </span><span class="nb">Result</span><span class="o">&lt;</span><span class="p">(),</span><span class="w"> </span><span class="nb">Box</span><span class="o">&lt;</span><span class="k">dyn</span><span class="w"> </span><span class="n">std</span><span class="p">::</span><span class="n">error</span><span class="p">::</span><span class="n">Error</span><span class="o">&gt;&gt;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">pipeline</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">ObservationPipeline</span><span class="p">::</span><span class="n">as_supplied</span><span class="p">();</span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">iod_stage</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">IodStageConfig</span><span class="p">::</span><span class="n">core_v1</span><span class="p">();</span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">refinement_config</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">RefinementRunConfig</span><span class="p">::</span><span class="n">core_v1</span><span class="p">();</span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">iod_config</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">IodRunConfig</span><span class="p">::</span><span class="n">explicit</span><span class="p">(</span>
+<span class="w">        </span><span class="n">pipeline</span><span class="p">.</span><span class="n">clone</span><span class="p">(),</span>
+<span class="w">        </span><span class="n">iod_stage</span><span class="p">.</span><span class="n">clone</span><span class="p">(),</span>
+<span class="w">    </span><span class="p">)</span><span class="o">?</span><span class="p">;</span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">od_config</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">OdConfig</span><span class="p">::</span><span class="n">explicit</span><span class="p">(</span>
+<span class="w">        </span><span class="n">pipeline</span><span class="p">,</span>
+<span class="w">        </span><span class="n">iod_stage</span><span class="p">,</span>
+<span class="w">        </span><span class="n">refinement_config</span><span class="p">,</span>
+<span class="w">    </span><span class="p">)</span><span class="o">?</span><span class="p">;</span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">evaluation_config</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">EvaluationConfig</span><span class="p">::</span><span class="n">core_v1</span><span class="p">();</span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">provider</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">OdPropagator</span><span class="p">::</span><span class="n">two_body</span><span class="p">();</span>
+
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">iod</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">run_iod</span><span class="p">(</span><span class="n">associated</span><span class="p">,</span><span class="w"> </span><span class="o">&amp;</span><span class="n">iod_config</span><span class="p">,</span><span class="w"> </span><span class="o">&amp;</span><span class="n">provider</span><span class="p">)</span><span class="o">?</span><span class="p">;</span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">full</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">run_od</span><span class="p">(</span><span class="n">associated</span><span class="p">,</span><span class="w"> </span><span class="o">&amp;</span><span class="n">od_config</span><span class="p">,</span><span class="w"> </span><span class="o">&amp;</span><span class="n">provider</span><span class="p">)</span><span class="o">?</span><span class="p">;</span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">refined</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">refine</span><span class="p">(</span><span class="n">membered</span><span class="p">,</span><span class="w"> </span><span class="o">&amp;</span><span class="n">refinement_config</span><span class="p">,</span><span class="w"> </span><span class="o">&amp;</span><span class="n">provider</span><span class="p">)</span><span class="o">?</span><span class="p">;</span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">evaluated</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">evaluate_orbits</span><span class="p">(</span><span class="n">membered</span><span class="p">,</span><span class="w"> </span><span class="o">&amp;</span><span class="n">evaluation_config</span><span class="p">,</span><span class="w"> </span><span class="o">&amp;</span><span class="n">provider</span><span class="p">)</span><span class="o">?</span><span class="p">;</span>
+
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">orbit_slice</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">iod</span><span class="p">.</span><span class="n">fitted_orbits</span><span class="p">();</span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">member_slice</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">iod</span><span class="p">.</span><span class="n">fitted_orbit_members</span><span class="p">();</span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">failure_slice</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">iod</span><span class="p">.</span><span class="n">failures</span><span class="p">();</span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="p">(</span><span class="n">orbits</span><span class="p">,</span><span class="w"> </span><span class="n">members</span><span class="p">,</span><span class="w"> </span><span class="n">failures</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">full</span><span class="p">.</span><span class="n">into_products</span><span class="p">();</span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">_</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span>
+<span class="w">        </span><span class="n">orbit_slice</span><span class="p">,</span>
+<span class="w">        </span><span class="n">member_slice</span><span class="p">,</span>
+<span class="w">        </span><span class="n">failure_slice</span><span class="p">,</span>
+<span class="w">        </span><span class="n">orbits</span><span class="p">,</span>
+<span class="w">        </span><span class="n">members</span><span class="p">,</span>
+<span class="w">        </span><span class="n">failures</span><span class="p">,</span>
+<span class="w">        </span><span class="n">refined</span><span class="p">,</span>
+<span class="w">        </span><span class="n">evaluated</span><span class="p">,</span>
+<span class="w">    </span><span class="p">);</span>
+<span class="w">    </span><span class="nb">Ok</span><span class="p">(())</span>
+<span class="p">}</span>
 </pre></div>
 </div>
-<p>The repository includes the complete runnable example
-<code class="docutils literal notranslate"><span class="pre">rust/adam_core/examples/validate_core_od_resource.rs</span></code>:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">cargo</span> <span class="n">run</span> <span class="o">-</span><span class="n">p</span> <span class="n">adam_core</span> <span class="o">--</span><span class="n">example</span> <span class="n">validate_core_od_resource</span> <span class="o">--</span> \
-    <span class="o">/</span><span class="n">absolute</span><span class="o">/</span><span class="n">path</span><span class="o">/</span><span class="n">to</span><span class="o">/</span><span class="n">bias</span><span class="o">.</span><span class="n">dat</span>
+<p>The executable <code class="docutils literal notranslate"><span class="pre">rust/adam_core/examples/od_canonical_workflows.rs</span></code> creates a
+deterministic non-empty two-body fixture and demonstrates the complete public
+handoff. It constructs one and several hypotheses; preserves overlaps,
+first-appearance group order, and source row order; continues after a typed
+scientific failure; converts IOD products with <code class="docutils literal notranslate"><span class="pre">to_membered_orbits</span></code>; runs
+standalone refinement; compares direct <code class="docutils literal notranslate"><span class="pre">run_od</span></code> with the explicit
+<code class="docutils literal notranslate"><span class="pre">run_iod</span></code>-then-<code class="docutils literal notranslate"><span class="pre">refine</span></code> composition; evaluates a full group and a validated
+member subset; and coordinates an orbit/member <code class="docutils literal notranslate"><span class="pre">orbit_id</span></code> relabel. It also
+shows immutable product slices, <code class="docutils literal notranslate"><span class="pre">into_products()</span></code>, and explicit public-profile
+resource binding. Run it with:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">cargo run -p adam_core --example od_canonical_workflows</span>
 </pre></div>
 </div>
-<p>It validates bytes and structure without downloading, caching, or falling back
-to another source.</p>
+<p>The separate <code class="docutils literal notranslate"><span class="pre">od_external_provider</span></code> example compiles the exact unsafe ABI-v2
+ownership/lifetime boundary and its conversion to <code class="docutils literal notranslate"><span class="pre">OdPropagator</span></code> without
+fabricating a foreign table:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">cargo run -p adam_core --example od_external_provider</span>
+</pre></div>
+</div>
+<p>The guide and workflow-docstring Python snippets are executable documentation.
+The repository runner supplies deterministic caller-owned tables and checks the
+composition and post-relabel calls:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">python docs/scripts/run_orbit_determination_examples.py</span>
+</pre></div>
+</div>
+<p>Standalone Rust OD workflows do not discover OD semantic-resource packages or
+paths. Bind the public profile’s semantic slot explicitly (the separate
+<code class="docutils literal notranslate"><span class="pre">adam_core::kernel_data</span></code> resolver has its own documented kernel-discovery
+policy):</p>
+<div class="highlight-rust notranslate"><div class="highlight"><pre><span></span><span class="k">use</span><span class="w"> </span><span class="n">adam_core</span><span class="p">::</span><span class="n">od</span><span class="p">::{</span><span class="n">profiles</span><span class="p">::</span><span class="n">CORE_OD_V1</span><span class="p">,</span><span class="w"> </span><span class="n">ResourceBindings</span><span class="p">,</span><span class="w"> </span><span class="n">ResourceSlot</span><span class="p">};</span>
+
+<span class="kd">let</span><span class="w"> </span><span class="n">resources</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">ResourceBindings</span><span class="p">::</span><span class="n">new</span><span class="p">().</span><span class="n">bind</span><span class="p">(</span>
+<span class="w">    </span><span class="n">ResourceSlot</span><span class="p">::</span><span class="n">Efcc18CatalogBiasTable</span><span class="p">,</span>
+<span class="w">    </span><span class="s">"/absolute/path/to/bias.dat"</span><span class="p">,</span>
+<span class="p">);</span>
+<span class="kd">let</span><span class="w"> </span><span class="n">config</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">CORE_OD_V1</span><span class="p">.</span><span class="n">bind</span><span class="p">(</span><span class="o">&amp;</span><span class="n">resources</span><span class="p">)</span><span class="o">?</span><span class="p">;</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">rust/adam_core/examples/validate_core_od_resource.rs</span></code> validates that resource
+without downloading, caching, or fallback.</p>
 </section>
-<section id="propagation-integration-tolerance">
-<h3>Propagation integration tolerance<a class="headerlink" href="#propagation-integration-tolerance" title="Link to this heading">¶</a></h3>
-<p>Profiles never select or configure a propagator. When ASSIST is the negotiated
-propagation-only provider, its ordinary <code class="docutils literal notranslate"><span class="pre">epsilon=1e-6</span></code> propagation default
-can produce evaluation noise under sub-metre perturbations on some long,
-heavily observed main-belt arcs. Existing qualification found <code class="docutils literal notranslate"><span class="pre">epsilon=1e-8</span></code>
-to be converged and faster than tighter settings on a 30-object sample; use it
-as an evidence-based starting point for that workload and re-qualify other
-workloads. Avoid assuming that <code class="docutils literal notranslate"><span class="pre">1e-12</span></code> is safer: ASSIST state-transition
-integration stalled at that setting in the qualification. Core’s two-scale
-weak-direction covariance diagnostic distinguishes approximately quadratic
-curvature from step-independent evaluation noise and reports an integration-
-tolerance hint; it checks consistency with the fit’s own chi-square surface,
-not physical uncertainty realism.</p>
-</section>
-</section>
-<section id="canonical-batch-workflows">
-<h2>Canonical batch workflows<a class="headerlink" href="#canonical-batch-workflows" title="Link to this heading">¶</a></h2>
-<p>Rust parses and validates complete memberships before provider or pipeline
-work. Null group IDs, unknown references, duplicate pairs, non-unique IDs, and
-orbits without explicit members abort atomically. Groups follow first
-appearance; members follow source-table order; overlapping hypotheses are
-supported.</p>
-<p><code class="docutils literal notranslate"><span class="pre">run_od</span></code> plans and prepares each group once, runs IOD, and refines the
-accepted seed on the exact same rows. Original and used astrometry, including
-exact diagonal variances, are persisted on members so standalone <code class="docutils literal notranslate"><span class="pre">refine</span></code>
-consumes a bitwise-lossless prepared handoff. Refinement and
-evaluation fail closed when those snapshots are missing or when current source
-astrometry differs from the persisted original snapshot. Per-member Rust
-fingerprints also bind detection metadata, epochs/scale, observatory and observer
-geometry, prepared astrometry, explicit orbit membership, and exact orbit state.
-Expert kernels remain
-under <code class="docutils literal notranslate"><span class="pre">adam_core.orbit_determination.algorithms</span></code>. Standalone Rust exposes
-predictor-level building blocks under <code class="docutils literal notranslate"><span class="pre">adam_core_rs_coords::od::algorithms</span></code>.</p>
+<section id="determinism-empty-input-and-failures">
+<h2>Determinism, empty input, and failures<a class="headerlink" href="#determinism-empty-input-and-failures" title="Link to this heading">¶</a></h2>
+<p>Rust parses and validates the complete batch before provider or pipeline work.
+Null/blank IDs, duplicate source IDs or pairs, unknown references, ambiguous
+members, and input orbits without members abort atomically. Groups follow first
+appearance and rows follow source order. Overlapping hypotheses retain their
+independent groups.</p>
+<p>Empty input returns the exact three empty products and does not acquire an
+external provider. Errors have four boundaries:</p>
+<ol class="arabic simple">
+<li><p><strong>Static preflight:</strong> malformed typed configuration, resources, IDs,
+memberships, covariance dimensions, or persisted provenance. These fail
+before provider acquisition with <code class="docutils literal notranslate"><span class="pre">ValueError</span></code> (or <code class="docutils literal notranslate"><span class="pre">TypeError</span></code> for a
+wrong public Python type).</p></li>
+<li><p><strong>Provider acquisition (validation-layer split):</strong> <code class="docutils literal notranslate"><span class="pre">ValueError</span></code> covers a
+non-capsule, a capsule not named <code class="docutils literal notranslate"><span class="pre">adam_core.propagator.v2</span></code>, or a malformed
+descriptor; a <code class="docutils literal notranslate"><span class="pre">NativeBackend</span></code> declaration/table identity mismatch; a
+legacy table without the complete provenance suffix; and capability bits
+unknown to this Core. <code class="docutils literal notranslate"><span class="pre">RuntimeError</span></code> covers an ABI-v2 table-contract
+violation: version, base size or partial suffix, alignment, reserved words,
+null context or callback, missing <code class="docutils literal notranslate"><span class="pre">THREAD_SAFE</span></code>, empty identity strings,
+malformed fingerprints, or an inconsistent STM capability/callback slot.
+Both classes can therefore arise before callback execution.</p></li>
+<li><p><strong>Invocation-fatal callback/backend outcome:</strong> callback <code class="docutils literal notranslate"><span class="pre">ERROR</span></code>, <code class="docutils literal notranslate"><span class="pre">PANIC</span></code>,
+<code class="docutils literal notranslate"><span class="pre">INVALID</span></code>, or an unknown status; malformed responses; unsupported request
+capabilities; and other backend failures raise <code class="docutils literal notranslate"><span class="pre">RuntimeError</span></code> and return
+no partial products.</p></li>
+<li><p><strong>Per-group scientific outcome:</strong> safely isolated no-solution, refinement,
+or evaluation failures become deterministic rows of
+<code class="docutils literal notranslate"><span class="pre">OrbitDeterminationFailures</span></code> and later groups continue.</p></li>
+</ol>
+<p><code class="docutils literal notranslate"><span class="pre">orbit_id</span></code> appears on a failure only when a state was emitted;
+<code class="docutils literal notranslate"><span class="pre">input_orbit_id</span></code> identifies a refinement/evaluation seed when no output state
+exists. A non-converged fit remains in <code class="docutils literal notranslate"><span class="pre">FittedOrbits</span></code> with <code class="docutils literal notranslate"><span class="pre">success=False</span></code>
+only when Rust retained a real best state.</p>
 </section>
 <section id="provenance">
 <h2>Provenance<a class="headerlink" href="#provenance" title="Link to this heading">¶</a></h2>
-<p>Canonical batch results populate, where applicable:</p>
+<p>Canonical fitted-orbit rows record, where applicable:</p>
 <ul class="simple">
-<li><p>ordered complete source/member, membership, and exact orbit-state fingerprints;</p></li>
-<li><p>a validated provenance consistency digest covering route, complete
-configuration (including profile selection), input fingerprint, and every
-propagated IOD provider/backend/diagnostic/ambiguity field. The digest is
-unkeyed consistency validation, not authentication or a tamper-proof
-signature;</p></li>
-<li><p>focused route;</p></li>
-<li><p>native IOD/refinement provider identity and metadata;</p></li>
-<li><p>IOD and refinement diagnostics;</p></li>
-<li><p>complete canonical Rust configuration and its SHA-256;</p></li>
-<li><p>ambiguity, rejection count, and rejected fraction;</p></li>
-<li><p>original and used astrometry on member rows.</p></li>
+<li><p>ordered complete source/member and membership fingerprints;</p></li>
+<li><p>exact orbit state/time/origin/covariance plus physical and
+non-gravitational-parameter identity;</p></li>
+<li><p>route and complete canonical Rust configuration, including profile identity,
+transforms/resources, and configuration SHA-256;</p></li>
+<li><p>actual IOD/refinement/evaluation provider metadata and diagnostics;</p></li>
+<li><p>IOD ambiguity, alternatives, rejection count, and rejected fraction; and</p></li>
+<li><p>an unkeyed consistency digest covering route, configuration, input identity,
+and propagated IOD metadata.</p></li>
 </ul>
-<p>Resource paths are excluded. Lower-level numerical kernels that do not run a
-complete configured workflow may legitimately leave runtime provenance fields
-null.</p>
+<p>The digest detects inconsistent persisted fields; it is not authentication or
+a tamper-proof signature. Resource paths and Core build identity are excluded
+from scientific provenance. Member rows retain original and used astrometry so
+prepared handoffs are lossless and auditable.</p>
 </section>
-<section id="failure-boundary">
-<h2>Failure boundary<a class="headerlink" href="#failure-boundary" title="Link to this heading">¶</a></h2>
-<p>Malformed configuration, resources, IDs/member mappings, unsupported provider
-capabilities and malformed provider responses are invocation-fatal with no
-partial output. Only safely isolated scientific
-no-solution/refinement/evaluation failures continue per group. They are rows of
-<code class="docutils literal notranslate"><span class="pre">OrbitDeterminationFailures</span></code> with typed stage counters, not opaque JSON.
-<code class="docutils literal notranslate"><span class="pre">orbit_id</span></code> is present only for an emitted state; <code class="docutils literal notranslate"><span class="pre">input_orbit_id</span></code> separately
-identifies a refine/evaluate input when a state-less failure occurs. IOD
-failures emit no placeholder orbit. A non-converged refinement remains in
-<code class="docutils literal notranslate"><span class="pre">FittedOrbits</span></code> with <code class="docutils literal notranslate"><span class="pre">success=False</span></code> only when Rust returned an actual best
-state; local refinement/evaluation errors never relabel an untouched input seed.</p>
-<p>Canonical IOD IDs include the self-contained <code class="docutils literal notranslate"><span class="pre">IodRunConfig</span></code> science
-fingerprint and deliberately exclude later refinement settings. <code class="docutils literal notranslate"><span class="pre">run_iod</span></code> →
-<code class="docutils literal notranslate"><span class="pre">refine</span></code> composes that validated IOD configuration with the requested
-<code class="docutils literal notranslate"><span class="pre">RefinementRunConfig</span></code>. A named profile identity is retained only when the
-refinement matches that immutable profile; cross-configuration composition
-drops the profile and exactly equals an explicit unprofiled <code class="docutils literal notranslate"><span class="pre">run_od</span></code>.
-Complete original membership is still required. Direct <code class="docutils literal notranslate"><span class="pre">run_iod</span></code> results are
-valid evaluation inputs after full provenance/member/state validation, and
-evaluation may use an explicit member subset. Evaluation uses only the
-prediction fit and covariance dimension in its independent
-<code class="docutils literal notranslate"><span class="pre">EvaluationConfig</span></code>. Provider <code class="docutils literal notranslate"><span class="pre">RowFailure</span></code> and other provider/protocol
-errors remain invocation-fatal rather than being converted to group failures.
-Evaluation outputs record evaluation-stage configuration/provider identity; they
-do not copy prior-stage backend fields or member weights.</p>
+<section id="propagation-only-providers-and-licensing">
+<h2>Propagation-only providers and licensing<a class="headerlink" href="#propagation-only-providers-and-licensing" title="Link to this heading">¶</a></h2>
+<p>A Python provider contributes only the negotiated native propagation capsule.
+Core still owns grouping, transforms, IOD, fitting, rejection, covariance,
+failures, and provenance. See <a class="reference internal" href="../reference/native_propagator_abi.html"><span class="doc">Native propagation-provider ABI</span></a> for the
+ABI-v2 identity, capability, lifetime, and error contract.</p>
+<p>The capsule boundary loads separately built extensions and does not make
+<code class="docutils literal notranslate"><span class="pre">adam-core</span></code> link to a GPL-covered provider. A standalone Rust application
+that directly links a GPL-covered propagation implementation creates a
+different distribution situation and must satisfy that provider’s license;
+projects should evaluate their own obligations. This documentation does not
+claim that a final Core 0.7/ASSIST 0.6 release pair exists or is compatible.</p>
+</section>
+<section id="api-reference">
+<h2>API reference<a class="headerlink" href="#api-reference" title="Link to this heading">¶</a></h2>
+<ul class="simple">
+<li><p><a class="reference internal" href="../reference/api/adam_core.orbit_determination.workflows.html#adam_core.orbit_determination.workflows.run_iod" title="adam_core.orbit_determination.workflows.run_iod"><code class="xref py py-func docutils literal notranslate"><span class="pre">adam_core.orbit_determination.workflows.run_iod()</span></code></a></p></li>
+<li><p><a class="reference internal" href="../reference/api/adam_core.orbit_determination.workflows.html#adam_core.orbit_determination.workflows.run_od" title="adam_core.orbit_determination.workflows.run_od"><code class="xref py py-func docutils literal notranslate"><span class="pre">adam_core.orbit_determination.workflows.run_od()</span></code></a></p></li>
+<li><p><a class="reference internal" href="../reference/api/adam_core.orbit_determination.workflows.html#adam_core.orbit_determination.workflows.refine" title="adam_core.orbit_determination.workflows.refine"><code class="xref py py-func docutils literal notranslate"><span class="pre">adam_core.orbit_determination.workflows.refine()</span></code></a></p></li>
+<li><p><a class="reference internal" href="../reference/api/adam_core.orbit_determination.workflows.html#adam_core.orbit_determination.workflows.evaluate_orbits" title="adam_core.orbit_determination.workflows.evaluate_orbits"><code class="xref py py-func docutils literal notranslate"><span class="pre">adam_core.orbit_determination.workflows.evaluate_orbits()</span></code></a></p></li>
+<li><p><a class="reference internal" href="../reference/api/adam_core.orbit_determination.config.html#adam_core.orbit_determination.config.IodRunConfig" title="adam_core.orbit_determination.config.IodRunConfig"><code class="xref py py-class docutils literal notranslate"><span class="pre">adam_core.orbit_determination.config.IodRunConfig</span></code></a></p></li>
+<li><p><a class="reference internal" href="../reference/api/adam_core.orbit_determination.config.html#adam_core.orbit_determination.config.OdConfig" title="adam_core.orbit_determination.config.OdConfig"><code class="xref py py-class docutils literal notranslate"><span class="pre">adam_core.orbit_determination.config.OdConfig</span></code></a></p></li>
+<li><p><a class="reference internal" href="../reference/api/adam_core.orbit_determination.config.html#adam_core.orbit_determination.config.RefinementRunConfig" title="adam_core.orbit_determination.config.RefinementRunConfig"><code class="xref py py-class docutils literal notranslate"><span class="pre">adam_core.orbit_determination.config.RefinementRunConfig</span></code></a></p></li>
+<li><p><a class="reference internal" href="../reference/api/adam_core.orbit_determination.config.html#adam_core.orbit_determination.config.EvaluationConfig" title="adam_core.orbit_determination.config.EvaluationConfig"><code class="xref py py-class docutils literal notranslate"><span class="pre">adam_core.orbit_determination.config.EvaluationConfig</span></code></a></p></li>
+<li><p><a class="reference internal" href="../reference/native_propagator_abi.html"><span class="doc">Native propagation-provider ABI</span></a></p></li>
+</ul>
 </section>
 </section>
 
@@ -739,19 +1019,18 @@ do not copy prior-stage backend fields or member weights.</p>
           <div class="toc-tree">
             <ul>
 <li><a class="reference internal" href="#">Orbit determination</a><ul>
-<li><a class="reference internal" href="#rust-owned-configuration-and-execution">Rust-owned configuration and execution</a><ul>
-<li><a class="reference internal" href="#python-batch-example">Python batch example</a></li>
-</ul>
-</li>
-<li><a class="reference internal" href="#observation-pipelines">Observation pipelines</a></li>
-<li><a class="reference internal" href="#profiles-and-resources">Profiles and resources</a><ul>
-<li><a class="reference internal" href="#standalone-rust-resource-validation">Standalone Rust resource validation</a></li>
-<li><a class="reference internal" href="#propagation-integration-tolerance">Propagation integration tolerance</a></li>
-</ul>
-</li>
-<li><a class="reference internal" href="#canonical-batch-workflows">Canonical batch workflows</a></li>
+<li><a class="reference internal" href="#python-table-contract">Python table contract</a></li>
+<li><a class="reference internal" href="#python-explicit-one-group-iod">Python: explicit one-group IOD</a></li>
+<li><a class="reference internal" href="#python-batch-od-with-the-public-profile">Python: batch OD with the public profile</a></li>
+<li><a class="reference internal" href="#python-iod-handoff-and-later-refinement">Python: IOD handoff and later refinement</a></li>
+<li><a class="reference internal" href="#python-evaluate-complete-groups-or-a-member-subset">Python: evaluate complete groups or a member subset</a></li>
+<li><a class="reference internal" href="#mutable-orbit-labels">Mutable orbit labels</a></li>
+<li><a class="reference internal" href="#profiles-pipelines-and-resources">Profiles, pipelines, and resources</a></li>
+<li><a class="reference internal" href="#standalone-rust-workflows">Standalone Rust workflows</a></li>
+<li><a class="reference internal" href="#determinism-empty-input-and-failures">Determinism, empty input, and failures</a></li>
 <li><a class="reference internal" href="#provenance">Provenance</a></li>
-<li><a class="reference internal" href="#failure-boundary">Failure boundary</a></li>
+<li><a class="reference internal" href="#propagation-only-providers-and-licensing">Propagation-only providers and licensing</a></li>
+<li><a class="reference internal" href="#api-reference">API reference</a></li>
 </ul>
 </li>
 </ul>

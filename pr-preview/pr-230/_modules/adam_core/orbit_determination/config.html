@@ -638,7 +638,13 @@
 <a class="viewcode-back" href="../../../reference/api/adam_core.orbit_determination.config.html#adam_core.orbit_determination.config.IodStageConfig">[docs]</a>
 <span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">slots</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 <span class="k">class</span><span class="w"> </span><span class="nc">IodStageConfig</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""Complete IOD/search/correction/ranging declaration."""</span>
+<span class="w">    </span><span class="sd">"""Complete IOD/search/correction/ranging declaration.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    OdConfigurationError</span>
+<span class="sd">        If any declared scientific value or combination is invalid.</span>
+<span class="sd">    """</span>
 
     <span class="n">search_correction_ranging</span><span class="p">:</span> <span class="n">IodSearchConfig</span>
     <span class="n">candidate_correction_fit</span><span class="p">:</span> <span class="n">WhitenedFitConfig</span>
@@ -680,7 +686,17 @@
 <a class="viewcode-back" href="../../../reference/api/adam_core.orbit_determination.config.html#adam_core.orbit_determination.config.IodRunConfig">[docs]</a>
 <span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">slots</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 <span class="k">class</span><span class="w"> </span><span class="nc">IodRunConfig</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""Complete bound pipeline/resource/profile and IOD-stage configuration."""</span>
+<span class="w">    </span><span class="sd">"""Complete bound pipeline/resource/profile and IOD-stage configuration.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    TypeError</span>
+<span class="sd">        If a component has the wrong public configuration type.</span>
+<span class="sd">    OdConfigurationError</span>
+<span class="sd">        If the complete pipeline/IOD declaration is inconsistent.</span>
+<span class="sd">    OdResourceValidationError</span>
+<span class="sd">        If supplied resources are unused, missing, or invalid for the pipeline.</span>
+<span class="sd">    """</span>
 
     <span class="n">observation_pipeline</span><span class="p">:</span> <span class="n">ObservationPipeline</span>
     <span class="n">iod</span><span class="p">:</span> <span class="n">IodStageConfig</span>
@@ -788,7 +804,13 @@
 <a class="viewcode-back" href="../../../reference/api/adam_core.orbit_determination.config.html#adam_core.orbit_determination.config.RefinementRunConfig">[docs]</a>
 <span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">slots</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 <span class="k">class</span><span class="w"> </span><span class="nc">RefinementRunConfig</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""Complete fit/Jacobian/covariance/rejection declaration."""</span>
+<span class="w">    </span><span class="sd">"""Complete fit/Jacobian/covariance/rejection declaration.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    OdConfigurationError</span>
+<span class="sd">        If any fit, covariance, or rejection setting is invalid.</span>
+<span class="sd">    """</span>
 
     <span class="n">refinement</span><span class="p">:</span> <span class="n">RefinementDeclaration</span>
     <span class="n">_native</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">init</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="nb">repr</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">compare</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
@@ -830,7 +852,13 @@
 <a class="viewcode-back" href="../../../reference/api/adam_core.orbit_determination.config.html#adam_core.orbit_determination.config.EvaluationConfig">[docs]</a>
 <span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">slots</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 <span class="k">class</span><span class="w"> </span><span class="nc">EvaluationConfig</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""Complete covariance and provider-prediction evaluation configuration."""</span>
+<span class="w">    </span><span class="sd">"""Complete covariance and provider-prediction evaluation configuration.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    OdConfigurationError</span>
+<span class="sd">        If the covariance dimension or prediction-fit declaration is invalid.</span>
+<span class="sd">    """</span>
 
     <span class="n">covariance_dimension</span><span class="p">:</span> <span class="nb">int</span>
     <span class="n">prediction_fit</span><span class="p">:</span> <span class="n">WhitenedFitConfig</span>
@@ -889,7 +917,17 @@
 <a class="viewcode-back" href="../../../reference/api/adam_core.orbit_determination.config.html#adam_core.orbit_determination.config.OdConfig">[docs]</a>
 <span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">slots</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 <span class="k">class</span><span class="w"> </span><span class="nc">OdConfig</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""Complete bound IOD-plus-refinement configuration."""</span>
+<span class="w">    </span><span class="sd">"""Complete bound IOD-plus-refinement configuration.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    TypeError</span>
+<span class="sd">        If a component has the wrong public configuration type.</span>
+<span class="sd">    OdConfigurationError</span>
+<span class="sd">        If the complete pipeline/IOD/refinement declaration is inconsistent.</span>
+<span class="sd">    OdResourceValidationError</span>
+<span class="sd">        If supplied resources are unused, missing, or invalid for the pipeline.</span>
+<span class="sd">    """</span>
 
     <span class="n">observation_pipeline</span><span class="p">:</span> <span class="n">ObservationPipeline</span>
     <span class="n">iod</span><span class="p">:</span> <span class="n">IodStageConfig</span>

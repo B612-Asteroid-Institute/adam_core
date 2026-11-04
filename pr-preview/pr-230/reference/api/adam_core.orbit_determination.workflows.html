@@ -451,32 +451,404 @@
           <section id="module-adam_core.orbit_determination.workflows">
 <span id="adam-core-orbit-determination-workflows-module"></span><h1>adam_core.orbit_determination.workflows module<a class="headerlink" href="#module-adam_core.orbit_determination.workflows" title="Link to this heading">¶</a></h1>
 <p>Thin Python marshalling for Rust-owned canonical batch OD workflows.</p>
+<p>The four public workflows are ordinary callables exported from this module:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">names</span> <span class="o">=</span> <span class="p">(</span><span class="s2">"run_iod"</span><span class="p">,</span> <span class="s2">"run_od"</span><span class="p">,</span> <span class="s2">"refine"</span><span class="p">,</span> <span class="s2">"evaluate_orbits"</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">all</span><span class="p">(</span><span class="nb">callable</span><span class="p">(</span><span class="nb">globals</span><span class="p">()[</span><span class="n">name</span><span class="p">])</span> <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">names</span><span class="p">)</span>
+<span class="go">True</span>
+</pre></div>
+</div>
 <dl class="py function">
 <dt class="sig sig-object py" id="adam_core.orbit_determination.workflows.run_iod">
 <span class="sig-prename descclassname"><span class="pre">adam_core.orbit_determination.workflows.</span></span><span class="sig-name descname"><span class="pre">run_iod</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">observations</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="adam_core.observations.source_catalog.html#adam_core.observations.source_catalog.SourceCatalog" title="adam_core.observations.source_catalog.SourceCatalog"><span class="pre">SourceCatalog</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">associations</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="adam_core.observations.associations.html#adam_core.observations.associations.Associations" title="adam_core.observations.associations.Associations"><span class="pre">Associations</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">propagator</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="adam_core.propagator.propagator.html#adam_core.propagator.propagator.Propagator" title="adam_core.propagator.propagator.Propagator"><span class="pre">Propagator</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">config</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="adam_core.orbit_determination.config.html#adam_core.orbit_determination.config.IodRunConfig" title="adam_core.orbit_determination.config.IodRunConfig"><span class="pre">IodRunConfig</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#tuple" title="(in Python v3.15)"><span class="pre">tuple</span></a><span class="p"><span class="pre">[</span></span><a class="reference internal" href="adam_core.orbit_determination.fitted_orbits.html#adam_core.orbit_determination.fitted_orbits.FittedOrbits" title="adam_core.orbit_determination.fitted_orbits.FittedOrbits"><span class="pre">FittedOrbits</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference internal" href="adam_core.orbit_determination.fitted_orbits.html#adam_core.orbit_determination.fitted_orbits.FittedOrbitMembers" title="adam_core.orbit_determination.fitted_orbits.FittedOrbitMembers"><span class="pre">FittedOrbitMembers</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference internal" href="adam_core.orbit_determination.fitted_orbits.html#adam_core.orbit_determination.fitted_orbits.OrbitDeterminationFailures" title="adam_core.orbit_determination.fitted_orbits.OrbitDeterminationFailures"><span class="pre">OrbitDeterminationFailures</span></a><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="../../_modules/adam_core/orbit_determination/workflows.html#run_iod"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.orbit_determination.workflows.run_iod" title="Link to this definition">¶</a></dt>
-<dd><p>Run canonical batch IOD over explicit association hypotheses.</p>
-<p><code class="docutils literal notranslate"><span class="pre">config</span></code> owns the bound pipeline/resources and complete IOD stage.
-Group parsing, validation, ordering, transforms,
-IOD, failure classification, identifiers, and provenance are executed by
-Core Rust.</p>
+<dd><p>Run canonical batch initial orbit determination (IOD).</p>
+<p>Rust validates the complete batch, applies the bound observation pipeline
+once, and executes deterministic IOD per explicit association
+hypothesis. A one-object request uses this same batch route.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>observations</strong> (<a class="reference internal" href="adam_core.observations.html#adam_core.observations.SourceCatalog" title="adam_core.observations.SourceCatalog"><em>SourceCatalog</em></a><em> (</em><em>N</em><em>)</em>) – Observation rows. The required non-null columns are <code class="docutils literal notranslate"><span class="pre">id</span></code> (unique and
+non-blank), <code class="docutils literal notranslate"><span class="pre">time</span></code>, <code class="docutils literal notranslate"><span class="pre">ra</span></code>, <code class="docutils literal notranslate"><span class="pre">dec</span></code>, <code class="docutils literal notranslate"><span class="pre">observatory_code</span></code>, and
+<code class="docutils literal notranslate"><span class="pre">catalog_id</span></code>. Astrometric uncertainty columns must be finite and
+positive after <code class="docutils literal notranslate"><span class="pre">config.observation_pipeline</span></code> runs. Every present
+covariance has dimension six before any transform is interpreted.</p></li>
+<li><p><strong>associations</strong> (<a class="reference internal" href="adam_core.observations.html#adam_core.observations.Associations" title="adam_core.observations.Associations"><em>Associations</em></a><em> (</em><em>M</em><em>)</em>) – Explicit memberships with non-null <code class="docutils literal notranslate"><span class="pre">detection_id</span></code> and <code class="docutils literal notranslate"><span class="pre">object_id</span></code>.
+Each detection ID must reference <code class="docutils literal notranslate"><span class="pre">observations.id</span></code>. A detection may
+occur in several hypotheses, but a <code class="docutils literal notranslate"><span class="pre">(object_id,</span> <span class="pre">detection_id)</span></code> pair
+may occur only once.</p></li>
+<li><p><strong>propagator</strong> (<a class="reference internal" href="adam_core.propagator.html#adam_core.propagator.Propagator" title="adam_core.propagator.Propagator"><em>Propagator</em></a><em> or </em><em>None</em>) – Propagation-only provider. <code class="docutils literal notranslate"><span class="pre">None</span></code> explicitly selects Core’s built-in
+two-body provider. Any other value must expose the negotiated native
+propagation capsule; it never supplies IOD, fitting, or rejection.</p></li>
+<li><p><strong>config</strong> (<a class="reference internal" href="adam_core.orbit_determination.config.html#adam_core.orbit_determination.config.IodRunConfig" title="adam_core.orbit_determination.config.IodRunConfig"><em>IodRunConfig</em></a>) – Self-contained IOD configuration containing the complete
+<code class="docutils literal notranslate"><span class="pre">IodStageConfig</span></code>, ordered bound <code class="docutils literal notranslate"><span class="pre">ObservationPipeline</span></code>, validated
+resources, and optional immutable profile identity.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><ul class="simple">
+<li><p><strong>fitted_orbits</strong> (<em>FittedOrbits (G_success)</em>) – One accepted state per successful group, in first-appearance group
+order, with complete route/configuration/provider provenance.</p></li>
+<li><p><strong>fitted_members</strong> (<em>FittedOrbitMembers (K_success)</em>) – Successful-group memberships in source-table order, including original
+and used astrometry plus input and membership fingerprints.</p></li>
+<li><p><strong>failures</strong> (<em>OrbitDeterminationFailures (G_failure)</em>) – Typed, deterministic per-group scientific failures. No placeholder
+orbit is emitted when an IOD group has no accepted state.</p></li>
+</ul>
+</p>
+</dd>
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#TypeError" title="(in Python v3.15)"><strong>TypeError</strong></a> – If a Python table, provider, or <code class="docutils literal notranslate"><span class="pre">config</span></code> has the wrong public type.</p></li>
+<li><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#ValueError" title="(in Python v3.15)"><strong>ValueError</strong></a> – If static batch, membership, covariance, identity, or provenance input
+    validation fails; provider acquisition returns a non-capsule, a capsule
+    not named <code class="docutils literal notranslate"><span class="pre">adam_core.propagator.v2</span></code>, or a malformed descriptor; the
+    <code class="docutils literal notranslate"><span class="pre">NativeBackend</span></code> declaration and table identity differ; a legacy table
+    lacks the complete provenance suffix; or capability bits are unknown to
+    this Core.</p></li>
+<li><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#RuntimeError" title="(in Python v3.15)"><strong>RuntimeError</strong></a> – If the table violates the ABI-v2 contract (version, base size or partial
+    provenance suffix, alignment, reserved words, null context or callback,
+    missing <code class="docutils literal notranslate"><span class="pre">THREAD_SAFE</span></code>, empty identity strings, malformed fingerprints,
+    or inconsistent STM capability/callback slot); a callback returns
+    <code class="docutils literal notranslate"><span class="pre">ERROR</span></code>, <code class="docutils literal notranslate"><span class="pre">PANIC</span></code>, <code class="docutils literal notranslate"><span class="pre">INVALID</span></code>, or an unknown status; or the provider
+    returns a malformed response, unsupported request capability, or other
+    backend failure. No partial products are returned. Both <code class="docutils literal notranslate"><span class="pre">ValueError</span></code>
+    and <code class="docutils literal notranslate"><span class="pre">RuntimeError</span></code> can arise during acquisition before callback
+    execution; the validation layer, not acquisition-versus-execution
+    timing, determines the exception class.</p></li>
+</ul>
+</dd>
+</dl>
+<p class="rubric">Notes</p>
+<p>Static configuration/resource/ID/membership checks complete before provider
+acquisition. Empty input returns three typed empty tables and does not
+acquire the provider. Groups follow first appearance in <code class="docutils literal notranslate"><span class="pre">associations</span></code>;
+members follow source order; overlaps are preserved. Safely isolated
+no-solution outcomes are rows in <code class="docutils literal notranslate"><span class="pre">failures</span></code> and do not stop later groups.
+<code class="docutils literal notranslate"><span class="pre">orbit_id</span></code> is a mutable relational label; immutable association identity
+is carried by the orbit <code class="docutils literal notranslate"><span class="pre">object_id</span></code>/native group identity and member
+fingerprints.</p>
+<p class="rubric">Examples</p>
+<p>One explicit group with a deliberate no-transform pipeline and the built-in
+provider (represented by <code class="docutils literal notranslate"><span class="pre">None</span></code>):</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.observations</span><span class="w"> </span><span class="kn">import</span> <span class="n">Associations</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.orbit_determination</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">IodRunConfig</span><span class="p">,</span>
+    <span class="n">IodStageConfig</span><span class="p">,</span>
+    <span class="n">ObservationPipeline</span><span class="p">,</span>
+    <span class="n">ResourceBindings</span><span class="p">,</span>
+    <span class="n">run_iod</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="n">one_group</span> <span class="o">=</span> <span class="n">Associations</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
+    <span class="n">detection_id</span><span class="o">=</span><span class="n">source_catalog</span><span class="o">.</span><span class="n">id</span><span class="p">,</span>
+    <span class="n">object_id</span><span class="o">=</span><span class="p">[</span><span class="s2">"hypothesis-1"</span><span class="p">]</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="n">source_catalog</span><span class="p">),</span>
+<span class="p">)</span>
+<span class="n">iod_config</span> <span class="o">=</span> <span class="n">IodRunConfig</span><span class="p">(</span>
+    <span class="n">ObservationPipeline</span><span class="o">.</span><span class="n">as_supplied</span><span class="p">(),</span>
+    <span class="n">IodStageConfig</span><span class="o">.</span><span class="n">core_v1</span><span class="p">(),</span>
+    <span class="n">ResourceBindings</span><span class="p">({}),</span>
+<span class="p">)</span>
+<span class="n">fitted_orbits</span><span class="p">,</span> <span class="n">fitted_members</span><span class="p">,</span> <span class="n">failures</span> <span class="o">=</span> <span class="n">run_iod</span><span class="p">(</span>
+    <span class="n">source_catalog</span><span class="p">,</span>
+    <span class="n">one_group</span><span class="p">,</span>
+    <span class="kc">None</span><span class="p">,</span>
+    <span class="n">iod_config</span><span class="p">,</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<div class="admonition seealso">
+<p class="admonition-title">See also</p>
+<dl class="simple">
+<dt><a class="reference internal" href="#adam_core.orbit_determination.workflows.run_od" title="adam_core.orbit_determination.workflows.run_od"><code class="xref py py-obj docutils literal notranslate"><span class="pre">run_od</span></code></a></dt><dd><p>IOD plus refinement with one preparation.</p>
+</dd>
+<dt><a class="reference internal" href="#adam_core.orbit_determination.workflows.refine" title="adam_core.orbit_determination.workflows.refine"><code class="xref py py-obj docutils literal notranslate"><span class="pre">refine</span></code></a></dt><dd><p>Refine the persisted prepared handoff.</p>
+</dd>
+<dt><a class="reference internal" href="#adam_core.orbit_determination.workflows.evaluate_orbits" title="adam_core.orbit_determination.workflows.evaluate_orbits"><code class="xref py py-obj docutils literal notranslate"><span class="pre">evaluate_orbits</span></code></a></dt><dd><p>Evaluate explicit orbit/member groups.</p>
+</dd>
+</dl>
+</div>
 </dd></dl>
 
 <dl class="py function">
 <dt class="sig sig-object py" id="adam_core.orbit_determination.workflows.run_od">
 <span class="sig-prename descclassname"><span class="pre">adam_core.orbit_determination.workflows.</span></span><span class="sig-name descname"><span class="pre">run_od</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">observations</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="adam_core.observations.source_catalog.html#adam_core.observations.source_catalog.SourceCatalog" title="adam_core.observations.source_catalog.SourceCatalog"><span class="pre">SourceCatalog</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">associations</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="adam_core.observations.associations.html#adam_core.observations.associations.Associations" title="adam_core.observations.associations.Associations"><span class="pre">Associations</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">propagator</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="adam_core.propagator.propagator.html#adam_core.propagator.propagator.Propagator" title="adam_core.propagator.propagator.Propagator"><span class="pre">Propagator</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">config</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="adam_core.orbit_determination.config.html#adam_core.orbit_determination.config.OdConfig" title="adam_core.orbit_determination.config.OdConfig"><span class="pre">OdConfig</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#tuple" title="(in Python v3.15)"><span class="pre">tuple</span></a><span class="p"><span class="pre">[</span></span><a class="reference internal" href="adam_core.orbit_determination.fitted_orbits.html#adam_core.orbit_determination.fitted_orbits.FittedOrbits" title="adam_core.orbit_determination.fitted_orbits.FittedOrbits"><span class="pre">FittedOrbits</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference internal" href="adam_core.orbit_determination.fitted_orbits.html#adam_core.orbit_determination.fitted_orbits.FittedOrbitMembers" title="adam_core.orbit_determination.fitted_orbits.FittedOrbitMembers"><span class="pre">FittedOrbitMembers</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference internal" href="adam_core.orbit_determination.fitted_orbits.html#adam_core.orbit_determination.fitted_orbits.OrbitDeterminationFailures" title="adam_core.orbit_determination.fitted_orbits.OrbitDeterminationFailures"><span class="pre">OrbitDeterminationFailures</span></a><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="../../_modules/adam_core/orbit_determination/workflows.html#run_od"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.orbit_determination.workflows.run_od" title="Link to this definition">¶</a></dt>
-<dd><p>Run canonical batch IOD then refinement on one prepared group batch.</p>
+<dd><p>Run canonical batch IOD followed by refinement.</p>
+<p>This is the complete OD workflow. Rust plans each association group,
+validates and applies the bound pipeline once, runs IOD, and refines each
+accepted seed on the exact same prepared rows.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>observations</strong> (<a class="reference internal" href="adam_core.observations.html#adam_core.observations.SourceCatalog" title="adam_core.observations.SourceCatalog"><em>SourceCatalog</em></a><em> (</em><em>N</em><em>)</em>) – Observation rows with unique non-blank <code class="docutils literal notranslate"><span class="pre">id</span></code> plus required <code class="docutils literal notranslate"><span class="pre">time</span></code>,
+<code class="docutils literal notranslate"><span class="pre">ra</span></code>, <code class="docutils literal notranslate"><span class="pre">dec</span></code>, <code class="docutils literal notranslate"><span class="pre">observatory_code</span></code>, and <code class="docutils literal notranslate"><span class="pre">catalog_id</span></code> columns.
+Uncertainty must be valid after the configured pipeline.</p></li>
+<li><p><strong>associations</strong> (<a class="reference internal" href="adam_core.observations.html#adam_core.observations.Associations" title="adam_core.observations.Associations"><em>Associations</em></a><em> (</em><em>M</em><em>)</em>) – Non-null <code class="docutils literal notranslate"><span class="pre">detection_id</span></code>/<code class="docutils literal notranslate"><span class="pre">object_id</span></code> membership pairs. References
+must be complete and unambiguous; duplicate pairs and dangling IDs are
+invocation-fatal. Overlapping hypotheses are allowed.</p></li>
+<li><p><strong>propagator</strong> (<a class="reference internal" href="adam_core.propagator.html#adam_core.propagator.Propagator" title="adam_core.propagator.Propagator"><em>Propagator</em></a><em> or </em><em>None</em>) – Explicit propagation-only provider. <code class="docutils literal notranslate"><span class="pre">None</span></code> selects the built-in
+two-body provider; another provider must expose the native capsule.</p></li>
+<li><p><strong>config</strong> (<a class="reference internal" href="adam_core.orbit_determination.config.html#adam_core.orbit_determination.config.OdConfig" title="adam_core.orbit_determination.config.OdConfig"><em>OdConfig</em></a>) – Complete bound configuration: ordered pipeline and resources,
+<code class="docutils literal notranslate"><span class="pre">IodStageConfig</span></code>, <code class="docutils literal notranslate"><span class="pre">RefinementRunConfig</span></code>, and optional validated
+profile identity. Profiles must be bound before this call.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><ul class="simple">
+<li><p><strong>fitted_orbits</strong> (<em>FittedOrbits (G_output)</em>) – Accepted or retained best states in deterministic group order. Each row
+includes success/status, exact state identity, and complete provenance.</p></li>
+<li><p><strong>fitted_members</strong> (<em>FittedOrbitMembers (K_output)</em>) – Member residual/selection rows in source order with lossless original
+and used astrometry and Rust-owned fingerprints.</p></li>
+<li><p><strong>failures</strong> (<em>OrbitDeterminationFailures (G_failure)</em>) – Typed isolated IOD/refinement failures in group order. A refinement
+failure emits a state only when Rust retained an actual best state.</p></li>
+</ul>
+</p>
+</dd>
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#TypeError" title="(in Python v3.15)"><strong>TypeError</strong></a> – If an argument does not have the documented public type.</p></li>
+<li><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#ValueError" title="(in Python v3.15)"><strong>ValueError</strong></a> – If static batch, membership, covariance, identity, or provenance input
+    validation fails; provider acquisition returns a non-capsule, a capsule
+    not named <code class="docutils literal notranslate"><span class="pre">adam_core.propagator.v2</span></code>, or a malformed descriptor; the
+    <code class="docutils literal notranslate"><span class="pre">NativeBackend</span></code> declaration and table identity differ; a legacy table
+    lacks the complete provenance suffix; or capability bits are unknown to
+    this Core.</p></li>
+<li><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#RuntimeError" title="(in Python v3.15)"><strong>RuntimeError</strong></a> – If the table violates the ABI-v2 contract (version, base size or partial
+    provenance suffix, alignment, reserved words, null context or callback,
+    missing <code class="docutils literal notranslate"><span class="pre">THREAD_SAFE</span></code>, empty identity strings, malformed fingerprints,
+    or inconsistent STM capability/callback slot); a callback returns
+    <code class="docutils literal notranslate"><span class="pre">ERROR</span></code>, <code class="docutils literal notranslate"><span class="pre">PANIC</span></code>, <code class="docutils literal notranslate"><span class="pre">INVALID</span></code>, or an unknown status; or the provider
+    returns a malformed response, unsupported request capability, or other
+    backend failure. No partial tuple is returned. Both <code class="docutils literal notranslate"><span class="pre">ValueError</span></code> and
+    <code class="docutils literal notranslate"><span class="pre">RuntimeError</span></code> can arise during acquisition before callback execution;
+    the validation layer, not acquisition-versus-execution timing,
+    determines the exception class.</p></li>
+</ul>
+</dd>
+</dl>
+<p class="rubric">Notes</p>
+<p>Empty input returns three empty typed tables without provider acquisition.
+Group order is first association appearance and member order is source
+order. Scientific failures continue per group; static and invocation-fatal
+errors abort the whole call.</p>
+<p>Conceptually, <code class="docutils literal notranslate"><span class="pre">run_od(config)</span></code> is <code class="docutils literal notranslate"><span class="pre">run_iod(config.for_iod())</span></code> followed
+by <code class="docutils literal notranslate"><span class="pre">refine(config.for_refinement())</span></code> with prior IOD failures carried
+forward. The fused route performs the observation transforms only once;
+the persisted handoff consumed by standalone <code class="docutils literal notranslate"><span class="pre">refine</span></code> prevents a second
+transformation. Matching direct and composed routes have equal scientific
+products and canonical OD provenance. Emitted <code class="docutils literal notranslate"><span class="pre">orbit_id</span></code> values are
+mutable relational labels; immutable association identity remains in the
+orbit object/group identity and member fingerprints.</p>
+<p class="rubric">Examples</p>
+<p>Bind the public profile explicitly, then run a multi-hypothesis batch:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.orbit_determination</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">CORE_OD_V1</span><span class="p">,</span>
+    <span class="n">core_od_v1_resource_bindings</span><span class="p">,</span>
+    <span class="n">run_od</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="n">config</span> <span class="o">=</span> <span class="n">CORE_OD_V1</span><span class="o">.</span><span class="n">bind</span><span class="p">(</span><span class="n">core_od_v1_resource_bindings</span><span class="p">())</span>
+<span class="n">fitted_orbits</span><span class="p">,</span> <span class="n">fitted_members</span><span class="p">,</span> <span class="n">failures</span> <span class="o">=</span> <span class="n">run_od</span><span class="p">(</span>
+    <span class="n">source_catalog</span><span class="p">,</span>
+    <span class="n">associations</span><span class="p">,</span>
+    <span class="kc">None</span><span class="p">,</span>
+    <span class="n">config</span><span class="p">,</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p>The tuple always has exactly these three table types, including empty
+and all-failed batches.</p>
+<div class="admonition seealso">
+<p class="admonition-title">See also</p>
+<dl class="simple">
+<dt><a class="reference internal" href="#adam_core.orbit_determination.workflows.run_iod" title="adam_core.orbit_determination.workflows.run_iod"><code class="xref py py-obj docutils literal notranslate"><span class="pre">run_iod</span></code></a></dt><dd><p>IOD-only stage using <code class="docutils literal notranslate"><span class="pre">IodRunConfig</span></code>.</p>
+</dd>
+<dt><a class="reference internal" href="#adam_core.orbit_determination.workflows.refine" title="adam_core.orbit_determination.workflows.refine"><code class="xref py py-obj docutils literal notranslate"><span class="pre">refine</span></code></a></dt><dd><p>Persisted-handoff refinement.</p>
+</dd>
+<dt><a class="reference internal" href="#adam_core.orbit_determination.workflows.evaluate_orbits" title="adam_core.orbit_determination.workflows.evaluate_orbits"><code class="xref py py-obj docutils literal notranslate"><span class="pre">evaluate_orbits</span></code></a></dt><dd><p>Independent residual evaluation.</p>
+</dd>
+</dl>
+</div>
 </dd></dl>
 
 <dl class="py function">
 <dt class="sig sig-object py" id="adam_core.orbit_determination.workflows.refine">
 <span class="sig-prename descclassname"><span class="pre">adam_core.orbit_determination.workflows.</span></span><span class="sig-name descname"><span class="pre">refine</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">orbits</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="adam_core.orbit_determination.fitted_orbits.html#adam_core.orbit_determination.fitted_orbits.FittedOrbits" title="adam_core.orbit_determination.fitted_orbits.FittedOrbits"><span class="pre">FittedOrbits</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">members</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="adam_core.orbit_determination.fitted_orbits.html#adam_core.orbit_determination.fitted_orbits.FittedOrbitMembers" title="adam_core.orbit_determination.fitted_orbits.FittedOrbitMembers"><span class="pre">FittedOrbitMembers</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">observations</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="adam_core.observations.source_catalog.html#adam_core.observations.source_catalog.SourceCatalog" title="adam_core.observations.source_catalog.SourceCatalog"><span class="pre">SourceCatalog</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">propagator</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="adam_core.propagator.propagator.html#adam_core.propagator.propagator.Propagator" title="adam_core.propagator.propagator.Propagator"><span class="pre">Propagator</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">config</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="adam_core.orbit_determination.config.html#adam_core.orbit_determination.config.RefinementRunConfig" title="adam_core.orbit_determination.config.RefinementRunConfig"><span class="pre">RefinementRunConfig</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#tuple" title="(in Python v3.15)"><span class="pre">tuple</span></a><span class="p"><span class="pre">[</span></span><a class="reference internal" href="adam_core.orbit_determination.fitted_orbits.html#adam_core.orbit_determination.fitted_orbits.FittedOrbits" title="adam_core.orbit_determination.fitted_orbits.FittedOrbits"><span class="pre">FittedOrbits</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference internal" href="adam_core.orbit_determination.fitted_orbits.html#adam_core.orbit_determination.fitted_orbits.FittedOrbitMembers" title="adam_core.orbit_determination.fitted_orbits.FittedOrbitMembers"><span class="pre">FittedOrbitMembers</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference internal" href="adam_core.orbit_determination.fitted_orbits.html#adam_core.orbit_determination.fitted_orbits.OrbitDeterminationFailures" title="adam_core.orbit_determination.fitted_orbits.OrbitDeterminationFailures"><span class="pre">OrbitDeterminationFailures</span></a><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="../../_modules/adam_core/orbit_determination/workflows.html#refine"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.orbit_determination.workflows.refine" title="Link to this definition">¶</a></dt>
-<dd><p>Refine explicit fitted-orbit/member groups using their prepared handoff.</p>
+<dd><p>Refine explicit orbit/member groups from a canonical handoff.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>orbits</strong> (<a class="reference internal" href="adam_core.orbit_determination.fitted_orbits.html#adam_core.orbit_determination.fitted_orbits.FittedOrbits" title="adam_core.orbit_determination.fitted_orbits.FittedOrbits"><em>FittedOrbits</em></a><em> (</em><em>O</em><em>)</em>) – Input states. <code class="docutils literal notranslate"><span class="pre">orbit_id</span></code> must be unique and non-blank, coordinates
+must contain a valid six-dimensional state/covariance, and each row
+must carry complete canonical IOD/OD provenance and state identity.</p></li>
+<li><p><strong>members</strong> (<a class="reference internal" href="adam_core.orbit_determination.fitted_orbits.html#adam_core.orbit_determination.fitted_orbits.FittedOrbitMembers" title="adam_core.orbit_determination.fitted_orbits.FittedOrbitMembers"><em>FittedOrbitMembers</em></a><em> (</em><em>K</em><em>)</em>) – Explicit memberships. Required non-null columns are <code class="docutils literal notranslate"><span class="pre">orbit_id</span></code> and
+<code class="docutils literal notranslate"><span class="pre">obs_id</span></code>; canonical refinement also requires lossless
+<code class="docutils literal notranslate"><span class="pre">original_astrometry</span></code>/<code class="docutils literal notranslate"><span class="pre">used_astrometry</span></code>, <code class="docutils literal notranslate"><span class="pre">input_fingerprint</span></code>, and
+<code class="docutils literal notranslate"><span class="pre">membership_fingerprint</span></code> for every row. Every input orbit must have
+at least one member.</p></li>
+<li><p><strong>observations</strong> (<a class="reference internal" href="adam_core.observations.html#adam_core.observations.SourceCatalog" title="adam_core.observations.SourceCatalog"><em>SourceCatalog</em></a><em> (</em><em>N</em><em>)</em>) – Current source rows. IDs, detection metadata, epochs, observer geometry,
+and original astrometry must match the persisted member fingerprints.</p></li>
+<li><p><strong>propagator</strong> (<a class="reference internal" href="adam_core.propagator.html#adam_core.propagator.Propagator" title="adam_core.propagator.Propagator"><em>Propagator</em></a><em> or </em><em>None</em>) – Explicit propagation-only provider; <code class="docutils literal notranslate"><span class="pre">None</span></code> selects Core’s built-in
+two-body implementation.</p></li>
+<li><p><strong>config</strong> (<a class="reference internal" href="adam_core.orbit_determination.config.html#adam_core.orbit_determination.config.RefinementRunConfig" title="adam_core.orbit_determination.config.RefinementRunConfig"><em>RefinementRunConfig</em></a>) – Complete fit/Jacobian/covariance/rejection declaration. It contains no
+hidden pipeline or IOD configuration.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><ul class="simple">
+<li><p><strong>fitted_orbits</strong> (<em>FittedOrbits (O_output)</em>) – Refined or explicitly retained best states in deterministic group order.</p></li>
+<li><p><strong>fitted_members</strong> (<em>FittedOrbitMembers (K_output)</em>) – Updated residual/selection/member products in source order.</p></li>
+<li><p><strong>failures</strong> (<em>OrbitDeterminationFailures (O_failure)</em>) – Typed per-orbit scientific failures. <code class="docutils literal notranslate"><span class="pre">input_orbit_id</span></code> identifies the
+seed even when no output state is emitted.</p></li>
+</ul>
+</p>
+</dd>
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#TypeError" title="(in Python v3.15)"><strong>TypeError</strong></a> – If any table or <code class="docutils literal notranslate"><span class="pre">config</span></code> has the wrong public type.</p></li>
+<li><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#ValueError" title="(in Python v3.15)"><strong>ValueError</strong></a> – If static membership, covariance, source-identity, or provenance input
+    validation fails; provider acquisition returns a non-capsule, a capsule
+    not named <code class="docutils literal notranslate"><span class="pre">adam_core.propagator.v2</span></code>, or a malformed descriptor; the
+    <code class="docutils literal notranslate"><span class="pre">NativeBackend</span></code> declaration and table identity differ; a legacy table
+    lacks the complete provenance suffix; or capability bits are unknown to
+    this Core. No partial products are returned.</p></li>
+<li><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#RuntimeError" title="(in Python v3.15)"><strong>RuntimeError</strong></a> – If the table violates the ABI-v2 contract (version, base size or partial
+    provenance suffix, alignment, reserved words, null context or callback,
+    missing <code class="docutils literal notranslate"><span class="pre">THREAD_SAFE</span></code>, empty identity strings, malformed fingerprints,
+    or inconsistent STM capability/callback slot); a callback returns
+    <code class="docutils literal notranslate"><span class="pre">ERROR</span></code>, <code class="docutils literal notranslate"><span class="pre">PANIC</span></code>, <code class="docutils literal notranslate"><span class="pre">INVALID</span></code>, or an unknown status; or the provider
+    returns a malformed response, unsupported request capability, or other
+    backend failure. Both <code class="docutils literal notranslate"><span class="pre">ValueError</span></code> and <code class="docutils literal notranslate"><span class="pre">RuntimeError</span></code> can arise
+    during acquisition before callback execution; the validation layer, not
+    acquisition-versus-execution timing, determines the exception class.</p></li>
+</ul>
+</dd>
+</dl>
+<p class="rubric">Notes</p>
+<p>Groups follow first appearance of <code class="docutils literal notranslate"><span class="pre">orbit_id</span></code> in <code class="docutils literal notranslate"><span class="pre">members</span></code>; members are
+restored to <code class="docutils literal notranslate"><span class="pre">observations</span></code> order. Empty input returns three typed empty
+tables without acquiring the provider. Safely isolated fit failures
+continue. The observation pipeline is <em>not</em> rerun: refinement consumes the
+persisted used astrometry created by <code class="docutils literal notranslate"><span class="pre">run_iod</span></code>/<code class="docutils literal notranslate"><span class="pre">run_od</span></code>. Static
+membership, covariance, source-identity, and provenance checks complete
+before provider acquisition.</p>
+<p><code class="docutils literal notranslate"><span class="pre">orbit_id</span></code> is mutable relational data. Relabeling is supported only by
+editing the orbit row and every matching member row together before this
+call; there is no rename helper. Fingerprints and immutable scientific
+identity do not depend on that presentation label.</p>
+<p class="rubric">Examples</p>
+<p>Persist and later refine the accepted IOD products:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">iod_orbits</span><span class="p">,</span> <span class="n">iod_members</span><span class="p">,</span> <span class="n">iod_failures</span> <span class="o">=</span> <span class="n">run_iod</span><span class="p">(</span>
+    <span class="n">source_catalog</span><span class="p">,</span>
+    <span class="n">associations</span><span class="p">,</span>
+    <span class="kc">None</span><span class="p">,</span>
+    <span class="n">config</span><span class="o">.</span><span class="n">for_iod</span><span class="p">(),</span>
+<span class="p">)</span>
+<span class="n">refined_orbits</span><span class="p">,</span> <span class="n">refined_members</span><span class="p">,</span> <span class="n">refine_failures</span> <span class="o">=</span> <span class="n">refine</span><span class="p">(</span>
+    <span class="n">iod_orbits</span><span class="p">,</span>
+    <span class="n">iod_members</span><span class="p">,</span>
+    <span class="n">source_catalog</span><span class="p">,</span>
+    <span class="kc">None</span><span class="p">,</span>
+    <span class="n">config</span><span class="o">.</span><span class="n">for_refinement</span><span class="p">(),</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">iod_failures</span></code> remains part of the composed batch result; <code class="docutils literal notranslate"><span class="pre">refine</span></code>
+returns only outcomes for seeds that reached this stage.</p>
+<div class="admonition seealso">
+<p class="admonition-title">See also</p>
+<dl class="simple">
+<dt><a class="reference internal" href="#adam_core.orbit_determination.workflows.run_od" title="adam_core.orbit_determination.workflows.run_od"><code class="xref py py-obj docutils literal notranslate"><span class="pre">run_od</span></code></a></dt><dd><p>Fused one-preparation IOD plus refinement.</p>
+</dd>
+<dt><a class="reference internal" href="#adam_core.orbit_determination.workflows.evaluate_orbits" title="adam_core.orbit_determination.workflows.evaluate_orbits"><code class="xref py py-obj docutils literal notranslate"><span class="pre">evaluate_orbits</span></code></a></dt><dd><p>Evaluate without changing input states.</p>
+</dd>
+</dl>
+</div>
 </dd></dl>
 
 <dl class="py function">
 <dt class="sig sig-object py" id="adam_core.orbit_determination.workflows.evaluate_orbits">
 <span class="sig-prename descclassname"><span class="pre">adam_core.orbit_determination.workflows.</span></span><span class="sig-name descname"><span class="pre">evaluate_orbits</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">orbits</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="adam_core.orbit_determination.fitted_orbits.html#adam_core.orbit_determination.fitted_orbits.FittedOrbits" title="adam_core.orbit_determination.fitted_orbits.FittedOrbits"><span class="pre">FittedOrbits</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">members</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="adam_core.orbit_determination.fitted_orbits.html#adam_core.orbit_determination.fitted_orbits.FittedOrbitMembers" title="adam_core.orbit_determination.fitted_orbits.FittedOrbitMembers"><span class="pre">FittedOrbitMembers</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">observations</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="adam_core.observations.source_catalog.html#adam_core.observations.source_catalog.SourceCatalog" title="adam_core.observations.source_catalog.SourceCatalog"><span class="pre">SourceCatalog</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">propagator</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="adam_core.propagator.propagator.html#adam_core.propagator.propagator.Propagator" title="adam_core.propagator.propagator.Propagator"><span class="pre">Propagator</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">config</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="adam_core.orbit_determination.config.html#adam_core.orbit_determination.config.EvaluationConfig" title="adam_core.orbit_determination.config.EvaluationConfig"><span class="pre">EvaluationConfig</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#tuple" title="(in Python v3.15)"><span class="pre">tuple</span></a><span class="p"><span class="pre">[</span></span><a class="reference internal" href="adam_core.orbit_determination.fitted_orbits.html#adam_core.orbit_determination.fitted_orbits.FittedOrbits" title="adam_core.orbit_determination.fitted_orbits.FittedOrbits"><span class="pre">FittedOrbits</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference internal" href="adam_core.orbit_determination.fitted_orbits.html#adam_core.orbit_determination.fitted_orbits.FittedOrbitMembers" title="adam_core.orbit_determination.fitted_orbits.FittedOrbitMembers"><span class="pre">FittedOrbitMembers</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference internal" href="adam_core.orbit_determination.fitted_orbits.html#adam_core.orbit_determination.fitted_orbits.OrbitDeterminationFailures" title="adam_core.orbit_determination.fitted_orbits.OrbitDeterminationFailures"><span class="pre">OrbitDeterminationFailures</span></a><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="../../_modules/adam_core/orbit_determination/workflows.html#evaluate_orbits"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.orbit_determination.workflows.evaluate_orbits" title="Link to this definition">¶</a></dt>
-<dd><p>Evaluate only explicitly declared fitted-orbit/member pairs.</p>
+<dd><p>Evaluate explicit orbit/member groups without changing their states.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>orbits</strong> (<a class="reference internal" href="adam_core.orbit_determination.fitted_orbits.html#adam_core.orbit_determination.fitted_orbits.FittedOrbits" title="adam_core.orbit_determination.fitted_orbits.FittedOrbits"><em>FittedOrbits</em></a><em> (</em><em>O</em><em>)</em>) – Input states with unique non-blank <code class="docutils literal notranslate"><span class="pre">orbit_id</span></code>, six-dimensional
+covariance, complete state fingerprint, and validated workflow
+provenance. Returned coordinates are the same states.</p></li>
+<li><p><strong>members</strong> (<a class="reference internal" href="adam_core.orbit_determination.fitted_orbits.html#adam_core.orbit_determination.fitted_orbits.FittedOrbitMembers" title="adam_core.orbit_determination.fitted_orbits.FittedOrbitMembers"><em>FittedOrbitMembers</em></a><em> (</em><em>K</em><em>)</em>) – Explicit pairs selected for evaluation. Required identity columns are
+<code class="docutils literal notranslate"><span class="pre">orbit_id</span></code> and <code class="docutils literal notranslate"><span class="pre">obs_id</span></code>; canonical original/used astrometry and
+input/membership fingerprints must be present. A validated subset of a
+prior group’s members is allowed.</p></li>
+<li><p><strong>observations</strong> (<a class="reference internal" href="adam_core.observations.html#adam_core.observations.SourceCatalog" title="adam_core.observations.SourceCatalog"><em>SourceCatalog</em></a><em> (</em><em>N</em><em>)</em>) – Source rows referenced by <code class="docutils literal notranslate"><span class="pre">members</span></code>. Their complete persisted identity
+must still match.</p></li>
+<li><p><strong>propagator</strong> (<a class="reference internal" href="adam_core.propagator.html#adam_core.propagator.Propagator" title="adam_core.propagator.Propagator"><em>Propagator</em></a><em> or </em><em>None</em>) – Explicit propagation-only provider; <code class="docutils literal notranslate"><span class="pre">None</span></code> selects the built-in
+two-body provider.</p></li>
+<li><p><strong>config</strong> (<a class="reference internal" href="adam_core.orbit_determination.config.html#adam_core.orbit_determination.config.EvaluationConfig" title="adam_core.orbit_determination.config.EvaluationConfig"><em>EvaluationConfig</em></a>) – Independent covariance-dimension and prediction-fit configuration.
+Passing an <code class="docutils literal notranslate"><span class="pre">OdConfig</span></code> is an error; use <code class="docutils literal notranslate"><span class="pre">config.for_evaluation()</span></code> or
+construct an explicit <code class="docutils literal notranslate"><span class="pre">EvaluationConfig</span></code>.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><ul class="simple">
+<li><p><strong>fitted_orbits</strong> (<em>FittedOrbits (O_output)</em>) – Unchanged states decorated with evaluation status, statistics, provider
+metadata, and evaluation-route provenance.</p></li>
+<li><p><strong>fitted_members</strong> (<em>FittedOrbitMembers (K_output)</em>) – Residual, solution, and outlier rows in deterministic source order.</p></li>
+<li><p><strong>failures</strong> (<em>OrbitDeterminationFailures (O_failure)</em>) – Typed per-orbit scientific evaluation failures.</p></li>
+</ul>
+</p>
+</dd>
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#TypeError" title="(in Python v3.15)"><strong>TypeError</strong></a> – If a table or <code class="docutils literal notranslate"><span class="pre">config</span></code> has the wrong public type.</p></li>
+<li><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#ValueError" title="(in Python v3.15)"><strong>ValueError</strong></a> – If static membership, covariance, source-identity, or provenance input
+    validation fails; provider acquisition returns a non-capsule, a capsule
+    not named <code class="docutils literal notranslate"><span class="pre">adam_core.propagator.v2</span></code>, or a malformed descriptor; the
+    <code class="docutils literal notranslate"><span class="pre">NativeBackend</span></code> declaration and table identity differ; a legacy table
+    lacks the complete provenance suffix; or capability bits are unknown to
+    this Core.</p></li>
+<li><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#RuntimeError" title="(in Python v3.15)"><strong>RuntimeError</strong></a> – If the table violates the ABI-v2 contract (version, base size or partial
+    provenance suffix, alignment, reserved words, null context or callback,
+    missing <code class="docutils literal notranslate"><span class="pre">THREAD_SAFE</span></code>, empty identity strings, malformed fingerprints,
+    or inconsistent STM capability/callback slot); a callback returns
+    <code class="docutils literal notranslate"><span class="pre">ERROR</span></code>, <code class="docutils literal notranslate"><span class="pre">PANIC</span></code>, <code class="docutils literal notranslate"><span class="pre">INVALID</span></code>, or an unknown status; or the provider
+    returns a malformed response, unsupported request capability, or other
+    backend failure. Both <code class="docutils literal notranslate"><span class="pre">ValueError</span></code> and <code class="docutils literal notranslate"><span class="pre">RuntimeError</span></code> can arise
+    during acquisition before callback execution; the validation layer, not
+    acquisition-versus-execution timing, determines the exception class.</p></li>
+</ul>
+</dd>
+</dl>
+<p class="rubric">Notes</p>
+<p>Static checks precede provider acquisition. Empty input returns three typed
+empty tables. Groups follow first member appearance and rows follow source
+order. Evaluation does not refit or relabel an orbit, does not reapply an
+observation pipeline, and records only evaluation-stage provider/config
+identity rather than copying prior stage backend fields. <code class="docutils literal notranslate"><span class="pre">orbit_id</span></code>
+remains a mutable relational label, but evaluation itself never changes it;
+callers must edit the orbit and matching member foreign keys together.</p>
+<p class="rubric">Examples</p>
+<p>Evaluate the complete accepted handoff with an explicit stage projection:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">evaluated_orbits</span><span class="p">,</span> <span class="n">evaluated_members</span><span class="p">,</span> <span class="n">failures</span> <span class="o">=</span> <span class="n">evaluate_orbits</span><span class="p">(</span>
+    <span class="n">fitted_orbits</span><span class="p">,</span>
+    <span class="n">fitted_members</span><span class="p">,</span>
+    <span class="n">source_catalog</span><span class="p">,</span>
+    <span class="kc">None</span><span class="p">,</span>
+    <span class="n">config</span><span class="o">.</span><span class="n">for_evaluation</span><span class="p">(),</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p>To evaluate a subset, pass only member rows for the chosen orbit/observation
+pairs while retaining their canonical fingerprint columns.</p>
+<div class="admonition seealso">
+<p class="admonition-title">See also</p>
+<dl class="simple">
+<dt><a class="reference internal" href="#adam_core.orbit_determination.workflows.run_iod" title="adam_core.orbit_determination.workflows.run_iod"><code class="xref py py-obj docutils literal notranslate"><span class="pre">run_iod</span></code></a></dt><dd><p>Produce canonical IOD states and members.</p>
+</dd>
+<dt><a class="reference internal" href="#adam_core.orbit_determination.workflows.run_od" title="adam_core.orbit_determination.workflows.run_od"><code class="xref py py-obj docutils literal notranslate"><span class="pre">run_od</span></code></a></dt><dd><p>Produce canonical refined states and members.</p>
+</dd>
+<dt><a class="reference internal" href="#adam_core.orbit_determination.workflows.refine" title="adam_core.orbit_determination.workflows.refine"><code class="xref py py-obj docutils literal notranslate"><span class="pre">refine</span></code></a></dt><dd><p>Change states through configured refinement.</p>
+</dd>
+</dl>
+</div>
 </dd></dl>
 
 </section>

@@ -568,6 +568,16 @@
 
 <span class="sd">        Validation is aggregate and precedes pipeline/provider work. Absolute</span>
 <span class="sd">        paths select local files but are excluded from canonical provenance.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        TypeError</span>
+<span class="sd">            If ``resources`` is not a ``ResourceBindings`` value.</span>
+<span class="sd">        OdConfigurationError</span>
+<span class="sd">            If the named immutable profile definition is inconsistent.</span>
+<span class="sd">        OdResourceValidationError</span>
+<span class="sd">            If required slots are missing or any bound resource fails identity,</span>
+<span class="sd">            schema, structural, swapped-slot, duplicate-slot, or unused checks.</span>
 <span class="sd">        """</span>
 
         <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">resources</span><span class="p">,</span> <span class="n">ResourceBindings</span><span class="p">):</span>

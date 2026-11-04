@@ -438,7 +438,14 @@
         </div>
         <article role="main" id="furo-main-content">
           <h1>Source code for adam_core.orbit_determination.workflows</h1><div class="highlight"><pre>
-<span></span><span class="sd">"""Thin Python marshalling for Rust-owned canonical batch OD workflows."""</span>
+<span></span><span class="sd">"""Thin Python marshalling for Rust-owned canonical batch OD workflows.</span>
+
+<span class="sd">The four public workflows are ordinary callables exported from this module:</span>
+
+<span class="sd">&gt;&gt;&gt; names = ("run_iod", "run_od", "refine", "evaluate_orbits")</span>
+<span class="sd">&gt;&gt;&gt; all(callable(globals()[name]) for name in names)</span>
+<span class="sd">True</span>
+<span class="sd">"""</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
 
@@ -713,12 +720,117 @@
     <span class="n">propagator</span><span class="p">:</span> <span class="n">Propagator</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">config</span><span class="p">:</span> <span class="n">IodRunConfig</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">_RESULT</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""Run canonical batch IOD over explicit association hypotheses.</span>
+<span class="w">    </span><span class="sd">"""Run canonical batch initial orbit determination (IOD).</span>
 
-<span class="sd">    ``config`` owns the bound pipeline/resources and complete IOD stage.</span>
-<span class="sd">    Group parsing, validation, ordering, transforms,</span>
-<span class="sd">    IOD, failure classification, identifiers, and provenance are executed by</span>
-<span class="sd">    Core Rust.</span>
+<span class="sd">    Rust validates the complete batch, applies the bound observation pipeline</span>
+<span class="sd">    once, and executes deterministic IOD per explicit association</span>
+<span class="sd">    hypothesis. A one-object request uses this same batch route.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    observations : SourceCatalog (N)</span>
+<span class="sd">        Observation rows. The required non-null columns are ``id`` (unique and</span>
+<span class="sd">        non-blank), ``time``, ``ra``, ``dec``, ``observatory_code``, and</span>
+<span class="sd">        ``catalog_id``. Astrometric uncertainty columns must be finite and</span>
+<span class="sd">        positive after ``config.observation_pipeline`` runs. Every present</span>
+<span class="sd">        covariance has dimension six before any transform is interpreted.</span>
+<span class="sd">    associations : Associations (M)</span>
+<span class="sd">        Explicit memberships with non-null ``detection_id`` and ``object_id``.</span>
+<span class="sd">        Each detection ID must reference ``observations.id``. A detection may</span>
+<span class="sd">        occur in several hypotheses, but a ``(object_id, detection_id)`` pair</span>
+<span class="sd">        may occur only once.</span>
+<span class="sd">    propagator : Propagator or None</span>
+<span class="sd">        Propagation-only provider. ``None`` explicitly selects Core's built-in</span>
+<span class="sd">        two-body provider. Any other value must expose the negotiated native</span>
+<span class="sd">        propagation capsule; it never supplies IOD, fitting, or rejection.</span>
+<span class="sd">    config : IodRunConfig</span>
+<span class="sd">        Self-contained IOD configuration containing the complete</span>
+<span class="sd">        ``IodStageConfig``, ordered bound ``ObservationPipeline``, validated</span>
+<span class="sd">        resources, and optional immutable profile identity.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    fitted_orbits : FittedOrbits (G_success)</span>
+<span class="sd">        One accepted state per successful group, in first-appearance group</span>
+<span class="sd">        order, with complete route/configuration/provider provenance.</span>
+<span class="sd">    fitted_members : FittedOrbitMembers (K_success)</span>
+<span class="sd">        Successful-group memberships in source-table order, including original</span>
+<span class="sd">        and used astrometry plus input and membership fingerprints.</span>
+<span class="sd">    failures : OrbitDeterminationFailures (G_failure)</span>
+<span class="sd">        Typed, deterministic per-group scientific failures. No placeholder</span>
+<span class="sd">        orbit is emitted when an IOD group has no accepted state.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    TypeError</span>
+<span class="sd">        If a Python table, provider, or ``config`` has the wrong public type.</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If static batch, membership, covariance, identity, or provenance input</span>
+<span class="sd">        validation fails; provider acquisition returns a non-capsule, a capsule</span>
+<span class="sd">        not named ``adam_core.propagator.v2``, or a malformed descriptor; the</span>
+<span class="sd">        ``NativeBackend`` declaration and table identity differ; a legacy table</span>
+<span class="sd">        lacks the complete provenance suffix; or capability bits are unknown to</span>
+<span class="sd">        this Core.</span>
+<span class="sd">    RuntimeError</span>
+<span class="sd">        If the table violates the ABI-v2 contract (version, base size or partial</span>
+<span class="sd">        provenance suffix, alignment, reserved words, null context or callback,</span>
+<span class="sd">        missing ``THREAD_SAFE``, empty identity strings, malformed fingerprints,</span>
+<span class="sd">        or inconsistent STM capability/callback slot); a callback returns</span>
+<span class="sd">        ``ERROR``, ``PANIC``, ``INVALID``, or an unknown status; or the provider</span>
+<span class="sd">        returns a malformed response, unsupported request capability, or other</span>
+<span class="sd">        backend failure. No partial products are returned. Both ``ValueError``</span>
+<span class="sd">        and ``RuntimeError`` can arise during acquisition before callback</span>
+<span class="sd">        execution; the validation layer, not acquisition-versus-execution</span>
+<span class="sd">        timing, determines the exception class.</span>
+
+<span class="sd">    Notes</span>
+<span class="sd">    -----</span>
+<span class="sd">    Static configuration/resource/ID/membership checks complete before provider</span>
+<span class="sd">    acquisition. Empty input returns three typed empty tables and does not</span>
+<span class="sd">    acquire the provider. Groups follow first appearance in ``associations``;</span>
+<span class="sd">    members follow source order; overlaps are preserved. Safely isolated</span>
+<span class="sd">    no-solution outcomes are rows in ``failures`` and do not stop later groups.</span>
+<span class="sd">    ``orbit_id`` is a mutable relational label; immutable association identity</span>
+<span class="sd">    is carried by the orbit ``object_id``/native group identity and member</span>
+<span class="sd">    fingerprints.</span>
+
+<span class="sd">    Examples</span>
+<span class="sd">    --------</span>
+<span class="sd">    One explicit group with a deliberate no-transform pipeline and the built-in</span>
+<span class="sd">    provider (represented by ``None``):</span>
+
+<span class="sd">    .. code-block:: python</span>
+
+<span class="sd">       from adam_core.observations import Associations</span>
+<span class="sd">       from adam_core.orbit_determination import (</span>
+<span class="sd">           IodRunConfig,</span>
+<span class="sd">           IodStageConfig,</span>
+<span class="sd">           ObservationPipeline,</span>
+<span class="sd">           ResourceBindings,</span>
+<span class="sd">           run_iod,</span>
+<span class="sd">       )</span>
+
+<span class="sd">       one_group = Associations.from_kwargs(</span>
+<span class="sd">           detection_id=source_catalog.id,</span>
+<span class="sd">           object_id=["hypothesis-1"] * len(source_catalog),</span>
+<span class="sd">       )</span>
+<span class="sd">       iod_config = IodRunConfig(</span>
+<span class="sd">           ObservationPipeline.as_supplied(),</span>
+<span class="sd">           IodStageConfig.core_v1(),</span>
+<span class="sd">           ResourceBindings({}),</span>
+<span class="sd">       )</span>
+<span class="sd">       fitted_orbits, fitted_members, failures = run_iod(</span>
+<span class="sd">           source_catalog,</span>
+<span class="sd">           one_group,</span>
+<span class="sd">           None,</span>
+<span class="sd">           iod_config,</span>
+<span class="sd">       )</span>
+
+<span class="sd">    See Also</span>
+<span class="sd">    --------</span>
+<span class="sd">    run_od : IOD plus refinement with one preparation.</span>
+<span class="sd">    refine : Refine the persisted prepared handoff.</span>
+<span class="sd">    evaluate_orbits : Evaluate explicit orbit/member groups.</span>
 <span class="sd">    """</span>
 
     <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">config</span><span class="p">,</span> <span class="n">IodRunConfig</span><span class="p">):</span>
@@ -747,7 +859,110 @@
     <span class="n">propagator</span><span class="p">:</span> <span class="n">Propagator</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">config</span><span class="p">:</span> <span class="n">OdConfig</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">_RESULT</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""Run canonical batch IOD then refinement on one prepared group batch."""</span>
+<span class="w">    </span><span class="sd">"""Run canonical batch IOD followed by refinement.</span>
+
+<span class="sd">    This is the complete OD workflow. Rust plans each association group,</span>
+<span class="sd">    validates and applies the bound pipeline once, runs IOD, and refines each</span>
+<span class="sd">    accepted seed on the exact same prepared rows.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    observations : SourceCatalog (N)</span>
+<span class="sd">        Observation rows with unique non-blank ``id`` plus required ``time``,</span>
+<span class="sd">        ``ra``, ``dec``, ``observatory_code``, and ``catalog_id`` columns.</span>
+<span class="sd">        Uncertainty must be valid after the configured pipeline.</span>
+<span class="sd">    associations : Associations (M)</span>
+<span class="sd">        Non-null ``detection_id``/``object_id`` membership pairs. References</span>
+<span class="sd">        must be complete and unambiguous; duplicate pairs and dangling IDs are</span>
+<span class="sd">        invocation-fatal. Overlapping hypotheses are allowed.</span>
+<span class="sd">    propagator : Propagator or None</span>
+<span class="sd">        Explicit propagation-only provider. ``None`` selects the built-in</span>
+<span class="sd">        two-body provider; another provider must expose the native capsule.</span>
+<span class="sd">    config : OdConfig</span>
+<span class="sd">        Complete bound configuration: ordered pipeline and resources,</span>
+<span class="sd">        ``IodStageConfig``, ``RefinementRunConfig``, and optional validated</span>
+<span class="sd">        profile identity. Profiles must be bound before this call.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    fitted_orbits : FittedOrbits (G_output)</span>
+<span class="sd">        Accepted or retained best states in deterministic group order. Each row</span>
+<span class="sd">        includes success/status, exact state identity, and complete provenance.</span>
+<span class="sd">    fitted_members : FittedOrbitMembers (K_output)</span>
+<span class="sd">        Member residual/selection rows in source order with lossless original</span>
+<span class="sd">        and used astrometry and Rust-owned fingerprints.</span>
+<span class="sd">    failures : OrbitDeterminationFailures (G_failure)</span>
+<span class="sd">        Typed isolated IOD/refinement failures in group order. A refinement</span>
+<span class="sd">        failure emits a state only when Rust retained an actual best state.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    TypeError</span>
+<span class="sd">        If an argument does not have the documented public type.</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If static batch, membership, covariance, identity, or provenance input</span>
+<span class="sd">        validation fails; provider acquisition returns a non-capsule, a capsule</span>
+<span class="sd">        not named ``adam_core.propagator.v2``, or a malformed descriptor; the</span>
+<span class="sd">        ``NativeBackend`` declaration and table identity differ; a legacy table</span>
+<span class="sd">        lacks the complete provenance suffix; or capability bits are unknown to</span>
+<span class="sd">        this Core.</span>
+<span class="sd">    RuntimeError</span>
+<span class="sd">        If the table violates the ABI-v2 contract (version, base size or partial</span>
+<span class="sd">        provenance suffix, alignment, reserved words, null context or callback,</span>
+<span class="sd">        missing ``THREAD_SAFE``, empty identity strings, malformed fingerprints,</span>
+<span class="sd">        or inconsistent STM capability/callback slot); a callback returns</span>
+<span class="sd">        ``ERROR``, ``PANIC``, ``INVALID``, or an unknown status; or the provider</span>
+<span class="sd">        returns a malformed response, unsupported request capability, or other</span>
+<span class="sd">        backend failure. No partial tuple is returned. Both ``ValueError`` and</span>
+<span class="sd">        ``RuntimeError`` can arise during acquisition before callback execution;</span>
+<span class="sd">        the validation layer, not acquisition-versus-execution timing,</span>
+<span class="sd">        determines the exception class.</span>
+
+<span class="sd">    Notes</span>
+<span class="sd">    -----</span>
+<span class="sd">    Empty input returns three empty typed tables without provider acquisition.</span>
+<span class="sd">    Group order is first association appearance and member order is source</span>
+<span class="sd">    order. Scientific failures continue per group; static and invocation-fatal</span>
+<span class="sd">    errors abort the whole call.</span>
+
+<span class="sd">    Conceptually, ``run_od(config)`` is ``run_iod(config.for_iod())`` followed</span>
+<span class="sd">    by ``refine(config.for_refinement())`` with prior IOD failures carried</span>
+<span class="sd">    forward. The fused route performs the observation transforms only once;</span>
+<span class="sd">    the persisted handoff consumed by standalone ``refine`` prevents a second</span>
+<span class="sd">    transformation. Matching direct and composed routes have equal scientific</span>
+<span class="sd">    products and canonical OD provenance. Emitted ``orbit_id`` values are</span>
+<span class="sd">    mutable relational labels; immutable association identity remains in the</span>
+<span class="sd">    orbit object/group identity and member fingerprints.</span>
+
+<span class="sd">    Examples</span>
+<span class="sd">    --------</span>
+<span class="sd">    Bind the public profile explicitly, then run a multi-hypothesis batch:</span>
+
+<span class="sd">    .. code-block:: python</span>
+
+<span class="sd">       from adam_core.orbit_determination import (</span>
+<span class="sd">           CORE_OD_V1,</span>
+<span class="sd">           core_od_v1_resource_bindings,</span>
+<span class="sd">           run_od,</span>
+<span class="sd">       )</span>
+
+<span class="sd">       config = CORE_OD_V1.bind(core_od_v1_resource_bindings())</span>
+<span class="sd">       fitted_orbits, fitted_members, failures = run_od(</span>
+<span class="sd">           source_catalog,</span>
+<span class="sd">           associations,</span>
+<span class="sd">           None,</span>
+<span class="sd">           config,</span>
+<span class="sd">       )</span>
+
+<span class="sd">    The tuple always has exactly these three table types, including empty</span>
+<span class="sd">    and all-failed batches.</span>
+
+<span class="sd">    See Also</span>
+<span class="sd">    --------</span>
+<span class="sd">    run_iod : IOD-only stage using ``IodRunConfig``.</span>
+<span class="sd">    refine : Persisted-handoff refinement.</span>
+<span class="sd">    evaluate_orbits : Independent residual evaluation.</span>
+<span class="sd">    """</span>
 
     <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">config</span><span class="p">,</span> <span class="n">OdConfig</span><span class="p">):</span>
         <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">"config must be an OdConfig"</span><span class="p">)</span>
@@ -809,7 +1024,105 @@
     <span class="n">propagator</span><span class="p">:</span> <span class="n">Propagator</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">config</span><span class="p">:</span> <span class="n">RefinementRunConfig</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">_RESULT</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""Refine explicit fitted-orbit/member groups using their prepared handoff."""</span>
+<span class="w">    </span><span class="sd">"""Refine explicit orbit/member groups from a canonical handoff.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    orbits : FittedOrbits (O)</span>
+<span class="sd">        Input states. ``orbit_id`` must be unique and non-blank, coordinates</span>
+<span class="sd">        must contain a valid six-dimensional state/covariance, and each row</span>
+<span class="sd">        must carry complete canonical IOD/OD provenance and state identity.</span>
+<span class="sd">    members : FittedOrbitMembers (K)</span>
+<span class="sd">        Explicit memberships. Required non-null columns are ``orbit_id`` and</span>
+<span class="sd">        ``obs_id``; canonical refinement also requires lossless</span>
+<span class="sd">        ``original_astrometry``/``used_astrometry``, ``input_fingerprint``, and</span>
+<span class="sd">        ``membership_fingerprint`` for every row. Every input orbit must have</span>
+<span class="sd">        at least one member.</span>
+<span class="sd">    observations : SourceCatalog (N)</span>
+<span class="sd">        Current source rows. IDs, detection metadata, epochs, observer geometry,</span>
+<span class="sd">        and original astrometry must match the persisted member fingerprints.</span>
+<span class="sd">    propagator : Propagator or None</span>
+<span class="sd">        Explicit propagation-only provider; ``None`` selects Core's built-in</span>
+<span class="sd">        two-body implementation.</span>
+<span class="sd">    config : RefinementRunConfig</span>
+<span class="sd">        Complete fit/Jacobian/covariance/rejection declaration. It contains no</span>
+<span class="sd">        hidden pipeline or IOD configuration.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    fitted_orbits : FittedOrbits (O_output)</span>
+<span class="sd">        Refined or explicitly retained best states in deterministic group order.</span>
+<span class="sd">    fitted_members : FittedOrbitMembers (K_output)</span>
+<span class="sd">        Updated residual/selection/member products in source order.</span>
+<span class="sd">    failures : OrbitDeterminationFailures (O_failure)</span>
+<span class="sd">        Typed per-orbit scientific failures. ``input_orbit_id`` identifies the</span>
+<span class="sd">        seed even when no output state is emitted.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    TypeError</span>
+<span class="sd">        If any table or ``config`` has the wrong public type.</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If static membership, covariance, source-identity, or provenance input</span>
+<span class="sd">        validation fails; provider acquisition returns a non-capsule, a capsule</span>
+<span class="sd">        not named ``adam_core.propagator.v2``, or a malformed descriptor; the</span>
+<span class="sd">        ``NativeBackend`` declaration and table identity differ; a legacy table</span>
+<span class="sd">        lacks the complete provenance suffix; or capability bits are unknown to</span>
+<span class="sd">        this Core. No partial products are returned.</span>
+<span class="sd">    RuntimeError</span>
+<span class="sd">        If the table violates the ABI-v2 contract (version, base size or partial</span>
+<span class="sd">        provenance suffix, alignment, reserved words, null context or callback,</span>
+<span class="sd">        missing ``THREAD_SAFE``, empty identity strings, malformed fingerprints,</span>
+<span class="sd">        or inconsistent STM capability/callback slot); a callback returns</span>
+<span class="sd">        ``ERROR``, ``PANIC``, ``INVALID``, or an unknown status; or the provider</span>
+<span class="sd">        returns a malformed response, unsupported request capability, or other</span>
+<span class="sd">        backend failure. Both ``ValueError`` and ``RuntimeError`` can arise</span>
+<span class="sd">        during acquisition before callback execution; the validation layer, not</span>
+<span class="sd">        acquisition-versus-execution timing, determines the exception class.</span>
+
+<span class="sd">    Notes</span>
+<span class="sd">    -----</span>
+<span class="sd">    Groups follow first appearance of ``orbit_id`` in ``members``; members are</span>
+<span class="sd">    restored to ``observations`` order. Empty input returns three typed empty</span>
+<span class="sd">    tables without acquiring the provider. Safely isolated fit failures</span>
+<span class="sd">    continue. The observation pipeline is *not* rerun: refinement consumes the</span>
+<span class="sd">    persisted used astrometry created by ``run_iod``/``run_od``. Static</span>
+<span class="sd">    membership, covariance, source-identity, and provenance checks complete</span>
+<span class="sd">    before provider acquisition.</span>
+
+<span class="sd">    ``orbit_id`` is mutable relational data. Relabeling is supported only by</span>
+<span class="sd">    editing the orbit row and every matching member row together before this</span>
+<span class="sd">    call; there is no rename helper. Fingerprints and immutable scientific</span>
+<span class="sd">    identity do not depend on that presentation label.</span>
+
+<span class="sd">    Examples</span>
+<span class="sd">    --------</span>
+<span class="sd">    Persist and later refine the accepted IOD products:</span>
+
+<span class="sd">    .. code-block:: python</span>
+
+<span class="sd">       iod_orbits, iod_members, iod_failures = run_iod(</span>
+<span class="sd">           source_catalog,</span>
+<span class="sd">           associations,</span>
+<span class="sd">           None,</span>
+<span class="sd">           config.for_iod(),</span>
+<span class="sd">       )</span>
+<span class="sd">       refined_orbits, refined_members, refine_failures = refine(</span>
+<span class="sd">           iod_orbits,</span>
+<span class="sd">           iod_members,</span>
+<span class="sd">           source_catalog,</span>
+<span class="sd">           None,</span>
+<span class="sd">           config.for_refinement(),</span>
+<span class="sd">       )</span>
+
+<span class="sd">    ``iod_failures`` remains part of the composed batch result; ``refine``</span>
+<span class="sd">    returns only outcomes for seeds that reached this stage.</span>
+
+<span class="sd">    See Also</span>
+<span class="sd">    --------</span>
+<span class="sd">    run_od : Fused one-preparation IOD plus refinement.</span>
+<span class="sd">    evaluate_orbits : Evaluate without changing input states.</span>
+<span class="sd">    """</span>
 
     <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">orbits</span><span class="p">,</span> <span class="n">FittedOrbits</span><span class="p">):</span>
         <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">"orbits must be FittedOrbits"</span><span class="p">)</span>
@@ -886,7 +1199,95 @@
     <span class="n">propagator</span><span class="p">:</span> <span class="n">Propagator</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">config</span><span class="p">:</span> <span class="n">EvaluationConfig</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">_RESULT</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""Evaluate only explicitly declared fitted-orbit/member pairs."""</span>
+<span class="w">    </span><span class="sd">"""Evaluate explicit orbit/member groups without changing their states.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    orbits : FittedOrbits (O)</span>
+<span class="sd">        Input states with unique non-blank ``orbit_id``, six-dimensional</span>
+<span class="sd">        covariance, complete state fingerprint, and validated workflow</span>
+<span class="sd">        provenance. Returned coordinates are the same states.</span>
+<span class="sd">    members : FittedOrbitMembers (K)</span>
+<span class="sd">        Explicit pairs selected for evaluation. Required identity columns are</span>
+<span class="sd">        ``orbit_id`` and ``obs_id``; canonical original/used astrometry and</span>
+<span class="sd">        input/membership fingerprints must be present. A validated subset of a</span>
+<span class="sd">        prior group's members is allowed.</span>
+<span class="sd">    observations : SourceCatalog (N)</span>
+<span class="sd">        Source rows referenced by ``members``. Their complete persisted identity</span>
+<span class="sd">        must still match.</span>
+<span class="sd">    propagator : Propagator or None</span>
+<span class="sd">        Explicit propagation-only provider; ``None`` selects the built-in</span>
+<span class="sd">        two-body provider.</span>
+<span class="sd">    config : EvaluationConfig</span>
+<span class="sd">        Independent covariance-dimension and prediction-fit configuration.</span>
+<span class="sd">        Passing an ``OdConfig`` is an error; use ``config.for_evaluation()`` or</span>
+<span class="sd">        construct an explicit ``EvaluationConfig``.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    fitted_orbits : FittedOrbits (O_output)</span>
+<span class="sd">        Unchanged states decorated with evaluation status, statistics, provider</span>
+<span class="sd">        metadata, and evaluation-route provenance.</span>
+<span class="sd">    fitted_members : FittedOrbitMembers (K_output)</span>
+<span class="sd">        Residual, solution, and outlier rows in deterministic source order.</span>
+<span class="sd">    failures : OrbitDeterminationFailures (O_failure)</span>
+<span class="sd">        Typed per-orbit scientific evaluation failures.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    TypeError</span>
+<span class="sd">        If a table or ``config`` has the wrong public type.</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If static membership, covariance, source-identity, or provenance input</span>
+<span class="sd">        validation fails; provider acquisition returns a non-capsule, a capsule</span>
+<span class="sd">        not named ``adam_core.propagator.v2``, or a malformed descriptor; the</span>
+<span class="sd">        ``NativeBackend`` declaration and table identity differ; a legacy table</span>
+<span class="sd">        lacks the complete provenance suffix; or capability bits are unknown to</span>
+<span class="sd">        this Core.</span>
+<span class="sd">    RuntimeError</span>
+<span class="sd">        If the table violates the ABI-v2 contract (version, base size or partial</span>
+<span class="sd">        provenance suffix, alignment, reserved words, null context or callback,</span>
+<span class="sd">        missing ``THREAD_SAFE``, empty identity strings, malformed fingerprints,</span>
+<span class="sd">        or inconsistent STM capability/callback slot); a callback returns</span>
+<span class="sd">        ``ERROR``, ``PANIC``, ``INVALID``, or an unknown status; or the provider</span>
+<span class="sd">        returns a malformed response, unsupported request capability, or other</span>
+<span class="sd">        backend failure. Both ``ValueError`` and ``RuntimeError`` can arise</span>
+<span class="sd">        during acquisition before callback execution; the validation layer, not</span>
+<span class="sd">        acquisition-versus-execution timing, determines the exception class.</span>
+
+<span class="sd">    Notes</span>
+<span class="sd">    -----</span>
+<span class="sd">    Static checks precede provider acquisition. Empty input returns three typed</span>
+<span class="sd">    empty tables. Groups follow first member appearance and rows follow source</span>
+<span class="sd">    order. Evaluation does not refit or relabel an orbit, does not reapply an</span>
+<span class="sd">    observation pipeline, and records only evaluation-stage provider/config</span>
+<span class="sd">    identity rather than copying prior stage backend fields. ``orbit_id``</span>
+<span class="sd">    remains a mutable relational label, but evaluation itself never changes it;</span>
+<span class="sd">    callers must edit the orbit and matching member foreign keys together.</span>
+
+<span class="sd">    Examples</span>
+<span class="sd">    --------</span>
+<span class="sd">    Evaluate the complete accepted handoff with an explicit stage projection:</span>
+
+<span class="sd">    .. code-block:: python</span>
+
+<span class="sd">       evaluated_orbits, evaluated_members, failures = evaluate_orbits(</span>
+<span class="sd">           fitted_orbits,</span>
+<span class="sd">           fitted_members,</span>
+<span class="sd">           source_catalog,</span>
+<span class="sd">           None,</span>
+<span class="sd">           config.for_evaluation(),</span>
+<span class="sd">       )</span>
+
+<span class="sd">    To evaluate a subset, pass only member rows for the chosen orbit/observation</span>
+<span class="sd">    pairs while retaining their canonical fingerprint columns.</span>
+
+<span class="sd">    See Also</span>
+<span class="sd">    --------</span>
+<span class="sd">    run_iod : Produce canonical IOD states and members.</span>
+<span class="sd">    run_od : Produce canonical refined states and members.</span>
+<span class="sd">    refine : Change states through configured refinement.</span>
+<span class="sd">    """</span>
 
     <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">orbits</span><span class="p">,</span> <span class="n">FittedOrbits</span><span class="p">):</span>
         <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">"orbits must be FittedOrbits"</span><span class="p">)</span>

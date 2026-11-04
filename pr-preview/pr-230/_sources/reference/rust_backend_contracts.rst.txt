@@ -200,10 +200,23 @@ Current Migrated APIs
     never bind a provider. The layer defines empty-group behavior, typed
     per-group scientific failures, deterministic overlapping grouping, and
     canonical Rust runtime provenance.
+  - Every present OD covariance is dimension-checked before snapshots,
+    transforms, fixed-stride indexing, or lon/lat variance interpretation.
+    Missing covariance may reach an explicitly configured fill transform;
+    unsupported dimensions fail rather than being projected through a fallback.
+    Python only marshals covariance storage. Rust owns selection, validation,
+    transforms, whitening, rejection, fitting, and output covariance.
   - CMC2003 finalization uses one central-difference Jacobian through the full
     predictor for all observations. Selected rows form the covariance; all
     rows supply rejection/recovery projections. Huber plus CMC2003 remains a
     heuristic combination without calibrated rejection statistics.
+  - Closed-form native tests in
+    ``adam_core_rs_coords::propagation::od_refine`` independently pin weighted
+    least-squares covariance, robust stationarity/weights, final-mask
+    covariance, derivative fallback, weak-direction probes, and full-predictor
+    CMC finalization. Capsule parity tests separately compare the external
+    provider route with the built-in two-body driver; retired Python prediction
+    callbacks are not test or production oracles.
   - Weak-direction covariance validation first probes both signs at 1 sigma.
     After a failed probe it repeats at 0.1 sigma: a curvature signal scales by
     about 0.01, while propagation/evaluation noise does not. The latter is

@@ -105,7 +105,7 @@ Use Cases (Complete List)
    * - :doc:`cookbook/ades_module`
      - ADES PSV parsing/building/export boundaries and validation patterns.
    * - :doc:`use_cases/orbit_determination`
-     - Orbit determination flows and residual-driven refinement loops.
+     - Canonical Python and standalone Rust IOD, OD, refinement, and evaluation.
    * - :doc:`use_cases/neo_tracking`
      - NEO candidate tracking from uncertain orbit state to follow-up planning products.
    * - :doc:`use_cases/source_multiplexing`

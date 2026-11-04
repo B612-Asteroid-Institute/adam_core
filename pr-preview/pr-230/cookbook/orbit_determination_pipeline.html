@@ -450,13 +450,20 @@
         <article role="main" id="furo-main-content">
           <section id="orbit-determination-pipeline-moved">
 <h1>Orbit Determination Pipeline (Moved)<a class="headerlink" href="#orbit-determination-pipeline-moved" title="Link to this heading">¶</a></h1>
-<p>This guide was merged into <a class="reference internal" href="../use_cases/orbit_determination.html"><span class="doc">Orbit determination</span></a>, which now
-documents:</p>
+<p>This guide was merged into <a class="reference internal" href="../use_cases/orbit_determination.html"><span class="doc">Orbit determination</span></a>, the single
+authoritative guide for Core 0.7 canonical OD. It documents:</p>
 <ul class="simple">
-<li><p>what linked-observation orbit determination returns</p></li>
-<li><p>how to use <code class="docutils literal notranslate"><span class="pre">FittedOrbits</span></code> and <code class="docutils literal notranslate"><span class="pre">FittedOrbitMembers</span></code> together</p></li>
-<li><p>simple IOD and advanced least-squares/evaluation patterns</p></li>
+<li><p>Python and standalone Rust <code class="docutils literal notranslate"><span class="pre">run_iod</span></code>, <code class="docutils literal notranslate"><span class="pre">run_od</span></code>, <code class="docutils literal notranslate"><span class="pre">refine</span></code>, and
+<code class="docutils literal notranslate"><span class="pre">evaluate_orbits</span></code> workflows;</p></li>
+<li><p>exact input-table/member contracts and the three result products;</p></li>
+<li><p>explicit configuration, profiles, resources, and propagation providers;</p></li>
+<li><p>deterministic overlaps, empty input, error boundaries, provenance, and
+mutable relational orbit labels; and</p></li>
+<li><p>the executable Rust example
+<code class="docutils literal notranslate"><span class="pre">rust/adam_core/examples/od_canonical_workflows.rs</span></code>.</p></li>
 </ul>
+<p>Generated Python API pages remain under
+<a class="reference internal" href="../reference/api/adam_core.orbit_determination.html"><span class="doc">adam_core.orbit_determination package</span></a>.</p>
 </section>
 
         </article>

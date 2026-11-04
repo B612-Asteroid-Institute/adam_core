@@ -460,11 +460,37 @@ It must not provide <code class="docutils literal notranslate"><span class="pre"
 Python enters an adam-core workflow once (including a linkage batch);
 prediction calls inside that workflow are batched C-ABI calls and never Python
 callbacks.</p>
-<p>Rust applications do not need this capsule. They compile the generic
-adam-core algorithms against a concrete <code class="docutils literal notranslate"><span class="pre">Propagator</span></code> implementation (for
-example <code class="docutils literal notranslate"><span class="pre">AssistPropagator</span></code>) directly. The capsule is the binary boundary
-between separately built Python extension modules and does not make
-adam-core link to a GPL provider.</p>
+<p>Canonical standalone Rust workflows that select an external provider also use
+ABI v2. The provider integration
+owns an <code class="docutils literal notranslate"><span class="pre">ExternalPropagatorV2</span></code> table, its NUL-terminated identity and
+fingerprint strings, its callbacks, and its callback context in stable memory.
+It validates that table with the unsafe
+<code class="docutils literal notranslate"><span class="pre">ExternalPropagator::from_raw(table_ptr)</span></code> constructor, retains every owned
+allocation for longer than the returned wrapper and every workflow call, then
+borrows the validated wrapper through <code class="docutils literal notranslate"><span class="pre">OdPropagator::external(&amp;external)</span></code>.
+The constructor validates the advertised ABI shape, identity, capabilities,
+and complete fields; it cannot prove that foreign pointers remain alive,
+immutable, thread-safe, or unwind-safe.</p>
+<p>Calling <code class="docutils literal notranslate"><span class="pre">from_raw</span></code> is sound only when the pointer is non-null, readable and
+properly aligned for its advertised <code class="docutils literal notranslate"><span class="pre">struct_size</span></code>; every read string and
+callback/context allocation outlives the wrapper; those values remain
+immutable; callbacks honor all buffer rules, may run concurrently, retain no
+request pointers, and never unwind across the C ABI. Moving an owner that would
+invalidate any table or context address is forbidden. The compiling reference
+<code class="docutils literal notranslate"><span class="pre">rust/adam_core/examples/od_external_provider.rs</span></code> makes this ownership and
+unsafe boundary explicit without fabricating a provider table. Lower-level
+predictor algorithms may be generic over the Rust <code class="docutils literal notranslate"><span class="pre">Propagator</span></code> trait, but
+there is no conversion from an arbitrary trait implementation to
+<code class="docutils literal notranslate"><span class="pre">OdPropagator::external</span></code> and the four canonical workflows do not accept that
+trait directly.</p>
+<p>The Python capsule is the ownership boundary between separately built extension
+modules: its destructor owns the table/context lifetime, and adam-core retains
+the capsule while its validated wrapper is used. This does not make adam-core
+link to a GPL-covered provider. An application that instead directly links a
+GPL-covered Rust provider creates a different distribution situation and must
+satisfy that provider’s license; projects should evaluate their own obligations.
+This ABI description does not claim that a final Core 0.7/ASSIST 0.6 release
+pair exists or is compatible.</p>
 </section>
 <section id="discovery-and-identity">
 <h2>Discovery and identity<a class="headerlink" href="#discovery-and-identity" title="Link to this heading">¶</a></h2>
@@ -549,8 +575,10 @@ provenance-incomplete. This is the only required downstream ABI adaptation.</p>
 </section>
 <section id="capabilities">
 <h2>Capabilities<a class="headerlink" href="#capabilities" title="Link to this heading">¶</a></h2>
-<p><code class="docutils literal notranslate"><span class="pre">capabilities</span></code> is a bit set. Unknown bits advertise optional future
-provider support and are ignored by older consumers. Known bits retain their
+<p><code class="docutils literal notranslate"><span class="pre">capabilities</span></code> is a bit set. General propagation ignores unknown capability
+bits for forward compatibility. Canonical OD workflows instead record the
+provider’s complete capability set in provenance and reject any bit unknown to
+this Core with <code class="docutils literal notranslate"><span class="pre">ValueError</span></code> before propagation. Known bits retain their
 specified fail-closed validation, so a provider cannot omit semantics required
 by the current request:</p>
 <ul class="simple">
@@ -627,10 +655,14 @@ for the call and must not alias each other or any input.</p>
 </section>
 <section id="lifetime-errors-and-panics">
 <h2>Lifetime, errors and panics<a class="headerlink" href="#lifetime-errors-and-panics" title="Link to this heading">¶</a></h2>
-<p>The provider owns the table, identity strings and context. They remain valid
-and immutable until the capsule destructor runs. Adam-core owns every request
-and output buffer, which is valid only for the duration of its callback. A
-provider must neither retain those pointers nor call Python from a callback.</p>
+<p>The provider owns the table, identity/fingerprint strings, callbacks and
+context. In Python they remain valid and immutable until the capsule destructor
+runs. In standalone Rust they remain valid and immutable longer than the
+<code class="docutils literal notranslate"><span class="pre">ExternalPropagator</span></code> wrapper and all <code class="docutils literal notranslate"><span class="pre">OdPropagator</span></code> borrows created from it;
+the owner must not move address-sensitive table/context storage. Adam-core owns
+every request and output buffer, which is valid only for the duration of its
+callback. A provider must neither retain those pointers nor call Python from a
+callback.</p>
 <p>Callback status values are <code class="docutils literal notranslate"><span class="pre">OK=0</span></code>, <code class="docutils literal notranslate"><span class="pre">ERROR=1</span></code>, <code class="docutils literal notranslate"><span class="pre">PANIC=2</span></code> and
 <code class="docutils literal notranslate"><span class="pre">INVALID=3</span></code> and are not interchangeable. <code class="docutils literal notranslate"><span class="pre">ERROR</span></code> is a provider operation
 failure, <code class="docutils literal notranslate"><span class="pre">PANIC</span></code> is a caught provider panic/exception, and <code class="docutils literal notranslate"><span class="pre">INVALID</span></code> is a
