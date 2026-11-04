@@ -464,17 +464,25 @@ settings, and path-free canonical configuration provenance. Python declares
 immutable values, binds explicit local paths, marshals tables, and assembles
 result tables. A propagation provider supplies only its negotiated native
 capsule.</p>
-<p>The complete configuration is <code class="docutils literal notranslate"><span class="pre">OdConfig</span></code>. <code class="docutils literal notranslate"><span class="pre">run_od</span></code> receives it directly;
-<code class="docutils literal notranslate"><span class="pre">run_iod</span></code> receives its bound <code class="docutils literal notranslate"><span class="pre">config.for_iod()</span></code> projection. Standalone
-<code class="docutils literal notranslate"><span class="pre">refine</span></code> receives <code class="docutils literal notranslate"><span class="pre">RefinementRunConfig</span></code> and <code class="docutils literal notranslate"><span class="pre">evaluate_orbits</span></code> receives
-the bound <code class="docutils literal notranslate"><span class="pre">config.for_evaluation()</span></code> projection. <code class="docutils literal notranslate"><span class="pre">OdConfig</span></code> contains:</p>
+<p>The complete fused configuration is <code class="docutils literal notranslate"><span class="pre">OdConfig</span></code>. <code class="docutils literal notranslate"><span class="pre">run_od</span></code> receives it
+directly; <code class="docutils literal notranslate"><span class="pre">run_iod</span></code> receives its bound <code class="docutils literal notranslate"><span class="pre">config.for_iod()</span></code> projection.
+Standalone <code class="docutils literal notranslate"><span class="pre">refine</span></code> receives <code class="docutils literal notranslate"><span class="pre">RefinementRunConfig</span></code> and
+<code class="docutils literal notranslate"><span class="pre">evaluate_orbits</span></code> receives an independent <code class="docutils literal notranslate"><span class="pre">EvaluationConfig</span></code> (often
+<code class="docutils literal notranslate"><span class="pre">config.for_evaluation()</span></code>). The types have deliberately separate scopes:</p>
 <ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">IodRunConfig</span></code>: search, selection, velocity, acceptance, correction,
+<li><p><code class="docutils literal notranslate"><span class="pre">IodStageConfig</span></code> owns search, selection, velocity, acceptance, correction,
 ranging, candidate-fit, solver, Jacobian, covariance, and two-body settings;</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">RefinementRunConfig</span></code>: either complete CMC2003 or worst-residual settings;</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">EvaluationConfig</span></code>;</p></li>
-<li><p>one ordered <code class="docutils literal notranslate"><span class="pre">ObservationPipeline</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">IodRunConfig</span></code> binds one <code class="docutils literal notranslate"><span class="pre">IodStageConfig</span></code> to an ordered, already-bound
+<code class="docutils literal notranslate"><span class="pre">ObservationPipeline</span></code> and optional immutable profile identity;</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">OdConfig</span></code> binds one <code class="docutils literal notranslate"><span class="pre">IodStageConfig</span></code>, one <code class="docutils literal notranslate"><span class="pre">RefinementRunConfig</span></code>
+(complete CMC2003 or worst-residual settings), and one ordered pipeline;</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">EvaluationConfig</span></code> independently owns covariance dimension and the exact
+prediction-fit settings used for residual evaluation.</p></li>
 </ul>
+<p>Explicit callers construct <code class="docutils literal notranslate"><span class="pre">IodRunConfig(pipeline,</span> <span class="pre">iod_stage,</span> <span class="pre">resources)</span></code>
+or <code class="docutils literal notranslate"><span class="pre">OdConfig.explicit(...)</span></code> only after choosing every scientific setting.
+<code class="docutils literal notranslate"><span class="pre">EvaluationConfig(6,</span> <span class="pre">prediction_fit)</span></code> is directly constructible and does not
+carry a hidden <code class="docutils literal notranslate"><span class="pre">OdConfig</span></code>.</p>
 <p>Python exposes typed immutable declarations such as <code class="docutils literal notranslate"><span class="pre">IodSearchConfig</span></code>,
 <code class="docutils literal notranslate"><span class="pre">SpanSearchConfig</span></code>, <code class="docutils literal notranslate"><span class="pre">CorrectionConfig</span></code>, <code class="docutils literal notranslate"><span class="pre">RangingConfig</span></code>,
 <code class="docutils literal notranslate"><span class="pre">WhitenedFitConfig</span></code>, <code class="docutils literal notranslate"><span class="pre">TwoBodyFitConfig</span></code>, <code class="docutils literal notranslate"><span class="pre">Cmc2003Refinement</span></code>, and
@@ -657,13 +665,17 @@ identifies a refine/evaluate input when a state-less failure occurs. IOD
 failures emit no placeholder orbit. A non-converged refinement remains in
 <code class="docutils literal notranslate"><span class="pre">FittedOrbits</span></code> with <code class="docutils literal notranslate"><span class="pre">success=False</span></code> only when Rust returned an actual best
 state; local refinement/evaluation errors never relabel an untouched input seed.</p>
-<p>Canonical IOD IDs deliberately include the complete <code class="docutils literal notranslate"><span class="pre">OdConfig</span></code>. Exact
-<code class="docutils literal notranslate"><span class="pre">run_iod</span></code> → <code class="docutils literal notranslate"><span class="pre">refine</span></code> composition therefore requires the same refinement
-projection and complete original membership. Direct <code class="docutils literal notranslate"><span class="pre">run_iod</span></code> results are
+<p>Canonical IOD IDs include the self-contained <code class="docutils literal notranslate"><span class="pre">IodRunConfig</span></code> science
+fingerprint and deliberately exclude later refinement settings. <code class="docutils literal notranslate"><span class="pre">run_iod</span></code> →
+<code class="docutils literal notranslate"><span class="pre">refine</span></code> composes that validated IOD configuration with the requested
+<code class="docutils literal notranslate"><span class="pre">RefinementRunConfig</span></code>. A named profile identity is retained only when the
+refinement matches that immutable profile; cross-configuration composition
+drops the profile and exactly equals an explicit unprofiled <code class="docutils literal notranslate"><span class="pre">run_od</span></code>.
+Complete original membership is still required. Direct <code class="docutils literal notranslate"><span class="pre">run_iod</span></code> results are
 valid evaluation inputs after full provenance/member/state validation, and
-evaluation may use an explicit member subset. Evaluation uses predictor settings
-from the complete configuration’s refinement fit and the covariance dimension
-from <code class="docutils literal notranslate"><span class="pre">EvaluationConfig</span></code>. Provider <code class="docutils literal notranslate"><span class="pre">RowFailure</span></code> and other provider/protocol
+evaluation may use an explicit member subset. Evaluation uses only the
+prediction fit and covariance dimension in its independent
+<code class="docutils literal notranslate"><span class="pre">EvaluationConfig</span></code>. Provider <code class="docutils literal notranslate"><span class="pre">RowFailure</span></code> and other provider/protocol
 errors remain invocation-fatal rather than being converted to group failures.
 Evaluation outputs record evaluation-stage configuration/provider identity; they
 do not copy prior-stage backend fields or member weights.</p>
@@ -705,7 +717,7 @@ do not copy prior-stage backend fields or member weights.</p>
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-11-03</div>
+              Last updated on 2026-11-04</div>
           </div>
           <div class="right-details">
             

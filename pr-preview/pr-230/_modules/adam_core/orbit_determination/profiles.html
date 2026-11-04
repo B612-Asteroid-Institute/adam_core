@@ -466,7 +466,7 @@
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">.config</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">EvaluationConfig</span><span class="p">,</span>
-    <span class="n">IodRunConfig</span><span class="p">,</span>
+    <span class="n">IodStageConfig</span><span class="p">,</span>
     <span class="n">OdConfig</span><span class="p">,</span>
     <span class="n">RefinementRunConfig</span><span class="p">,</span>
     <span class="n">ResourceBindings</span><span class="p">,</span>
@@ -538,12 +538,12 @@
         <span class="k">return</span> <span class="n">ObservationPipeline</span><span class="o">.</span><span class="n">_from_descriptors</span><span class="p">(</span><span class="n">definitions</span><span class="p">)</span>
 
     <span class="nd">@property</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">iod</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">IodRunConfig</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">iod</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">IodStageConfig</span><span class="p">:</span>
         <span class="n">value</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_payload</span><span class="p">[</span><span class="s2">"definition"</span><span class="p">][</span><span class="s2">"iod"</span><span class="p">]</span>
-        <span class="n">native</span> <span class="o">=</span> <span class="n">_rust</span><span class="o">.</span><span class="n">iod_run_config_from_json</span><span class="p">(</span>
+        <span class="n">native</span> <span class="o">=</span> <span class="n">_rust</span><span class="o">.</span><span class="n">iod_stage_config_from_json</span><span class="p">(</span>
             <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">sort_keys</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">separators</span><span class="o">=</span><span class="p">(</span><span class="s2">","</span><span class="p">,</span> <span class="s2">":"</span><span class="p">))</span>
         <span class="p">)</span>
-        <span class="k">return</span> <span class="n">IodRunConfig</span><span class="o">.</span><span class="n">_from_native</span><span class="p">(</span><span class="n">native</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">IodStageConfig</span><span class="o">.</span><span class="n">_from_native</span><span class="p">(</span><span class="n">native</span><span class="p">)</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">refinement</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">RefinementRunConfig</span><span class="p">:</span>
@@ -555,8 +555,7 @@
 
     <span class="nd">@property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">evaluation</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">EvaluationConfig</span><span class="p">:</span>
-        <span class="n">value</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_payload</span><span class="p">[</span><span class="s2">"definition"</span><span class="p">][</span><span class="s2">"evaluation"</span><span class="p">]</span>
-        <span class="k">return</span> <span class="n">EvaluationConfig</span><span class="p">(</span><span class="n">cast</span><span class="p">(</span><span class="nb">int</span><span class="p">,</span> <span class="n">value</span><span class="p">[</span><span class="s2">"covariance_dimension"</span><span class="p">]))</span>
+        <span class="k">return</span> <span class="n">EvaluationConfig</span><span class="o">.</span><span class="n">core_v1</span><span class="p">()</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">definition</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">object</span><span class="p">]:</span>
@@ -574,7 +573,13 @@
         <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">resources</span><span class="p">,</span> <span class="n">ResourceBindings</span><span class="p">):</span>
             <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">"resources must be ResourceBindings"</span><span class="p">)</span>
         <span class="n">native</span> <span class="o">=</span> <span class="n">_rust</span><span class="o">.</span><span class="n">bind_od_profile</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">resources</span><span class="o">.</span><span class="n">_native_paths</span><span class="p">())</span>
-        <span class="k">return</span> <span class="n">OdConfig</span><span class="p">(</span><span class="n">native</span><span class="p">)</span></div>
+        <span class="k">return</span> <span class="n">OdConfig</span><span class="o">.</span><span class="n">_from_native</span><span class="p">(</span>
+            <span class="n">native</span><span class="p">,</span>
+            <span class="n">observation_pipeline</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">observation_pipeline</span><span class="p">,</span>
+            <span class="n">iod</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">iod</span><span class="p">,</span>
+            <span class="n">refinement</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">refinement</span><span class="p">,</span>
+            <span class="n">resources</span><span class="o">=</span><span class="n">resources</span><span class="p">,</span>
+        <span class="p">)</span></div>
 
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
@@ -627,7 +632,7 @@
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-11-03</div>
+              Last updated on 2026-11-04</div>
           </div>
           <div class="right-details">
             
