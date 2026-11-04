@@ -16,6 +16,7 @@ use crate::{CoordinateBatch, ObserverBatch, OrbitBatch, PropagationResultValue};
 /// the exact coordinate batch consumed by all subsequent stages.
 pub type PreparedObservations = AppliedObservationModels;
 
+/// Validate six-dimensional covariance, then apply the bound pipeline exactly once.
 #[allow(clippy::too_many_arguments)]
 pub fn prepare_observations(
     observed: &CoordinateBatch,
@@ -32,6 +33,7 @@ pub fn prepare_observations(
     apply_configured_observation_pipeline(observed, obs_code, band, astcat, pipeline, provider)
 }
 
+/// Run one prepared group through IOD with an explicit predictor and stage config.
 pub fn run_iod_with_predictor<T: OriginTranslationProvider>(
     predictor: &dyn SphericalPredictor,
     prepared: &PreparedObservations,
@@ -51,6 +53,7 @@ pub fn run_iod_with_predictor<T: OriginTranslationProvider>(
     )
 }
 
+/// Refine one seed against the same persisted prepared observations.
 pub fn refine_with_predictor<T: OriginTranslationProvider>(
     predictor: &dyn SphericalPredictor,
     seed: &OrbitBatch,
@@ -71,10 +74,14 @@ pub fn refine_with_predictor<T: OriginTranslationProvider>(
     )
 }
 
+/// Predictor-level exact composition output retaining preparation and both stages.
 #[derive(Debug, Clone)]
 pub struct ConfiguredRunOdOutput {
+    /// Original/used astrometry and the exact coordinate batch consumed by both stages.
     pub prepared: PreparedObservations,
+    /// Complete preliminary-orbit decision and diagnostics.
     pub iod: IodResult,
+    /// Refinement output when IOD emitted an accepted seed.
     pub refined: Option<RefinedOutput>,
 }
 

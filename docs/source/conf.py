@@ -113,11 +113,10 @@ html_theme_options = {
 
 sitemap_url_scheme = "{link}"
 
-# These three landing-page figure links are explicit output-relative ``.html``
-# paths, not source-relative documentation roles. The strict HTML build proves
-# their targets; linkcheck cannot resolve them as source documents. Adjacent
-# :doc: roles cover the same destinations. The DOI resolves in browsers but
-# rejects automated HEAD/GET checks with HTTP 403.
+# Sphinx does not validate raw figure ``:target:`` URLs, and linkcheck cannot
+# resolve these output-relative ``.html`` paths as source documents. Adjacent
+# :doc: roles validate the same three destinations. The DOI resolves in
+# browsers but rejects automated HEAD/GET checks with HTTP 403.
 linkcheck_ignore = [
     r"^cookbook/orbit_sources_and_state_tables\.html$",
     r"^cookbook/transfer_and_porkchop\.html$",

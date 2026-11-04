@@ -13,7 +13,8 @@ Python enters an adam-core workflow once (including a linkage batch);
 prediction calls inside that workflow are batched C-ABI calls and never Python
 callbacks.
 
-Canonical standalone Rust workflows also use ABI v2. The provider integration
+Canonical standalone Rust workflows that select an external provider also use
+ABI v2. The provider integration
 owns an ``ExternalPropagatorV2`` table, its NUL-terminated identity and
 fingerprint strings, its callbacks, and its callback context in stable memory.
 It validates that table with the unsafe

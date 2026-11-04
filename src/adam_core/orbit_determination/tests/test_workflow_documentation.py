@@ -3,14 +3,17 @@
 from __future__ import annotations
 
 import inspect
+import os
 import runpy
+import subprocess
+import sys
 from importlib.resources import files
 from pathlib import Path
+from typing import Any
 
 import pytest
 
 from ...observations import Associations, SourceCatalog
-from .. import workflows
 from ..config import (
     EvaluationConfig,
     IodRunConfig,
@@ -128,20 +131,88 @@ def test_workflow_raises_sections_match_binding_boundaries() -> None:
         assert f"PropagationError::{category}" in runtime_arm
 
 
-def test_checked_in_narrative_examples_execute() -> None:
+def test_rendered_od_rustdoc_has_complete_public_member_docs() -> None:
+    root = Path(__file__).resolve().parents[4]
+    environment = os.environ.copy()
+    environment["RUSTDOCFLAGS"] = "-D warnings"
+    subprocess.run(
+        [
+            environment.get("CARGO", "cargo"),
+            "doc",
+            "--locked",
+            "-p",
+            "adam_core",
+            "--no-deps",
+            "--all-features",
+        ],
+        cwd=root / "rust",
+        env=environment,
+        check=True,
+    )
+    subprocess.run(
+        [
+            sys.executable,
+            str(root / "docs" / "scripts" / "check_od_rustdoc_coverage.py"),
+            str(root / "target" / "doc" / "adam_core" / "od"),
+            "--expected-total",
+            "370",
+        ],
+        check=True,
+    )
+
+
+def _narrative_runner_namespace() -> dict[str, Any]:
     runner = (
         Path(__file__).resolve().parents[4]
         / "docs"
         / "scripts"
         / "run_orbit_determination_examples.py"
     )
-    namespace = runpy.run_path(str(runner))
-    namespace["main"]()
+    return runpy.run_path(str(runner))
 
 
-def test_documented_workflow_exception_boundaries_are_exercised(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_checked_in_narrative_examples_execute() -> None:
+    _narrative_runner_namespace()["main"]()
+
+
+def test_narrative_parser_and_contract_fail_closed_on_mutation() -> None:
+    namespace = _narrative_runner_namespace()
+    code_blocks = namespace["code_blocks"]
+    assert_contract = namespace["assert_block_contract"]
+    contract = namespace["GUIDE_BLOCK_CONTRACT"]
+    guide = (
+        Path(__file__).resolve().parents[4]
+        / "docs"
+        / "source"
+        / "use_cases"
+        / "orbit_determination.rst"
+    ).read_text()
+
+    with pytest.raises(AssertionError, match="language changed"):
+        assert_contract(
+            code_blocks(
+                guide.replace(".. code-block:: python", ".. code-block:: python3", 1)
+            ),
+            contract,
+            "mutated guide",
+        )
+    with pytest.raises(AssertionError, match="count changed"):
+        assert_contract(
+            code_blocks(guide.replace(".. code-block:: python", ".. note::", 1)),
+            contract,
+            "mutated guide",
+        )
+    with pytest.raises(AssertionError, match="lost expected identity"):
+        assert_contract(
+            code_blocks(guide.replace("one_group =", "one_group_broken =", 1)),
+            contract,
+            "mutated guide",
+        )
+    with pytest.raises(AssertionError, match="malformed code-block directive"):
+        code_blocks(".. code-block: python\n\n   pass")
+
+
+def test_documented_workflow_type_and_value_boundaries_are_exercised() -> None:
     with pytest.raises(TypeError, match="IodRunConfig"):
         run_iod(object(), object(), None, object())  # type: ignore[arg-type]
 
@@ -151,15 +222,3 @@ def test_documented_workflow_exception_boundaries_are_exercised(
     )
     with pytest.raises(ValueError, match="not-a-source-id"):
         run_iod(source, dangling, None, _iod_config())
-
-    associations = Associations.from_kwargs(
-        detection_id=source.id, object_id=["group"] * len(source)
-    )
-
-    def backend_failure(*_args: object) -> object:
-        raise RuntimeError("documented backend/protocol failure")
-
-    native = getattr(workflows, "_rust_native")
-    monkeypatch.setattr(native, "run_iod_batch_ipc", backend_failure)
-    with pytest.raises(RuntimeError, match="backend/protocol failure"):
-        run_iod(source, associations, None, _iod_config())

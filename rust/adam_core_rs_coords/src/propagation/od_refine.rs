@@ -187,12 +187,19 @@ impl JacobianMethod {
 ///   therefore keeps its state and statistics and loses only the covariance.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct WhitenedFitConfig {
+    /// Robust loss applied to whitened residual components.
     pub loss: LossType,
+    /// Positive transition scale of the selected robust loss.
     pub f_scale: f64,
+    /// State-Jacobian strategy used by the solver and covariance.
     pub jacobian: JacobianMethod,
+    /// Whether to probe covariance consistency along its weakest direction.
     pub validate_covariance: bool,
+    /// Non-negative parameter-step convergence tolerance.
     pub xtol: f64,
+    /// Non-negative robust-cost convergence tolerance.
     pub ftol: f64,
+    /// Non-negative gradient convergence tolerance.
     pub gtol: f64,
     /// Shared maximum optimizer iterations across every solver phase.
     pub max_iterations: usize,
@@ -222,6 +229,7 @@ impl Default for WhitenedFitConfig {
 }
 
 impl WhitenedFitConfig {
+    /// Validate robust-loss, convergence, budget and two-body predictor settings.
     pub fn validate(&self) -> Result<(), String> {
         if !self.f_scale.is_finite() || self.f_scale <= 0.0 {
             return Err(format!(
@@ -1852,10 +1860,15 @@ fn lowest_probability_row(
 /// Settings of the worst-residual rejection loop (`iterative_fit`).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct IterativeFitConfig {
+    /// Reduced-chi-squared threshold that ends rejection.
     pub rchi2_threshold: f64,
+    /// Minimum observations retained after rejection.
     pub min_obs: usize,
+    /// Minimum retained observational arc length in days.
     pub min_arc_length: f64,
+    /// Maximum percent of observations that may be rejected.
     pub contamination_percentage: f64,
+    /// Whitened differential-correction settings for every pass.
     pub fit: WhitenedFitConfig,
 }
 
@@ -1872,6 +1885,7 @@ impl Default for IterativeFitConfig {
 }
 
 impl IterativeFitConfig {
+    /// Validate the rejection bounds and nested fit declaration.
     pub fn validate(&self) -> Result<(), String> {
         self.fit.validate()?;
         if self.min_obs < 3 {
@@ -2431,11 +2445,14 @@ fn cmc2003_fit_with_covariance_failure<T: OriginTranslationProvider>(
 /// ``outlier_rejection``).
 #[derive(Debug, Clone, Copy)]
 pub enum RefinementConfig {
+    /// Repeatedly reject the statistically worst residual under explicit bounds.
     WorstResidual(IterativeFitConfig),
+    /// Apply Carpino-Milani-Chesley (2003) rejection and recovery.
     Cmc2003(Cmc2003FitConfig),
 }
 
 impl RefinementConfig {
+    /// Validate the selected refinement policy and its nested fit settings.
     pub fn validate(&self) -> Result<(), String> {
         match self {
             Self::WorstResidual(config) => config.validate(),
@@ -3565,9 +3582,13 @@ impl AstrometrySnapshot {
 /// Rust-owned result of applying ordered observation models to original data.
 #[derive(Debug, Clone)]
 pub struct AppliedObservationModels {
+    /// Lossless astrometry snapshot before any transform.
     pub original: AstrometrySnapshot,
+    /// Astrometry snapshot consumed by scientific stages.
     pub used: AstrometrySnapshot,
+    /// Whether at least one transform changed scientific values.
     pub models_changed: bool,
+    /// Complete six-dimensional coordinate batch consumed by OD.
     pub observations: CoordinateBatch,
 }
 

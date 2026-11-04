@@ -33,12 +33,16 @@ use crate::{Cmc2003FitConfig, LossType, RefinementConfig, TwoBodyModelConfig, Wh
 /// are deliberately absent from scientific identity and provenance.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum ResourceSlot {
+    /// Station/catalog astrometric-uncertainty lookup used to fill missing values.
     StationCatalogUncertaintyTable,
+    /// EFCC18 catalog-bias table used for deterministic debiasing.
     Efcc18CatalogBiasTable,
+    /// Station/band empirical residual-covariance lookup.
     StationBandResidualCovarianceTable,
 }
 
 impl ResourceSlot {
+    /// Stable snake-case slot name used in configuration provenance.
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::StationCatalogUncertaintyTable => "station_catalog_uncertainty_table",
@@ -51,18 +55,28 @@ impl ResourceSlot {
 /// Path-independent identity of one required scientific resource.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ResourceRequirement {
+    /// Semantic slot occupied by the resource.
     pub slot: ResourceSlot,
+    /// Stable scientific product name.
     pub product: &'static str,
+    /// Exact product version.
     pub product_version: &'static str,
+    /// Expected schema identity.
     pub schema_version: &'static str,
+    /// Expected lowercase SHA-256 of the complete file.
     pub sha256: &'static str,
+    /// Expected file size in bytes.
     pub byte_size: u64,
+    /// Expected logical row count when the format is tabular.
     pub row_count: Option<usize>,
+    /// Catalog date when supplied by the scientific product.
     pub catalog_date: Option<&'static str>,
+    /// Expected media type.
     pub format: &'static str,
 }
 
 impl ResourceRequirement {
+    /// Validate this declaration's identity, size and slot-specific schema contract.
     pub fn validate(self) -> Result<(), String> {
         for (name, value) in [
             ("product", self.product),
@@ -114,6 +128,7 @@ impl ResourceRequirement {
         Ok(())
     }
 
+    /// Return the path-free canonical JSON value persisted in provenance.
     pub fn canonical_value(self) -> Value {
         json!({
             "slot": self.slot.as_str(),
@@ -129,6 +144,7 @@ impl ResourceRequirement {
     }
 }
 
+/// Exact public EFCC18 bias-table requirement used by Core OD V1.
 pub const EFCC18_BIAS_RESOURCE: ResourceRequirement = ResourceRequirement {
     slot: ResourceSlot::Efcc18CatalogBiasTable,
     product: "jpl-debias-2018-bias.dat",
@@ -141,6 +157,7 @@ pub const EFCC18_BIAS_RESOURCE: ResourceRequirement = ResourceRequirement {
     format: "text/plain",
 };
 
+/// Exact station/catalog uncertainty requirement used by the Institute profile.
 pub const V2_SIGMA_FILL_RESOURCE: ResourceRequirement = ResourceRequirement {
     slot: ResourceSlot::StationCatalogUncertaintyTable,
     product: "v2_sigma_fill",
@@ -153,6 +170,7 @@ pub const V2_SIGMA_FILL_RESOURCE: ResourceRequirement = ResourceRequirement {
     format: "application/vnd.apache.parquet",
 };
 
+/// Exact station/band residual-covariance requirement used by the Institute profile.
 pub const V2_FULL_RESOURCE: ResourceRequirement = ResourceRequirement {
     slot: ResourceSlot::StationBandResidualCovarianceTable,
     product: "v2_full",
@@ -172,32 +190,41 @@ pub struct ResourceBindings {
 }
 
 impl ResourceBindings {
+    /// Construct empty bindings; profiles then reject any missing required slots.
     pub fn new() -> Self {
         Self::default()
     }
 
+    /// Bind one semantic slot to a caller-owned local path.
     pub fn bind(mut self, slot: ResourceSlot, path: impl AsRef<Path>) -> Self {
         self.paths.insert(slot, path.as_ref().to_path_buf());
         self
     }
 
+    /// Return the local path bound to `slot`, if present.
     pub fn get(&self, slot: ResourceSlot) -> Option<&Path> {
         self.paths.get(&slot).map(PathBuf::as_path)
     }
 
+    /// Iterate bound slots in deterministic semantic-slot order.
     pub fn slots(&self) -> impl Iterator<Item = ResourceSlot> + '_ {
         self.paths.keys().copied()
     }
 }
 
+/// One aggregate resource-validation defect associated with a semantic slot.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ResourceProblem {
+    /// Slot whose binding or content is invalid.
     pub slot: ResourceSlot,
+    /// Human-readable validation detail.
     pub reason: String,
 }
 
+/// Aggregate fail-closed validation error covering every supplied resource slot.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ResourceValidationError {
+    /// Deterministically ordered slot problems discovered before pipeline work.
     pub problems: Vec<ResourceProblem>,
 }
 
@@ -217,7 +244,12 @@ impl std::error::Error for ResourceValidationError {}
 /// Configuration defects are deliberately distinct from resource-slot defects.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum OdConfigError {
-    Configuration { problems: Vec<String> },
+    /// One or more invalid scientific configuration declarations.
+    Configuration {
+        /// Deterministically collected configuration defects.
+        problems: Vec<String>,
+    },
+    /// One or more missing, unused, mismatched or malformed resources.
     Resources(ResourceValidationError),
 }
 
@@ -228,6 +260,7 @@ impl OdConfigError {
         }
     }
 
+    /// Return configuration defects, or an empty slice for resource failures.
     pub fn configuration_problems(&self) -> &[String] {
         match self {
             Self::Configuration { problems } => problems,
@@ -235,6 +268,7 @@ impl OdConfigError {
         }
     }
 
+    /// Return resource defects, or an empty slice for configuration failures.
     pub fn resource_problems(&self) -> &[ResourceProblem] {
         match self {
             Self::Configuration { .. } => &[],
@@ -266,14 +300,19 @@ impl fmt::Display for OdConfigError {
 
 impl std::error::Error for OdConfigError {}
 
+/// Path-free identity of bytes validated against one resource requirement.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ValidatedResourceIdentity {
+    /// Requirement that selected and constrained these bytes.
     pub requirement: ResourceRequirement,
+    /// Lowercase SHA-256 computed from the bound bytes.
     pub actual_sha256: String,
+    /// File size computed from the bound bytes.
     pub actual_byte_size: u64,
 }
 
 impl ValidatedResourceIdentity {
+    /// Return the canonical path-free identity persisted in provenance.
     pub fn canonical_value(&self) -> Value {
         json!({
             "requirement": self.requirement.canonical_value(),
@@ -283,13 +322,17 @@ impl ValidatedResourceIdentity {
     }
 }
 
+/// How a station/band empirical residual covariance changes supplied covariance.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ResidualCovarianceOperation {
+    /// Add empirical covariance to supplied covariance.
     Add,
+    /// Replace supplied covariance with empirical covariance.
     Replace,
 }
 
 impl ResidualCovarianceOperation {
+    /// Stable lowercase operation name used in provenance.
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::Add => "add",
@@ -303,21 +346,21 @@ impl ResidualCovarianceOperation {
 /// Python and standalone Rust.
 #[derive(Debug, Clone)]
 pub enum ObservationTransform {
-    FillMissingAstrometricUncertainty {
-        resource: ResourceRequirement,
-    },
+    /// Fill only missing angular uncertainty from a station/catalog lookup.
+    FillMissingAstrometricUncertainty { resource: ResourceRequirement },
+    /// Apply EFCC18 catalog-bias correction except for explicitly excluded catalogs.
     Efcc18CatalogBiasCorrection {
         resource: ResourceRequirement,
         exclude_astcats: Vec<String>,
     },
+    /// Add or replace covariance from a sufficiently supported station/band lookup.
     StationBandResidualCovarianceAdjustment {
         resource: ResourceRequirement,
         operation: ResidualCovarianceOperation,
         minimum_residual_count: usize,
     },
-    NightlyBatchDeweighting {
-        effective_observation_cap: usize,
-    },
+    /// Deweight same-night observations to an effective independent-observation cap.
+    NightlyBatchDeweighting { effective_observation_cap: usize },
 }
 
 impl ObservationTransform {
@@ -528,6 +571,7 @@ pub struct ObservationPipeline {
 }
 
 impl ObservationPipeline {
+    /// Select the deliberate no-transform pipeline recorded as `transforms=[]`.
     pub const fn as_supplied() -> Self {
         Self {
             transforms: Vec::new(),
@@ -558,6 +602,7 @@ impl ObservationPipeline {
         Ok(())
     }
 
+    /// Return transform kind names in authoritative execution order.
     pub fn transform_kinds(&self) -> Vec<&'static str> {
         self.transforms
             .iter()
@@ -565,6 +610,7 @@ impl ObservationPipeline {
             .collect()
     }
 
+    /// Whether this is the explicit no-transform pipeline.
     pub const fn is_as_supplied(&self) -> bool {
         self.transforms.is_empty()
     }
@@ -582,6 +628,7 @@ impl ObservationPipeline {
         Ok(changed)
     }
 
+    /// Return ordered, path-free transform provenance.
     pub fn provenance_value(&self) -> Value {
         Value::Array(
             self.transforms
@@ -927,6 +974,7 @@ enum RefinementDeclaration {
     },
 }
 
+/// Complete declaration of deterministic IOD search, correction and candidate fitting.
 #[derive(Debug, Clone)]
 pub struct IodStageConfig {
     iod: IodConfig,
@@ -1037,6 +1085,7 @@ fn d21_fit_config() -> WhitenedFitConfig {
 }
 
 impl IodStageConfig {
+    /// Decode and validate a complete canonical IOD-stage JSON declaration.
     pub fn from_json(raw: &str) -> Result<Self, String> {
         let declaration: IodRunDeclaration = serde_json::from_str(raw)
             .map_err(|error| format!("invalid IOD run configuration: {error}"))?;
@@ -1046,11 +1095,13 @@ impl IodStageConfig {
         )
     }
 
+    /// Serialize the canonical IOD-stage declaration.
     pub fn canonical_json(&self) -> String {
         serde_json::to_string(&self.canonical_value())
             .expect("IOD run configuration is serializable")
     }
 
+    /// Construct a validated stage from explicit search and correction-fit settings.
     pub fn new(iod: IodConfig, correction_fit: WhitenedFitConfig) -> Result<Self, String> {
         let config = Self {
             iod,
@@ -1060,18 +1111,22 @@ impl IodStageConfig {
         Ok(config)
     }
 
+    /// Return the exact named Core-v1 IOD values; this is never an implicit default.
     pub fn core_v1() -> Self {
         Self::new(IodConfig::default(), d21_fit_config()).expect("Core-v1 IOD settings are valid")
     }
 
+    /// Borrow the search, selection, acceptance, correction and ranging policy.
     pub const fn iod(&self) -> &IodConfig {
         &self.iod
     }
 
+    /// Borrow the fit settings used to correct and score IOD candidates.
     pub const fn correction_fit(&self) -> &WhitenedFitConfig {
         &self.correction_fit
     }
 
+    /// Return the path-free canonical JSON value used by complete configurations.
     pub fn canonical_value(&self) -> Value {
         json!({
             "search_correction_ranging": iod_config_value(&self.iod),
@@ -1079,6 +1134,7 @@ impl IodStageConfig {
         })
     }
 
+    /// Validate every search and correction-fit setting.
     pub fn validate(&self) -> Result<(), String> {
         self.iod.validate()?;
         self.correction_fit.validate()?;
@@ -1086,12 +1142,14 @@ impl IodStageConfig {
     }
 }
 
+/// Complete standalone refinement-stage fit and outlier-treatment declaration.
 #[derive(Debug, Clone, Copy)]
 pub struct RefinementRunConfig {
     refinement: RefinementConfig,
 }
 
 impl RefinementRunConfig {
+    /// Decode and validate a canonical refinement-stage JSON declaration.
     pub fn from_json(raw: &str) -> Result<Self, String> {
         let declaration: RefinementDeclaration = serde_json::from_str(raw)
             .map_err(|error| format!("invalid refinement run configuration: {error}"))?;
@@ -1134,17 +1192,20 @@ impl RefinementRunConfig {
         Self::new(refinement)
     }
 
+    /// Serialize the canonical refinement-stage declaration.
     pub fn canonical_json(&self) -> String {
         serde_json::to_string(&self.canonical_value())
             .expect("refinement run configuration is serializable")
     }
 
+    /// Construct a validated stage from one explicit refinement policy.
     pub fn new(refinement: RefinementConfig) -> Result<Self, String> {
         let config = Self { refinement };
         config.validate()?;
         Ok(config)
     }
 
+    /// Return the exact named Core-v1 CMC2003 refinement values.
     pub fn core_v1() -> Self {
         let cmc = Cmc2003FitConfig {
             fit: d21_fit_config(),
@@ -1153,19 +1214,23 @@ impl RefinementRunConfig {
         Self::new(RefinementConfig::Cmc2003(cmc)).expect("Core-v1 refinement settings are valid")
     }
 
+    /// Borrow the declared refinement policy.
     pub const fn refinement(&self) -> &RefinementConfig {
         &self.refinement
     }
 
+    /// Return the path-free canonical JSON value used in provenance.
     pub fn canonical_value(&self) -> Value {
         refinement_config_value(&self.refinement)
     }
 
+    /// Validate the complete fit and outlier-treatment policy.
     pub fn validate(&self) -> Result<(), String> {
         self.refinement.validate()
     }
 }
 
+/// Independent covariance and prediction-fit declaration for orbit evaluation.
 #[derive(Debug, Clone, Copy)]
 pub struct EvaluationConfig {
     covariance_dimension: usize,
@@ -1173,6 +1238,7 @@ pub struct EvaluationConfig {
 }
 
 impl EvaluationConfig {
+    /// Decode and validate a canonical evaluation JSON declaration.
     pub fn from_json(raw: &str) -> Result<Self, String> {
         let declaration: EvaluationDeclaration = serde_json::from_str(raw)
             .map_err(|error| format!("invalid evaluation configuration: {error}"))?;
@@ -1182,6 +1248,7 @@ impl EvaluationConfig {
         )
     }
 
+    /// Construct a validated evaluation stage with an explicit covariance dimension.
     pub fn new(
         covariance_dimension: usize,
         prediction_fit: WhitenedFitConfig,
@@ -1199,14 +1266,17 @@ impl EvaluationConfig {
         Self::new(6, d21_fit_config()).expect("Core-v1 evaluation settings are valid")
     }
 
+    /// Return the required coordinate covariance dimension (six for complete OD).
     pub const fn covariance_dimension(self) -> usize {
         self.covariance_dimension
     }
 
+    /// Borrow the settings used to predict and whiten evaluation residuals.
     pub const fn prediction_fit(&self) -> &WhitenedFitConfig {
         &self.prediction_fit
     }
 
+    /// Return the canonical path-free evaluation value.
     pub fn canonical_value(&self) -> Value {
         json!({
             "schema": "adam-core-evaluation-config/v1",
@@ -1215,11 +1285,13 @@ impl EvaluationConfig {
         })
     }
 
+    /// Serialize the canonical evaluation declaration.
     pub fn canonical_json(&self) -> String {
         serde_json::to_string(&self.canonical_value())
             .expect("evaluation configuration is serializable")
     }
 
+    /// Validate the six-dimensional covariance contract and prediction settings.
     pub fn validate(&self) -> Result<(), String> {
         if self.covariance_dimension != 6 {
             return Err(format!(
@@ -1231,10 +1303,14 @@ impl EvaluationConfig {
     }
 }
 
+/// Immutable name, version and definition digest of a built-in OD profile.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ProfileIdentity {
+    /// Stable profile name.
     pub name: &'static str,
+    /// Profile-definition version.
     pub version: u32,
+    /// Lowercase SHA-256 of the complete path-free profile definition.
     pub definition_sha256: &'static str,
 }
 
@@ -1277,6 +1353,7 @@ pub struct IodRunConfig {
 }
 
 impl IodRunConfig {
+    /// Build an unprofiled IOD run from an already-bound pipeline and stage.
     pub fn explicit(
         observation_pipeline: ObservationPipeline,
         stage: IodStageConfig,
@@ -1302,6 +1379,7 @@ impl IodRunConfig {
         }
     }
 
+    /// Revalidate the stage and every already-bound transform.
     pub fn validate(&self) -> Result<(), String> {
         self.stage.validate()?;
         for transform in self.observation_pipeline.bound_transforms() {
@@ -1310,14 +1388,17 @@ impl IodRunConfig {
         Ok(())
     }
 
+    /// Borrow the exact ordered observation pipeline applied before IOD.
     pub const fn observation_pipeline(&self) -> &ObservationPipeline {
         &self.observation_pipeline
     }
 
+    /// Borrow the complete IOD-stage declaration.
     pub const fn stage(&self) -> &IodStageConfig {
         &self.stage
     }
 
+    /// Return the immutable built-in profile identity, if this is an exact projection.
     pub const fn profile_identity(&self) -> Option<ProfileIdentity> {
         self.profile
     }
@@ -1331,10 +1412,12 @@ impl IodRunConfig {
         })
     }
 
+    /// Compute the path-free scientific configuration digest.
     pub fn configuration_sha256(&self) -> String {
         configuration_sha256(self.canonical_value_without_fingerprint())
     }
 
+    /// Serialize complete canonical IOD-run provenance, including its digest.
     pub fn provenance_json(&self) -> String {
         provenance_json(
             self.canonical_value_without_fingerprint(),
@@ -1353,6 +1436,7 @@ pub struct OdConfig {
 }
 
 impl OdConfig {
+    /// Build an unprofiled full-OD config from an already-bound pipeline and stages.
     pub fn explicit(
         observation_pipeline: ObservationPipeline,
         iod: IodStageConfig,
@@ -1368,6 +1452,7 @@ impl OdConfig {
         Ok(config)
     }
 
+    /// Revalidate both stages and every already-bound observation transform.
     pub fn validate(&self) -> Result<(), String> {
         self.iod.validate()?;
         self.refinement.validate()?;
@@ -1377,18 +1462,22 @@ impl OdConfig {
         Ok(())
     }
 
+    /// Borrow the exact ordered pipeline shared by IOD and refinement.
     pub const fn observation_pipeline(&self) -> &ObservationPipeline {
         &self.observation_pipeline
     }
 
+    /// Return the immutable profile identity retained only for an exact built-in definition.
     pub const fn profile_identity(&self) -> Option<ProfileIdentity> {
         self.profile
     }
 
+    /// Borrow the full IOD-stage declaration.
     pub const fn iod_stage(&self) -> &IodStageConfig {
         &self.iod
     }
 
+    /// Project pipeline and IOD state without reopening resources or losing profile identity.
     pub fn for_iod(&self) -> IodRunConfig {
         IodRunConfig::from_parts(
             self.observation_pipeline.clone(),
@@ -1397,10 +1486,12 @@ impl OdConfig {
         )
     }
 
+    /// Project the exact standalone refinement declaration used by `run_od`.
     pub const fn for_refinement(&self) -> RefinementRunConfig {
         self.refinement
     }
 
+    /// Derive six-dimensional evaluation settings from the refinement fit declaration.
     pub fn for_evaluation(&self) -> EvaluationConfig {
         let fit = match *self.refinement.refinement() {
             RefinementConfig::WorstResidual(value) => value.fit,
@@ -1428,6 +1519,7 @@ impl OdConfig {
         configuration_sha256(self.canonical_value_without_fingerprint())
     }
 
+    /// Serialize complete canonical full-OD provenance, including its digest.
     pub fn provenance_json(&self) -> String {
         provenance_json(
             self.canonical_value_without_fingerprint(),
@@ -1442,6 +1534,7 @@ pub enum OdProfileKind {
     AsteroidInstitute,
 }
 
+/// Immutable built-in OD definition that becomes executable only after resource binding.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct OdProfile {
     identity: ProfileIdentity,
@@ -1449,10 +1542,12 @@ pub struct OdProfile {
 }
 
 impl OdProfile {
+    /// Return the immutable name, version and definition digest.
     pub const fn identity(self) -> ProfileIdentity {
         self.identity
     }
 
+    /// Return the closed profile kind used to expand this definition.
     pub const fn kind(self) -> OdProfileKind {
         self.kind
     }
@@ -1513,6 +1608,7 @@ impl OdProfile {
         }
     }
 
+    /// Expand the complete path-free profile definition as canonical JSON.
     pub fn definition_value(self) -> Value {
         let pipeline = self
             .definitions()
@@ -1531,6 +1627,7 @@ impl OdProfile {
         })
     }
 
+    /// Verify that the compiled definition matches its immutable declared digest.
     pub fn verify_definition_fingerprint(self) -> Result<(), String> {
         let canonical = serde_json::to_vec(&self.definition_value())
             .expect("profile definition is serializable");
@@ -1544,6 +1641,7 @@ impl OdProfile {
         Ok(())
     }
 
+    /// Return every semantic resource requirement in definition order.
     pub fn requirements(self) -> &'static [ResourceRequirement] {
         match self.kind {
             OdProfileKind::Core => &[EFCC18_BIAS_RESOURCE],
@@ -1555,10 +1653,12 @@ impl OdProfile {
         }
     }
 
+    /// Return the exact evaluation declaration associated with this profile.
     pub fn evaluation_config(self) -> EvaluationConfig {
         EvaluationConfig::core_v1()
     }
 
+    /// Validate and parse every resource once, returning a complete profiled config.
     pub fn bind(self, bindings: &ResourceBindings) -> Result<OdConfig, OdConfigError> {
         self.verify_definition_fingerprint()
             .map_err(OdConfigError::configuration)?;

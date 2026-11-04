@@ -1549,15 +1549,24 @@ impl Default for CorrectionConfig {
     }
 }
 
+/// Complete deterministic preliminary-orbit search, acceptance and correction policy.
 #[derive(Debug, Clone, Copy)]
 pub struct IodConfig {
+    /// Minimum observations required to attempt IOD.
     pub min_obs: usize,
+    /// Minimum accepted observational arc length in days.
     pub min_arc_length: f64,
+    /// Maximum percent of observations that correction may reject.
     pub contamination_percentage: f64,
+    /// Reduced-chi-squared threshold for accepting a corrected candidate.
     pub rchi2_threshold: f64,
+    /// Deterministic triplet-selection strategy.
     pub observation_selection_method: ObservationSelectionMethod,
+    /// Whether candidate geometry includes light-time correction.
     pub light_time: bool,
+    /// Central gravitational parameter in au³/day².
     pub mu: f64,
+    /// Speed of light in au/day.
     pub speed_of_light: f64,
     /// Upper bound on the number of candidate triplets searched. `None`
     /// keeps each method's historical default: `spans.max_triplets` for span
@@ -1582,6 +1591,7 @@ pub struct IodConfig {
     /// `run_iod_with` (`od_refine.rs`); [`run_iod`] alone is the prefit
     /// search.
     pub acceptance: IodAcceptance,
+    /// Staged differential-correction policy applied to candidate states.
     pub correction: CorrectionConfig,
     /// Systematic ranging for arcs Gauss cannot handle (corrected
     /// acceptance): an arc shorter than `min_arc_length` gets the ranging

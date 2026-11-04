@@ -123,9 +123,9 @@ Python: batch OD with the public profile
 The public profile helper is the one intentional Python convenience that
 locates the installed public EFCC18 package's exported path. It converts that
 location into an explicit ``ResourceBindings`` value and passes the path to
-Rust, which verifies the file before acquiring a provider. No Rust workflow
-performs package discovery, download, cache lookup, or fallback. Profiles never
-choose a propagator.
+Rust, which verifies the file before acquiring a provider. No canonical OD
+workflow performs package discovery, download, cache lookup, or fallback for OD
+semantic resources. Profiles never choose a propagator.
 
 .. code-block:: python
 
@@ -283,8 +283,10 @@ scientific validation and raise ``OdConfigurationError``; constructors and
 profile binding raise ``OdResourceValidationError`` for aggregate semantic
 resource failures. The workflow calls receive only already-validated values,
 so their invocation-time exceptions are ``TypeError`` for wrong public Python
-types, ``ValueError`` for static batch/provenance failures, and ``RuntimeError``
-for fatal provider/backend/protocol failures.
+types; ``ValueError`` for static batch/provenance failures and provider
+identity, provenance-metadata, or capability declarations rejected as invalid
+input during acquisition; and ``RuntimeError`` for backend execution errors,
+provider panics, unsupported request capabilities, and ABI protocol violations.
 
 
 * ``IodStageConfig`` is the complete search/selection/velocity/acceptance/
@@ -426,8 +428,10 @@ composition and post-relabel calls:
 
    python docs/scripts/run_orbit_determination_examples.py
 
-Standalone Rust does not discover Python packages or resources. Bind the public
-profile's semantic slot to an explicit path:
+Standalone Rust OD workflows do not discover OD semantic-resource packages or
+paths. Bind the public profile's semantic slot explicitly (the separate
+``adam_core::kernel_data`` resolver has its own documented kernel-discovery
+policy):
 
 .. code-block:: rust
 
@@ -452,14 +456,18 @@ appearance and rows follow source order. Overlapping hypotheses retain their
 independent groups.
 
 Empty input returns the exact three empty products and does not acquire an
-external provider. Errors have three boundaries:
+external provider. Errors have four boundaries:
 
 #. **Static preflight:** malformed typed configuration, resources, IDs,
    memberships, covariance dimensions, or persisted provenance. These fail
-   before provider acquisition.
-#. **Invocation-fatal execution:** unsupported provider capabilities, malformed
-   provider identity/responses, backend errors, panics, or protocol violations.
-   These abort the invocation and return no partial products.
+   before provider acquisition with ``ValueError`` (or ``TypeError`` for a
+   wrong public Python type).
+#. **Invalid provider input during acquisition:** descriptor/capsule identity,
+   required provenance metadata, or capability declarations rejected as input
+   validation fail with ``ValueError``.
+#. **Invocation-fatal backend execution:** backend errors, provider panics,
+   unsupported request capabilities, malformed responses, or ABI protocol
+   violations raise ``RuntimeError`` and return no partial products.
 #. **Per-group scientific outcome:** safely isolated no-solution, refinement,
    or evaluation failures become deterministic rows of
    ``OrbitDeterminationFailures`` and later groups continue.

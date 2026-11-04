@@ -171,10 +171,11 @@ This file contains notable changes in adam-core
 
 ### Compatibility
 
-- Core 0.7's canonical OD workflows require explicit configuration and an
-  ABI-v2 propagation provider with complete provenance fingerprints. Invalid
-  input/configuration/resource/provider contracts fail atomically; safely
-  isolated scientific failures continue as typed group failures.
+- Core 0.7's canonical OD workflows require explicit configuration. The
+  built-in two-body route needs no capsule; an external provider must supply
+  the complete propagation-only ABI-v2 identity and provenance fingerprints.
+  Invalid input/configuration/resource/provider contracts fail atomically;
+  safely isolated scientific failures continue as typed group failures.
 - These changes are intentionally source-breaking for the removed Python and
   Rust OD surfaces. They target adam-core 0.7.0; no merge, publication, release,
   or cross-package compatibility claim is implied by this unreleased entry.

@@ -1,7 +1,8 @@
-"""Execute the Python snippets in the canonical OD guide and docstrings.
+"""Execute every intended Python snippet in the canonical OD documentation.
 
 The prose deliberately assumes caller-owned tables. This validation runner
-supplies the repository's deterministic two-body fixture and executes snippets
+supplies the repository's deterministic two-body fixture, first proves the
+exact directive/order/identity contract, and then executes every Python block
 in narrative order. Run it from a source environment containing the built
 native extension::
 
@@ -11,7 +12,9 @@ native extension::
 from __future__ import annotations
 
 import inspect
+import re
 import textwrap
+from dataclasses import dataclass
 from importlib.resources import files
 from pathlib import Path
 from typing import Any
@@ -30,9 +33,43 @@ from adam_core.orbit_determination import (
     run_od,
 )
 from adam_core.orbit_determination.evaluate import OrbitDeterminationObservations
-from adam_core.orbit_determination.tests.test_batch_workflows import _two_body_source
+from adam_core.orbit_determination.tests.test_batch_workflows import (
+    _assert_exact_results,
+    _concat_failures,
+    _two_body_source,
+)
 
 ROOT = Path(__file__).resolve().parents[2]
+
+
+@dataclass(frozen=True)
+class CodeBlock:
+    """One parsed reStructuredText code-block directive and body."""
+
+    language: str
+    body: str
+
+
+GUIDE_BLOCK_CONTRACT = (
+    ("python", "one_group = Associations.from_kwargs"),
+    ("python", "config = CORE_OD_V1.bind"),
+    ("python", "overlapping = Associations.from_kwargs"),
+    ("python", "iod_orbits, iod_members, iod_failures = run_iod"),
+    ("python", "selected_id = fitted_orbits.orbit_id[0].as_py()"),
+    ("python", 'new_id = "analyst-label"'),
+    ("python", "institute_config = ASTEROID_INSTITUTE_OD_V1.bind(resources)"),
+    ("rust", "fn workflows("),
+    ("console", "cargo run -p adam_core --example od_canonical_workflows"),
+    ("console", "cargo run -p adam_core --example od_external_provider"),
+    ("console", "python docs/scripts/run_orbit_determination_examples.py"),
+    ("rust", "let resources = ResourceBindings::new().bind("),
+)
+WORKFLOW_BLOCK_CONTRACT = {
+    "run_iod": (("python", "one_group = Associations.from_kwargs"),),
+    "run_od": (("python", "config = CORE_OD_V1.bind"),),
+    "refine": (("python", "iod_orbits, iod_members, iod_failures = run_iod"),),
+    "evaluate_orbits": (("python", "evaluated_orbits, evaluated_members, failures"),),
+}
 
 
 def fixture_source() -> SourceCatalog:
@@ -52,16 +89,21 @@ def fixture_source() -> SourceCatalog:
     )
 
 
-def code_blocks(text: str) -> list[str]:
-    """Extract indented ``code-block:: python`` bodies."""
+def code_blocks(text: str) -> list[CodeBlock]:
+    """Parse every code-block directive, rejecting malformed directives."""
 
     lines = text.splitlines()
-    blocks: list[str] = []
+    blocks: list[CodeBlock] = []
     index = 0
     while index < len(lines):
-        if lines[index].strip() != ".. code-block:: python":
+        directive = lines[index].strip()
+        if not directive.startswith(".. code-block"):
             index += 1
             continue
+        match = re.fullmatch(r"\.\. code-block:: ([A-Za-z0-9_+.-]+)", directive)
+        if match is None:
+            raise AssertionError(f"malformed code-block directive: {directive!r}")
+        language = match.group(1)
         index += 1
         body: list[str] = []
         while index < len(lines) and (
@@ -69,8 +111,28 @@ def code_blocks(text: str) -> list[str]:
         ):
             body.append(lines[index])
             index += 1
-        blocks.append(textwrap.dedent("\n".join(body)).strip("\n"))
+        blocks.append(CodeBlock(language, textwrap.dedent("\n".join(body)).strip("\n")))
     return blocks
+
+
+def assert_block_contract(
+    blocks: list[CodeBlock], contract: tuple[tuple[str, str], ...], label: str
+) -> None:
+    """Require exact directive count, language order, and stable block identities."""
+
+    assert len(blocks) == len(
+        contract
+    ), f"{label} code-block count changed: expected {len(contract)}, got {len(blocks)}"
+    for index, (block, (language, identity)) in enumerate(
+        zip(blocks, contract, strict=True)
+    ):
+        assert block.language == language, (
+            f"{label} block {index} language changed: "
+            f"expected {language!r}, got {block.language!r}"
+        )
+        assert (
+            identity in block.body
+        ), f"{label} block {index} lost expected identity {identity!r}"
 
 
 def assert_products(namespace: dict[str, Any], names: tuple[str, str, str]) -> None:
@@ -100,9 +162,13 @@ def main() -> None:
     }
 
     guide = ROOT / "docs" / "source" / "use_cases" / "orbit_determination.rst"
-    for index, block in enumerate(code_blocks(guide.read_text())):
+    guide_blocks = code_blocks(guide.read_text())
+    assert_block_contract(guide_blocks, GUIDE_BLOCK_CONTRACT, str(guide))
+    python_blocks = guide_blocks[:7]
+    assert all(block.language == "python" for block in python_blocks)
+    for index, block in enumerate(python_blocks):
         label = f"{guide.name}:python[{index}]"
-        if "overlapping = Associations.from_kwargs" in block:
+        if index == 2:
             local = dict(namespace)
             local["source_catalog"] = source_catalog.set_column(
                 "id",
@@ -111,23 +177,29 @@ def main() -> None:
                     type=source_catalog.id.type,
                 ),
             )
-            execute(block, local, label)
+            execute(block.body, local, label)
             assert_products(local, ("orbits", "members", "failures"))
-            continue
-        if "ASTEROID_INSTITUTE_OD_V1.bind(resources)" in block:
+        elif index == 6:
             try:
-                execute(block, dict(namespace), label)
+                execute(block.body, dict(namespace), label)
             except OdResourceValidationError:
-                continue
-            raise AssertionError("illustrative missing resources did not fail closed")
-        execute(block, namespace, label)
-        for names in [
-            ("fitted_orbits", "fitted_members", "failures"),
-            ("iod_orbits", "iod_members", "iod_failures"),
-            ("refined_orbits", "refined_members", "refine_failures"),
-            ("evaluated_orbits", "evaluated_members", "evaluation_failures"),
-        ]:
-            if names[0] in block:
+                pass
+            else:
+                raise AssertionError(
+                    "illustrative missing resources did not fail closed"
+                )
+        else:
+            execute(block.body, namespace, label)
+            expected_products = {
+                0: [("fitted_orbits", "fitted_members", "failures")],
+                1: [("fitted_orbits", "fitted_members", "failures")],
+                3: [
+                    ("iod_orbits", "iod_members", "iod_failures"),
+                    ("refined_orbits", "refined_members", "refine_failures"),
+                ],
+                4: [("evaluated_orbits", "evaluated_members", "evaluation_failures")],
+            }.get(index, [])
+            for names in expected_products:
                 assert_products(namespace, names)
 
     # Complete the relabel recipe with both downstream workflows.
@@ -150,7 +222,7 @@ def main() -> None:
     assert "analyst-label" in evaluated[0].orbit_id.to_pylist()
     assert "analyst-label" in refined[0].orbit_id.to_pylist()
 
-    # Exercise the documented exact composition, including carried IOD failures.
+    # Exercise exact documented composition, including carried IOD failures.
     direct = run_od(source_catalog, associations, None, namespace["config"])
     iod = run_iod(source_catalog, associations, None, namespace["config"].for_iod())
     staged = refine(
@@ -160,23 +232,29 @@ def main() -> None:
         None,
         namespace["config"].for_refinement(),
     )
-    assert len(direct[0]) == len(staged[0])
-    assert len(direct[1]) == len(staged[1])
-    assert len(direct[2]) == len(iod[2]) + len(staged[2])
+    _assert_exact_results(
+        direct,
+        (staged[0], staged[1], _concat_failures(iod[2], staged[2])),
+    )
 
     for workflow in [run_iod, run_od, refine, evaluate_orbits]:
-        for index, block in enumerate(code_blocks(inspect.getdoc(workflow) or "")):
-            local = {
-                "source_catalog": source_catalog,
-                "associations": associations,
-                "config": namespace["config"],
-                "fitted_orbits": namespace["iod_orbits"],
-                "fitted_members": namespace["iod_members"],
-                "run_iod": run_iod,
-                "refine": refine,
-                "evaluate_orbits": evaluate_orbits,
-            }
-            execute(block, local, f"{workflow.__name__}.__doc__[{index}]")
+        name = workflow.__name__
+        blocks = code_blocks(inspect.getdoc(workflow) or "")
+        assert_block_contract(
+            blocks, WORKFLOW_BLOCK_CONTRACT[name], f"{name} docstring"
+        )
+        block = blocks[0]
+        local = {
+            "source_catalog": source_catalog,
+            "associations": associations,
+            "config": namespace["config"],
+            "fitted_orbits": namespace["iod_orbits"],
+            "fitted_members": namespace["iod_members"],
+            "run_iod": run_iod,
+            "refine": refine,
+            "evaluate_orbits": evaluate_orbits,
+        }
+        execute(block.body, local, f"{name}.__doc__[0]")
 
     print("canonical OD Python narrative examples passed")
 

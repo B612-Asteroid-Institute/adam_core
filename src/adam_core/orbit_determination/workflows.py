@@ -324,11 +324,12 @@ def run_iod(
         If a Python table, provider, or ``config`` has the wrong public type.
     ValueError
         If static batch, identity, membership, covariance, or provenance
-        validation fails. These errors abort atomically before provider work.
+        validation fails, or provider identity, provenance metadata, or a
+        capability declaration is rejected as invalid input during acquisition.
     RuntimeError
-        If provider acquisition or execution reports a backend error, panic,
-        unsupported capability, malformed response, or protocol violation.
-        These errors abort atomically and return no partial products.
+        If ABI acquisition or provider execution reports a backend error,
+        provider panic, unsupported request capability, malformed response, or
+        protocol violation. No partial products are returned.
 
     Notes
     -----
@@ -445,11 +446,12 @@ def run_od(
         If an argument does not have the documented public type.
     ValueError
         If static batch, identity, membership, covariance, or provenance
-        validation fails. No partial tuple is returned.
+        validation fails, or provider identity, provenance metadata, or a
+        capability declaration is rejected as invalid input during acquisition.
     RuntimeError
-        If provider acquisition or execution reports a backend error, panic,
-        unsupported capability, malformed response, or protocol violation.
-        No partial tuple is returned.
+        If ABI acquisition or provider execution reports a backend error,
+        provider panic, unsupported request capability, malformed response, or
+        protocol violation. No partial tuple is returned.
 
     Notes
     -----
@@ -594,11 +596,13 @@ def refine(
         If any table or ``config`` has the wrong public type.
     ValueError
         If memberships are incomplete or ambiguous, source rows are stale,
-        provenance is missing or inconsistent, or covariance is invalid.
-        Invocation-fatal validation errors return no partial products.
+        provenance or covariance is invalid, or provider identity, provenance
+        metadata, or a capability declaration is rejected as invalid input
+        during acquisition. No partial products are returned.
     RuntimeError
-        If provider acquisition or execution reports a backend error, panic,
-        unsupported capability, malformed response, or protocol violation.
+        If ABI acquisition or provider execution reports a backend error,
+        provider panic, unsupported request capability, malformed response, or
+        protocol violation.
 
     Notes
     -----
@@ -755,11 +759,13 @@ def evaluate_orbits(
     TypeError
         If a table or ``config`` has the wrong public type.
     ValueError
-        If covariance dimension, memberships, provenance, or source identity
-        is invalid.
+        If covariance dimension, memberships, provenance, or source identity is
+        invalid, or provider identity, provenance metadata, or a capability
+        declaration is rejected as invalid input during acquisition.
     RuntimeError
-        If provider acquisition or execution reports a backend error, panic,
-        unsupported capability, malformed response, or protocol violation.
+        If ABI acquisition or provider execution reports a backend error,
+        provider panic, unsupported request capability, malformed response, or
+        protocol violation.
 
     Notes
     -----
