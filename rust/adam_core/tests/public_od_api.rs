@@ -110,6 +110,82 @@ fn canonical_workflows_keep_meaningful_rustdoc_and_examples() {
 }
 
 #[test]
+fn ordinary_public_od_items_keep_rustdoc() {
+    let core = include_str!("../src/od.rs");
+    let before_python_view = core
+        .split("/// Binding-only borrowed view")
+        .next()
+        .expect("ordinary prefix");
+    let provider_marker = "/// Provider identities used by a canonical batch invocation.";
+    let after_python_view = &core[core.find(provider_marker).expect("ordinary result suffix")..];
+    let after_python_view = after_python_view
+        .split("#[doc(hidden)]\npub mod python_bindings")
+        .next()
+        .expect("ordinary workflow suffix");
+    let ordinary = format!("{before_python_view}\n{after_python_view}");
+    let mut documented = false;
+    let mut public_enum_depth: Option<usize> = None;
+    let mut depth = 0usize;
+
+    for (index, line) in ordinary.lines().enumerate() {
+        let trimmed = line.trim();
+        if trimmed.starts_with("///") {
+            documented = true;
+            continue;
+        }
+        if trimmed.starts_with("pub use ") {
+            documented = false;
+            continue;
+        }
+        if trimmed.is_empty() || trimmed.starts_with("//") || trimmed.starts_with("#") {
+            continue;
+        }
+
+        let is_public_declaration = [
+            "pub struct ",
+            "pub enum ",
+            "pub fn ",
+            "pub const ",
+            "pub type ",
+            "pub mod ",
+        ]
+        .iter()
+        .any(|prefix| trimmed.starts_with(prefix));
+        let is_public_field = trimmed.starts_with("pub ")
+            && trimmed.contains(':')
+            && trimmed.ends_with(',')
+            && !trimmed.starts_with("pub(crate)");
+        if is_public_declaration || is_public_field {
+            assert!(
+                documented,
+                "public OD item lacks Rustdoc at line {}: {trimmed}",
+                index + 1
+            );
+        }
+
+        if trimmed.starts_with("pub enum ") {
+            public_enum_depth = Some(depth + trimmed.matches('{').count());
+        } else if public_enum_depth.is_some_and(|enum_depth| depth == enum_depth)
+            && trimmed.ends_with(',')
+            && !trimmed.starts_with("pub ")
+        {
+            assert!(
+                documented,
+                "public OD enum variant lacks Rustdoc at line {}: {trimmed}",
+                index + 1
+            );
+        }
+
+        depth += trimmed.matches('{').count();
+        depth = depth.saturating_sub(trimmed.matches('}').count());
+        if public_enum_depth.is_some_and(|enum_depth| depth < enum_depth) {
+            public_enum_depth = None;
+        }
+        documented = false;
+    }
+}
+
+#[test]
 fn removed_public_preparation_seams_are_not_reintroduced() {
     let core = include_str!("../src/od.rs");
     for forbidden in [

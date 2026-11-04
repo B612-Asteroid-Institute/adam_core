@@ -322,13 +322,12 @@ def run_iod(
     ------
     TypeError
         If a Python table, provider, or ``config`` has the wrong public type.
-    OdConfigurationError
-        If the typed scientific configuration is invalid.
-    OdResourceValidationError
-        If required semantic resource slots are missing, unused, swapped,
-        corrupt, or structurally invalid.
     ValueError
-        For invocation-fatal input, provenance, provider, or protocol errors.
+        If static batch, identity, membership, covariance, or provenance
+        validation fails. These errors abort atomically before provider work.
+    RuntimeError
+        If provider acquisition or execution reports a backend error, panic,
+        unsupported capability, malformed response, or protocol violation.
         These errors abort atomically and return no partial products.
 
     Notes
@@ -444,13 +443,13 @@ def run_od(
     ------
     TypeError
         If an argument does not have the documented public type.
-    OdConfigurationError
-        If ``config`` is not a valid complete OD declaration.
-    OdResourceValidationError
-        If any explicitly required resource fails aggregate validation.
     ValueError
-        For malformed batches, incomplete identities/provenance, or fatal
-        provider/backend/protocol failures. No partial tuple is returned.
+        If static batch, identity, membership, covariance, or provenance
+        validation fails. No partial tuple is returned.
+    RuntimeError
+        If provider acquisition or execution reports a backend error, panic,
+        unsupported capability, malformed response, or protocol violation.
+        No partial tuple is returned.
 
     Notes
     -----
@@ -593,12 +592,13 @@ def refine(
     ------
     TypeError
         If any table or ``config`` has the wrong public type.
-    OdConfigurationError
-        If the refinement declaration is invalid.
     ValueError
-        For incomplete/ambiguous memberships, stale source rows, missing or
-        inconsistent provenance, invalid covariance, or fatal provider errors.
-        Invocation-fatal errors return no partial products.
+        If memberships are incomplete or ambiguous, source rows are stale,
+        provenance is missing or inconsistent, or covariance is invalid.
+        Invocation-fatal validation errors return no partial products.
+    RuntimeError
+        If provider acquisition or execution reports a backend error, panic,
+        unsupported capability, malformed response, or protocol violation.
 
     Notes
     -----
@@ -754,11 +754,12 @@ def evaluate_orbits(
     ------
     TypeError
         If a table or ``config`` has the wrong public type.
-    OdConfigurationError
-        If the independent evaluation declaration is invalid.
     ValueError
-        For invalid covariance dimension, incomplete memberships/provenance,
-        stale source data, or fatal provider/backend/protocol failures.
+        If covariance dimension, memberships, provenance, or source identity
+        is invalid.
+    RuntimeError
+        If provider acquisition or execution reports a backend error, panic,
+        unsupported capability, malformed response, or protocol violation.
 
     Notes
     -----

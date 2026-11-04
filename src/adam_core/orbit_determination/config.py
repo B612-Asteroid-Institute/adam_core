@@ -172,7 +172,13 @@ class IodSearchConfig:
 
 @dataclass(frozen=True, slots=True)
 class IodStageConfig:
-    """Complete IOD/search/correction/ranging declaration."""
+    """Complete IOD/search/correction/ranging declaration.
+
+    Raises
+    ------
+    OdConfigurationError
+        If any declared scientific value or combination is invalid.
+    """
 
     search_correction_ranging: IodSearchConfig
     candidate_correction_fit: WhitenedFitConfig
@@ -208,7 +214,17 @@ class IodStageConfig:
 
 @dataclass(frozen=True, slots=True)
 class IodRunConfig:
-    """Complete bound pipeline/resource/profile and IOD-stage configuration."""
+    """Complete bound pipeline/resource/profile and IOD-stage configuration.
+
+    Raises
+    ------
+    TypeError
+        If a component has the wrong public configuration type.
+    OdConfigurationError
+        If the complete pipeline/IOD declaration is inconsistent.
+    OdResourceValidationError
+        If supplied resources are unused, missing, or invalid for the pipeline.
+    """
 
     observation_pipeline: ObservationPipeline
     iod: IodStageConfig
@@ -307,7 +323,13 @@ RefinementDeclaration = WorstResidualRefinement | Cmc2003Refinement
 
 @dataclass(frozen=True, slots=True)
 class RefinementRunConfig:
-    """Complete fit/Jacobian/covariance/rejection declaration."""
+    """Complete fit/Jacobian/covariance/rejection declaration.
+
+    Raises
+    ------
+    OdConfigurationError
+        If any fit, covariance, or rejection setting is invalid.
+    """
 
     refinement: RefinementDeclaration
     _native: Any = field(init=False, repr=False, compare=False)
@@ -343,7 +365,13 @@ class RefinementRunConfig:
 
 @dataclass(frozen=True, slots=True)
 class EvaluationConfig:
-    """Complete covariance and provider-prediction evaluation configuration."""
+    """Complete covariance and provider-prediction evaluation configuration.
+
+    Raises
+    ------
+    OdConfigurationError
+        If the covariance dimension or prediction-fit declaration is invalid.
+    """
 
     covariance_dimension: int
     prediction_fit: WhitenedFitConfig
@@ -396,7 +424,17 @@ def _iod_search_from_dict(raw: Mapping[str, Any]) -> IodSearchConfig:
 
 @dataclass(frozen=True, slots=True)
 class OdConfig:
-    """Complete bound IOD-plus-refinement configuration."""
+    """Complete bound IOD-plus-refinement configuration.
+
+    Raises
+    ------
+    TypeError
+        If a component has the wrong public configuration type.
+    OdConfigurationError
+        If the complete pipeline/IOD/refinement declaration is inconsistent.
+    OdResourceValidationError
+        If supplied resources are unused, missing, or invalid for the pipeline.
+    """
 
     observation_pipeline: ObservationPipeline
     iod: IodStageConfig

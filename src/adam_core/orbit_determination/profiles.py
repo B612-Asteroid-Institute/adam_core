@@ -121,6 +121,16 @@ class OdProfile:
 
         Validation is aggregate and precedes pipeline/provider work. Absolute
         paths select local files but are excluded from canonical provenance.
+
+        Raises
+        ------
+        TypeError
+            If ``resources`` is not a ``ResourceBindings`` value.
+        OdConfigurationError
+            If the named immutable profile definition is inconsistent.
+        OdResourceValidationError
+            If required slots are missing or any bound resource fails identity,
+            schema, structural, swapped-slot, duplicate-slot, or unused checks.
         """
 
         if not isinstance(resources, ResourceBindings):

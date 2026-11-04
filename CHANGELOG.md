@@ -160,9 +160,11 @@ This file contains notable changes in adam-core
   ``OdPropagatorSource``, raw group handles, rename APIs, and OD build-identity
   fields/checks. Core build identity remains artifact diagnostics only and is
   not a scientific provenance or compatibility dimension.
-- The public Rust crates are ordinary Python-independent libraries. Python is
-  optional binding/marshalling surface; standalone Rust does not import Python,
-  use PyO3/IPC, or discover Python resource packages.
+- The public Rust crates compile and link without Python or PyO3. Canonical
+  standalone Rust OD workflows do not import Python, use PyO3/IPC, or discover
+  OD semantic-resource packages; callers pass explicit ``ResourceBindings``.
+  This OD rule does not change the separate optional Python-package probe in
+  ``adam_core::kernel_data`` for installed NAIF kernel-data distributions.
 - Tests should compare NaN-bearing results by canonical IPC bytes/bit patterns,
   assert typed failure columns and original group IDs, and verify exact
   ``run_od == run_iod + refine`` composition instead of Python callback order.

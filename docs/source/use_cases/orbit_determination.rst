@@ -120,9 +120,12 @@ empty callback list, a model dictionary, or a profile name as a substitute.
 Python: batch OD with the public profile
 ----------------------------------------
 
-The public profile helper resolves only the installed public EFCC18 path. The
-path is passed explicitly to Rust, which verifies the file before acquiring a
-provider. Profiles never choose a propagator.
+The public profile helper is the one intentional Python convenience that
+locates the installed public EFCC18 package's exported path. It converts that
+location into an explicit ``ResourceBindings`` value and passes the path to
+Rust, which verifies the file before acquiring a provider. No Rust workflow
+performs package discovery, download, cache lookup, or fallback. Profiles never
+choose a propagator.
 
 .. code-block:: python
 
@@ -275,7 +278,14 @@ resource validation/parsing, numerical settings, and path-free canonical
 configuration provenance. Python constructs immutable declarations, binds local
 paths, marshals typed tables, and assembles typed results.
 
-The configuration types have separate scopes:
+The configuration types have separate scopes. Their constructors perform
+scientific validation and raise ``OdConfigurationError``; constructors and
+profile binding raise ``OdResourceValidationError`` for aggregate semantic
+resource failures. The workflow calls receive only already-validated values,
+so their invocation-time exceptions are ``TypeError`` for wrong public Python
+types, ``ValueError`` for static batch/provenance failures, and ``RuntimeError``
+for fatal provider/backend/protocol failures.
+
 
 * ``IodStageConfig`` is the complete search/selection/velocity/acceptance/
   correction/ranging/candidate-fit declaration. It has no pipeline or resource
@@ -385,18 +395,39 @@ paths deliberately expose the same four implementations:
        Ok(())
    }
 
-The complete executable ``rust/adam_core/examples/od_canonical_workflows.rs``
-constructs empty typed ``AssociatedObservations`` and ``MemberedOrbits`` values,
-executes all four routes, demonstrates immutable slices and ``into_products()``,
-and includes public-profile resource binding plus the external-provider
-constructor. Run it with:
+The executable ``rust/adam_core/examples/od_canonical_workflows.rs`` creates a
+deterministic non-empty two-body fixture and demonstrates the complete public
+handoff. It constructs one and several hypotheses; preserves overlaps,
+first-appearance group order, and source row order; continues after a typed
+scientific failure; converts IOD products with ``to_membered_orbits``; runs
+standalone refinement; compares direct ``run_od`` with the explicit
+``run_iod``-then-``refine`` composition; evaluates a full group and a validated
+member subset; and coordinates an orbit/member ``orbit_id`` relabel. It also
+shows immutable product slices, ``into_products()``, and explicit public-profile
+resource binding. Run it with:
 
 .. code-block:: console
 
    cargo run -p adam_core --example od_canonical_workflows
 
-Rust does not discover Python packages or resources. Bind the public profile's
-semantic slot to an explicit path:
+The separate ``od_external_provider`` example compiles the exact unsafe ABI-v2
+ownership/lifetime boundary and its conversion to ``OdPropagator`` without
+fabricating a foreign table:
+
+.. code-block:: console
+
+   cargo run -p adam_core --example od_external_provider
+
+The guide and workflow-docstring Python snippets are executable documentation.
+The repository runner supplies deterministic caller-owned tables and checks the
+composition and post-relabel calls:
+
+.. code-block:: console
+
+   python docs/scripts/run_orbit_determination_examples.py
+
+Standalone Rust does not discover Python packages or resources. Bind the public
+profile's semantic slot to an explicit path:
 
 .. code-block:: rust
 

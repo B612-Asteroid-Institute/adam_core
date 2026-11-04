@@ -13,15 +13,38 @@ Python enters an adam-core workflow once (including a linkage batch);
 prediction calls inside that workflow are batched C-ABI calls and never Python
 callbacks.
 
-Rust applications do not need this capsule. They compile the generic
-adam-core algorithms against a concrete ``Propagator`` implementation directly
-and pass it through ``OdPropagator::external``. The capsule is the binary
-boundary between separately built Python extension modules and does not make
-adam-core link to a GPL-covered provider. An application that instead directly
-links a GPL-covered Rust provider creates a different distribution situation
-and must satisfy that provider's license; projects should evaluate their own
-obligations. This ABI description does not claim that a final Core 0.7/ASSIST
-0.6 release pair exists or is compatible.
+Canonical standalone Rust workflows also use ABI v2. The provider integration
+owns an ``ExternalPropagatorV2`` table, its NUL-terminated identity and
+fingerprint strings, its callbacks, and its callback context in stable memory.
+It validates that table with the unsafe
+``ExternalPropagator::from_raw(table_ptr)`` constructor, retains every owned
+allocation for longer than the returned wrapper and every workflow call, then
+borrows the validated wrapper through ``OdPropagator::external(&external)``.
+The constructor validates the advertised ABI shape, identity, capabilities,
+and complete fields; it cannot prove that foreign pointers remain alive,
+immutable, thread-safe, or unwind-safe.
+
+Calling ``from_raw`` is sound only when the pointer is non-null, readable and
+properly aligned for its advertised ``struct_size``; every read string and
+callback/context allocation outlives the wrapper; those values remain
+immutable; callbacks honor all buffer rules, may run concurrently, retain no
+request pointers, and never unwind across the C ABI. Moving an owner that would
+invalidate any table or context address is forbidden. The compiling reference
+``rust/adam_core/examples/od_external_provider.rs`` makes this ownership and
+unsafe boundary explicit without fabricating a provider table. Lower-level
+predictor algorithms may be generic over the Rust ``Propagator`` trait, but
+there is no conversion from an arbitrary trait implementation to
+``OdPropagator::external`` and the four canonical workflows do not accept that
+trait directly.
+
+The Python capsule is the ownership boundary between separately built extension
+modules: its destructor owns the table/context lifetime, and adam-core retains
+the capsule while its validated wrapper is used. This does not make adam-core
+link to a GPL-covered provider. An application that instead directly links a
+GPL-covered Rust provider creates a different distribution situation and must
+satisfy that provider's license; projects should evaluate their own obligations.
+This ABI description does not claim that a final Core 0.7/ASSIST 0.6 release
+pair exists or is compatible.
 
 Discovery and identity
 ----------------------
@@ -195,10 +218,14 @@ for the call and must not alias each other or any input.
 Lifetime, errors and panics
 ---------------------------
 
-The provider owns the table, identity strings and context. They remain valid
-and immutable until the capsule destructor runs. Adam-core owns every request
-and output buffer, which is valid only for the duration of its callback. A
-provider must neither retain those pointers nor call Python from a callback.
+The provider owns the table, identity/fingerprint strings, callbacks and
+context. In Python they remain valid and immutable until the capsule destructor
+runs. In standalone Rust they remain valid and immutable longer than the
+``ExternalPropagator`` wrapper and all ``OdPropagator`` borrows created from it;
+the owner must not move address-sensitive table/context storage. Adam-core owns
+every request and output buffer, which is valid only for the duration of its
+callback. A provider must neither retain those pointers nor call Python from a
+callback.
 
 Callback status values are ``OK=0``, ``ERROR=1``, ``PANIC=2`` and
 ``INVALID=3`` and are not interchangeable. ``ERROR`` is a provider operation

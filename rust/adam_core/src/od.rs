@@ -67,10 +67,13 @@ pub mod algorithms {
     /// Canonical ephemeris options and actual two-body backend derived from one
     /// authoritative typed fit configuration.
     pub struct CanonicalStageSettings {
+        /// Ephemeris and light-time options derived from the fit declaration.
         pub options: EphemerisOptions,
+        /// Two-body propagator configured with the declared numerical controls.
         pub two_body: TwoBodyPropagator,
     }
 
+    /// Validate one fit declaration and derive its canonical predictor settings.
     pub fn canonical_stage_settings(
         config: WhitenedFitConfig,
     ) -> Result<CanonicalStageSettings, OdBatchError> {
@@ -332,15 +335,25 @@ impl From<SchemaError> for OdBatchError {
 /// Complete, content-pinned identity of one prediction service.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProviderMetadata {
+    /// Stable provider implementation name.
     pub name: String,
+    /// Canonical provider-native semantic version.
     pub version: String,
+    /// Propagation ABI version, including the synthetic built-in ABI identity.
     pub abi_version: u32,
+    /// Whether a retained capsule established this identity.
     pub identity_validated_by_capsule: bool,
+    /// Capability bits advertised by the provider.
     pub capabilities: u64,
+    /// Capability bits understood when this identity was captured.
     pub known_capabilities: u64,
+    /// Provider integration time scale.
     pub integration_time_scale: String,
+    /// Whether the provider declares exact two-body dynamics.
     pub two_body_dynamics: bool,
+    /// Lowercase SHA-256 of dynamics-affecting configuration.
     pub configuration_fingerprint: String,
+    /// Lowercase SHA-256 of external model data.
     pub data_fingerprint: String,
 }
 
@@ -627,27 +640,39 @@ fn with_stage_predictors<R>(
 /// Typed observation/source input shared by all four workflows.
 #[derive(Debug, Clone)]
 pub struct OdObservationBatch {
+    /// Source-catalog identity, astrometry and uncertainty columns.
     pub source: SourceCatalogBatch,
+    /// Typed observed spherical coordinates and covariance.
     pub observed: CoordinateBatch,
+    /// Observer codes and Cartesian states aligned with source rows.
     pub observers: ObserverBatch,
 }
 
 /// Typed association input to [`run_iod`] and [`run_od`].
 #[derive(Debug, Clone)]
 pub struct AssociatedObservations {
+    /// Observation rows shared by all hypotheses.
     pub observations: OdObservationBatch,
+    /// Explicit detection-to-hypothesis memberships.
     pub associations: AssociationBatch,
 }
 
 /// Typed nullable astrometry columns persisted for explicit fitted members.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct AstrometryColumns {
+    /// Longitudes in degrees.
     pub lon: Vec<Option<f64>>,
+    /// Latitudes in degrees.
     pub lat: Vec<Option<f64>>,
+    /// Longitude standard deviations in degrees.
     pub sigma_lon: Vec<Option<f64>>,
+    /// Latitude standard deviations in degrees.
     pub sigma_lat: Vec<Option<f64>>,
+    /// Longitude variances in square degrees.
     pub variance_lon: Vec<Option<f64>>,
+    /// Latitude variances in square degrees.
     pub variance_lat: Vec<Option<f64>>,
+    /// Longitude/latitude covariance in square degrees.
     pub cov_lonlat: Vec<Option<f64>>,
 }
 
@@ -668,12 +693,19 @@ impl AstrometryColumns {
 /// Explicit fitted-orbit membership input to [`refine`] and [`evaluate_orbits`].
 #[derive(Debug, Clone)]
 pub struct FittedOrbitMembersBatch {
+    /// Mutable orbit-label foreign key for each membership row.
     pub orbit_id: Vec<String>,
+    /// Source observation identifier for each membership row.
     pub observation_id: Vec<String>,
+    /// Whether each member was rejected by a completed fit.
     pub outlier: Vec<Option<bool>>,
+    /// Persisted immutable input fingerprint per member.
     pub input_fingerprint: Vec<Option<String>>,
+    /// Persisted immutable group-membership fingerprint per member.
     pub membership_fingerprint: Vec<Option<String>>,
+    /// Astrometry before the observation pipeline.
     pub original_astrometry: AstrometryColumns,
+    /// Astrometry consumed by the scientific stage.
     pub used_astrometry: AstrometryColumns,
 }
 
@@ -724,8 +756,11 @@ impl FittedOrbitMembersBatch {
 /// Typed orbit/member input to [`refine`] and [`evaluate_orbits`].
 #[derive(Debug, Clone)]
 pub struct MemberedOrbits {
+    /// Explicit orbit rows, one per unique relational orbit label.
     pub orbits: OrbitBatch,
+    /// Source observations referenced by the member table.
     pub observations: OdObservationBatch,
+    /// Explicit orbit-to-observation memberships and persisted handoff data.
     pub members: FittedOrbitMembersBatch,
     /// One persisted, validated provenance value per input orbit.
     pub provenance: Vec<Option<OdProvenance>>,
@@ -735,13 +770,18 @@ pub struct MemberedOrbits {
 #[non_exhaustive]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OdRoute {
+    /// Initial orbit determination only.
     RunIod,
+    /// Fused initial orbit determination followed by refinement.
     RunOd,
+    /// Standalone refinement of a persisted handoff.
     Refine,
+    /// Residual evaluation without changing input states.
     EvaluateOrbits,
 }
 
 impl OdRoute {
+    /// Stable snake-case route name used in provenance.
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::RunIod => "run_iod",
@@ -1092,10 +1132,12 @@ impl CanonicalConfiguration {
         })
     }
 
+    /// Digest of only the path-free scientific configuration.
     pub fn science_sha256(&self) -> &str {
         &self.science_sha256
     }
 
+    /// Digest of the complete canonical configuration representation.
     pub fn complete_sha256(&self) -> &str {
         &self.complete_sha256
     }
@@ -1115,14 +1157,20 @@ impl CanonicalConfiguration {
 /// Typed IOD diagnostic provenance.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IodDiagnostics {
+    /// Observation triplets visited by deterministic search.
     pub triplets_tried: usize,
+    /// Candidate states evaluated scientifically.
     pub candidates_evaluated: usize,
+    /// Candidate evaluations that failed locally.
     pub candidates_failed: usize,
+    /// Differential-correction attempts performed.
     pub corrections_run: usize,
+    /// Whether a configured deterministic search bound was reached.
     pub search_cap_exhausted: bool,
 }
 
 impl IodDiagnostics {
+    /// Serialize these diagnostics with stable field names.
     pub fn canonical_json(&self) -> String {
         json!({
             "triplets_tried": self.triplets_tried,
@@ -1138,13 +1186,18 @@ impl IodDiagnostics {
 /// Typed refinement diagnostic provenance.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RefinementDiagnostics {
+    /// Completed refinement passes.
     pub passes: usize,
+    /// Observations rejected by refinement.
     pub n_rejected: usize,
+    /// Previously rejected observations recovered by refinement.
     pub n_recovered: usize,
+    /// Stable scientific status flags emitted by the fit.
     pub flags: Vec<String>,
 }
 
 impl RefinementDiagnostics {
+    /// Serialize these diagnostics with stable field names.
     pub fn canonical_json(&self) -> String {
         json!({
             "passes": self.passes,
@@ -1159,13 +1212,18 @@ impl RefinementDiagnostics {
 /// Typed evaluation diagnostic provenance.
 #[derive(Debug, Clone, PartialEq)]
 pub struct EvaluationDiagnostics {
+    /// Number of observations included in evaluation.
     pub num_obs: usize,
+    /// Included observational arc length in days.
     pub arc_length: f64,
+    /// Total chi-squared statistic.
     pub chi2: f64,
+    /// Reduced chi-squared statistic.
     pub reduced_chi2: f64,
 }
 
 impl EvaluationDiagnostics {
+    /// Serialize these diagnostics with stable field names.
     pub fn canonical_json(&self) -> String {
         json!({
             "num_obs": self.num_obs,
@@ -1180,36 +1238,54 @@ impl EvaluationDiagnostics {
 /// Complete Rust-owned fitted-orbit provenance.
 #[derive(Debug, Clone)]
 pub struct OdProvenance {
+    /// Fingerprint of immutable input science and associations.
     pub input_fingerprint: String,
+    /// Fingerprint of the emitted orbit state and covariance.
     pub state_fingerprint: Option<String>,
+    /// Consistency digest over the complete provenance record.
     pub provenance_fingerprint: String,
+    /// Canonical workflow route that emitted this record.
     pub route: OdRoute,
+    /// IOD-stage provider identity when that stage executed.
     pub iod_provider: Option<ProviderMetadata>,
+    /// Refinement-stage provider identity when that stage executed.
     pub refinement_provider: Option<ProviderMetadata>,
+    /// Evaluation-stage provider identity when that stage executed.
     pub evaluation_provider: Option<ProviderMetadata>,
+    /// IOD-stage diagnostics when that stage executed.
     pub iod_diagnostics: Option<IodDiagnostics>,
+    /// Refinement-stage diagnostics when that stage executed.
     pub refinement_diagnostics: Option<RefinementDiagnostics>,
+    /// Evaluation-stage diagnostics when that stage executed.
     pub evaluation_diagnostics: Option<EvaluationDiagnostics>,
+    /// Complete path-free canonical scientific configuration.
     pub configuration: CanonicalConfiguration,
+    /// Whether IOD found more than one accepted solution family.
     pub iod_ambiguous: Option<bool>,
+    /// Count of alternative accepted IOD solutions.
     pub iod_alternatives: Option<usize>,
+    /// Count of observations rejected by the final disposition.
     pub num_rejected: Option<usize>,
+    /// Fraction of observations rejected by the final disposition.
     pub rejected_fraction: Option<f64>,
 }
 
 impl OdProvenance {
+    /// Human-readable IOD backend label, when IOD executed.
     pub fn iod_backend(&self) -> Option<String> {
         self.iod_provider
             .as_ref()
             .map(ProviderMetadata::backend_label)
     }
 
+    /// Human-readable refinement backend label, when refinement executed.
     pub fn refinement_backend(&self) -> Option<String> {
         self.refinement_provider
             .as_ref()
             .map(ProviderMetadata::backend_label)
     }
 
+    /// Human-readable evaluation backend label, when evaluation executed.
     pub fn evaluation_backend(&self) -> Option<String> {
         self.evaluation_provider
             .as_ref()
@@ -1327,12 +1403,16 @@ impl OdProvenance {
 #[non_exhaustive]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OdStage {
+    /// Initial orbit determination stage.
     Iod,
+    /// Orbit refinement stage.
     Refinement,
+    /// Orbit evaluation stage.
     Evaluation,
 }
 
 impl OdStage {
+    /// Stable snake-case stage name used by failure rows.
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::Iod => "iod",
@@ -1365,12 +1445,16 @@ impl std::str::FromStr for OdStage {
 #[non_exhaustive]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum OdGroupFailureCode {
+    /// No scientifically acceptable state was found.
     NoSolution,
+    /// A fit terminated without convergence.
     NotConverged,
+    /// More specific scientific fitting failure.
     Scientific(GroupScientificFailureCode),
 }
 
 impl OdGroupFailureCode {
+    /// Stable snake-case failure code used by result tables.
     pub const fn as_str(&self) -> &'static str {
         match self {
             Self::NoSolution => "no_solution",
@@ -1406,22 +1490,39 @@ impl std::str::FromStr for OdGroupFailureCode {
 /// Typed per-group failure. These values continue the surrounding batch.
 #[derive(Debug, Clone)]
 pub struct OrbitDeterminationFailure {
+    /// Immutable association-group identity.
     pub group_id: String,
+    /// Output orbit label when a real best state was retained.
     pub orbit_id: Option<String>,
+    /// Input orbit label for standalone refinement or evaluation.
     pub input_orbit_id: Option<String>,
+    /// Scientific stage that produced the failure.
     pub stage: OdStage,
+    /// Stable machine-readable failure classification.
     pub code: OdGroupFailureCode,
+    /// Human-readable scientific detail.
     pub message: String,
+    /// Number of observations presented to the stage.
     pub num_obs: usize,
+    /// Observational arc length in days, when available.
     pub arc_length: Option<f64>,
+    /// IOD triplets visited, when IOD executed.
     pub triplets_tried: Option<usize>,
+    /// IOD candidates evaluated, when IOD executed.
     pub candidates_evaluated: Option<usize>,
+    /// IOD candidate evaluations that failed locally.
     pub candidates_failed: Option<usize>,
+    /// IOD differential-correction attempts performed.
     pub corrections_run: Option<usize>,
+    /// Refinement passes completed, when refinement executed.
     pub passes: Option<usize>,
+    /// Observations rejected by refinement.
     pub n_rejected: Option<usize>,
+    /// Observations recovered by refinement.
     pub n_recovered: Option<usize>,
+    /// Native scientific status code, when one exists.
     pub status_code: Option<i64>,
+    /// Whether a genuine best state accompanies this failure.
     pub best_state_retained: bool,
 }
 
@@ -1430,23 +1531,36 @@ pub struct OrbitDeterminationFailure {
 pub struct FittedOrbitRecord {
     /// Materialized one-row fitted/evaluated orbit, including covariance when fitted.
     pub orbit: OrbitBatch,
+    /// Immutable association-group identity.
     pub group_id: String,
+    /// Source orbit-row index for standalone refinement or evaluation.
     pub input_orbit_index: Option<usize>,
+    /// IOD scientific output when IOD executed.
     pub iod: Option<IodResult>,
+    /// Refinement scientific output when refinement executed.
     pub refined: Option<RefinedOutput>,
+    /// Evaluation scientific output when evaluation executed.
     pub evaluation: Option<FitEvaluation>,
+    /// Complete Rust-owned provenance for this state.
     pub provenance: OdProvenance,
 }
 
 /// Named astrometric values persisted before and after the observation pipeline.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct AstrometryRecord {
+    /// Longitude in degrees.
     pub lon: f64,
+    /// Latitude in degrees.
     pub lat: f64,
+    /// Longitude standard deviation in degrees.
     pub sigma_lon: f64,
+    /// Latitude standard deviation in degrees.
     pub sigma_lat: f64,
+    /// Longitude variance in square degrees.
     pub variance_lon: f64,
+    /// Latitude variance in square degrees.
     pub variance_lat: f64,
+    /// Longitude/latitude covariance in square degrees.
     pub cov_lonlat: f64,
 }
 
@@ -1467,14 +1581,23 @@ impl AstrometryRecord {
 /// Rust-owned explicit fitted-orbit membership record.
 #[derive(Debug, Clone, PartialEq)]
 pub struct FittedOrbitMemberRecord {
+    /// Mutable orbit-label foreign key.
     pub orbit_id: String,
+    /// Source observation identifier.
     pub observation_id: String,
+    /// Original source-table row index.
     pub source_index: usize,
+    /// Input member-row index for standalone refinement or evaluation.
     pub input_member_index: Option<usize>,
+    /// Immutable scientific input fingerprint.
     pub input_fingerprint: String,
+    /// Immutable group-membership fingerprint.
     pub membership_fingerprint: String,
+    /// Astrometry before the observation pipeline.
     pub original: AstrometryRecord,
+    /// Astrometry consumed by the scientific stage.
     pub used: AstrometryRecord,
+    /// Whether this member is rejected in the emitted disposition.
     pub outlier: bool,
 }
 
@@ -1575,8 +1698,11 @@ impl<'a> PythonGroupView<'a> {
 /// Provider identities used by a canonical batch invocation.
 #[derive(Debug, Clone, Default)]
 pub struct OdStageProviders {
+    /// IOD-stage provider identity, when IOD executed.
     pub iod: Option<ProviderMetadata>,
+    /// Refinement-stage provider identity, when refinement executed.
     pub refinement: Option<ProviderMetadata>,
+    /// Evaluation-stage provider identity, when evaluation executed.
     pub evaluation: Option<ProviderMetadata>,
 }
 
@@ -1903,6 +2029,7 @@ impl OdBatchResult {
         self.group_views().map(PythonGroupView)
     }
 
+    /// Provider identities actually used by this invocation.
     pub fn providers(&self) -> &OdStageProviders {
         &self.providers
     }
@@ -1933,6 +2060,10 @@ impl OdBatchResult {
         (self.fitted_orbits, self.fitted_orbit_members, self.failures)
     }
 
+    /// Convert all successful products into one validated persisted handoff.
+    ///
+    /// Returns `None` when no orbit state was emitted. The supplied observation
+    /// batch must be the source used to produce this result.
     pub fn to_membered_orbits(
         &self,
         observations: &OdObservationBatch,
@@ -1958,6 +2089,10 @@ impl OdBatchResult {
         Ok(Some(output))
     }
 
+    /// Convert each successful group into an independent validated handoff.
+    ///
+    /// Failed groups without a retained state are omitted. Output order is the
+    /// deterministic successful-group order.
     pub fn to_membered_groups(
         &self,
         observations: &OdObservationBatch,
@@ -1979,6 +2114,7 @@ impl OdBatchResult {
         Ok(output)
     }
 
+    /// Whether this invocation emitted neither states nor scientific failures.
     pub fn is_empty(&self) -> bool {
         debug_assert_eq!(
             self.groups.is_empty(),

@@ -3,6 +3,13 @@
 //! Domain crates remain available independently for consumers that need a
 //! smaller dependency graph. This umbrella crate provides stable module names
 //! and re-exports the same reviewed implementations used by the Python wheel.
+//!
+//! Canonical orbit determination is available both at the crate root through
+//! [`run_iod`], [`run_od`], [`refine`] and [`evaluate_orbits`] and through the
+//! [`od`] module. See `examples/od_canonical_workflows.rs` for complete
+//! standalone batch construction, persisted handoff, composition, evaluation,
+//! failure-continuation and relational-relabel scenarios, and
+//! `examples/od_external_provider.rs` for the ABI-v2 ownership boundary.
 
 pub use adam_core_rs_autodiff as autodiff;
 pub use adam_core_rs_coords as coords;
