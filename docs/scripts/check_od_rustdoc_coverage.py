@@ -3,8 +3,11 @@
 The umbrella module inlines public items re-exported from domain crates, so
 source-only checks of ``rust/adam_core/src/od.rs`` are insufficient. This guard
 parses the rendered Rustdoc tree and checks item docs, inherent methods,
-associated constants, struct fields, and enum variants while excluding trait
-and blanket implementations.
+associated constants, struct fields, enum variants, and enum-variant fields
+while excluding trait and blanket implementations.
+
+The pinned count is a rendered-coverage sentinel (pages plus inherent members,
+fields, variants, and variant fields), not an API-size or stability promise.
 """
 
 from __future__ import annotations
@@ -13,7 +16,7 @@ import argparse
 import re
 from pathlib import Path
 
-EXPECTED_MEMBER_COUNT = 370
+EXPECTED_MEMBER_COUNT = 378
 
 
 def rustdoc_coverage(root: Path) -> tuple[int, list[str]]:
@@ -69,6 +72,15 @@ def rustdoc_coverage(root: Path) -> tuple[int, list[str]]:
             total += 1
             if not variant.group(2):
                 missing.append(f"{item}: {variant.group(1)}")
+        for variant_field in re.finditer(
+            r'<span id="(variant\.[^"]+\.field\.[^"]+)"[^>]*>.*?</span>'
+            r'(<div class="docblock">)?',
+            text,
+            re.S,
+        ):
+            total += 1
+            if not variant_field.group(2):
+                missing.append(f"{item}: {variant_field.group(1)}")
     return total, missing
 
 

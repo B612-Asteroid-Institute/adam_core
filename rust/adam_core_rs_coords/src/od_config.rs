@@ -347,20 +347,31 @@ impl ResidualCovarianceOperation {
 #[derive(Debug, Clone)]
 pub enum ObservationTransform {
     /// Fill only missing angular uncertainty from a station/catalog lookup.
-    FillMissingAstrometricUncertainty { resource: ResourceRequirement },
+    FillMissingAstrometricUncertainty {
+        /// Exact station/catalog uncertainty-table requirement to bind.
+        resource: ResourceRequirement,
+    },
     /// Apply EFCC18 catalog-bias correction except for explicitly excluded catalogs.
     Efcc18CatalogBiasCorrection {
+        /// Exact EFCC18 catalog-bias-table requirement to bind.
         resource: ResourceRequirement,
+        /// Astrometric catalog identifiers that must not receive the correction.
         exclude_astcats: Vec<String>,
     },
     /// Add or replace covariance from a sufficiently supported station/band lookup.
     StationBandResidualCovarianceAdjustment {
+        /// Exact station/band residual-covariance-table requirement to bind.
         resource: ResourceRequirement,
+        /// Whether empirical covariance is added to or replaces supplied covariance.
         operation: ResidualCovarianceOperation,
+        /// Minimum residual count required before applying one lookup-table row.
         minimum_residual_count: usize,
     },
     /// Deweight same-night observations to an effective independent-observation cap.
-    NightlyBatchDeweighting { effective_observation_cap: usize },
+    NightlyBatchDeweighting {
+        /// Effective independent-observation cap used to compute nightly deweighting.
+        effective_observation_cap: usize,
+    },
 }
 
 impl ObservationTransform {

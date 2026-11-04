@@ -283,10 +283,14 @@ scientific validation and raise ``OdConfigurationError``; constructors and
 profile binding raise ``OdResourceValidationError`` for aggregate semantic
 resource failures. The workflow calls receive only already-validated values,
 so their invocation-time exceptions are ``TypeError`` for wrong public Python
-types; ``ValueError`` for static batch/provenance failures and provider
-identity, provenance-metadata, or capability declarations rejected as invalid
-input during acquisition; and ``RuntimeError`` for backend execution errors,
-provider panics, unsupported request capabilities, and ABI protocol violations.
+types; ``ValueError`` for static input failures and provider descriptor,
+identity, complete-provenance-suffix, or unknown-capability validation at the
+Python/Core layer; and ``RuntimeError`` for ABI-v2 table-contract violations,
+callback statuses, malformed responses, and backend failures. Both
+``ValueError`` and ``RuntimeError`` may occur during provider acquisition before
+any callback executes: the validation layer, not acquisition-versus-execution
+timing, determines the class. The complete deterministic split is enumerated
+below.
 
 
 * ``IodStageConfig`` is the complete search/selection/velocity/acceptance/
@@ -462,12 +466,19 @@ external provider. Errors have four boundaries:
    memberships, covariance dimensions, or persisted provenance. These fail
    before provider acquisition with ``ValueError`` (or ``TypeError`` for a
    wrong public Python type).
-#. **Invalid provider input during acquisition:** descriptor/capsule identity,
-   required provenance metadata, or capability declarations rejected as input
-   validation fail with ``ValueError``.
-#. **Invocation-fatal backend execution:** backend errors, provider panics,
-   unsupported request capabilities, malformed responses, or ABI protocol
-   violations raise ``RuntimeError`` and return no partial products.
+#. **Provider acquisition (validation-layer split):** ``ValueError`` covers a
+   non-capsule, a capsule not named ``adam_core.propagator.v2``, or a malformed
+   descriptor; a ``NativeBackend`` declaration/table identity mismatch; a
+   legacy table without the complete provenance suffix; and capability bits
+   unknown to this Core. ``RuntimeError`` covers an ABI-v2 table-contract
+   violation: version, base size or partial suffix, alignment, reserved words,
+   null context or callback, missing ``THREAD_SAFE``, empty identity strings,
+   malformed fingerprints, or an inconsistent STM capability/callback slot.
+   Both classes can therefore arise before callback execution.
+#. **Invocation-fatal callback/backend outcome:** callback ``ERROR``, ``PANIC``,
+   ``INVALID``, or an unknown status; malformed responses; unsupported request
+   capabilities; and other backend failures raise ``RuntimeError`` and return
+   no partial products.
 #. **Per-group scientific outcome:** safely isolated no-solution, refinement,
    or evaluation failures become deterministic rows of
    ``OrbitDeterminationFailures`` and later groups continue.

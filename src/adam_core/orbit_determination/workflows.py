@@ -323,13 +323,23 @@ def run_iod(
     TypeError
         If a Python table, provider, or ``config`` has the wrong public type.
     ValueError
-        If static batch, identity, membership, covariance, or provenance
-        validation fails, or provider identity, provenance metadata, or a
-        capability declaration is rejected as invalid input during acquisition.
+        If static batch, membership, covariance, identity, or provenance input
+        validation fails; provider acquisition returns a non-capsule, a capsule
+        not named ``adam_core.propagator.v2``, or a malformed descriptor; the
+        ``NativeBackend`` declaration and table identity differ; a legacy table
+        lacks the complete provenance suffix; or capability bits are unknown to
+        this Core.
     RuntimeError
-        If ABI acquisition or provider execution reports a backend error,
-        provider panic, unsupported request capability, malformed response, or
-        protocol violation. No partial products are returned.
+        If the table violates the ABI-v2 contract (version, base size or partial
+        provenance suffix, alignment, reserved words, null context or callback,
+        missing ``THREAD_SAFE``, empty identity strings, malformed fingerprints,
+        or inconsistent STM capability/callback slot); a callback returns
+        ``ERROR``, ``PANIC``, ``INVALID``, or an unknown status; or the provider
+        returns a malformed response, unsupported request capability, or other
+        backend failure. No partial products are returned. Both ``ValueError``
+        and ``RuntimeError`` can arise during acquisition before callback
+        execution; the validation layer, not acquisition-versus-execution
+        timing, determines the exception class.
 
     Notes
     -----
@@ -445,13 +455,23 @@ def run_od(
     TypeError
         If an argument does not have the documented public type.
     ValueError
-        If static batch, identity, membership, covariance, or provenance
-        validation fails, or provider identity, provenance metadata, or a
-        capability declaration is rejected as invalid input during acquisition.
+        If static batch, membership, covariance, identity, or provenance input
+        validation fails; provider acquisition returns a non-capsule, a capsule
+        not named ``adam_core.propagator.v2``, or a malformed descriptor; the
+        ``NativeBackend`` declaration and table identity differ; a legacy table
+        lacks the complete provenance suffix; or capability bits are unknown to
+        this Core.
     RuntimeError
-        If ABI acquisition or provider execution reports a backend error,
-        provider panic, unsupported request capability, malformed response, or
-        protocol violation. No partial tuple is returned.
+        If the table violates the ABI-v2 contract (version, base size or partial
+        provenance suffix, alignment, reserved words, null context or callback,
+        missing ``THREAD_SAFE``, empty identity strings, malformed fingerprints,
+        or inconsistent STM capability/callback slot); a callback returns
+        ``ERROR``, ``PANIC``, ``INVALID``, or an unknown status; or the provider
+        returns a malformed response, unsupported request capability, or other
+        backend failure. No partial tuple is returned. Both ``ValueError`` and
+        ``RuntimeError`` can arise during acquisition before callback execution;
+        the validation layer, not acquisition-versus-execution timing,
+        determines the exception class.
 
     Notes
     -----
@@ -595,14 +615,22 @@ def refine(
     TypeError
         If any table or ``config`` has the wrong public type.
     ValueError
-        If memberships are incomplete or ambiguous, source rows are stale,
-        provenance or covariance is invalid, or provider identity, provenance
-        metadata, or a capability declaration is rejected as invalid input
-        during acquisition. No partial products are returned.
+        If static membership, covariance, source-identity, or provenance input
+        validation fails; provider acquisition returns a non-capsule, a capsule
+        not named ``adam_core.propagator.v2``, or a malformed descriptor; the
+        ``NativeBackend`` declaration and table identity differ; a legacy table
+        lacks the complete provenance suffix; or capability bits are unknown to
+        this Core. No partial products are returned.
     RuntimeError
-        If ABI acquisition or provider execution reports a backend error,
-        provider panic, unsupported request capability, malformed response, or
-        protocol violation.
+        If the table violates the ABI-v2 contract (version, base size or partial
+        provenance suffix, alignment, reserved words, null context or callback,
+        missing ``THREAD_SAFE``, empty identity strings, malformed fingerprints,
+        or inconsistent STM capability/callback slot); a callback returns
+        ``ERROR``, ``PANIC``, ``INVALID``, or an unknown status; or the provider
+        returns a malformed response, unsupported request capability, or other
+        backend failure. Both ``ValueError`` and ``RuntimeError`` can arise
+        during acquisition before callback execution; the validation layer, not
+        acquisition-versus-execution timing, determines the exception class.
 
     Notes
     -----
@@ -759,13 +787,22 @@ def evaluate_orbits(
     TypeError
         If a table or ``config`` has the wrong public type.
     ValueError
-        If covariance dimension, memberships, provenance, or source identity is
-        invalid, or provider identity, provenance metadata, or a capability
-        declaration is rejected as invalid input during acquisition.
+        If static membership, covariance, source-identity, or provenance input
+        validation fails; provider acquisition returns a non-capsule, a capsule
+        not named ``adam_core.propagator.v2``, or a malformed descriptor; the
+        ``NativeBackend`` declaration and table identity differ; a legacy table
+        lacks the complete provenance suffix; or capability bits are unknown to
+        this Core.
     RuntimeError
-        If ABI acquisition or provider execution reports a backend error,
-        provider panic, unsupported request capability, malformed response, or
-        protocol violation.
+        If the table violates the ABI-v2 contract (version, base size or partial
+        provenance suffix, alignment, reserved words, null context or callback,
+        missing ``THREAD_SAFE``, empty identity strings, malformed fingerprints,
+        or inconsistent STM capability/callback slot); a callback returns
+        ``ERROR``, ``PANIC``, ``INVALID``, or an unknown status; or the provider
+        returns a malformed response, unsupported request capability, or other
+        backend failure. Both ``ValueError`` and ``RuntimeError`` can arise
+        during acquisition before callback execution; the validation layer, not
+        acquisition-versus-execution timing, determines the exception class.
 
     Notes
     -----

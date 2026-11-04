@@ -5,8 +5,10 @@ from __future__ import annotations
 import inspect
 import os
 import runpy
+import shutil
 import subprocess
 import sys
+import tempfile
 from importlib.resources import files
 from pathlib import Path
 from typing import Any
@@ -104,6 +106,32 @@ def test_workflow_raises_sections_match_binding_boundaries() -> None:
         assert "RuntimeError" in raises
         assert "OdConfigurationError" not in raises
         assert "OdResourceValidationError" not in raises
+        normalized_raises = " ".join(raises.split())
+        for phrase in [
+            "non-capsule",
+            "adam_core.propagator.v2",
+            "malformed descriptor",
+            "NativeBackend",
+            "complete provenance suffix",
+            "capability bits are unknown to this Core",
+            "ABI-v2 contract",
+            "partial provenance suffix",
+            "alignment",
+            "reserved words",
+            "null context or callback",
+            "THREAD_SAFE",
+            "empty identity strings",
+            "malformed fingerprints",
+            "STM capability/callback slot",
+            "ERROR",
+            "PANIC",
+            "INVALID",
+            "unknown status",
+            "malformed response",
+            "before callback execution",
+            "validation layer",
+        ]:
+            assert phrase in normalized_raises
 
     for config_type in [
         IodStageConfig,
@@ -131,6 +159,51 @@ def test_workflow_raises_sections_match_binding_boundaries() -> None:
         assert f"PropagationError::{category}" in runtime_arm
 
 
+def test_native_abi_reference_scopes_unknown_capability_bits_to_od() -> None:
+    reference = (
+        Path(__file__).resolve().parents[4]
+        / "docs"
+        / "source"
+        / "reference"
+        / "native_propagator_abi.rst"
+    ).read_text()
+    normalized = " ".join(reference.split())
+    assert "General propagation ignores unknown capability bits" in normalized
+    assert "record the provider's complete capability set in provenance" in normalized
+    assert "reject any bit unknown to this Core with ``ValueError``" in normalized
+    assert "Unknown bits advertise optional future" not in normalized
+
+
+def test_guide_enumerates_the_validation_layer_exception_split() -> None:
+    guide = (
+        Path(__file__).resolve().parents[4]
+        / "docs"
+        / "source"
+        / "use_cases"
+        / "orbit_determination.rst"
+    ).read_text()
+    normalized = " ".join(guide.split())
+    for phrase in [
+        "``ValueError`` covers a non-capsule",
+        "capsule not named ``adam_core.propagator.v2``",
+        "malformed descriptor",
+        "``NativeBackend`` declaration/table identity mismatch",
+        "without the complete provenance suffix",
+        "capability bits unknown to this Core",
+        "``RuntimeError`` covers an ABI-v2 table-contract violation",
+        "base size or partial suffix",
+        "null context or callback",
+        "missing ``THREAD_SAFE``",
+        "empty identity strings",
+        "malformed fingerprints",
+        "STM capability/callback slot",
+        "callback ``ERROR``, ``PANIC``, ``INVALID``, or an unknown status",
+        "Both classes can therefore arise before callback execution",
+        "validation layer, not acquisition-versus-execution timing",
+    ]:
+        assert phrase in normalized
+
+
 def test_rendered_od_rustdoc_has_complete_public_member_docs() -> None:
     root = Path(__file__).resolve().parents[4]
     environment = os.environ.copy()
@@ -155,10 +228,42 @@ def test_rendered_od_rustdoc_has_complete_public_member_docs() -> None:
             str(root / "docs" / "scripts" / "check_od_rustdoc_coverage.py"),
             str(root / "target" / "doc" / "adam_core" / "od"),
             "--expected-total",
-            "370",
+            "378",
         ],
         check=True,
     )
+
+    # The pinned count is a rendered-coverage sentinel, not an API-size
+    # promise. Prove specifically that an enum-variant field regression is
+    # detected rather than merely asserting that the unmodified tree passes.
+    with tempfile.TemporaryDirectory() as temporary:
+        mutated_root = Path(temporary) / "od"
+        shutil.copytree(root / "target" / "doc" / "adam_core" / "od", mutated_root)
+        page = mutated_root / "enum.ObservationTransform.html"
+        rendered = page.read_text()
+        field = "variant.FillMissingAstrometricUncertainty.field.resource"
+        anchor = rendered.index(f'id="{field}"')
+        docblock = rendered.index('<div class="docblock">', anchor)
+        rendered = (
+            rendered[:docblock]
+            + '<div class="docblock-removed">'
+            + rendered[docblock + len('<div class="docblock">') :]
+        )
+        page.write_text(rendered)
+        control = subprocess.run(
+            [
+                sys.executable,
+                str(root / "docs" / "scripts" / "check_od_rustdoc_coverage.py"),
+                str(mutated_root),
+                "--expected-total",
+                "378",
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        assert control.returncode != 0
+        assert f"MISSING od/enum.ObservationTransform.html: {field}" in control.stdout
 
 
 def _narrative_runner_namespace() -> dict[str, Any]:

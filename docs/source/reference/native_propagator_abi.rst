@@ -136,8 +136,10 @@ provenance-incomplete. This is the only required downstream ABI adaptation.
 Capabilities
 ------------
 
-``capabilities`` is a bit set. Unknown bits advertise optional future
-provider support and are ignored by older consumers. Known bits retain their
+``capabilities`` is a bit set. General propagation ignores unknown capability
+bits for forward compatibility. Canonical OD workflows instead record the
+provider's complete capability set in provenance and reject any bit unknown to
+this Core with ``ValueError`` before propagation. Known bits retain their
 specified fail-closed validation, so a provider cannot omit semantics required
 by the current request:
 
