@@ -235,6 +235,20 @@ def test_kernel_data_constrains_icu_for_clean_rust_1_87_consumers() -> None:
     assert 'cargo package -p "$crate" --locked' in workflow
     assert 'RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps' in workflow
     assert "Latest-stable Rust compatibility (non-authoritative)" in workflow
+    setup_python = (
+        "actions/setup-python@"
+        "a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0"
+    )
+    assert workflow.count("name: Set up supported PyO3 build interpreter") == 2
+    assert workflow.count(f"uses: {setup_python}") == 2
+    assert workflow.count('python-version: "3.13"') == 2
+    package_job, latest_job = workflow.split("  latest-stable-compatibility:", 1)
+    for job in (package_job, latest_job):
+        assert job.count(setup_python) == 1
+        assert job.count('python-version: "3.13"') == 1
+        assert job.index(setup_python) < job.index("dtolnay/rust-toolchain@")
+        assert job.index(setup_python) < job.index("cargo ")
+    assert "PYO3_USE_ABI3_FORWARD_COMPATIBILITY" not in workflow
     assert "dtolnay/rust-toolchain@stable" in workflow
     assert "cargo test --workspace --locked --all-features" in workflow
     assert "--locked --no-default-features" in workflow
