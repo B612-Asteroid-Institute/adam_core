@@ -4,9 +4,9 @@ Tests for the Huber robust loss in differential correction
 algorithms under evaluation alongside hard rejection.
 
 Synthetic two-body observations of a known truth orbit exercise the complete
-native solver with one injected gross outlier. Closed-form callback-oracle
-coverage moved to the active Rust tests mapped in
-``migration/od_native_oracle_coverage.md``.
+native solver with one injected gross outlier. Independent closed-form coverage
+lives beside the implementation in the active Rust ``od_refine`` tests; retired
+Python prediction callbacks are not an oracle.
 """
 
 from __future__ import annotations

@@ -113,6 +113,17 @@ html_theme_options = {
 
 sitemap_url_scheme = "{link}"
 
+# The three landing-page figure targets are validated by the strict HTML build
+# and duplicated by adjacent :doc: roles; linkcheck has no HTML output tree in
+# which to resolve their explicit ``.html`` targets. The DOI resolves for
+# browsers but rejects automated HEAD/GET checks with HTTP 403.
+linkcheck_ignore = [
+    r"^cookbook/orbit_sources_and_state_tables\.html$",
+    r"^cookbook/transfer_and_porkchop\.html$",
+    r"^use_cases/impact_risk\.html$",
+    r"^https://doi\.org/10\.1051/0004-6361/201936502$",
+]
+
 
 def _apidoc_excludes(package_dir: Path) -> list[str]:
     excludes: list[str] = []
@@ -163,7 +174,9 @@ def _generate_api_reference(_: object) -> None:
 
 The package exports immutable configuration/profile values, OD result schemas,
 and the four canonical native-backed batch workflows. Expert numerical kernels
-live in the ``algorithms`` namespace.
+live in the ``algorithms`` namespace. See the
+:doc:`canonical Python and standalone Rust guide </use_cases/orbit_determination>`
+for complete inputs, data flow, examples, products, and error boundaries.
 
 Subpackages
 -----------

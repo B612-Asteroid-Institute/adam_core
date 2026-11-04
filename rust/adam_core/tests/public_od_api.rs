@@ -52,6 +52,64 @@ fn canonical_workflows_have_deliberate_root_and_module_exports() {
 }
 
 #[test]
+fn canonical_workflows_keep_meaningful_rustdoc_and_examples() {
+    let core = include_str!("../src/od.rs");
+    for (signature, headline, route_terms) in [
+        (
+            "pub fn run_iod(",
+            "/// Run canonical batch initial orbit determination (IOD).",
+            ["IodRunConfig", "first appearance", "no-solution"],
+        ),
+        (
+            "pub fn run_od(",
+            "/// Run canonical full OD: one preparation, IOD, then refinement.",
+            [
+                "OdConfig",
+                "run_od == run_iod + refine",
+                "applies the configured observation pipeline",
+            ],
+        ),
+        (
+            "pub fn refine(",
+            "/// Refine explicit orbit/member groups using their persisted prepared handoff.",
+            [
+                "RefinementRunConfig",
+                "original/used astrometry",
+                "mutable relational data",
+            ],
+        ),
+        (
+            "pub fn evaluate_orbits(",
+            "/// Evaluate explicit orbit/member groups without changing their states.",
+            ["EvaluationConfig", "validated explicit", "does not refit"],
+        ),
+    ] {
+        let end = core.find(signature).expect("canonical workflow signature");
+        let start = core[..end]
+            .rfind(headline)
+            .expect("canonical workflow Rustdoc headline");
+        let docs = &core[start..end];
+        let normalized = docs
+            .lines()
+            .map(|line| line.trim_start_matches("///").trim())
+            .collect::<Vec<_>>()
+            .join(" ");
+        for required in ["# Example", "Empty input", "provider", "provenance"] {
+            assert!(
+                normalized.contains(required),
+                "{signature} lacks {required}"
+            );
+        }
+        for required in route_terms {
+            assert!(
+                normalized.contains(required),
+                "{signature} lacks {required}"
+            );
+        }
+    }
+}
+
+#[test]
 fn removed_public_preparation_seams_are_not_reintroduced() {
     let core = include_str!("../src/od.rs");
     for forbidden in [

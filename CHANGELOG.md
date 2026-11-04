@@ -118,9 +118,22 @@ This file contains notable changes in adam-core
 
 - Replace ``initial_orbit_determination`` / ``iod`` with ``run_iod``;
   ``od`` with ``run_od``; and ``differential_correction`` with ``refine``.
-  Replace direct residual evaluation with ``evaluate_orbits``. All four are
-  association/member-backed batch functions and all return
-  ``(FittedOrbits, FittedOrbitMembers, OrbitDeterminationFailures)``.
+  Replace direct residual evaluation with ``evaluate_orbits``. Python calls are
+  association/member-backed batch functions returning exactly
+  ``(FittedOrbits, FittedOrbitMembers, OrbitDeterminationFailures)``. Standalone
+  Rust calls the same orchestration through ``adam_core::{run_iod, run_od,
+  refine, evaluate_orbits}`` (or ``adam_core::od``), receives ``OdBatchResult``,
+  and borrows its three immutable slices or consumes ``into_products()``.
+- Split declaration from execution scope: ``IodStageConfig`` contains only the
+  complete IOD/search/correction/ranging declaration; bound ``IodRunConfig``
+  additionally owns the ordered pipeline, verified resources, and optional
+  profile identity. ``EvaluationConfig`` is independent and self-contained;
+  passing a full ``OdConfig`` to IOD or evaluation is no longer accepted.
+- Select every pipeline, semantic resource, stage config, and propagation-only
+  provider explicitly. Python ``None`` explicitly selects Core's built-in
+  two-body provider; Rust uses ``OdPropagator::two_body()``. Python callbacks,
+  provider-owned OD, profile-selected propagators, and resource fallback are
+  removed.
 - Replace ``NativeOrbitFitter``, ``OrbitFitter``, ``LeastSquares``, executable
   observation models, ``CompositeModel``, ``models=``, and
   ``observatory_bias_model=`` with a bound ``OdConfig`` or one of its stage
@@ -140,6 +153,16 @@ This file contains notable changes in adam-core
   memberships, source fingerprints, configuration, and orbit-state identity
   cannot be refined or evaluated canonically. Rerun IOD/OD to create the 0.7
   handoff rather than translating incomplete provenance.
+- ``orbit_id`` is mutable relational data. Relabel by directly editing the
+  orbit row and all matching member foreign keys together. Rename helpers are
+  removed; scientific/member fingerprints do not depend on that label.
+- Remove uses of model/callback/plugin APIs, public preparation helpers,
+  ``OdPropagatorSource``, raw group handles, rename APIs, and OD build-identity
+  fields/checks. Core build identity remains artifact diagnostics only and is
+  not a scientific provenance or compatibility dimension.
+- The public Rust crates are ordinary Python-independent libraries. Python is
+  optional binding/marshalling surface; standalone Rust does not import Python,
+  use PyO3/IPC, or discover Python resource packages.
 - Tests should compare NaN-bearing results by canonical IPC bytes/bit patterns,
   assert typed failure columns and original group IDs, and verify exact
   ``run_od == run_iod + refine`` composition instead of Python callback order.

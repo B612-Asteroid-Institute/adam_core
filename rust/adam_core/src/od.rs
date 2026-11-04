@@ -2757,7 +2757,55 @@ fn run_iod_with_source<S: OdPropagatorSource + ?Sized>(
     }
 }
 
-/// Canonical batch IOD over deterministic first-appearance association groups.
+/// Run canonical batch initial orbit determination (IOD).
+///
+/// `input` contains typed source/coordinate/observer rows plus explicit
+/// association pairs. `config` is a self-contained [`IodRunConfig`]: its
+/// [`ObservationPipeline`], verified resources, complete [`IodStageConfig`],
+/// and optional immutable profile identity are already bound. `provider` is an
+/// explicit propagation-only [`OdPropagator`]; it never owns IOD policy.
+///
+/// # Ordering and products
+///
+/// Association groups follow first appearance, successful members follow
+/// source-row order, and a detection may belong to multiple groups. The result
+/// owns exactly three primary products: [`OdBatchResult::fitted_orbits`],
+/// [`OdBatchResult::fitted_orbit_members`], and
+/// [`OdBatchResult::failures`]. The immutable slices preserve that order;
+/// [`OdBatchResult::into_products`] moves all three out together.
+///
+/// Empty input returns an empty `OdBatchResult` without resolving an external
+/// provider. Safely isolated no-solution outcomes become typed failure records
+/// and later groups continue. Invalid IDs/memberships, configuration/resources,
+/// provenance, or provider/protocol behavior are invocation-fatal
+/// [`OdBatchError`] values and produce no partial result. Static preparation
+/// completes before provider acquisition.
+///
+/// Every emitted orbit carries complete path-free configuration, ordered input,
+/// state, provider, diagnostics, and consistency provenance. `orbit_id` remains
+/// a mutable relational label; immutable association identity is held by the
+/// group/orbit object identity and member fingerprints.
+///
+/// # Example
+///
+/// ```no_run
+/// use adam_core::{
+///     od::{AssociatedObservations, IodRunConfig, IodStageConfig,
+///          ObservationPipeline, OdPropagator},
+///     run_iod,
+/// };
+///
+/// # fn workflow(input: &AssociatedObservations) -> Result<(), Box<dyn std::error::Error>> {
+/// let config = IodRunConfig::explicit(
+///     ObservationPipeline::as_supplied(),
+///     IodStageConfig::core_v1(),
+/// )?;
+/// let provider = OdPropagator::two_body();
+/// let result = run_iod(input, &config, &provider)?;
+/// let (_orbits, _members, _failures) = result.into_products();
+/// # Ok(())
+/// # }
+/// ```
 pub fn run_iod(
     input: &AssociatedObservations,
     config: &IodRunConfig,
@@ -2939,7 +2987,58 @@ fn run_od_with_source<S: OdPropagatorSource + ?Sized>(
     }
 }
 
-/// Canonical exact composition: one preparation, IOD, then refinement.
+/// Run canonical full OD: one preparation, IOD, then refinement.
+///
+/// `input` is an [`AssociatedObservations`] batch, `config` is the complete
+/// bound [`OdConfig`], and `provider` is the explicit propagation-only backend.
+/// Profiles and semantic resource paths must be bound before this call; Rust
+/// validates their exact identities and stores only path-free provenance.
+///
+/// # Composition and ordering
+///
+/// Rust validates all memberships, applies the configured observation pipeline
+/// once, runs IOD, and refines every accepted seed on those exact prepared rows.
+/// This is the authoritative `run_od == run_iod + refine` composition: IOD
+/// failures are carried forward, successful seeds are refined, and standalone
+/// refinement consumes persisted used astrometry rather than rerunning the
+/// transforms. Matching direct and composed routes have equal scientific
+/// products and canonical OD provenance. Emitted `orbit_id` values are mutable
+/// relational labels; immutable association identity remains in orbit/group
+/// object identity and member fingerprints.
+///
+/// Groups follow first association appearance; members follow source order;
+/// overlapping hypotheses are retained. The result exposes immutable fitted
+/// orbit, fitted-member, and typed-failure slices, or all three owned vectors
+/// through [`OdBatchResult::into_products`]. Empty input produces three empty
+/// products without provider resolution.
+///
+/// Invalid static contracts (configuration, resources, IDs, mappings, or
+/// covariance dimension) and invocation-fatal provider/protocol failures return
+/// [`OdBatchError`] without partial products. Isolated IOD/refinement scientific
+/// failures continue by group. A failed refinement emits a state only when Rust
+/// retained an actual native best state. Complete configuration/input/state/
+/// provider/diagnostic provenance is attached to each emitted orbit.
+///
+/// # Example
+///
+/// ```no_run
+/// use adam_core::od::{
+///     self, AssociatedObservations, IodStageConfig, ObservationPipeline,
+///     OdConfig, OdPropagator, RefinementRunConfig,
+/// };
+///
+/// # fn workflow(input: &AssociatedObservations) -> Result<(), Box<dyn std::error::Error>> {
+/// let config = OdConfig::explicit(
+///     ObservationPipeline::as_supplied(),
+///     IodStageConfig::core_v1(),
+///     RefinementRunConfig::core_v1(),
+/// )?;
+/// let provider = OdPropagator::two_body();
+/// let result = od::run_od(input, &config, &provider)?;
+/// let (_orbits, _members, _failures) = result.into_products();
+/// # Ok(())
+/// # }
+/// ```
 pub fn run_od(
     input: &AssociatedObservations,
     config: &OdConfig,
@@ -3579,7 +3678,49 @@ fn refine_with_source<S: OdPropagatorSource + ?Sized>(
     }
 }
 
-/// Refine explicit orbit/member groups using persisted prepared astrometry.
+/// Refine explicit orbit/member groups using their persisted prepared handoff.
+///
+/// `input` is a [`MemberedOrbits`] value containing exact states, explicit
+/// members, original/used astrometry, source and membership fingerprints, and
+/// one validated provenance value per orbit. `config` is an independent,
+/// self-contained [`RefinementRunConfig`]. `provider` supplies propagation only.
+/// The observation pipeline is not reapplied.
+///
+/// Groups follow the first appearance of each orbit label in the member table;
+/// rows inside a group return to source-observation order. Empty input returns
+/// three empty products without provider resolution. Isolated fit failures
+/// continue and appear in [`OdBatchResult::failures`]; `input_orbit_id` identifies
+/// a seed when no output state exists. Invalid or incomplete memberships,
+/// changed source/astrometry, missing or inconsistent provenance, covariance
+/// errors, and fatal provider/protocol failures return an invocation-wide
+/// [`OdBatchError`] with no partial result. Static membership, source-identity,
+/// covariance, and provenance checks complete before provider resolution.
+///
+/// `orbit_id` is mutable relational data. Relabel only a safe owned
+/// [`MemberedOrbits`] value and update its orbit and member labels together;
+/// immutable scientific and membership fingerprints deliberately exclude the
+/// presentation label. Returned orbits carry the composed or standalone
+/// refinement configuration plus input/state/provider/diagnostic provenance.
+///
+/// # Example
+///
+/// ```no_run
+/// use adam_core::{
+///     od::{MemberedOrbits, OdPropagator, RefinementRunConfig},
+///     refine,
+/// };
+///
+/// # fn workflow(input: &MemberedOrbits) -> Result<(), Box<dyn std::error::Error>> {
+/// let config = RefinementRunConfig::core_v1();
+/// let provider = OdPropagator::two_body();
+/// let result = refine(input, &config, &provider)?;
+/// let fitted: &[_] = result.fitted_orbits();
+/// let members: &[_] = result.fitted_orbit_members();
+/// let failures: &[_] = result.failures();
+/// # let _ = (fitted, members, failures);
+/// # Ok(())
+/// # }
+/// ```
 pub fn refine(
     input: &MemberedOrbits,
     config: &RefinementRunConfig,
@@ -3791,6 +3932,40 @@ fn evaluate_orbits_with_source<S: OdPropagatorSource + ?Sized>(
 }
 
 /// Evaluate explicit orbit/member groups without changing their states.
+///
+/// `input` is a canonical [`MemberedOrbits`] handoff; a validated explicit
+/// subset of its members is permitted. `config` is the independent
+/// [`EvaluationConfig`] containing the mandatory covariance dimension and exact
+/// prediction-fit settings. It is intentionally not an `OdConfig`. `provider`
+/// supplies propagation only.
+///
+/// Groups follow first member appearance and rows follow source order. Empty
+/// input returns three empty products without provider resolution. Scientific
+/// evaluation failures continue per orbit. Invalid covariance, memberships,
+/// source/state/fingerprint/provenance identity, or fatal provider/protocol
+/// behavior returns an invocation-wide [`OdBatchError`] and no partial result.
+///
+/// Evaluation does not refit, transform, or relabel states. Successful records
+/// preserve the input state while adding evaluation statistics and complete
+/// evaluation-route configuration/provider/diagnostic provenance; prior-stage
+/// backend fields are not copied as if they had executed again. `orbit_id`
+/// remains mutable relational data, but evaluation does not change it; callers
+/// relabel an owned [`MemberedOrbits`] orbit row and its member foreign keys
+/// together.
+///
+/// # Example
+///
+/// ```no_run
+/// use adam_core::od::{self, EvaluationConfig, MemberedOrbits, OdPropagator};
+///
+/// # fn workflow(input: &MemberedOrbits) -> Result<(), Box<dyn std::error::Error>> {
+/// let config = EvaluationConfig::core_v1();
+/// let provider = OdPropagator::two_body();
+/// let result = od::evaluate_orbits(input, &config, &provider)?;
+/// let (_orbits, _members, _failures) = result.into_products();
+/// # Ok(())
+/// # }
+/// ```
 pub fn evaluate_orbits(
     input: &MemberedOrbits,
     config: &EvaluationConfig,

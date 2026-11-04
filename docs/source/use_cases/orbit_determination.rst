@@ -1,56 +1,130 @@
 Orbit determination
 ===================
 
-Core 0.7's canonical batch functions are ``run_iod``, ``run_od``, ``refine``,
-and ``evaluate_orbits``. Each returns ``FittedOrbits``,
-``FittedOrbitMembers``, and typed ``OrbitDeterminationFailures``. Raw IOD/OD
-uses a ``SourceCatalog`` plus explicit ``Associations``; refinement and
-evaluation use explicit ``FittedOrbitMembers``. One object is one group through
-the same batch path; there are no primary one-group aliases.
+Core 0.7 has four canonical orbit-determination (OD) workflows. The Python and
+standalone Rust entry points call the same Rust orchestration:
 
-Rust-owned configuration and execution
---------------------------------------
+.. list-table:: Canonical OD workflows
+   :header-rows: 1
+   :widths: 13 25 22 20 20
 
-Core Rust owns complete OD configuration, profile expansion, ordered
-observation transforms, resource validation/parsing, fitting and rejection
-settings, and path-free canonical configuration provenance. Python declares
-immutable values, binds explicit local paths, marshals tables, and assembles
-result tables. A propagation provider supplies only its negotiated native
-capsule.
+   * - Workflow
+     - Input
+     - Configuration
+     - Provider
+     - Result
+   * - ``run_iod``
+     - Python ``SourceCatalog`` + ``Associations``; Rust
+       ``AssociatedObservations``
+     - Bound ``IodRunConfig``
+     - Python ``Propagator | None``; Rust ``&OdPropagator``
+     - Fitted orbits, fitted members, typed failures
+   * - ``run_od``
+     - Python ``SourceCatalog`` + ``Associations``; Rust
+       ``AssociatedObservations``
+     - Bound ``OdConfig``
+     - Python ``Propagator | None``; Rust ``&OdPropagator``
+     - Fitted orbits, fitted members, typed failures
+   * - ``refine``
+     - Python ``FittedOrbits`` + ``FittedOrbitMembers`` + ``SourceCatalog``;
+       Rust ``MemberedOrbits``
+     - ``RefinementRunConfig``
+     - Python ``Propagator | None``; Rust ``&OdPropagator``
+     - Fitted orbits, fitted members, typed failures
+   * - ``evaluate_orbits``
+     - Python ``FittedOrbits`` + ``FittedOrbitMembers`` + ``SourceCatalog``;
+       Rust ``MemberedOrbits``
+     - Independent ``EvaluationConfig``
+     - Python ``Propagator | None``; Rust ``&OdPropagator``
+     - Fitted orbits, fitted members, typed failures
 
-The complete fused configuration is ``OdConfig``. ``run_od`` receives it
-directly; ``run_iod`` receives its bound ``config.for_iod()`` projection.
-Standalone ``refine`` receives ``RefinementRunConfig`` and
-``evaluate_orbits`` receives an independent ``EvaluationConfig`` (often
-``config.for_evaluation()``). The types have deliberately separate scopes:
+Every Python call returns exactly
+``(FittedOrbits, FittedOrbitMembers, OrbitDeterminationFailures)``. Rust returns
+``OdBatchResult`` with immutable slices for those same three products and an
+owning ``into_products()`` conversion. A one-object request is one batch group;
+there are no canonical one-group aliases.
 
-* ``IodStageConfig`` owns search, selection, velocity, acceptance, correction,
-  ranging, candidate-fit, solver, Jacobian, covariance, and two-body settings;
-* ``IodRunConfig`` binds one ``IodStageConfig`` to an ordered, already-bound
-  ``ObservationPipeline`` and optional immutable profile identity;
-* ``OdConfig`` binds one ``IodStageConfig``, one ``RefinementRunConfig``
-  (complete CMC2003 or worst-residual settings), and one ordered pipeline;
-* ``EvaluationConfig`` independently owns covariance dimension and the exact
-  prediction-fit settings used for residual evaluation.
+Python table contract
+---------------------
 
-Explicit callers construct ``IodRunConfig(pipeline, iod_stage, resources)``
-or ``OdConfig.explicit(...)`` only after choosing every scientific setting.
-``EvaluationConfig(6, prediction_fit)`` is directly constructible and does not
-carry a hidden ``OdConfig``.
+Raw IOD and OD consume these table shapes:
 
-Python exposes typed immutable declarations such as ``IodSearchConfig``,
-``SpanSearchConfig``, ``CorrectionConfig``, ``RangingConfig``,
-``WhitenedFitConfig``, ``TwoBodyFitConfig``, ``Cmc2003Refinement``, and
-``WorstResidualRefinement``. Their canonical JSON is parsed, validated, and
-re-emitted by Rust; Python does not maintain a second validation/default path.
-There is no implicit scientific ``Default`` at the high-level boundary.
+* ``SourceCatalog (N)`` requires unique, non-blank ``id`` and non-null
+  ``time``, ``ra``, ``dec``, ``observatory_code``, and ``catalog_id`` values.
+  The configured pipeline must leave finite positive angular uncertainty.
+  Present OD covariances are validated as dimension six before snapshots,
+  transforms, indexing, or variance interpretation.
+* ``Associations (M)`` requires non-null ``detection_id`` and ``object_id``.
+  Detection IDs reference ``SourceCatalog.id``. A detection may belong to
+  several hypotheses, but the same ``(object_id, detection_id)`` pair may not
+  be repeated.
 
-Python batch example
-~~~~~~~~~~~~~~~~~~~~
+Refinement and evaluation consume:
 
-The public Core profile uses the installed public EFCC18 data package only to
-obtain an explicit path; Rust validates that file before adopting a propagation
-provider::
+* ``FittedOrbits (O)`` with unique, non-blank ``orbit_id``, an exact Cartesian
+  state and six-dimensional covariance, and complete canonical configuration,
+  input, state, provider, and consistency provenance;
+* ``FittedOrbitMembers (K)`` with ``orbit_id``/``obs_id`` foreign keys,
+  ``original_astrometry``, ``used_astrometry``, ``input_fingerprint``, and
+  ``membership_fingerprint`` for every row; and
+* the original ``SourceCatalog (N)``. Source IDs, detection metadata, epochs,
+  observer geometry, and original astrometry must still match the persisted
+  fingerprints.
+
+Every input orbit needs at least one explicit member. Evaluation may receive a
+validated subset of those members. Old tables lacking the canonical handoff
+columns must be regenerated by ``run_iod`` or ``run_od``; Core does not guess
+missing scientific identity.
+
+Python: explicit one-group IOD
+------------------------------
+
+This example deliberately selects no transforms, no resource slots, and the
+built-in two-body provider. ``None`` is an explicit provider choice, not an
+omitted argument. The named Core-v1 stage values are loaded from Rust; they are
+not a function default.
+
+.. code-block:: python
+
+   from adam_core.observations import Associations
+   from adam_core.orbit_determination import (
+       IodRunConfig,
+       IodStageConfig,
+       ObservationPipeline,
+       ResourceBindings,
+       run_iod,
+   )
+
+   one_group = Associations.from_kwargs(
+       detection_id=source_catalog.id,
+       object_id=["hypothesis-1"] * len(source_catalog),
+   )
+   iod_config = IodRunConfig(
+       ObservationPipeline.as_supplied(),
+       IodStageConfig.core_v1(),
+       ResourceBindings({}),
+   )
+   propagator = None  # Explicitly select Core's built-in two-body provider.
+
+   fitted_orbits, fitted_members, failures = run_iod(
+       source_catalog,
+       one_group,
+       propagator,
+       iod_config,
+   )
+
+``ObservationPipeline.as_supplied()`` is the only manual no-transform
+operation. Its canonical provenance records ``transforms=[]``. Do not pass an
+empty callback list, a model dictionary, or a profile name as a substitute.
+
+Python: batch OD with the public profile
+----------------------------------------
+
+The public profile helper resolves only the installed public EFCC18 path. The
+path is passed explicitly to Rust, which verifies the file before acquiring a
+provider. Profiles never choose a propagator.
+
+.. code-block:: python
 
    from adam_core.orbit_determination import (
        CORE_OD_V1,
@@ -58,9 +132,9 @@ provider::
        run_od,
    )
 
-   # source_catalog is a SourceCatalog and associations is an Associations
-   # table. The propagator supplies propagation only.
    config = CORE_OD_V1.bind(core_od_v1_resource_bindings())
+   propagator = None  # Or a propagation-only native capsule provider.
+
    fitted_orbits, fitted_members, failures = run_od(
        source_catalog,
        associations,
@@ -68,182 +142,346 @@ provider::
        config,
    )
 
-Use ``config.for_iod()``, ``config.for_refinement()``, and
-``config.for_evaluation()`` for the corresponding standalone stage. Never omit
-``config`` and never pass a profile itself where a bound stage configuration is
-required.
+Groups follow first appearance of ``Associations.object_id``. Rows inside each
+group follow ``SourceCatalog`` order. Overlap is intentional:
 
-Observation pipelines
----------------------
+.. code-block:: python
 
-The closed transform set is:
+   from adam_core.observations import Associations
 
-* ``FillMissingAstrometricUncertainty``;
-* ``Efcc18CatalogBiasCorrection``;
-* ``StationBandResidualCovarianceAdjustment`` with explicit Add/Replace and a
-  minimum residual count;
-* ``NightlyBatchDeweighting``.
+   overlapping = Associations.from_kwargs(
+       detection_id=["obs-1", "obs-2", "obs-2", "obs-3"],
+       object_id=["short-arc", "short-arc", "long-arc", "long-arc"],
+   )
+   orbits, members, failures = run_od(
+       source_catalog,
+       overlapping,
+       propagator,
+       config,
+   )
 
-Declaration order and repeated transforms are authoritative. Python callbacks,
-dynamic registration, model dictionaries, and external science plugin ABIs are
-not supported. Deliberate no-transform behavior is expressed only by
-``ObservationPipeline.as_supplied()`` and is recorded as ``transforms=[]``.
+One hypothesis may fail scientifically while a later one succeeds. Inspect the
+three products together: failure rows retain the original group identity and
+stage counters; successful membership rows state exactly which observations
+belong to each emitted orbit.
 
-Profiles and resources
-----------------------
+Python: IOD handoff and later refinement
+----------------------------------------
 
-``CORE_OD_V1`` and ``ASTEROID_INSTITUTE_OD_V1`` are immutable path-free Rust
-profile definitions. A caller binds every required semantic slot explicitly::
+``run_iod`` persists original and used astrometry, exact variances, complete
+memberships, and fingerprints. Save the orbit and member tables together, then
+refine them without running the observation pipeline again:
+
+.. code-block:: python
+
+   from adam_core.orbit_determination import refine, run_iod
+
+   iod_orbits, iod_members, iod_failures = run_iod(
+       source_catalog,
+       associations,
+       propagator,
+       config.for_iod(),
+   )
+
+   refined_orbits, refined_members, refine_failures = refine(
+       iod_orbits,
+       iod_members,
+       source_catalog,
+       propagator,
+       config.for_refinement(),
+   )
+
+The complete composed outcome contains ``iod_failures`` plus the outputs and
+failures for seeds that reached refinement. Internally, fused ``run_od`` is the
+same composition: prepare once, run IOD, then refine accepted states on the
+same rows. A matching direct and composed route has equal scientific products
+and canonical OD provenance. If a different valid refinement configuration is
+chosen, composition becomes explicitly unprofiled rather than claiming the
+original named profile.
+
+Python: evaluate complete groups or a member subset
+---------------------------------------------------
+
+Evaluation has its own configuration. It does not change states or reuse a full
+``OdConfig`` as hidden state.
+
+.. code-block:: python
+
+   import pyarrow.compute as pc
+
+   from adam_core.orbit_determination import evaluate_orbits
+
+   selected_id = fitted_orbits.orbit_id[0].as_py()
+   one_orbit = fitted_orbits.apply_mask(
+       pc.equal(fitted_orbits.orbit_id, selected_id)
+   )
+   selected_members = fitted_members.apply_mask(
+       pc.equal(fitted_members.orbit_id, selected_id)
+   )
+
+   evaluated_orbits, evaluated_members, evaluation_failures = evaluate_orbits(
+       one_orbit,
+       selected_members,
+       source_catalog,
+       propagator,
+       config.for_evaluation(),
+   )
+
+A smaller validated subset of ``selected_members`` is also permitted.
+Evaluation reports residuals, solution/outlier flags, statistics, and
+independent evaluation-route provenance. It does not copy prior-stage backend
+fields as if those stages executed again.
+
+Mutable orbit labels
+--------------------
+
+``orbit_id`` is mutable relational data. Immutable association identity lives
+in the orbit ``object_id``/native group identity and Rust-owned fingerprints.
+To relabel a handoff, edit the selected ``FittedOrbits.orbit_id`` and every
+matching ``FittedOrbitMembers.orbit_id`` together, then call ``refine`` or
+``evaluate_orbits``:
+
+.. code-block:: python
+
+   import pyarrow as pa
+
+   old_id = fitted_orbits.orbit_id[0].as_py()
+   new_id = "analyst-label"
+   fitted_orbits = fitted_orbits.set_column(
+       "orbit_id",
+       pa.array(
+           [new_id if value == old_id else value
+            for value in fitted_orbits.orbit_id.to_pylist()],
+           type=pa.large_string(),
+       ),
+   )
+   fitted_members = fitted_members.set_column(
+       "orbit_id",
+       pa.array(
+           [new_id if value == old_id else value
+            for value in fitted_members.orbit_id.to_pylist()],
+           type=pa.large_string(),
+       ),
+   )
+
+There is no rename API. Core validates the foreign keys before provider work; a
+partial, duplicate, blank, or dangling relabel fails atomically.
+
+Profiles, pipelines, and resources
+----------------------------------
+
+Core Rust owns complete OD configuration, profile expansion, transform order,
+resource validation/parsing, numerical settings, and path-free canonical
+configuration provenance. Python constructs immutable declarations, binds local
+paths, marshals typed tables, and assembles typed results.
+
+The configuration types have separate scopes:
+
+* ``IodStageConfig`` is the complete search/selection/velocity/acceptance/
+  correction/ranging/candidate-fit declaration. It has no pipeline or resource
+  binding.
+* ``IodRunConfig`` binds one ``IodStageConfig`` to an ordered
+  ``ObservationPipeline``, exact resources, and optional immutable profile
+  identity.
+* ``OdConfig`` contains that pipeline plus IOD and ``RefinementRunConfig``
+  declarations. It deliberately has no implicit ``Default``.
+* ``RefinementRunConfig`` contains the complete fit/Jacobian/covariance/
+  rejection declaration.
+* ``EvaluationConfig`` independently contains covariance dimension and exact
+  prediction-fit settings.
+
+The closed transform set is ``FillMissingAstrometricUncertainty``,
+``Efcc18CatalogBiasCorrection``,
+``StationBandResidualCovarianceAdjustment`` (explicit Add/Replace and minimum
+count), and ``NightlyBatchDeweighting``. Order and repetition are authoritative.
+Python callbacks, dynamically registered transforms, model dictionaries,
+profile-selected propagators, and resource fallback are not supported.
+
+``CORE_OD_V1`` applies EFCC18 correction and nightly deweighting. It does not
+fill missing uncertainty. ``ASTEROID_INSTITUTE_OD_V1`` additionally uses the
+semantic station/catalog uncertainty and station/band residual-covariance
+slots. Deployment and distribution are outside Core; callers separately
+provision local files and bind all semantic slots explicitly:
+
+.. code-block:: python
+
+   from pathlib import Path
 
    from adam_core.orbit_determination import (
        ASTEROID_INSTITUTE_OD_V1,
        ResourceBindings,
    )
 
-   config = ASTEROID_INSTITUTE_OD_V1.bind(
-       ResourceBindings(
-           {
-               "efcc18_catalog_bias_table": efcc18_path,
-               "station_catalog_uncertainty_table": station_sigma_path,
-               "station_band_residual_covariance_table": station_covariance_path,
-           }
-       )
+   resources = ResourceBindings(
+       {
+           "efcc18_catalog_bias_table": Path("/srv/od/bias.dat"),
+           "station_catalog_uncertainty_table": Path("/srv/od/station.parquet"),
+           "station_band_residual_covariance_table": Path(
+               "/srv/od/residual-covariance.parquet"
+           ),
+       }
    )
+   institute_config = ASTEROID_INSTITUTE_OD_V1.bind(resources)
 
-The Institute profile applies those resources in this exact order: fill
-missing uncertainty, EFCC18 correction, station/band residual covariance Add
-with minimum count 30, then nightly deweighting with cap 4. ``CORE_OD_V1``
-applies EFCC18 correction and nightly deweighting only. It intentionally has no
-missing-uncertainty fallback while public-profile qualification remains open;
-inputs without finite positive astrometric variances fail rather than receiving
-an invented default.
+Validation aggregates missing, unused, swapped, corrupt, schema, identity, and
+structural problems by slot before transforms, propagation, or fitting.
+Absolute paths are excluded from fingerprints and provenance. A named profile
+never falls back to another profile or to an explicit configuration.
 
-Validation checks semantic slot, product/version, schema/version, SHA-256, byte
-size, row count/structure, and table schema. Missing, corrupt, swapped, parse,
-and structural failures are typed and aggregated by slot before science work.
-Unused bindings fail. Absolute paths are never included in profile or bound
-configuration fingerprints.
+Standalone Rust workflows
+-------------------------
 
-The profiles preserve the accepted d21 effective numerical constants:
-``lt_tol=1e-12``, ephemeris maximum iterations 1000, and light-time maximum
-iterations 10. Changing settings, transform order, resource bytes, or schemas
-requires a new version/fingerprint decision.
+Standalone Rust uses typed values directly; it does not require Python, PyO3,
+Arrow IPC, or a capsule for the built-in provider. Both the root and module
+paths deliberately expose the same four implementations:
 
-Choose ``CORE_OD_V1`` when observations already carry finite positive
-astrometric uncertainty and the public EFCC18 correction plus nightly
-batch-deweighting policy is appropriate. Choose
-``ASTEROID_INSTITUTE_OD_V1`` only when the separately supplied, licensed
-station resources are available and its fill/add/deweight policy is appropriate
-for the data. The names do not establish comparative accuracy, and Core 0.7
-does not make a profile-superiority claim.
+.. code-block:: rust
 
-Standalone Rust resource validation
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   use adam_core::{run_iod, run_od, refine, evaluate_orbits};
+   use adam_core::od::{
+       AssociatedObservations, EvaluationConfig, IodRunConfig, IodStageConfig,
+       MemberedOrbits, ObservationPipeline, OdConfig, OdPropagator,
+       RefinementRunConfig,
+   };
 
-Rust does not import Python packages or discover resources. Pass absolute paths
-through semantic slots::
+   fn workflows(
+       associated: &AssociatedObservations,
+       membered: &MemberedOrbits,
+   ) -> Result<(), Box<dyn std::error::Error>> {
+       let pipeline = ObservationPipeline::as_supplied();
+       let iod_stage = IodStageConfig::core_v1();
+       let refinement_config = RefinementRunConfig::core_v1();
+       let iod_config = IodRunConfig::explicit(
+           pipeline.clone(),
+           iod_stage.clone(),
+       )?;
+       let od_config = OdConfig::explicit(
+           pipeline,
+           iod_stage,
+           refinement_config,
+       )?;
+       let evaluation_config = EvaluationConfig::core_v1();
+       let provider = OdPropagator::two_body();
 
-   use adam_core::coords::{ResourceBindings, ResourceSlot, CORE_OD_V1};
+       let iod = run_iod(associated, &iod_config, &provider)?;
+       let full = run_od(associated, &od_config, &provider)?;
+       let refined = refine(membered, &refinement_config, &provider)?;
+       let evaluated = evaluate_orbits(membered, &evaluation_config, &provider)?;
 
-   let bindings = ResourceBindings::new().bind(
+       let orbit_slice = iod.fitted_orbits();
+       let member_slice = iod.fitted_orbit_members();
+       let failure_slice = iod.failures();
+       let (orbits, members, failures) = full.into_products();
+       let _ = (
+           orbit_slice,
+           member_slice,
+           failure_slice,
+           orbits,
+           members,
+           failures,
+           refined,
+           evaluated,
+       );
+       Ok(())
+   }
+
+The complete executable ``rust/adam_core/examples/od_canonical_workflows.rs``
+constructs empty typed ``AssociatedObservations`` and ``MemberedOrbits`` values,
+executes all four routes, demonstrates immutable slices and ``into_products()``,
+and includes public-profile resource binding plus the external-provider
+constructor. Run it with:
+
+.. code-block:: console
+
+   cargo run -p adam_core --example od_canonical_workflows
+
+Rust does not discover Python packages or resources. Bind the public profile's
+semantic slot to an explicit path:
+
+.. code-block:: rust
+
+   use adam_core::od::{profiles::CORE_OD_V1, ResourceBindings, ResourceSlot};
+
+   let resources = ResourceBindings::new().bind(
        ResourceSlot::Efcc18CatalogBiasTable,
        "/absolute/path/to/bias.dat",
    );
-   let config = CORE_OD_V1.bind(&bindings)?;
+   let config = CORE_OD_V1.bind(&resources)?;
 
-The repository includes the complete runnable example
-``rust/adam_core/examples/validate_core_od_resource.rs``::
+``rust/adam_core/examples/validate_core_od_resource.rs`` validates that resource
+without downloading, caching, or fallback.
 
-   cargo run -p adam_core --example validate_core_od_resource -- \
-       /absolute/path/to/bias.dat
+Determinism, empty input, and failures
+--------------------------------------
 
-It validates bytes and structure without downloading, caching, or falling back
-to another source.
+Rust parses and validates the complete batch before provider or pipeline work.
+Null/blank IDs, duplicate source IDs or pairs, unknown references, ambiguous
+members, and input orbits without members abort atomically. Groups follow first
+appearance and rows follow source order. Overlapping hypotheses retain their
+independent groups.
 
-Propagation integration tolerance
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Empty input returns the exact three empty products and does not acquire an
+external provider. Errors have three boundaries:
 
-Profiles never select or configure a propagator. When ASSIST is the negotiated
-propagation-only provider, its ordinary ``epsilon=1e-6`` propagation default
-can produce evaluation noise under sub-metre perturbations on some long,
-heavily observed main-belt arcs. Existing qualification found ``epsilon=1e-8``
-to be converged and faster than tighter settings on a 30-object sample; use it
-as an evidence-based starting point for that workload and re-qualify other
-workloads. Avoid assuming that ``1e-12`` is safer: ASSIST state-transition
-integration stalled at that setting in the qualification. Core's two-scale
-weak-direction covariance diagnostic distinguishes approximately quadratic
-curvature from step-independent evaluation noise and reports an integration-
-tolerance hint; it checks consistency with the fit's own chi-square surface,
-not physical uncertainty realism.
+#. **Static preflight:** malformed typed configuration, resources, IDs,
+   memberships, covariance dimensions, or persisted provenance. These fail
+   before provider acquisition.
+#. **Invocation-fatal execution:** unsupported provider capabilities, malformed
+   provider identity/responses, backend errors, panics, or protocol violations.
+   These abort the invocation and return no partial products.
+#. **Per-group scientific outcome:** safely isolated no-solution, refinement,
+   or evaluation failures become deterministic rows of
+   ``OrbitDeterminationFailures`` and later groups continue.
 
-Canonical batch workflows
--------------------------
-
-Rust parses and validates complete memberships before provider or pipeline
-work. Null group IDs, unknown references, duplicate pairs, non-unique IDs, and
-orbits without explicit members abort atomically. Groups follow first
-appearance; members follow source-table order; overlapping hypotheses are
-supported.
-
-``run_od`` plans and prepares each group once, runs IOD, and refines the
-accepted seed on the exact same rows. Original and used astrometry, including
-exact diagonal variances, are persisted on members so standalone ``refine``
-consumes a bitwise-lossless prepared handoff. Refinement and
-evaluation fail closed when those snapshots are missing or when current source
-astrometry differs from the persisted original snapshot. Per-member Rust
-fingerprints also bind detection metadata, epochs/scale, observatory and observer
-geometry, prepared astrometry, explicit orbit membership, and exact orbit state.
-Expert kernels remain
-under ``adam_core.orbit_determination.algorithms``. Standalone Rust exposes
-predictor-level building blocks under ``adam_core_rs_coords::od::algorithms``.
+``orbit_id`` appears on a failure only when a state was emitted;
+``input_orbit_id`` identifies a refinement/evaluation seed when no output state
+exists. A non-converged fit remains in ``FittedOrbits`` with ``success=False``
+only when Rust retained a real best state.
 
 Provenance
 ----------
 
-Canonical batch results populate, where applicable:
+Canonical fitted-orbit rows record, where applicable:
 
-* ordered complete source/member, membership, and exact orbit-state fingerprints;
-* a validated provenance consistency digest covering route, complete
-  configuration (including profile selection), input fingerprint, and every
-  propagated IOD provider/backend/diagnostic/ambiguity field. The digest is
-  unkeyed consistency validation, not authentication or a tamper-proof
-  signature;
-* focused route;
-* native IOD/refinement provider identity and metadata;
-* IOD and refinement diagnostics;
-* complete canonical Rust configuration and its SHA-256;
-* ambiguity, rejection count, and rejected fraction;
-* original and used astrometry on member rows.
+* ordered complete source/member and membership fingerprints;
+* exact orbit state/time/origin/covariance plus physical and
+  non-gravitational-parameter identity;
+* route and complete canonical Rust configuration, including profile identity,
+  transforms/resources, and configuration SHA-256;
+* actual IOD/refinement/evaluation provider metadata and diagnostics;
+* IOD ambiguity, alternatives, rejection count, and rejected fraction; and
+* an unkeyed consistency digest covering route, configuration, input identity,
+  and propagated IOD metadata.
 
-Resource paths are excluded. Lower-level numerical kernels that do not run a
-complete configured workflow may legitimately leave runtime provenance fields
-null.
+The digest detects inconsistent persisted fields; it is not authentication or
+a tamper-proof signature. Resource paths and Core build identity are excluded
+from scientific provenance. Member rows retain original and used astrometry so
+prepared handoffs are lossless and auditable.
 
-Failure boundary
-----------------
+Propagation-only providers and licensing
+----------------------------------------
 
-Malformed configuration, resources, IDs/member mappings, unsupported provider
-capabilities and malformed provider responses are invocation-fatal with no
-partial output. Only safely isolated scientific
-no-solution/refinement/evaluation failures continue per group. They are rows of
-``OrbitDeterminationFailures`` with typed stage counters, not opaque JSON.
-``orbit_id`` is present only for an emitted state; ``input_orbit_id`` separately
-identifies a refine/evaluate input when a state-less failure occurs. IOD
-failures emit no placeholder orbit. A non-converged refinement remains in
-``FittedOrbits`` with ``success=False`` only when Rust returned an actual best
-state; local refinement/evaluation errors never relabel an untouched input seed.
+A Python provider contributes only the negotiated native propagation capsule.
+Core still owns grouping, transforms, IOD, fitting, rejection, covariance,
+failures, and provenance. See :doc:`../reference/native_propagator_abi` for the
+ABI-v2 identity, capability, lifetime, and error contract.
 
-Canonical IOD IDs include the self-contained ``IodRunConfig`` science
-fingerprint and deliberately exclude later refinement settings. ``run_iod`` →
-``refine`` composes that validated IOD configuration with the requested
-``RefinementRunConfig``. A named profile identity is retained only when the
-refinement matches that immutable profile; cross-configuration composition
-drops the profile and exactly equals an explicit unprofiled ``run_od``.
-Complete original membership is still required. Direct ``run_iod`` results are
-valid evaluation inputs after full provenance/member/state validation, and
-evaluation may use an explicit member subset. Evaluation uses only the
-prediction fit and covariance dimension in its independent
-``EvaluationConfig``. Provider ``RowFailure`` and other provider/protocol
-errors remain invocation-fatal rather than being converted to group failures.
-Evaluation outputs record evaluation-stage configuration/provider identity; they
-do not copy prior-stage backend fields or member weights.
+The capsule boundary loads separately built extensions and does not make
+``adam-core`` link to a GPL-covered provider. A standalone Rust application
+that directly links a GPL-covered propagation implementation creates a
+different distribution situation and must satisfy that provider's license;
+projects should evaluate their own obligations. This documentation does not
+claim that a final Core 0.7/ASSIST 0.6 release pair exists or is compatible.
+
+API reference
+-------------
+
+* :func:`adam_core.orbit_determination.workflows.run_iod`
+* :func:`adam_core.orbit_determination.workflows.run_od`
+* :func:`adam_core.orbit_determination.workflows.refine`
+* :func:`adam_core.orbit_determination.workflows.evaluate_orbits`
+* :class:`adam_core.orbit_determination.config.IodRunConfig`
+* :class:`adam_core.orbit_determination.config.OdConfig`
+* :class:`adam_core.orbit_determination.config.RefinementRunConfig`
+* :class:`adam_core.orbit_determination.config.EvaluationConfig`
+* :doc:`../reference/native_propagator_abi`

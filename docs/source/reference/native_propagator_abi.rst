@@ -14,10 +14,14 @@ prediction calls inside that workflow are batched C-ABI calls and never Python
 callbacks.
 
 Rust applications do not need this capsule. They compile the generic
-adam-core algorithms against a concrete ``Propagator`` implementation (for
-example ``AssistPropagator``) directly. The capsule is the binary boundary
-between separately built Python extension modules and does not make
-adam-core link to a GPL provider.
+adam-core algorithms against a concrete ``Propagator`` implementation directly
+and pass it through ``OdPropagator::external``. The capsule is the binary
+boundary between separately built Python extension modules and does not make
+adam-core link to a GPL-covered provider. An application that instead directly
+links a GPL-covered Rust provider creates a different distribution situation
+and must satisfy that provider's license; projects should evaluate their own
+obligations. This ABI description does not claim that a final Core 0.7/ASSIST
+0.6 release pair exists or is compatible.
 
 Discovery and identity
 ----------------------
