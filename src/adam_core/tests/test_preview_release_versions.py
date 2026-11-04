@@ -236,8 +236,7 @@ def test_kernel_data_constrains_icu_for_clean_rust_1_87_consumers() -> None:
     assert 'RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps' in workflow
     assert "Latest-stable Rust compatibility (non-authoritative)" in workflow
     setup_python = (
-        "actions/setup-python@"
-        "a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0"
+        "actions/setup-python@" "a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0"
     )
     assert workflow.count("name: Set up supported PyO3 build interpreter") == 2
     assert workflow.count(f"uses: {setup_python}") == 2
