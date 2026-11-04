@@ -321,7 +321,16 @@ def test_bound_profile_projection_is_one_time_path_independent_value_state(
     )
     with pytest.raises(TypeError, match="Core Rust"):
         od.ProfileIdentity("CORE_OD_V1", 1, "f" * 64, _token=object())
-    with pytest.raises(ValueError, match="init=False"):
+    # Python 3.13 changed this stdlib contract violation from ValueError to
+    # TypeError; both prove that an init=False identity cannot be injected.
+    replace_error = TypeError if sys.version_info >= (3, 13) else ValueError
+    with pytest.raises(
+        replace_error,
+        match=(
+            r"field profile_identity is declared with init=False, "
+            r"it cannot be specified with replace\(\)"
+        ),
+    ):
         dataclasses.replace(config, profile_identity=None)
 
     direct = od.OdConfig.explicit(
