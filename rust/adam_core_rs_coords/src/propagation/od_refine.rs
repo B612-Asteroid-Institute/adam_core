@@ -4821,7 +4821,7 @@ mod tests {
             "{}",
             probe[0]
         );
-        assert!(probe[0].contains("epsilon"), "{}", probe[0]);
+        assert!(probe[0].contains("configured tolerance"), "{}", probe[0]);
         assert!(
             noisy.iter().all(|w| !w.contains("Falling back")),
             "{noisy:?}"

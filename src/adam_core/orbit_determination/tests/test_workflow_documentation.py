@@ -188,7 +188,10 @@ def test_non_gravitational_provider_boundary_matches_native_capability() -> None
     normalized = " ".join(reference.split())
     assert "``Propagator::supports_non_gravitational_parameters``" in normalized
     assert "``EXTERNAL_PROPAGATOR_CAP_NON_GRAVITATIONAL``" in normalized
-    assert "Core fails closed before propagation" in normalized
+    assert (
+        "ABI-v2 boundary and Core's built-in two-body provider fail closed"
+        in normalized
+    )
     assert "supports_non_gravitational_forces" not in normalized
     assert "log a warning" not in normalized
 

@@ -131,10 +131,11 @@ Provider Boundary
 parameters through its propagation contracts. A Rust provider reports support
 through ``Propagator::supports_non_gravitational_parameters``; an external
 ABI-v2 provider advertises
-``EXTERNAL_PROPAGATOR_CAP_NON_GRAVITATIONAL``. Core fails closed before
-propagation when dynamically active parameters are supplied to a provider
-without that capability; it does not warn and silently drop the acceleration.
-The provider remains responsible for interpreting the fixed g(r) constants
-and validating its force integration. Consult the selected provider's
-documentation for its supported force laws, configuration, accuracy evidence,
-and limits.
+``EXTERNAL_PROPAGATOR_CAP_NON_GRAVITATIONAL``. The ABI-v2 boundary and Core's
+built-in two-body provider fail closed when dynamically active parameters are
+unsupported; they do not warn and silently drop the acceleration. A custom
+in-process Rust ``Propagator`` is responsible for honoring its own capability
+declaration. Every provider remains responsible for interpreting the fixed g(r)
+constants and validating its force integration. Consult the selected
+provider's documentation for its supported force laws, configuration, accuracy
+evidence, and limits.
