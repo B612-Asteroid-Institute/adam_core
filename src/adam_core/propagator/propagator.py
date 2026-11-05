@@ -1,7 +1,8 @@
 """Abstract propagator framework.
 
 adam_core ships no concrete propagator and no Python composition: concrete
-Rust-backed propagators are supplied by separately installed providers. Each public surface -- :meth:`Propagator.propagate_orbits`,
+Rust-backed propagators are supplied by separately installed providers. Each
+public surface -- :meth:`Propagator.propagate_orbits`,
 :meth:`EphemerisMixin.generate_ephemeris`, and
 :meth:`~adam_core.dynamics.impacts.ImpactMixin.detect_collisions` -- is the
 abstract single-crossing contract that a backend implements as one
