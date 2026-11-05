@@ -49,10 +49,11 @@ Trail Orbits with Spice Translation
 -----------------------------------
 
 Use this mode when you want OpenSpace to drive positions from an SPK kernel.
+The example assumes ``propagator`` is a configured implementation supplied by
+the application.
 
 .. code-block:: python
 
-   from adam_assist import ASSISTPropagator
    from adam_core.orbits.openspace import create_renderable_trail_orbit
    from adam_core.orbits.spice_kernel import orbits_to_spk
 
@@ -61,7 +62,7 @@ Use this mode when you want OpenSpace to drive positions from an SPK kernel.
        output_file="openspace_assets/neo_kernel.bsp",
        start_time=start_time,
        end_time=end_time,
-       propagator=ASSISTPropagator(),
+       propagator=propagator,
        step_days=0.25,
        window_days=32.0,
        kernel_type="w03",
@@ -82,8 +83,8 @@ Practical Notes
 
 * Keep identifiers path-safe and stable.
 * For Spice translation, SPK kernel + ``spice_id_mappings`` are required.
-* For production kernels, use a high-fidelity propagator such as
-  ``adam_assist.ASSISTPropagator``.
+* For production kernels, use an application-supplied propagator whose force
+  model and accuracy are appropriate for the product.
 
 When to Use
 -----------

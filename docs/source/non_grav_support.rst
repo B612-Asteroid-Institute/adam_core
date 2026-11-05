@@ -63,9 +63,9 @@ accelerations plus the fixed g(r) model constants:
 
 Fitted source parameters outside this set (``DT``, ``AMRAT``, ``RHO``) are
 not stored: importers drop their values and marginalize their covariance
-dimensions out, logging a warning. Note this makes DT-fit comet solutions an
-approximation (the asymmetric-outgassing time offset is not representable and
-ASSIST implements no equivalent force).
+dimensions out, logging a warning. This makes DT-fit comet solutions an
+approximation because the asymmetric-outgassing time offset is not
+representable by the canonical schema.
 
 Extended Coordinate Covariance
 ------------------------------
@@ -109,10 +109,9 @@ Current limits:
   cometary-to-Cartesian defect tracked in `issue #210
   <https://github.com/B612-Asteroid-Institute/adam_core/issues/210>`_. Until
   that is fixed, element-based SBDB/NEOCC imports of such objects cannot be
-  propagated meaningfully: the non-gravitational force model itself is
-  validated against JPL Horizons from Cartesian starting states (see the
-  adam-assist regression suite), so parity claims for hyperbolic comets are
-  bounded to that force-integration path, not the element-conversion path.
+  propagated meaningfully. Validation of a provider's non-gravitational force
+  model from Cartesian starting states does not validate this element-
+  conversion path.
 
 Two-Body Note
 -------------
@@ -125,20 +124,14 @@ block, the covariance is propagated with the 2-body state-transition
 Jacobian and the non-gravitational block is carried through as dynamically
 inert — consistent with the 2-body force model.
 
-ASSIST Boundary
----------------
+Provider Boundary
+-----------------
 
-``adam_assist`` versions with non-grav support handle propagation when the
-usable estimated non-gravitational parameters are limited to Marsden-style
-``A1``, ``A2``, and ``A3``. This requires a companion ``adam_assist``
-release; ``adam_core`` itself only carries the parameters through its
-``Propagator`` interface (propagators that do not declare
-``supports_non_gravitational_forces`` log a warning when handed orbits with
-non-zero parameter values or a non-gravitational covariance block).
-
-- Real regression coverage includes SBDB ``99942`` end-to-end propagation,
-  a NEOCC ``99942`` parsing-to-ASSIST handoff check, and (in adam-assist)
-  frozen JPL Horizons trajectory regressions for all three supported g(r)
-  laws -- inverse-square (99942), standard comet Marsden (C/2022 E3), and a
-  custom tuple (1I/'Oumuamua) -- accurate to tens--hundreds of metres over
-  +/- 300 days against km-to-million-km gravity-only controls.
+``adam_core`` carries the canonical Marsden-style ``A1``, ``A2``, and ``A3``
+parameters through its ``Propagator`` interface. A concrete provider is
+responsible for declaring ``supports_non_gravitational_forces``, interpreting
+the fixed g(r) constants, and validating its force integration against its own
+reference data. Providers that do not declare the capability log a warning
+when handed non-zero parameter values or a non-gravitational covariance block.
+Consult the selected provider's documentation for its supported force laws,
+configuration, accuracy evidence, and limits.

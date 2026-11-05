@@ -182,7 +182,7 @@ impl From<SchemaError> for PropagationError {
 /// used to decide which derivatives are exact for it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BackendIdentity {
-    /// Stable backend name (e.g. `adam_core.two_body`, `adam_assist`).
+    /// Stable backend name (for example `adam_core.two_body` or `external.n_body`).
     pub name: String,
     /// Backend version (its crate or package version).
     pub version: String,

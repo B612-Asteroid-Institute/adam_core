@@ -4,14 +4,14 @@
 //! All drivers live in the permissive core, generic over the [`Propagator`]
 //! trait: candidate states are predicted through the shared backend-generic
 //! barycentric ephemeris workflow, so each iteration costs one base
-//! prediction plus one batched multi-state Jacobian prediction. GPL backends
-//! (the adam-assist equivalent) only plug in their `Propagator`
-//! implementation; no OD logic lives behind the GPL boundary.
+//! prediction plus one batched multi-state Jacobian prediction. External
+//! backends only plug in their `Propagator` implementation; no OD logic lives
+//! behind the provider boundary.
 //!
 //! Three public work units mirror adam-core's public OD surfaces:
 //!
-//! * [`fit_orbit_least_squares_barycentric`] — the Gauss-Newton fitter behind
-//!   `ASSISTPropagator.fit_least_squares`.
+//! * [`fit_orbit_least_squares_barycentric`] — the backend-generic
+//!   Gauss-Newton fitter.
 //! * [`fit_orbit_least_squares_evaluated_barycentric`] — the fitter fused with
 //!   the final `evaluate_orbits`-style residual/statistics pass, so
 //!   `adam_core.orbit_determination.fit_least_squares` is one crossing.
@@ -114,7 +114,8 @@
 //!   same canonical bounded traversal; the first candidate satisfying both
 //!   reduced-chi2 and `min_arc_length` (after any bounded rejection) wins.
 //! * **Evidence.** On the first solutions of 126 walk-forward objects
-//!   (ASSIST, MPC observations, 2026-10-14) this policy seeded 116 of 122
+//!   (external n-body propagation, MPC observations, 2026-10-14) this policy
+//!   seeded 116 of 122
 //!   against 16 for the legacy `combinations` + prefit gate and 114 for the
 //!   study's seeding ladder, with the ladder's final reduced chi2 (median
 //!   ratio 1.000), median 1.9 s per object; single-object reruns since
@@ -3835,8 +3836,8 @@ pub(super) fn observed_times_mjd_tdb(
 
 /// Predict spherical topocentric coordinates for `states`, returned as
 /// candidate-major row blocks in INPUT candidate order. Backends may emit
-/// rows in their own public order (the ASSIST backend sorts by orbit id, so
-/// `od-candidate-10` would precede `od-candidate-2`); rows are scattered back
+/// rows in their own public order (a backend may sort by orbit id, so
+/// `od-candidate-10` precedes `od-candidate-2`); rows are scattered back
 /// through the diagnostics' input orbit/observer indices. Outer `Err` is a
 /// request/setup failure; inner `Err` is a per-row numerical failure carrying
 /// the legacy light-time message.
@@ -3925,8 +3926,8 @@ pub fn candidate_orbit_batch(
     )?;
     let mut candidates = OrbitBatch::new(
         // Zero-padded ids: backends honoring the public sorted-output
-        // contract (the ASSIST propagator sorts blocks lexicographically by
-        // orbit id) must return candidate blocks in input order, otherwise
+        // contract (some propagators sort blocks lexicographically by orbit
+        // id) must return candidate blocks in input order, otherwise
         // Jacobian plus/minus blocks would be paired against the wrong
         // candidates once more than ten states are batched.
         (0..states.len())

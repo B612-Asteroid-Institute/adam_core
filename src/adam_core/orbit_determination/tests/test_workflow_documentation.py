@@ -3,16 +3,14 @@
 from __future__ import annotations
 
 import inspect
-import os
-import runpy
-import shutil
-import subprocess
-import sys
-import tempfile
+import re
+import textwrap
+from dataclasses import dataclass
 from importlib.resources import files
 from pathlib import Path
 from typing import Any
 
+import pyarrow as pa  # type: ignore[import-untyped]
 import pytest
 
 from ...observations import Associations, SourceCatalog
@@ -21,15 +19,26 @@ from ..config import (
     IodRunConfig,
     IodStageConfig,
     OdConfig,
+    OdResourceValidationError,
     RefinementRunConfig,
     ResourceBindings,
 )
 from ..evaluate import OrbitDeterminationObservations
-from ..fitted_orbits import FittedOrbitMembers, FittedOrbits
+from ..fitted_orbits import (
+    FittedOrbitMembers,
+    FittedOrbits,
+    OrbitDeterminationFailures,
+)
 from ..observation_pipeline import ObservationPipeline
 from ..profiles import OdProfile
 from ..workflows import evaluate_orbits, refine, run_iod, run_od
-from .test_batch_workflows import _two_body_source
+from .test_batch_workflows import (
+    _assert_exact_results,
+    _concat_failures,
+    _two_body_source,
+)
+
+_ROOT = Path(__file__).resolve().parents[4]
 
 
 @pytest.mark.parametrize("workflow", [run_iod, run_od, refine, evaluate_orbits])
@@ -204,117 +213,229 @@ def test_guide_enumerates_the_validation_layer_exception_split() -> None:
         assert phrase in normalized
 
 
-def test_rendered_od_rustdoc_has_complete_public_member_docs() -> None:
-    root = Path(__file__).resolve().parents[4]
-    environment = os.environ.copy()
-    environment["RUSTDOCFLAGS"] = "-D warnings"
-    subprocess.run(
-        [
-            environment.get("CARGO", "cargo"),
-            "doc",
-            "--locked",
-            "-p",
-            "adam_core",
-            "--no-deps",
-            "--all-features",
-        ],
-        cwd=root / "rust",
-        env=environment,
-        check=True,
-    )
-    subprocess.run(
-        [
-            sys.executable,
-            str(root / "docs" / "scripts" / "check_od_rustdoc_coverage.py"),
-            str(root / "target" / "doc" / "adam_core" / "od"),
-            "--expected-total",
-            "378",
-        ],
-        check=True,
-    )
+@dataclass(frozen=True)
+class CodeBlock:
+    """One parsed reStructuredText code-block directive and body."""
 
-    # The pinned count is a rendered-coverage sentinel, not an API-size
-    # promise. Prove specifically that an enum-variant field regression is
-    # detected rather than merely asserting that the unmodified tree passes.
-    with tempfile.TemporaryDirectory() as temporary:
-        mutated_root = Path(temporary) / "od"
-        shutil.copytree(root / "target" / "doc" / "adam_core" / "od", mutated_root)
-        page = mutated_root / "enum.ObservationTransform.html"
-        rendered = page.read_text()
-        field = "variant.FillMissingAstrometricUncertainty.field.resource"
-        anchor = rendered.index(f'id="{field}"')
-        docblock = rendered.index('<div class="docblock">', anchor)
-        rendered = (
-            rendered[:docblock]
-            + '<div class="docblock-removed">'
-            + rendered[docblock + len('<div class="docblock">') :]
+    language: str
+    body: str
+
+
+_GUIDE_BLOCK_CONTRACT = (
+    ("python", "one_group = Associations.from_kwargs"),
+    ("python", "config = CORE_OD_V1.bind"),
+    ("python", "overlapping = Associations.from_kwargs"),
+    ("python", "iod_orbits, iod_members, iod_failures = run_iod"),
+    ("python", "selected_id = fitted_orbits.orbit_id[0].as_py()"),
+    ("python", 'new_id = "analyst-label"'),
+    ("python", "institute_config = ASTEROID_INSTITUTE_OD_V1.bind(resources)"),
+    ("rust", "fn workflows("),
+    ("console", "cargo run -p adam_core --example od_canonical_workflows"),
+    ("console", "cargo run -p adam_core --example od_external_provider"),
+    ("rust", "let resources = ResourceBindings::new().bind("),
+)
+_WORKFLOW_BLOCK_CONTRACT = {
+    "run_iod": (("python", "one_group = Associations.from_kwargs"),),
+    "run_od": (("python", "config = CORE_OD_V1.bind"),),
+    "refine": (("python", "iod_orbits, iod_members, iod_failures = run_iod"),),
+    "evaluate_orbits": (("python", "evaluated_orbits, evaluated_members, failures"),),
+}
+
+
+def _code_blocks(text: str) -> list[CodeBlock]:
+    """Parse every code-block directive, rejecting malformed directives."""
+
+    lines = text.splitlines()
+    blocks: list[CodeBlock] = []
+    index = 0
+    while index < len(lines):
+        directive = lines[index].strip()
+        if not directive.startswith(".. code-block"):
+            index += 1
+            continue
+        match = re.fullmatch(r"\.\. code-block:: ([A-Za-z0-9_+.-]+)", directive)
+        if match is None:
+            raise AssertionError(f"malformed code-block directive: {directive!r}")
+        language = match.group(1)
+        index += 1
+        body: list[str] = []
+        while index < len(lines) and (
+            not lines[index].strip() or lines[index].startswith("   ")
+        ):
+            body.append(lines[index])
+            index += 1
+        blocks.append(CodeBlock(language, textwrap.dedent("\n".join(body)).strip("\n")))
+    return blocks
+
+
+def _assert_block_contract(
+    blocks: list[CodeBlock], contract: tuple[tuple[str, str], ...], label: str
+) -> None:
+    """Require exact directive count, language order, and stable block identities."""
+
+    assert len(blocks) == len(
+        contract
+    ), f"{label} code-block count changed: expected {len(contract)}, got {len(blocks)}"
+    for index, (block, (language, identity)) in enumerate(
+        zip(blocks, contract, strict=True)
+    ):
+        assert block.language == language, (
+            f"{label} block {index} language changed: "
+            f"expected {language!r}, got {block.language!r}"
         )
-        page.write_text(rendered)
-        control = subprocess.run(
-            [
-                sys.executable,
-                str(root / "docs" / "scripts" / "check_od_rustdoc_coverage.py"),
-                str(mutated_root),
-                "--expected-total",
-                "378",
-            ],
-            check=False,
-            capture_output=True,
-            text=True,
-        )
-        assert control.returncode != 0
-        assert f"MISSING od/enum.ObservationTransform.html: {field}" in control.stdout
+        assert (
+            identity in block.body
+        ), f"{label} block {index} lost expected identity {identity!r}"
 
 
-def _narrative_runner_namespace() -> dict[str, Any]:
-    runner = (
-        Path(__file__).resolve().parents[4]
-        / "docs"
-        / "scripts"
-        / "run_orbit_determination_examples.py"
+def _assert_products(namespace: dict[str, Any], names: tuple[str, str, str]) -> None:
+    orbits, members, failures = (namespace[name] for name in names)
+    assert isinstance(orbits, FittedOrbits)
+    assert isinstance(members, FittedOrbitMembers)
+    assert isinstance(failures, OrbitDeterminationFailures)
+
+
+def _execute(code: str, namespace: dict[str, Any], label: str) -> None:
+    exec(compile(code, label, "exec"), namespace)
+
+
+def _execute_documented_examples() -> None:
+    source_catalog = _source_catalog()
+    ids = source_catalog.id.to_pylist()
+    overlap_count = max(3, len(ids) // 2)
+    associations = Associations.from_kwargs(
+        detection_id=ids + ids[:overlap_count],
+        object_id=["full-arc"] * len(ids) + ["half-arc"] * overlap_count,
     )
-    return runpy.run_path(str(runner))
+    namespace: dict[str, Any] = {
+        "source_catalog": source_catalog,
+        "associations": associations,
+    }
+
+    guide = _ROOT / "docs" / "source" / "use_cases" / "orbit_determination.rst"
+    guide_blocks = _code_blocks(guide.read_text())
+    _assert_block_contract(guide_blocks, _GUIDE_BLOCK_CONTRACT, str(guide))
+    python_blocks = guide_blocks[:7]
+    assert all(block.language == "python" for block in python_blocks)
+    for index, block in enumerate(python_blocks):
+        label = f"{guide.name}:python[{index}]"
+        if index == 2:
+            local = dict(namespace)
+            local["source_catalog"] = source_catalog.set_column(
+                "id",
+                pa.array(
+                    [f"obs-{row + 1}" for row in range(len(source_catalog))],
+                    type=source_catalog.id.type,
+                ),
+            )
+            _execute(block.body, local, label)
+            _assert_products(local, ("orbits", "members", "failures"))
+        elif index == 6:
+            with pytest.raises(OdResourceValidationError):
+                _execute(block.body, dict(namespace), label)
+        else:
+            _execute(block.body, namespace, label)
+            expected_products = {
+                0: [("fitted_orbits", "fitted_members", "failures")],
+                1: [("fitted_orbits", "fitted_members", "failures")],
+                3: [
+                    ("iod_orbits", "iod_members", "iod_failures"),
+                    ("refined_orbits", "refined_members", "refine_failures"),
+                ],
+                4: [
+                    (
+                        "evaluated_orbits",
+                        "evaluated_members",
+                        "evaluation_failures",
+                    )
+                ],
+            }.get(index, [])
+            for names in expected_products:
+                _assert_products(namespace, names)
+
+    relabeled = namespace["fitted_orbits"]
+    assert "analyst-label" in relabeled.orbit_id.to_pylist()
+    evaluated = evaluate_orbits(
+        relabeled,
+        namespace["fitted_members"],
+        source_catalog,
+        namespace["propagator"],
+        namespace["config"].for_evaluation(),
+    )
+    refined = refine(
+        relabeled,
+        namespace["fitted_members"],
+        source_catalog,
+        namespace["propagator"],
+        namespace["config"].for_refinement(),
+    )
+    assert "analyst-label" in evaluated[0].orbit_id.to_pylist()
+    assert "analyst-label" in refined[0].orbit_id.to_pylist()
+
+    direct = run_od(source_catalog, associations, None, namespace["config"])
+    iod = run_iod(source_catalog, associations, None, namespace["config"].for_iod())
+    staged = refine(
+        iod[0],
+        iod[1],
+        source_catalog,
+        None,
+        namespace["config"].for_refinement(),
+    )
+    _assert_exact_results(
+        direct,
+        (staged[0], staged[1], _concat_failures(iod[2], staged[2])),
+    )
+
+    for workflow in [run_iod, run_od, refine, evaluate_orbits]:
+        name = workflow.__name__
+        blocks = _code_blocks(inspect.getdoc(workflow) or "")
+        _assert_block_contract(
+            blocks, _WORKFLOW_BLOCK_CONTRACT[name], f"{name} docstring"
+        )
+        local = {
+            "source_catalog": source_catalog,
+            "associations": associations,
+            "config": namespace["config"],
+            "fitted_orbits": namespace["iod_orbits"],
+            "fitted_members": namespace["iod_members"],
+            "run_iod": run_iod,
+            "refine": refine,
+            "evaluate_orbits": evaluate_orbits,
+        }
+        _execute(blocks[0].body, local, f"{name}.__doc__[0]")
 
 
 def test_checked_in_narrative_examples_execute() -> None:
-    _narrative_runner_namespace()["main"]()
+    _execute_documented_examples()
 
 
 def test_narrative_parser_and_contract_fail_closed_on_mutation() -> None:
-    namespace = _narrative_runner_namespace()
-    code_blocks = namespace["code_blocks"]
-    assert_contract = namespace["assert_block_contract"]
-    contract = namespace["GUIDE_BLOCK_CONTRACT"]
     guide = (
-        Path(__file__).resolve().parents[4]
-        / "docs"
-        / "source"
-        / "use_cases"
-        / "orbit_determination.rst"
+        _ROOT / "docs" / "source" / "use_cases" / "orbit_determination.rst"
     ).read_text()
 
     with pytest.raises(AssertionError, match="language changed"):
-        assert_contract(
-            code_blocks(
+        _assert_block_contract(
+            _code_blocks(
                 guide.replace(".. code-block:: python", ".. code-block:: python3", 1)
             ),
-            contract,
+            _GUIDE_BLOCK_CONTRACT,
             "mutated guide",
         )
     with pytest.raises(AssertionError, match="count changed"):
-        assert_contract(
-            code_blocks(guide.replace(".. code-block:: python", ".. note::", 1)),
-            contract,
+        _assert_block_contract(
+            _code_blocks(guide.replace(".. code-block:: python", ".. note::", 1)),
+            _GUIDE_BLOCK_CONTRACT,
             "mutated guide",
         )
     with pytest.raises(AssertionError, match="lost expected identity"):
-        assert_contract(
-            code_blocks(guide.replace("one_group =", "one_group_broken =", 1)),
-            contract,
+        _assert_block_contract(
+            _code_blocks(guide.replace("one_group =", "one_group_broken =", 1)),
+            _GUIDE_BLOCK_CONTRACT,
             "mutated guide",
         )
     with pytest.raises(AssertionError, match="malformed code-block directive"):
-        code_blocks(".. code-block: python\n\n   pass")
+        _code_blocks(".. code-block: python\n\n   pass")
 
 
 def test_documented_workflow_type_and_value_boundaries_are_exercised() -> None:

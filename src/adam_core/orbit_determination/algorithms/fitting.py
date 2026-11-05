@@ -609,8 +609,8 @@ def fit_least_squares(
         - ``"auto"`` (default): derivatives that follow the selected
           dynamics: ``"analytic"`` when the propagator declares two-body
           dynamics (``Propagator.two_body_dynamics``), ``"propagator"`` when
-          its native backend supplies state-transition matrices (ASSIST's
-          variational equations), ``"central"`` otherwise.
+          its native backend supplies state-transition matrices, ``"central"``
+          otherwise.
         - ``"propagator"``: the propagation backend's own state-transition
           matrices chained through the exact light-time and projection
           derivatives: exact for that backend's dynamics, at about the cost

@@ -27,16 +27,16 @@ pip install "adam_core[plots]"        # Plotting and date-axis formatting
 ```
 
 Native wheels support CPython 3.11-3.13 on manylinux 2.17+ x86-64/AArch64 and
-macOS Apple silicon/Intel. Windows is deferred because the required
-``libassist-sys 1.2.1`` acceptance stack depends on upstream ASSIST's POSIX
-memory mapping; musllinux is also unsupported. Python installs reuse kernel
-data from the active environment; pure-Rust consumers use override ->
-installed-Python -> cache -> checksummed wheel resolution, with
-``ADAM_CORE_KERNEL_OFFLINE=1`` disabling downloads.
+macOS Apple silicon/Intel. Windows and musllinux are not current release
+targets. Python installs reuse kernel data from the active environment;
+pure-Rust consumers use override -> installed-Python -> cache -> checksummed
+wheel resolution, with ``ADAM_CORE_KERNEL_OFFLINE=1`` disabling downloads.
 
-ASSIST propagation is provided by the separate ``adam-assist`` distribution as
-``adam_assist.ASSISTPropagator``. ``adam-assist`` owns the orchestration layer
-and consumes ``libassist-sys`` and ``librebound-sys`` directly.
+Propagation and ephemeris generation require a separately installed concrete
+implementation of the `adam_core.propagator.Propagator` contract. ADAM Core
+does not bundle or recommend a provider; consult the selected provider's
+documentation for installation, configuration, supported physics, and license
+terms.
 
 ## Usage
 
@@ -182,26 +182,25 @@ spherical_elements = orbits.coordinates.to_spherical()
 ### Propagator
 The propagator class in `adam_core` provides a generalized interface to the supported orbit integrators and ephemeris generators. The propagator class is designed to be used with the `Orbits` class and can handle multiple orbits and times. 
 
-You will need to install either `adam-assist`, or another compatible propagator in order to use propagation, ephemeris generation, or impact analysis.
+Install and configure a compatible concrete propagator to use propagation,
+ephemeris generation, or impact analysis. The examples below assume the
+application has supplied that instance as `propagator`.
 
 #### Propagation
-To propagate orbits with ASSIST (here we grab some orbits from Horizons first):
+Here we grab some orbits from Horizons before passing them to the configured
+propagator:
 
 ```python
 import numpy as np
 from astropy import units as u
 
 from adam_core.orbits.query import query_horizons
-from adam_assist import ASSISTPropagator
 from adam_core.time import Timestamp
 
 # Get orbits to propagate
 initial_time = Timestamp.from_mjd([60000.0], scale="tdb")
 object_ids = ["Duende", "Eros", "Ceres"]
 orbits = query_horizons(object_ids, initial_time)
-
-# initialize the propagator
-propagator = ASSISTPropagator()
 
 # Define propagation times
 times = initial_time.from_mjd(initial_time.mjd() + np.arange(0, 100))
@@ -217,13 +216,13 @@ propagated_orbits = propagator.propagate_orbits(
 ```
 
 #### Ephemeris Generation
-Ephemeris generation requires a compatible propagator. `adam-assist` supplies the supported high-precision N-body implementation and maps propagated covariance matrices to the sky plane.
+Ephemeris generation requires a compatible propagator. The implementation owns
+its propagation fidelity; Core defines the result tables and contract.
 
 ```python
 import numpy as np
 from astropy import units as u
 
-from adam_assist import ASSISTPropagator
 from adam_core.observers import Observers
 from adam_core.orbits.query import query_horizons
 from adam_core.time import Timestamp
@@ -232,8 +231,6 @@ from adam_core.time import Timestamp
 initial_time = Timestamp.from_mjd([60000.0], scale="tdb")
 object_ids = ["Duende", "Eros", "Ceres"]
 orbits = query_horizons(object_ids, initial_time)
-
-propagator = ASSISTPropagator()
 
 # Define a set of observers and observation times
 times = Timestamp.from_mjd(initial_time.mjd() + np.arange(0, 100))
@@ -295,8 +292,8 @@ propagated_orbits = propagate_2body(
 
 #### 2-body Ephemeris Generation
 This package also has functionality to generate ephemerides for a set of orbits. We do not recommend you use this with
-2-body propagated orbits as it will not be accurate for more than a few days. However, if you used a N-body propagator
-such as ASSIST, you can feed in the propagated orbits to this function to generate ephemerides. We call the ephemeris generator
+2-body propagated orbits as it will not be accurate for more than a few days. However, if you used a compatible n-body
+propagator, you can feed in the propagated orbits to this function to generate ephemerides. We call the ephemeris generator
 2-body because the light-time correction is applied using a 2-body propagator.
 
 The ephemeris generator can map covariances directly to the sky plane. To do this, propagate
@@ -307,7 +304,6 @@ then automatically map the propagated covariance matrices to the sky-plane.
 import numpy as np
 from astropy import units as u
 
-from adam_assist import ASSISTPropagator
 from adam_core.observers import Observers
 from adam_core.orbits.query import query_sbdb
 from adam_core.dynamics import generate_ephemeris_2body
@@ -317,13 +313,11 @@ from adam_core.time import Timestamp
 object_ids = ["Duende", "Eros", "Ceres"]
 orbits = query_sbdb(object_ids)
 
-propagator = ASSISTPropagator()
-
 # Define a set of observers and observation times
 times = Timestamp.from_mjd(np.arange(59000, 60000), scale="tdb")
 observers = Observers.from_code("I11", times)
 
-# Propagate orbits with ASSIST (including covariances)
+# Propagate orbits with the application-supplied provider (including covariances)
 propagated_orbits = propagator.propagate_orbits(
     orbits,
     times,

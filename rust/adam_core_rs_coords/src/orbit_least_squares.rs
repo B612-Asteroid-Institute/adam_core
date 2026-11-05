@@ -132,10 +132,10 @@ fn chi_residuals(
 /// predicted spherical coordinates, `(M * N, 6)` row-major in candidate-major
 /// order — typically one `generate_ephemeris::<P>` crossing per call, which is
 /// what makes propagator-backed fits cheap: each Gauss-Newton iteration costs
-/// one base prediction plus ONE batched 12-state central Jacobian prediction (the
-/// ASSIST same-epoch multi-particle fast path integrates all candidates
-/// in a single simulation) instead of legacy scipy's seven sequential Python
-/// propagator round-trips.
+/// one base prediction plus ONE batched 12-state central Jacobian prediction.
+/// A backend with a same-epoch multi-state fast path can integrate all candidates
+/// in one request instead of legacy scipy's seven sequential Python propagator
+/// round-trips.
 ///
 /// The algorithm mirrors [`fit_orbit_2body_least_squares`] but uses a central
 /// finite-difference Jacobian to avoid a platform-dependent forward-difference

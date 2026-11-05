@@ -5,16 +5,15 @@ Propagator Requirement
 ----------------------
 
 High-fidelity operational propagation requires a concrete ``Propagator``
-implementation. In practice, use a production backend such as
-``adam_assist.ASSISTPropagator``.
+implementation supplied and configured by the application. The examples below
+assume ``propagator`` is such an instance; Core does not select a provider.
 
-Simple Case (Production Propagator)
+Simple Case (Application-Supplied Propagator)
 -----------------------------------
 
 .. code-block:: python
 
    import numpy as np
-   from adam_assist import ASSISTPropagator
    from adam_core.orbits import Orbits
    from adam_core.orbits.ephemeris import Ephemeris
    from adam_core.observers import Observers
@@ -25,7 +24,6 @@ Simple Case (Production Propagator)
    t0: Timestamp = Timestamp.from_mjd([60200.0], scale="tdb")
    times: Timestamp = Timestamp.from_mjd(t0.mjd().to_numpy() + np.arange(0, 10), scale="tdb")
 
-   propagator = ASSISTPropagator()
    propagated: Orbits = propagator.propagate_orbits(orbits, times, max_processes=1)
 
    observers: Observers = Observers.from_code("I11", times)
@@ -132,7 +130,7 @@ Basic Two-Body Baseline (Fast Screening)
 When to Use
 -----------
 
-* Default operational path: n-body propagator interface (for example ``ASSISTPropagator``).
+* Default operational path: an application-supplied high-fidelity ``Propagator``.
 * Advanced production tuning: ``max_processes`` + ``chunk_size`` on n-body methods.
 * Uncertainty-aware outputs: ``covariance=True`` on n-body methods.
 * Variant workflows: pass ``VariantOrbits`` directly to n-body ephemeris generation.

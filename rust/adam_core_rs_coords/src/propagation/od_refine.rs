@@ -74,9 +74,9 @@ pub enum JacobianMethod {
     /// Exact 2-body state-transition Jacobian by forward-mode autodiff (exact
     /// only for two-body dynamics).
     Analytic,
-    /// The propagation backend's state-transition matrices (e.g. ASSIST's
-    /// variational equations) chained through the exact light-time and
-    /// projection derivatives: exact for the backend's dynamics.
+    /// The propagation backend's state-transition matrices chained through
+    /// the exact light-time and projection derivatives: exact for the
+    /// backend's dynamics.
     Propagator,
     /// Central differences through the full residual pipeline.
     Central,
@@ -7556,9 +7556,9 @@ mod tests {
 
     #[test]
     fn external_propagators_run_the_od_stages_like_native_ones() {
-        // adam-core's two-body propagator behind the C ABI (as a plugin such
-        // as ASSIST exposes its own) gives the same IOD and refinement as
-        // the propagator itself, and reports the external identity.
+        // adam-core's two-body propagator behind the C ABI, as an external
+        // plugin would expose its own dynamics, gives the same IOD and
+        // refinement as the propagator itself, and reports the external identity.
         let table = super::super::two_body_reference::table(TwoBodyPropagator::default());
         let external = unsafe { super::super::ExternalPropagator::from_raw(table) }.unwrap();
         let identity = external.backend();
@@ -7615,8 +7615,8 @@ mod tests {
     }
 
     /// A predictor with the two-body dynamics and STMs that does not declare
-    /// them two-body (ASSIST's position: exact derivatives of non-two-body
-    /// dynamics), or (`stm = false`) supplies no derivatives at all.
+    /// them two-body (representing exact derivatives of other dynamics), or
+    /// (`stm = false`) supplies no derivatives at all.
     struct UndeclaredBackend<'a> {
         inner: &'a dyn SphericalPredictor,
         stm: bool,

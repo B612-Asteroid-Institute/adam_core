@@ -424,13 +424,9 @@ fabricating a foreign table:
 
    cargo run -p adam_core --example od_external_provider
 
-The guide and workflow-docstring Python snippets are executable documentation.
-The repository runner supplies deterministic caller-owned tables and checks the
-composition and post-relabel calls:
-
-.. code-block:: console
-
-   python docs/scripts/run_orbit_determination_examples.py
+The guide and workflow-docstring Python snippets are exercised by the ordinary
+orbit-determination unit-test suite with deterministic caller-owned tables,
+including exact composition and post-relabel calls.
 
 Standalone Rust OD workflows do not discover OD semantic-resource packages or
 paths. Bind the public profile's semantic slot explicitly (the separate
@@ -520,8 +516,7 @@ The capsule boundary loads separately built extensions and does not make
 ``adam-core`` link to a GPL-covered provider. A standalone Rust application
 that directly links a GPL-covered propagation implementation creates a
 different distribution situation and must satisfy that provider's license;
-projects should evaluate their own obligations. This documentation does not
-claim that a final Core 0.7/ASSIST 0.6 release pair exists or is compatible.
+projects should evaluate their own obligations.
 
 API reference
 -------------

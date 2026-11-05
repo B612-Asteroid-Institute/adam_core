@@ -107,13 +107,11 @@ Propagator Guidance
 -------------------
 
 When using ``prepare_and_propagate_orbits`` with ``body`` as an ``Orbits`` table
-(instead of an ``OriginCodes`` major body), you should provide a propagator class.
-For production-quality trajectories, use a high-fidelity propagator such as
-``adam_assist.ASSISTPropagator``.
+(instead of an ``OriginCodes`` major body), provide a concrete propagator class.
+The example assumes ``propagator_class`` is supplied by the application and has
+a force model appropriate for the trajectory.
 
 .. code-block:: python
-
-   from adam_assist import ASSISTPropagator
 
    propagated_custom: Orbits = prepare_and_propagate_orbits(
        body=custom_orbit,
@@ -121,7 +119,7 @@ For production-quality trajectories, use a high-fidelity propagator such as
        end_time=departure_end,
        propagation_origin=OriginCodes.SUN,
        step_size=1.0,
-       propagator_class=ASSISTPropagator,
+       propagator_class=propagator_class,
        max_processes=8,
    )
 

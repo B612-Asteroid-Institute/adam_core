@@ -6,8 +6,8 @@ Scope and ownership
 
 ``adam-core`` owns orbit determination: IOD candidate policy, least squares,
 rejection, ranging, linkage orchestration, settings, result tables and
-provenance.  A separately built package such as ``adam-assist`` may contribute
-only propagation and derivatives through the private capsule described here.
+provenance. A separately built provider may contribute only propagation and
+derivatives through the private capsule described here.
 It must not provide ``run_iod``, ``run_od``, fitting or rejection work units.
 Python enters an adam-core workflow once (including a linkage batch);
 prediction calls inside that workflow are batched C-ABI calls and never Python
@@ -44,8 +44,6 @@ the capsule while its validated wrapper is used. This does not make adam-core
 link to a GPL-covered provider. An application that instead directly links a
 GPL-covered Rust provider creates a different distribution situation and must
 satisfy that provider's license; projects should evaluate their own obligations.
-This ABI description does not claim that a final Core 0.7/ASSIST 0.6 release
-pair exists or is compatible.
 
 Discovery and identity
 ----------------------
@@ -119,19 +117,19 @@ from the exact retained capsule used by each IOD/refinement stage before
 releasing the GIL; provenance never asks Python for a second capsule afterward.
 Unknown fields appended after the complete suffix remain ignored.
 
-``adam-assist`` adaptation contract
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Provider metadata contract
+^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-``ASSISTPropagator`` remains a propagation-only capsule provider; Core does
-not add an OD callback or import ASSIST. Its provider table must append both
-fields after the frozen reserved words, retain stable NUL-terminated storage
-for the capsule lifetime, and advertise at least
+A propagation-only capsule provider does not add an OD callback or move any
+Core workflow into the provider. Its table must append both metadata fields
+after the frozen reserved words, retain stable NUL-terminated storage for the
+capsule lifetime, and advertise at least
 ``EXTERNAL_PROPAGATOR_V2_METADATA_SIZE``. The configuration hash covers every
 setting that can change propagated states (including integration and force
-model choices); the data hash covers the exact immutable ephemeris/kernel and
-other dynamics data content. An older adam-assist table remains usable for
+model choices); the data hash covers the exact immutable ephemeris, kernel,
+and other dynamics data content. A shorter legacy v2 table remains usable for
 general propagation but is intentionally rejected by native OD as
-provenance-incomplete. This is the only required downstream ABI adaptation.
+provenance-incomplete.
 
 Capabilities
 ------------
@@ -156,7 +154,7 @@ by the current request:
   per-orbit A1, A2, A3, ALN, NK, NM, NN and R0 array. A NaN means that field is
   null. A row is dynamically active only when at least one of A1/A2/A3 is
   non-zero, matching adam-core's in-process two-body check. For an active row,
-  null Marsden constants mean the asteroid convention used by ASSIST:
+  null Marsden constants mean the standard asteroid convention:
   ``ALN=1``, ``NK=0``, ``NM=2``, ``NN=5.093``, ``R0=1 au``. Adam-core fails
   closed instead of dropping active non-gravitational acceleration when this
   bit is absent.

@@ -392,8 +392,8 @@ pub fn whitened_2body_jacobian(
 /// `(2N, 6)` row-major, from the propagator's own dynamics: `states[i]` and
 /// `stms[i]` (row-major `d x(t_i) / d x(epoch)`) are the heliocentric
 /// ecliptic state at `terms.times_mjd_tdb[i]` and its state-transition matrix,
-/// supplied by the propagation backend (e.g. ASSIST's variational
-/// equations). The light-time and topocentric projection from there to the
+/// supplied by the propagation backend's variational equations. The
+/// light-time and topocentric projection from there to the
 /// whitened angles are differentiated exactly as in
 /// [`whitened_2body_jacobian`]; only the propagation to the observation
 /// times is the backend's.

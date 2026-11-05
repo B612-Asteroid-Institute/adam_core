@@ -1,8 +1,7 @@
 """Abstract propagator framework.
 
-adam_core ships no concrete propagator and no Python composition: only
-Rust-backed propagators (e.g. ``adam_assist.ASSISTPropagator``) are
-supported. Each public surface -- :meth:`Propagator.propagate_orbits`,
+adam_core ships no concrete propagator and no Python composition: concrete
+Rust-backed propagators are supplied by separately installed providers. Each public surface -- :meth:`Propagator.propagate_orbits`,
 :meth:`EphemerisMixin.generate_ephemeris`, and
 :meth:`~adam_core.dynamics.impacts.ImpactMixin.detect_collisions` -- is the
 abstract single-crossing contract that a backend implements as one
@@ -14,8 +13,8 @@ backend call.
 The former Python composition (per-chunk Ray fan-out, covariance
 sample/propagate/collapse, the generic light-time ephemeris pipeline, and the
 ``_propagate_orbits``/``_generate_ephemeris`` hooks) has been deleted; its
-behavior is replicated inside the Rust backends and validated by the
-the downstream ``adam-assist`` Rust/parity test suites.
+behavior belongs inside each Rust backend and must be validated by that
+provider's own conformance and parity tests.
 """
 
 import logging

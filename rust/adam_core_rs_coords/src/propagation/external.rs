@@ -1,8 +1,7 @@
 //! External native propagators (C ABI, version 2).
 //!
-//! A propagation backend compiled in another extension module (adam-assist's
-//! ASSIST, for example) cannot share Rust trait objects with adam-core: the
-//! two are separately compiled. It shares a C function instead. The backend
+//! A propagation backend compiled in another extension module cannot share
+//! Rust trait objects with adam-core because the two are separately compiled. It shares a C function instead. The backend
 //! fills an [`ExternalPropagatorV2`] (identity plus a `propagate` function
 //! pointer over flat arrays) and hands it to Python in a capsule named
 //! [`EXTERNAL_PROPAGATOR_CAPSULE`]; adam-core wraps it as an
@@ -2008,8 +2007,8 @@ unsafe fn run_request<P: Propagator>(
                 ))
             })?;
         let epoch = out_times.epochs[row];
-        // Backends may quantize their output times (ASSIST rebuilds them
-        // from f64 Julian dates, tens of microseconds), so a row matches the
+        // Backends may quantize their output times when rebuilding them from
+        // floating-point Julian dates, so a row matches the
         // nearest unfilled requested epoch of its orbit within a millisecond.
         let offset = |slot: usize| {
             let target = target_epochs[if pairwise { slot } else { slot - orbit * m }];
@@ -2105,7 +2104,7 @@ mod tests {
 
     /// Two-body dynamics that return their rows in reverse order (as a
     /// backend sorting by id, or by anything else, may) with output times
-    /// shifted by 30 microseconds (as ASSIST's float Julian-date times are):
+    /// shifted by 30 microseconds (as float Julian-date times may be):
     /// the ABI must still deliver rows in (orbit, time) order.
     struct Reversed(TwoBodyPropagator);
 

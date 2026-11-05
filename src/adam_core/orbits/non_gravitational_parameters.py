@@ -21,7 +21,7 @@ NON_GRAVITATIONAL_VALUE_FIELDS = (
 #     g(r) = ALN * (r/R0)^-NM * (1 + (r/R0)^NN)^-NK
 #
 # Null constants mean the standard asteroid convention g(r) = (1 au / r)^2
-# (ALN=1, NK=0, NM=2, NN=5.093, R0=1 -- the defaults ASSIST applies).
+# (ALN=1, NK=0, NM=2, NN=5.093, R0=1).
 MARSDEN_CONSTANT_FIELDS = (
     "ALN",
     "NK",
