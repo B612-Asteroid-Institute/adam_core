@@ -183,6 +183,16 @@ def test_native_abi_reference_scopes_unknown_capability_bits_to_od() -> None:
     assert "Unknown bits advertise optional future" not in normalized
 
 
+def test_non_gravitational_provider_boundary_matches_native_capability() -> None:
+    reference = (_ROOT / "docs" / "source" / "non_grav_support.rst").read_text()
+    normalized = " ".join(reference.split())
+    assert "``Propagator::supports_non_gravitational_parameters``" in normalized
+    assert "``EXTERNAL_PROPAGATOR_CAP_NON_GRAVITATIONAL``" in normalized
+    assert "Core fails closed before propagation" in normalized
+    assert "supports_non_gravitational_forces" not in normalized
+    assert "log a warning" not in normalized
+
+
 def test_guide_enumerates_the_validation_layer_exception_split() -> None:
     guide = (
         Path(__file__).resolve().parents[4]

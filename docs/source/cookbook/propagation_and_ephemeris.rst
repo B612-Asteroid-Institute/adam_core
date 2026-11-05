@@ -9,7 +9,7 @@ implementation supplied and configured by the application. The examples below
 assume ``propagator`` is such an instance; Core does not select a provider.
 
 Simple Case (Application-Supplied Propagator)
------------------------------------
+---------------------------------------------
 
 .. code-block:: python
 

@@ -1419,8 +1419,8 @@ fn validated_covariance(
                  weakest axis raised chi2 by {delta:.3} at 1 sigma and {small:.3} at \
                  {SMALL_PROBE_SCALE} sigma, where a quadratic surface gives ~1 and \
                  ~{expected_small}: the predictions jump under small state changes. This is \
-                 typically the propagator's integration tolerance (for ASSIST, tighten \
-                 epsilon, e.g. ASSISTPropagator(epsilon=1e-9)); the same noise can stall \
+                 typically the propagator's integration tolerance; tighten the \
+                 provider's configured tolerance. The same noise can stall \
                  convergence and shift the fitted orbit."
             ));
             return Ok(covariance);

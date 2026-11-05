@@ -69,8 +69,10 @@ Stable promotion remains separately approval-gated and proceeds in dependency
 order:
 
 #. prepare and review an exact propagation-only v2 reference-provider source
-   revision for dependent acceptance. That revision is evidence for the Core
-   candidate, not a Core dependency or publication candidate;
+   revision for dependent acceptance. The current workflow names this required
+   operational input ``adam_assist_ref`` and requires a full commit SHA; that
+   revision is evidence for the Core candidate, not a Core dependency or
+   publication candidate;
 #. accept the exact Core ``0.7.0`` six-crate set and 12-wheel matrix, including
    the separately built provider compatibility lane;
 #. publish and verify the six Core crates in dependency order;

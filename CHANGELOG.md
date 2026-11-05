@@ -68,6 +68,11 @@ This file contains notable changes in adam-core
   light-time maximum iterations ``10``. Fit evaluation and solver budgets are
   independent, IOD traversal is bounded, and provider/protocol/global failures
   remain fail-closed.
+- Historical IOD-policy evidence used ASSIST propagation with MPC observations
+  on 2026-10-14: the selected policy seeded 116 of 122 first solutions across
+  126 walk-forward objects, versus 16 for the legacy combinations/prefit gate
+  and 114 for the comparison ladder. The backend name records study context;
+  the policy and public workflows remain provider-generic.
 - Native provider ABI v2 uses an append-only negotiated layout, explicit
   identity and capability metadata, stable per-row failure codes, optional
   dynamics-consistent STMs, and complete physical/non-gravitational parameter

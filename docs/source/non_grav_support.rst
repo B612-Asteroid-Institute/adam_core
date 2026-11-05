@@ -128,10 +128,13 @@ Provider Boundary
 -----------------
 
 ``adam_core`` carries the canonical Marsden-style ``A1``, ``A2``, and ``A3``
-parameters through its ``Propagator`` interface. A concrete provider is
-responsible for declaring ``supports_non_gravitational_forces``, interpreting
-the fixed g(r) constants, and validating its force integration against its own
-reference data. Providers that do not declare the capability log a warning
-when handed non-zero parameter values or a non-gravitational covariance block.
-Consult the selected provider's documentation for its supported force laws,
-configuration, accuracy evidence, and limits.
+parameters through its propagation contracts. A Rust provider reports support
+through ``Propagator::supports_non_gravitational_parameters``; an external
+ABI-v2 provider advertises
+``EXTERNAL_PROPAGATOR_CAP_NON_GRAVITATIONAL``. Core fails closed before
+propagation when dynamically active parameters are supplied to a provider
+without that capability; it does not warn and silently drop the acceleration.
+The provider remains responsible for interpreting the fixed g(r) constants
+and validating its force integration. Consult the selected provider's
+documentation for its supported force laws, configuration, accuracy evidence,
+and limits.

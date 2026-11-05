@@ -168,8 +168,8 @@ def native_propagator(propagator: object) -> NativeProvider | None:
         "backend: OD runs natively, without calling back into Python for each "
         "prediction. Use adam-core's two-body propagator (propagator=None in the "
         "low-level drivers) or a propagator whose NativeBackend declares the "
-        "'propagator_capsule' work unit (a compatible adam-assist ASSISTPropagator). "
-        "A subclass that overrides propagation is not covered by its parent's "
+        "'propagator_capsule' work unit. A subclass that overrides propagation "
+        "is not covered by its parent's "
         "declaration."
     )
 
