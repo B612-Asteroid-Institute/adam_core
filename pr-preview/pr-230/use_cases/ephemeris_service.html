@@ -465,15 +465,16 @@ Better for reuse when many observer requests share the same propagated states.</
 Simpler request path, potentially more repeated propagation work.</p></li>
 </ul>
 </section>
-<section id="runnable-example">
-<h2>Runnable Example<a class="headerlink" href="#runnable-example" title="Link to this heading">¶</a></h2>
+<section id="provider-neutral-example">
+<h2>Provider-Neutral Example<a class="headerlink" href="#provider-neutral-example" title="Link to this heading">¶</a></h2>
+<p>This example assumes <code class="docutils literal notranslate"><span class="pre">propagator</span></code> is a configured implementation of
+<code class="docutils literal notranslate"><span class="pre">adam_core.propagator.Propagator</span></code> supplied by the service.</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.orbits</span><span class="w"> </span><span class="kn">import</span> <span class="n">Orbits</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.observers</span><span class="w"> </span><span class="kn">import</span> <span class="n">Observers</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.orbits.query</span><span class="w"> </span><span class="kn">import</span> <span class="n">query_horizons</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.time</span><span class="w"> </span><span class="kn">import</span> <span class="n">Timestamp</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">adam_assist</span><span class="w"> </span><span class="kn">import</span> <span class="n">ASSISTPropagator</span>
 
 <span class="n">request_object_ids</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"Apophis"</span><span class="p">,</span> <span class="s2">"Bennu"</span><span class="p">,</span> <span class="s2">"Eros"</span><span class="p">]</span>
 <span class="n">t0</span><span class="p">:</span> <span class="n">Timestamp</span> <span class="o">=</span> <span class="n">Timestamp</span><span class="o">.</span><span class="n">from_mjd</span><span class="p">([</span><span class="mf">60000.0</span><span class="p">],</span> <span class="n">scale</span><span class="o">=</span><span class="s2">"tdb"</span><span class="p">)</span>
@@ -483,8 +484,6 @@ Simpler request path, potentially more repeated propagation work.</p></li>
 
 <span class="n">orbits</span><span class="p">:</span> <span class="n">Orbits</span> <span class="o">=</span> <span class="n">query_horizons</span><span class="p">(</span><span class="n">request_object_ids</span><span class="p">,</span> <span class="n">t0</span><span class="p">)</span>
 <span class="n">observers</span><span class="p">:</span> <span class="n">Observers</span> <span class="o">=</span> <span class="n">Observers</span><span class="o">.</span><span class="n">from_code</span><span class="p">(</span><span class="s2">"I11"</span><span class="p">,</span> <span class="n">request_times</span><span class="p">)</span>
-
-<span class="n">propagator</span> <span class="o">=</span> <span class="n">ASSISTPropagator</span><span class="p">()</span>
 
 <span class="c1"># Pattern A: direct output for one request.</span>
 <span class="n">ephemeris</span> <span class="o">=</span> <span class="n">propagator</span><span class="o">.</span><span class="n">generate_ephemeris</span><span class="p">(</span>
@@ -561,7 +560,7 @@ about perturbing-body states (for example Earth, Moon, planets), use
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-11-04</div>
+              Last updated on 2026-11-05</div>
           </div>
           <div class="right-details">
             
@@ -585,7 +584,7 @@ about perturbing-body states (for example Earth, Moon, planets), use
 <li><a class="reference internal" href="#">Ephemeris Generation for Services</a><ul>
 <li><a class="reference internal" href="#problem">Problem</a></li>
 <li><a class="reference internal" href="#implementation-options-and-tradeoffs">Implementation Options and Tradeoffs</a></li>
-<li><a class="reference internal" href="#runnable-example">Runnable Example</a></li>
+<li><a class="reference internal" href="#provider-neutral-example">Provider-Neutral Example</a></li>
 <li><a class="reference internal" href="#when-to-use-this-pattern">When to Use This Pattern</a></li>
 <li><a class="reference internal" href="#notes">Notes</a></li>
 <li><a class="reference internal" href="#related-documentation">Related Documentation</a></li>

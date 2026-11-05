@@ -467,16 +467,12 @@
 <li><p>macOS 11+ Apple silicon; and</p></li>
 <li><p>macOS Intel x86-64.</p></li>
 </ul>
-<p>Windows wheels are deferred because the reviewed <code class="docutils literal notranslate"><span class="pre">libassist-sys</span> <span class="pre">1.2.1</span></code>
-backend used by the required adam-assist acceptance stack wraps upstream
-ASSIST code that depends on POSIX <code class="docutils literal notranslate"><span class="pre">sys/mman.h</span></code>. Windows source builds are not
-a supported substitute, and no unreviewed compatibility port is bundled.</p>
+<p>Windows and musllinux wheels are not current release targets. A source build
+on an unlisted platform is not a substitute for an accepted release artifact.</p>
 <p>These wheels are built once, installed and exercised by the clean-room
 acceptance suite, and only those exact tested files are eligible for
-publication. <code class="docutils literal notranslate"><span class="pre">musllinux</span></code> is not a supported release target: the SPICE and
-ASSIST native stacks target glibc on Linux, and no native musllinux acceptance
-runner is available. Installing from source requires a Rust toolchain and the
-platform C build tools; release consumers should normally require wheels.</p>
+publication. Installing from source requires a Rust toolchain and the platform
+C build tools; release consumers should normally require wheels.</p>
 </section>
 <section id="optional-installation-profiles">
 <h2>Optional Installation Profiles<a class="headerlink" href="#optional-installation-profiles" title="Link to this heading">¶</a></h2>
@@ -506,16 +502,16 @@ pip<span class="w"> </span>install<span class="w"> </span><span class="s2">"adam
 </section>
 <section id="propagator-backends">
 <h2>Propagator Backends<a class="headerlink" href="#propagator-backends" title="Link to this heading">¶</a></h2>
-<p>Propagation and ephemeris generation depend on a compatible propagator implementation.
-A common setup is <code class="docutils literal notranslate"><span class="pre">adam-assist</span></code>:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span>adam-assist
-</pre></div>
-</div>
-<p><code class="docutils literal notranslate"><span class="pre">adam-core</span></code> owns data models, coordinate/dynamics kernels, provider clients,
-and generic propagator contracts. <code class="docutils literal notranslate"><span class="pre">adam-assist</span></code> owns ASSIST orchestration and
-exposes <code class="docutils literal notranslate"><span class="pre">adam_assist.ASSISTPropagator</span></code>. Its Rust extension consumes the
-reviewed <code class="docutils literal notranslate"><span class="pre">libassist-sys</span></code> and <code class="docutils literal notranslate"><span class="pre">librebound-sys</span></code> crates directly; there is no
-separate <code class="docutils literal notranslate"><span class="pre">assist-rs</span></code> runtime package.</p>
+<p>Propagation and ephemeris generation depend on a separately installed
+implementation of the <code class="docutils literal notranslate"><span class="pre">adam_core.propagator.Propagator</span></code> contract. Choose and
+configure that implementation in the application; <code class="docutils literal notranslate"><span class="pre">adam-core</span></code> does not
+bundle or select one.</p>
+<p><code class="docutils literal notranslate"><span class="pre">adam-core</span></code> owns the data models, coordinate and dynamics kernels, generic
+propagator contracts, and Core orbit-determination workflows. A provider owns
+its propagation implementation and provider-specific data; Core does not
+delegate OD orchestration or fitting to it. Consult the provider’s
+documentation for installation, configuration, supported physics, and license
+terms.</p>
 </section>
 <section id="kernel-data-resolution">
 <h2>Kernel Data Resolution<a class="headerlink" href="#kernel-data-resolution" title="Link to this heading">¶</a></h2>
@@ -602,7 +598,7 @@ pdm<span class="w"> </span>run<span class="w"> </span>docs-check
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-11-04</div>
+              Last updated on 2026-11-05</div>
           </div>
           <div class="right-details">
             

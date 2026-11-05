@@ -451,9 +451,9 @@
           <section id="module-adam_core.propagator.propagator">
 <span id="adam-core-propagator-propagator-module"></span><h1>adam_core.propagator.propagator module<a class="headerlink" href="#module-adam_core.propagator.propagator" title="Link to this heading">¶</a></h1>
 <p>Abstract propagator framework.</p>
-<p>adam_core ships no concrete propagator and no Python composition: only
-Rust-backed propagators (e.g. <code class="docutils literal notranslate"><span class="pre">adam_assist.ASSISTPropagator</span></code>) are
-supported. Each public surface – <a class="reference internal" href="#adam_core.propagator.propagator.Propagator.propagate_orbits" title="adam_core.propagator.propagator.Propagator.propagate_orbits"><code class="xref py py-meth docutils literal notranslate"><span class="pre">Propagator.propagate_orbits()</span></code></a>,
+<p>adam_core ships no concrete propagator and no Python composition: concrete
+Rust-backed propagators are supplied by separately installed providers. Each
+public surface – <a class="reference internal" href="#adam_core.propagator.propagator.Propagator.propagate_orbits" title="adam_core.propagator.propagator.Propagator.propagate_orbits"><code class="xref py py-meth docutils literal notranslate"><span class="pre">Propagator.propagate_orbits()</span></code></a>,
 <a class="reference internal" href="#adam_core.propagator.propagator.EphemerisMixin.generate_ephemeris" title="adam_core.propagator.propagator.EphemerisMixin.generate_ephemeris"><code class="xref py py-meth docutils literal notranslate"><span class="pre">EphemerisMixin.generate_ephemeris()</span></code></a>, and
 <a class="reference internal" href="adam_core.dynamics.impacts.html#adam_core.dynamics.impacts.ImpactMixin.detect_collisions" title="adam_core.dynamics.impacts.ImpactMixin.detect_collisions"><code class="xref py py-meth docutils literal notranslate"><span class="pre">detect_collisions()</span></code></a> – is the
 abstract single-crossing contract that a backend implements as one
@@ -464,8 +464,8 @@ backend call.</p>
 <p>The former Python composition (per-chunk Ray fan-out, covariance
 sample/propagate/collapse, the generic light-time ephemeris pipeline, and the
 <code class="docutils literal notranslate"><span class="pre">_propagate_orbits</span></code>/<code class="docutils literal notranslate"><span class="pre">_generate_ephemeris</span></code> hooks) has been deleted; its
-behavior is replicated inside the Rust backends and validated by the
-the downstream <code class="docutils literal notranslate"><span class="pre">adam-assist</span></code> Rust/parity test suites.</p>
+behavior belongs inside each Rust backend and must be validated by that
+provider’s own conformance and parity tests.</p>
 <dl class="py class">
 <dt class="sig sig-object py" id="adam_core.propagator.propagator.EphemerisMixin">
 <em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">adam_core.propagator.propagator.</span></span><span class="sig-name descname"><span class="pre">EphemerisMixin</span></span><a class="reference internal" href="../../_modules/adam_core/propagator/propagator.html#EphemerisMixin"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.propagator.propagator.EphemerisMixin" title="Link to this definition">¶</a></dt>
@@ -637,7 +637,7 @@ and extended covariance. False requests gravity-only behavior.</p></li>
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-11-04</div>
+              Last updated on 2026-11-05</div>
           </div>
           <div class="right-details">
             

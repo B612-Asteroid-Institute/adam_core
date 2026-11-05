@@ -49,10 +49,12 @@ Generate OEM from a Pre-Propagated State History
 Generate OEM from a Seed Orbit (Propagation Included)
 -----------------------------------------------------
 
+This example assumes ``propagator_class`` is a concrete propagator class
+supplied by the application.
+
 .. code-block:: python
 
    import numpy as np
-   from adam_assist import ASSISTPropagator
    from adam_core.orbits import Orbits
    from adam_core.orbits.oem_io import orbit_to_oem_propagated
    from adam_core.time import Timestamp
@@ -64,7 +66,7 @@ Generate OEM from a Seed Orbit (Propagation Included)
        orbits=seed_orbit,
        output_file="apophis_propagated.oem",
        times=times,
-       propagator_klass=ASSISTPropagator,
+       propagator_klass=propagator_class,
        originator="ADAM CORE USER",
    )
 
@@ -108,12 +110,12 @@ Generate SPK from ``Orbits``
 ----------------------------
 
 ``orbits_to_spk`` can propagate internally if you pass ``propagator=...``.
-For production products, use a high-fidelity propagator such as
-``adam_assist.ASSISTPropagator``.
+For production products, supply a propagator whose force model and accuracy
+are appropriate for the product. The example assumes that configured instance
+is named ``propagator``.
 
 .. code-block:: python
 
-   from adam_assist import ASSISTPropagator
    from adam_core.orbits import Orbits
    from adam_core.orbits.spice_kernel import orbits_to_spk
    from adam_core.time import Timestamp
@@ -127,7 +129,7 @@ For production products, use a high-fidelity propagator such as
        output_file="objects.bsp",
        start_time=start_time,
        end_time=end_time,
-       propagator=ASSISTPropagator(),
+       propagator=propagator,
        step_days=0.25,
        window_days=32.0,
        kernel_type="w03",

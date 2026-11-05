@@ -550,18 +550,16 @@ time-of-flight values.</p>
 <section id="propagator-guidance">
 <h2>Propagator Guidance<a class="headerlink" href="#propagator-guidance" title="Link to this heading">¶</a></h2>
 <p>When using <code class="docutils literal notranslate"><span class="pre">prepare_and_propagate_orbits</span></code> with <code class="docutils literal notranslate"><span class="pre">body</span></code> as an <code class="docutils literal notranslate"><span class="pre">Orbits</span></code> table
-(instead of an <code class="docutils literal notranslate"><span class="pre">OriginCodes</span></code> major body), you should provide a propagator class.
-For production-quality trajectories, use a high-fidelity propagator such as
-<code class="docutils literal notranslate"><span class="pre">adam_assist.ASSISTPropagator</span></code>.</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">adam_assist</span><span class="w"> </span><span class="kn">import</span> <span class="n">ASSISTPropagator</span>
-
-<span class="n">propagated_custom</span><span class="p">:</span> <span class="n">Orbits</span> <span class="o">=</span> <span class="n">prepare_and_propagate_orbits</span><span class="p">(</span>
+(instead of an <code class="docutils literal notranslate"><span class="pre">OriginCodes</span></code> major body), provide a concrete propagator class.
+The example assumes <code class="docutils literal notranslate"><span class="pre">propagator_class</span></code> is supplied by the application and has
+a force model appropriate for the trajectory.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">propagated_custom</span><span class="p">:</span> <span class="n">Orbits</span> <span class="o">=</span> <span class="n">prepare_and_propagate_orbits</span><span class="p">(</span>
     <span class="n">body</span><span class="o">=</span><span class="n">custom_orbit</span><span class="p">,</span>
     <span class="n">start_time</span><span class="o">=</span><span class="n">departure_start</span><span class="p">,</span>
     <span class="n">end_time</span><span class="o">=</span><span class="n">departure_end</span><span class="p">,</span>
     <span class="n">propagation_origin</span><span class="o">=</span><span class="n">OriginCodes</span><span class="o">.</span><span class="n">SUN</span><span class="p">,</span>
     <span class="n">step_size</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>
-    <span class="n">propagator_class</span><span class="o">=</span><span class="n">ASSISTPropagator</span><span class="p">,</span>
+    <span class="n">propagator_class</span><span class="o">=</span><span class="n">propagator_class</span><span class="p">,</span>
     <span class="n">max_processes</span><span class="o">=</span><span class="mi">8</span><span class="p">,</span>
 <span class="p">)</span>
 </pre></div>
@@ -619,7 +617,7 @@ For production-quality trajectories, use a high-fidelity propagator such as
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-11-04</div>
+              Last updated on 2026-11-05</div>
           </div>
           <div class="right-details">
             

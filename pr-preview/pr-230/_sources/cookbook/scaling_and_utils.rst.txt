@@ -4,8 +4,8 @@ Scaling and Utilities
 Simple Case
 -----------
 
-Rust kernels and ``adam-assist`` parallelize eligible batch work internally;
-no Python cluster needs to be initialized. To cap Rayon worker threads, set
+Core's Rust kernels and compatible native providers can parallelize eligible
+batch work internally; no Python cluster needs to be initialized. To cap Rayon worker threads, set
 ``RAYON_NUM_THREADS`` before starting Python:
 
 .. code-block:: console

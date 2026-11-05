@@ -490,9 +490,10 @@
 </section>
 <section id="trail-orbits-with-spice-translation">
 <h2>Trail Orbits with Spice Translation<a class="headerlink" href="#trail-orbits-with-spice-translation" title="Link to this heading">¶</a></h2>
-<p>Use this mode when you want OpenSpace to drive positions from an SPK kernel.</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">adam_assist</span><span class="w"> </span><span class="kn">import</span> <span class="n">ASSISTPropagator</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.orbits.openspace</span><span class="w"> </span><span class="kn">import</span> <span class="n">create_renderable_trail_orbit</span>
+<p>Use this mode when you want OpenSpace to drive positions from an SPK kernel.
+The example assumes <code class="docutils literal notranslate"><span class="pre">propagator</span></code> is a configured implementation supplied by
+the application.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.orbits.openspace</span><span class="w"> </span><span class="kn">import</span> <span class="n">create_renderable_trail_orbit</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.orbits.spice_kernel</span><span class="w"> </span><span class="kn">import</span> <span class="n">orbits_to_spk</span>
 
 <span class="n">spice_id_mappings</span> <span class="o">=</span> <span class="n">orbits_to_spk</span><span class="p">(</span>
@@ -500,7 +501,7 @@
     <span class="n">output_file</span><span class="o">=</span><span class="s2">"openspace_assets/neo_kernel.bsp"</span><span class="p">,</span>
     <span class="n">start_time</span><span class="o">=</span><span class="n">start_time</span><span class="p">,</span>
     <span class="n">end_time</span><span class="o">=</span><span class="n">end_time</span><span class="p">,</span>
-    <span class="n">propagator</span><span class="o">=</span><span class="n">ASSISTPropagator</span><span class="p">(),</span>
+    <span class="n">propagator</span><span class="o">=</span><span class="n">propagator</span><span class="p">,</span>
     <span class="n">step_days</span><span class="o">=</span><span class="mf">0.25</span><span class="p">,</span>
     <span class="n">window_days</span><span class="o">=</span><span class="mf">32.0</span><span class="p">,</span>
     <span class="n">kernel_type</span><span class="o">=</span><span class="s2">"w03"</span><span class="p">,</span>
@@ -523,8 +524,8 @@
 <ul class="simple">
 <li><p>Keep identifiers path-safe and stable.</p></li>
 <li><p>For Spice translation, SPK kernel + <code class="docutils literal notranslate"><span class="pre">spice_id_mappings</span></code> are required.</p></li>
-<li><p>For production kernels, use a high-fidelity propagator such as
-<code class="docutils literal notranslate"><span class="pre">adam_assist.ASSISTPropagator</span></code>.</p></li>
+<li><p>For production kernels, use an application-supplied propagator whose force
+model and accuracy are appropriate for the product.</p></li>
 </ul>
 </section>
 <section id="when-to-use">
@@ -579,7 +580,7 @@
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-11-04</div>
+              Last updated on 2026-11-05</div>
           </div>
           <div class="right-details">
             

@@ -467,8 +467,10 @@ decision-making.</p>
 </section>
 <section id="backend-requirement">
 <h2>Backend Requirement<a class="headerlink" href="#backend-requirement" title="Link to this heading">¶</a></h2>
-<p>Impact analysis requires a propagator that implements <code class="docutils literal notranslate"><span class="pre">ImpactMixin</span></code> collision
-detection. For production use, prefer <code class="docutils literal notranslate"><span class="pre">adam_assist.ASSISTPropagator</span></code>.</p>
+<p>Impact analysis requires an application-supplied propagator that implements
+the <code class="docutils literal notranslate"><span class="pre">ImpactMixin</span></code> collision-detection contract. Core does not select a
+provider; verify the chosen implementation’s force model and collision
+semantics for the analysis.</p>
 </section>
 <section id="core-pattern">
 <h2>Core Pattern<a class="headerlink" href="#core-pattern" title="Link to this heading">¶</a></h2>
@@ -542,9 +544,10 @@ common for “terminal Earth impact, non-terminal Moon/other event tracking.”<
 </section>
 <section id="quick-triage-example">
 <h2>Quick Triage Example<a class="headerlink" href="#quick-triage-example" title="Link to this heading">¶</a></h2>
-<p>Use this for a first-pass estimate before a larger rerun.</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">adam_assist</span><span class="w"> </span><span class="kn">import</span> <span class="n">ASSISTPropagator</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.dynamics.impacts</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+<p>Use this for a first-pass estimate before a larger rerun. The examples in this
+section assume <code class="docutils literal notranslate"><span class="pre">propagator</span></code> is a configured <code class="docutils literal notranslate"><span class="pre">ImpactMixin</span></code> implementation
+supplied by the application.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.dynamics.impacts</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">CollisionEvent</span><span class="p">,</span>
     <span class="n">ImpactProbabilities</span><span class="p">,</span>
     <span class="n">calculate_impact_probabilities</span><span class="p">,</span>
@@ -554,7 +557,6 @@ common for “terminal Earth impact, non-terminal Moon/other event tracking.”<
 <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.orbits.query</span><span class="w"> </span><span class="kn">import</span> <span class="n">query_sbdb</span>
 
 <span class="n">orbit</span><span class="p">:</span> <span class="n">Orbits</span> <span class="o">=</span> <span class="n">query_sbdb</span><span class="p">([</span><span class="s2">"2024 YR4"</span><span class="p">])</span>
-<span class="n">propagator</span> <span class="o">=</span> <span class="n">ASSISTPropagator</span><span class="p">()</span>
 
 <span class="n">variants</span><span class="p">:</span> <span class="n">VariantOrbits</span>
 <span class="n">collisions</span><span class="p">:</span> <span class="n">CollisionEvent</span>
@@ -579,8 +581,7 @@ common for “terminal Earth impact, non-terminal Moon/other event tracking.”<
 <h2>YR4-Style End-to-End Workflow (Expanded)<a class="headerlink" href="#yr4-style-end-to-end-workflow-expanded" title="Link to this heading">¶</a></h2>
 <p>This is the full operational path with explicit analysis window and explicit
 collision conditions.</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">adam_assist</span><span class="w"> </span><span class="kn">import</span> <span class="n">ASSISTPropagator</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.coordinates</span><span class="w"> </span><span class="kn">import</span> <span class="n">Origin</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.coordinates</span><span class="w"> </span><span class="kn">import</span> <span class="n">Origin</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.dynamics.impacts</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">CollisionConditions</span><span class="p">,</span>
     <span class="n">CollisionEvent</span><span class="p">,</span>
@@ -606,8 +607,6 @@ collision conditions.</p>
     <span class="n">collision_distance</span><span class="o">=</span><span class="p">[</span><span class="mf">6420.0</span><span class="p">,</span> <span class="mf">1740.0</span><span class="p">],</span>
     <span class="n">stopping_condition</span><span class="o">=</span><span class="p">[</span><span class="kc">True</span><span class="p">,</span> <span class="kc">True</span><span class="p">],</span>
 <span class="p">)</span>
-
-<span class="n">propagator</span> <span class="o">=</span> <span class="n">ASSISTPropagator</span><span class="p">()</span>
 
 <span class="n">variants</span><span class="p">:</span> <span class="n">VariantOrbits</span>
 <span class="n">impacts</span><span class="p">:</span> <span class="n">CollisionEvent</span>
@@ -820,7 +819,7 @@ run a fast triage pass first, then rerun higher-fidelity for final products.</p>
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-11-04</div>
+              Last updated on 2026-11-05</div>
           </div>
           <div class="right-details">
             

@@ -456,15 +456,15 @@
 workflow builds one wheel for each supported Python/platform pair, installs
 those exact files in isolated binary-only environments, runs <code class="docutils literal notranslate"><span class="pre">pip</span> <span class="pre">check</span></code>,
 proves offline installed-package kernel discovery without duplicate cache
-files, and exercises public SBDB, observer, ephemeris, and ASSIST workflows.
+files, and exercises public SBDB, observer, ephemeris, and
+propagation-provider workflows.
 Publication jobs download those accepted artifacts by workflow run ID; they do
 not rebuild wheels or crates.</p>
 <p>The supported matrix is CPython 3.11-3.13 on manylinux 2.17 x86-64 and AArch64
 and macOS Apple silicon and Intel (12 wheels per distribution). The workflow
 checks runner architecture, exact wheel count, runtime/distribution version
-equality, native members, and platform tags. Windows is deferred because
-<code class="docutils literal notranslate"><span class="pre">libassist-sys</span> <span class="pre">1.2.1</span></code> requires the upstream ASSIST POSIX memory-mapping
-implementation; musllinux is deliberately unsupported.</p>
+equality, native members, and platform tags. Windows and musllinux are not
+current release targets.</p>
 </section>
 <section id="stable-release-line">
 <h2>Stable release line<a class="headerlink" href="#stable-release-line" title="Link to this heading">¶</a></h2>
@@ -509,27 +509,22 @@ complete release matches the accepted bytes.</p>
 <p>Stable promotion remains separately approval-gated and proceeds in dependency
 order:</p>
 <ol class="arabic simple">
-<li><p>prepare and review the compatible <code class="docutils literal notranslate"><span class="pre">adam-assist</span> <span class="pre">0.6.0</span></code> source candidate,
-declaring compatibility with Core <code class="docutils literal notranslate"><span class="pre">&gt;=0.7,&lt;0.8</span></code> and implementing the exact
-propagation-only v2 contract. Its final commit is not yet available and
-must not be guessed or added to Core CI. A preliminary Cargo lock may select
-the path-patched, unpublished Core <code class="docutils literal notranslate"><span class="pre">0.7.0</span></code> crates solely for paired
-acceptance; it is not a publication candidate;</p></li>
-<li><p>accept the exact Core <code class="docutils literal notranslate"><span class="pre">0.7.0</span></code> six-crate set and paired 12-wheel matrix
-using that reviewed, exact ASSIST commit;</p></li>
+<li><p>prepare and review an exact propagation-only v2 reference-provider source
+revision for dependent acceptance. The current workflow names this required
+operational input <code class="docutils literal notranslate"><span class="pre">adam_assist_ref</span></code> and requires a full commit SHA; that
+revision is evidence for the Core candidate, not a Core dependency or
+publication candidate;</p></li>
+<li><p>accept the exact Core <code class="docutils literal notranslate"><span class="pre">0.7.0</span></code> six-crate set and 12-wheel matrix, including
+the separately built provider compatibility lane;</p></li>
 <li><p>publish and verify the six Core crates in dependency order;</p></li>
-<li><p>publish and verify the exact Core Python wheel set;</p></li>
-<li><p>finalize the ASSIST Python/Rust requirements and frozen registry-only locks
-selected at public Core <code class="docutils literal notranslate"><span class="pre">0.7.0</span></code>;</p></li>
-<li><p>accept, publish, and verify <code class="docutils literal notranslate"><span class="pre">adam_assist</span> <span class="pre">0.6.0</span></code> and the exact
-<code class="docutils literal notranslate"><span class="pre">adam-assist==0.6.0</span></code> wheel set; and</p></li>
-<li><p>run clean no-lock Cargo 1.87/latest-stable and clean pip/current-uv
-propagation smoke tests from registry-only environments.</p></li>
+<li><p>publish and verify the exact Core Python wheel set; and</p></li>
+<li><p>run clean no-lock Cargo 1.87/latest-stable and clean pip/current-uv smoke
+tests from registry-only environments.</p></li>
 </ol>
-<p><code class="docutils literal notranslate"><span class="pre">adam-assist</span></code> owns ASSIST orchestration and consumes released
-<code class="docutils literal notranslate"><span class="pre">libassist-sys</span></code> and <code class="docutils literal notranslate"><span class="pre">librebound-sys</span></code> directly. A tag, GitHub release,
-protected-environment change, crates.io upload, or PyPI upload is a human
-approval boundary and is never performed as part of source preparation.</p>
+<p>Provider publication and compatibility policy belong to each provider’s own
+release process. A tag, GitHub release, protected-environment change,
+crates.io upload, or PyPI upload is a human approval boundary and is never
+performed as part of Core source preparation.</p>
 </section>
 </section>
 
@@ -568,7 +563,7 @@ approval boundary and is never performed as part of source preparation.</p>
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-11-04</div>
+              Last updated on 2026-11-05</div>
           </div>
           <div class="right-details">
             

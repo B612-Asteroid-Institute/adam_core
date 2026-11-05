@@ -13,17 +13,20 @@ explicit uncertainty handling.
 Operational Prerequisites
 -------------------------
 
-* Install a production propagator: ``adam-assist`` (recommended).
+* Install and configure a concrete ``Propagator`` implementation appropriate
+  for the required fidelity.
 * Query access to CNEOS Scout for active NEOCP candidates.
 * Observatory code(s) or explicit observer state vectors.
 
 Canonical End-to-End Pattern
 ----------------------------
 
+The pattern assumes ``propagator`` is a configured implementation supplied by
+the application.
+
 .. code-block:: python
 
    import pyarrow.compute as pc
-   from adam_assist import ASSISTPropagator
    from adam_core.observers import Observers
    from adam_core.observations import ScoutObservations
    from adam_core.orbits import Orbits, VariantOrbits
@@ -57,7 +60,6 @@ Canonical End-to-End Pattern
        scale="utc",
    )
    observers: Observers = Observers.from_code("T08", times)
-   propagator = ASSISTPropagator()
 
    # 5A) Fast operational path: collapse variants and propagate covariance.
    collapsed_orbits: Orbits = samples.collapse_by_object_id()

@@ -454,8 +454,8 @@
 <h2>Scope and ownership<a class="headerlink" href="#scope-and-ownership" title="Link to this heading">¶</a></h2>
 <p><code class="docutils literal notranslate"><span class="pre">adam-core</span></code> owns orbit determination: IOD candidate policy, least squares,
 rejection, ranging, linkage orchestration, settings, result tables and
-provenance.  A separately built package such as <code class="docutils literal notranslate"><span class="pre">adam-assist</span></code> may contribute
-only propagation and derivatives through the private capsule described here.
+provenance. A separately built provider may contribute only propagation and
+derivatives through the private capsule described here.
 It must not provide <code class="docutils literal notranslate"><span class="pre">run_iod</span></code>, <code class="docutils literal notranslate"><span class="pre">run_od</span></code>, fitting or rejection work units.
 Python enters an adam-core workflow once (including a linkage batch);
 prediction calls inside that workflow are batched C-ABI calls and never Python
@@ -488,9 +488,7 @@ modules: its destructor owns the table/context lifetime, and adam-core retains
 the capsule while its validated wrapper is used. This does not make adam-core
 link to a GPL-covered provider. An application that instead directly links a
 GPL-covered Rust provider creates a different distribution situation and must
-satisfy that provider’s license; projects should evaluate their own obligations.
-This ABI description does not claim that a final Core 0.7/ASSIST 0.6 release
-pair exists or is compatible.</p>
+satisfy that provider’s license; projects should evaluate their own obligations.</p>
 </section>
 <section id="discovery-and-identity">
 <h2>Discovery and identity<a class="headerlink" href="#discovery-and-identity" title="Link to this heading">¶</a></h2>
@@ -559,18 +557,18 @@ all external ephemeris/model data. Adam-core decodes and copies this metadata
 from the exact retained capsule used by each IOD/refinement stage before
 releasing the GIL; provenance never asks Python for a second capsule afterward.
 Unknown fields appended after the complete suffix remain ignored.</p>
-<section id="adam-assist-adaptation-contract">
-<h3><code class="docutils literal notranslate"><span class="pre">adam-assist</span></code> adaptation contract<a class="headerlink" href="#adam-assist-adaptation-contract" title="Link to this heading">¶</a></h3>
-<p><code class="docutils literal notranslate"><span class="pre">ASSISTPropagator</span></code> remains a propagation-only capsule provider; Core does
-not add an OD callback or import ASSIST. Its provider table must append both
-fields after the frozen reserved words, retain stable NUL-terminated storage
-for the capsule lifetime, and advertise at least
+<section id="provider-metadata-contract">
+<h3>Provider metadata contract<a class="headerlink" href="#provider-metadata-contract" title="Link to this heading">¶</a></h3>
+<p>A propagation-only capsule provider does not add an OD callback or move any
+Core workflow into the provider. Its table must append both metadata fields
+after the frozen reserved words, retain stable NUL-terminated storage for the
+capsule lifetime, and advertise at least
 <code class="docutils literal notranslate"><span class="pre">EXTERNAL_PROPAGATOR_V2_METADATA_SIZE</span></code>. The configuration hash covers every
 setting that can change propagated states (including integration and force
-model choices); the data hash covers the exact immutable ephemeris/kernel and
-other dynamics data content. An older adam-assist table remains usable for
+model choices); the data hash covers the exact immutable ephemeris, kernel,
+and other dynamics data content. A shorter legacy v2 table remains usable for
 general propagation but is intentionally rejected by native OD as
-provenance-incomplete. This is the only required downstream ABI adaptation.</p>
+provenance-incomplete.</p>
 </section>
 </section>
 <section id="capabilities">
@@ -595,7 +593,7 @@ same dynamics as propagation.</p></li>
 per-orbit A1, A2, A3, ALN, NK, NM, NN and R0 array. A NaN means that field is
 null. A row is dynamically active only when at least one of A1/A2/A3 is
 non-zero, matching adam-core’s in-process two-body check. For an active row,
-null Marsden constants mean the asteroid convention used by ASSIST:
+null Marsden constants mean the standard asteroid convention:
 <code class="docutils literal notranslate"><span class="pre">ALN=1</span></code>, <code class="docutils literal notranslate"><span class="pre">NK=0</span></code>, <code class="docutils literal notranslate"><span class="pre">NM=2</span></code>, <code class="docutils literal notranslate"><span class="pre">NN=5.093</span></code>, <code class="docutils literal notranslate"><span class="pre">R0=1</span> <span class="pre">au</span></code>. Adam-core fails
 closed instead of dropping active non-gravitational acceleration when this
 bit is absent.</p></li>
@@ -731,7 +729,7 @@ there is no bridge package.</p>
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-11-04</div>
+              Last updated on 2026-11-05</div>
           </div>
           <div class="right-details">
             
@@ -756,7 +754,7 @@ there is no bridge package.</p>
 <li><a class="reference internal" href="#scope-and-ownership">Scope and ownership</a></li>
 <li><a class="reference internal" href="#discovery-and-identity">Discovery and identity</a></li>
 <li><a class="reference internal" href="#reproducibility-metadata-suffix">Reproducibility metadata suffix</a><ul>
-<li><a class="reference internal" href="#adam-assist-adaptation-contract"><code class="docutils literal notranslate"><span class="pre">adam-assist</span></code> adaptation contract</a></li>
+<li><a class="reference internal" href="#provider-metadata-contract">Provider metadata contract</a></li>
 </ul>
 </li>
 <li><a class="reference internal" href="#capabilities">Capabilities</a></li>

@@ -453,13 +453,12 @@
 <section id="propagator-requirement">
 <h2>Propagator Requirement<a class="headerlink" href="#propagator-requirement" title="Link to this heading">¶</a></h2>
 <p>High-fidelity operational propagation requires a concrete <code class="docutils literal notranslate"><span class="pre">Propagator</span></code>
-implementation. In practice, use a production backend such as
-<code class="docutils literal notranslate"><span class="pre">adam_assist.ASSISTPropagator</span></code>.</p>
+implementation supplied and configured by the application. The examples below
+assume <code class="docutils literal notranslate"><span class="pre">propagator</span></code> is such an instance; Core does not select a provider.</p>
 </section>
-<section id="simple-case-production-propagator">
-<h2>Simple Case (Production Propagator)<a class="headerlink" href="#simple-case-production-propagator" title="Link to this heading">¶</a></h2>
+<section id="simple-case-application-supplied-propagator">
+<h2>Simple Case (Application-Supplied Propagator)<a class="headerlink" href="#simple-case-application-supplied-propagator" title="Link to this heading">¶</a></h2>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">adam_assist</span><span class="w"> </span><span class="kn">import</span> <span class="n">ASSISTPropagator</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.orbits</span><span class="w"> </span><span class="kn">import</span> <span class="n">Orbits</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.orbits.ephemeris</span><span class="w"> </span><span class="kn">import</span> <span class="n">Ephemeris</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.observers</span><span class="w"> </span><span class="kn">import</span> <span class="n">Observers</span>
@@ -470,7 +469,6 @@ implementation. In practice, use a production backend such as
 <span class="n">t0</span><span class="p">:</span> <span class="n">Timestamp</span> <span class="o">=</span> <span class="n">Timestamp</span><span class="o">.</span><span class="n">from_mjd</span><span class="p">([</span><span class="mf">60200.0</span><span class="p">],</span> <span class="n">scale</span><span class="o">=</span><span class="s2">"tdb"</span><span class="p">)</span>
 <span class="n">times</span><span class="p">:</span> <span class="n">Timestamp</span> <span class="o">=</span> <span class="n">Timestamp</span><span class="o">.</span><span class="n">from_mjd</span><span class="p">(</span><span class="n">t0</span><span class="o">.</span><span class="n">mjd</span><span class="p">()</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">()</span> <span class="o">+</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">10</span><span class="p">),</span> <span class="n">scale</span><span class="o">=</span><span class="s2">"tdb"</span><span class="p">)</span>
 
-<span class="n">propagator</span> <span class="o">=</span> <span class="n">ASSISTPropagator</span><span class="p">()</span>
 <span class="n">propagated</span><span class="p">:</span> <span class="n">Orbits</span> <span class="o">=</span> <span class="n">propagator</span><span class="o">.</span><span class="n">propagate_orbits</span><span class="p">(</span><span class="n">orbits</span><span class="p">,</span> <span class="n">times</span><span class="p">,</span> <span class="n">max_processes</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
 
 <span class="n">observers</span><span class="p">:</span> <span class="n">Observers</span> <span class="o">=</span> <span class="n">Observers</span><span class="o">.</span><span class="n">from_code</span><span class="p">(</span><span class="s2">"I11"</span><span class="p">,</span> <span class="n">times</span><span class="p">)</span>
@@ -575,7 +573,7 @@ implementation. In practice, use a production backend such as
 <section id="when-to-use">
 <h2>When to Use<a class="headerlink" href="#when-to-use" title="Link to this heading">¶</a></h2>
 <ul class="simple">
-<li><p>Default operational path: n-body propagator interface (for example <code class="docutils literal notranslate"><span class="pre">ASSISTPropagator</span></code>).</p></li>
+<li><p>Default operational path: an application-supplied high-fidelity <code class="docutils literal notranslate"><span class="pre">Propagator</span></code>.</p></li>
 <li><p>Advanced production tuning: <code class="docutils literal notranslate"><span class="pre">max_processes</span></code> + <code class="docutils literal notranslate"><span class="pre">chunk_size</span></code> on n-body methods.</p></li>
 <li><p>Uncertainty-aware outputs: <code class="docutils literal notranslate"><span class="pre">covariance=True</span></code> on n-body methods.</p></li>
 <li><p>Variant workflows: pass <code class="docutils literal notranslate"><span class="pre">VariantOrbits</span></code> directly to n-body ephemeris generation.</p></li>
@@ -629,7 +627,7 @@ implementation. In practice, use a production backend such as
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-11-04</div>
+              Last updated on 2026-11-05</div>
           </div>
           <div class="right-details">
             
@@ -652,7 +650,7 @@ implementation. In practice, use a production backend such as
             <ul>
 <li><a class="reference internal" href="#">Propagation and Ephemeris</a><ul>
 <li><a class="reference internal" href="#propagator-requirement">Propagator Requirement</a></li>
-<li><a class="reference internal" href="#simple-case-production-propagator">Simple Case (Production Propagator)</a></li>
+<li><a class="reference internal" href="#simple-case-application-supplied-propagator">Simple Case (Application-Supplied Propagator)</a></li>
 <li><a class="reference internal" href="#advanced-n-body-pattern-parallel-throughput-controls">Advanced N-Body Pattern: Parallel Throughput Controls</a></li>
 <li><a class="reference internal" href="#advanced-n-body-pattern-covariance-aware-products">Advanced N-Body Pattern: Covariance-Aware Products</a></li>
 <li><a class="reference internal" href="#advanced-n-body-pattern-variant-ensembles">Advanced N-Body Pattern: Variant Ensembles</a></li>

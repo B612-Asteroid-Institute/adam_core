@@ -459,15 +459,17 @@ explicit uncertainty handling.</p>
 <section id="operational-prerequisites">
 <h2>Operational Prerequisites<a class="headerlink" href="#operational-prerequisites" title="Link to this heading">¶</a></h2>
 <ul class="simple">
-<li><p>Install a production propagator: <code class="docutils literal notranslate"><span class="pre">adam-assist</span></code> (recommended).</p></li>
+<li><p>Install and configure a concrete <code class="docutils literal notranslate"><span class="pre">Propagator</span></code> implementation appropriate
+for the required fidelity.</p></li>
 <li><p>Query access to CNEOS Scout for active NEOCP candidates.</p></li>
 <li><p>Observatory code(s) or explicit observer state vectors.</p></li>
 </ul>
 </section>
 <section id="canonical-end-to-end-pattern">
 <h2>Canonical End-to-End Pattern<a class="headerlink" href="#canonical-end-to-end-pattern" title="Link to this heading">¶</a></h2>
+<p>The pattern assumes <code class="docutils literal notranslate"><span class="pre">propagator</span></code> is a configured implementation supplied by
+the application.</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">pyarrow.compute</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pc</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">adam_assist</span><span class="w"> </span><span class="kn">import</span> <span class="n">ASSISTPropagator</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.observers</span><span class="w"> </span><span class="kn">import</span> <span class="n">Observers</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.observations</span><span class="w"> </span><span class="kn">import</span> <span class="n">ScoutObservations</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.orbits</span><span class="w"> </span><span class="kn">import</span> <span class="n">Orbits</span><span class="p">,</span> <span class="n">VariantOrbits</span>
@@ -501,7 +503,6 @@ explicit uncertainty handling.</p>
     <span class="n">scale</span><span class="o">=</span><span class="s2">"utc"</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="n">observers</span><span class="p">:</span> <span class="n">Observers</span> <span class="o">=</span> <span class="n">Observers</span><span class="o">.</span><span class="n">from_code</span><span class="p">(</span><span class="s2">"T08"</span><span class="p">,</span> <span class="n">times</span><span class="p">)</span>
-<span class="n">propagator</span> <span class="o">=</span> <span class="n">ASSISTPropagator</span><span class="p">()</span>
 
 <span class="c1"># 5A) Fast operational path: collapse variants and propagate covariance.</span>
 <span class="n">collapsed_orbits</span><span class="p">:</span> <span class="n">Orbits</span> <span class="o">=</span> <span class="n">samples</span><span class="o">.</span><span class="n">collapse_by_object_id</span><span class="p">()</span>
@@ -684,7 +685,7 @@ candidates and need a defensible uncertainty-aware pointing recommendation.</p>
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-11-04</div>
+              Last updated on 2026-11-05</div>
           </div>
           <div class="right-details">
             

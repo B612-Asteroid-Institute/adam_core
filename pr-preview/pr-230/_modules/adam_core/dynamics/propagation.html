@@ -565,8 +565,8 @@
     <span class="k">if</span> <span class="n">include_nongrav</span> <span class="ow">and</span> <span class="n">orbits</span><span class="o">.</span><span class="n">has_non_gravitational_parameters</span><span class="p">():</span>
         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
             <span class="s2">"propagate_2body does not support non-gravitational accelerations. "</span>
-            <span class="s2">"Use an n-body propagator such as adam_assist.ASSISTPropagator for "</span>
-            <span class="s2">"orbits with non-gravitational parameters."</span>
+            <span class="s2">"Use a propagator that declares non-gravitational-parameter support "</span>
+            <span class="s2">"for orbits with non-gravitational parameters."</span>
         <span class="p">)</span>
     <span class="k">return</span> <span class="n">_propagate_2body_serial</span><span class="p">(</span>
         <span class="n">orbits</span><span class="p">,</span>
@@ -595,7 +595,7 @@
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-11-04</div>
+              Last updated on 2026-11-05</div>
           </div>
           <div class="right-details">
             

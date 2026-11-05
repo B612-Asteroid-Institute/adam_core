@@ -498,9 +498,10 @@
 </section>
 <section id="ephemeris-level-photometry-and-phase-angle">
 <h2>Ephemeris-Level Photometry and Phase Angle<a class="headerlink" href="#ephemeris-level-photometry-and-phase-angle" title="Link to this heading">¶</a></h2>
-<p>For operational pipelines, usually compute these through ephemeris generation.</p>
+<p>For operational pipelines, usually compute these through ephemeris generation.
+The example assumes <code class="docutils literal notranslate"><span class="pre">propagator</span></code> is a configured implementation supplied by
+the application.</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">adam_assist</span><span class="w"> </span><span class="kn">import</span> <span class="n">ASSISTPropagator</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.observers</span><span class="w"> </span><span class="kn">import</span> <span class="n">Observers</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.orbits.query</span><span class="w"> </span><span class="kn">import</span> <span class="n">query_sbdb</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.time</span><span class="w"> </span><span class="kn">import</span> <span class="n">Timestamp</span>
@@ -512,7 +513,6 @@
 <span class="p">)</span>
 <span class="n">observers</span> <span class="o">=</span> <span class="n">Observers</span><span class="o">.</span><span class="n">from_code</span><span class="p">(</span><span class="s2">"I41"</span><span class="p">,</span> <span class="n">times</span><span class="p">)</span>
 
-<span class="n">propagator</span> <span class="o">=</span> <span class="n">ASSISTPropagator</span><span class="p">()</span>
 <span class="n">ephemeris</span> <span class="o">=</span> <span class="n">propagator</span><span class="o">.</span><span class="n">generate_ephemeris</span><span class="p">(</span>
     <span class="n">orbits</span><span class="p">,</span>
     <span class="n">observers</span><span class="p">,</span>
@@ -945,7 +945,7 @@ production light-curve generation.</p></li>
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-11-04</div>
+              Last updated on 2026-11-05</div>
           </div>
           <div class="right-details">
             

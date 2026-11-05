@@ -452,8 +452,8 @@
 <h1>Scaling and Utilities<a class="headerlink" href="#scaling-and-utilities" title="Link to this heading">¶</a></h1>
 <section id="simple-case">
 <h2>Simple Case<a class="headerlink" href="#simple-case" title="Link to this heading">¶</a></h2>
-<p>Rust kernels and <code class="docutils literal notranslate"><span class="pre">adam-assist</span></code> parallelize eligible batch work internally;
-no Python cluster needs to be initialized. To cap Rayon worker threads, set
+<p>Core’s Rust kernels and compatible native providers can parallelize eligible
+batch work internally; no Python cluster needs to be initialized. To cap Rayon worker threads, set
 <code class="docutils literal notranslate"><span class="pre">RAYON_NUM_THREADS</span></code> before starting Python:</p>
 <div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span><span class="nv">RAYON_NUM_THREADS</span><span class="o">=</span><span class="m">8</span><span class="w"> </span>python<span class="w"> </span>my_pipeline.py
 </pre></div>
@@ -532,7 +532,7 @@ scheduling arguments remain compatibility no-ops.</p></li>
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-11-04</div>
+              Last updated on 2026-11-05</div>
           </div>
           <div class="right-details">
             

@@ -120,17 +120,15 @@ Quick Orbit Preview
 -------------------
 
 This is the same "preview orbit" pattern, now folded into ``Using Orbits`` so
-the sourcing + inspection flow is in one place.
+the sourcing + inspection flow is in one place. It assumes ``propagator`` is a
+configured implementation supplied by the application.
 
 .. code-block:: python
 
-   from adam_assist import ASSISTPropagator
    from adam_core.orbits import Orbits
    from adam_core.orbits.query import query_sbdb
 
    preview_orbits: Orbits = query_sbdb(["Apophis"])
-   propagator = ASSISTPropagator()
-
    # Render an interactive preview for one orbit.
    preview_orbits.take([0]).preview(propagator)
 

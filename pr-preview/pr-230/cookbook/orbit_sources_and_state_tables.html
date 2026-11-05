@@ -563,14 +563,12 @@ orbit determination handoff, photometry prediction, and export.</p>
 <section id="quick-orbit-preview">
 <h2>Quick Orbit Preview<a class="headerlink" href="#quick-orbit-preview" title="Link to this heading">¶</a></h2>
 <p>This is the same “preview orbit” pattern, now folded into <code class="docutils literal notranslate"><span class="pre">Using</span> <span class="pre">Orbits</span></code> so
-the sourcing + inspection flow is in one place.</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">adam_assist</span><span class="w"> </span><span class="kn">import</span> <span class="n">ASSISTPropagator</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.orbits</span><span class="w"> </span><span class="kn">import</span> <span class="n">Orbits</span>
+the sourcing + inspection flow is in one place. It assumes <code class="docutils literal notranslate"><span class="pre">propagator</span></code> is a
+configured implementation supplied by the application.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.orbits</span><span class="w"> </span><span class="kn">import</span> <span class="n">Orbits</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.orbits.query</span><span class="w"> </span><span class="kn">import</span> <span class="n">query_sbdb</span>
 
 <span class="n">preview_orbits</span><span class="p">:</span> <span class="n">Orbits</span> <span class="o">=</span> <span class="n">query_sbdb</span><span class="p">([</span><span class="s2">"Apophis"</span><span class="p">])</span>
-<span class="n">propagator</span> <span class="o">=</span> <span class="n">ASSISTPropagator</span><span class="p">()</span>
-
 <span class="c1"># Render an interactive preview for one orbit.</span>
 <span class="n">preview_orbits</span><span class="o">.</span><span class="n">take</span><span class="p">([</span><span class="mi">0</span><span class="p">])</span><span class="o">.</span><span class="n">preview</span><span class="p">(</span><span class="n">propagator</span><span class="p">)</span>
 </pre></div>
@@ -637,7 +635,7 @@ the sourcing + inspection flow is in one place.</p>
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-11-04</div>
+              Last updated on 2026-11-05</div>
           </div>
           <div class="right-details">
             

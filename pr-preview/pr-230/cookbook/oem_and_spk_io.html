@@ -494,8 +494,9 @@ table into <code class="docutils literal notranslate"><span class="pre">Orbits</
 </section>
 <section id="generate-oem-from-a-seed-orbit-propagation-included">
 <h2>Generate OEM from a Seed Orbit (Propagation Included)<a class="headerlink" href="#generate-oem-from-a-seed-orbit-propagation-included" title="Link to this heading">¶</a></h2>
+<p>This example assumes <code class="docutils literal notranslate"><span class="pre">propagator_class</span></code> is a concrete propagator class
+supplied by the application.</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">adam_assist</span><span class="w"> </span><span class="kn">import</span> <span class="n">ASSISTPropagator</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.orbits</span><span class="w"> </span><span class="kn">import</span> <span class="n">Orbits</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.orbits.oem_io</span><span class="w"> </span><span class="kn">import</span> <span class="n">orbit_to_oem_propagated</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.time</span><span class="w"> </span><span class="kn">import</span> <span class="n">Timestamp</span>
@@ -507,7 +508,7 @@ table into <code class="docutils literal notranslate"><span class="pre">Orbits</
     <span class="n">orbits</span><span class="o">=</span><span class="n">seed_orbit</span><span class="p">,</span>
     <span class="n">output_file</span><span class="o">=</span><span class="s2">"apophis_propagated.oem"</span><span class="p">,</span>
     <span class="n">times</span><span class="o">=</span><span class="n">times</span><span class="p">,</span>
-    <span class="n">propagator_klass</span><span class="o">=</span><span class="n">ASSISTPropagator</span><span class="p">,</span>
+    <span class="n">propagator_klass</span><span class="o">=</span><span class="n">propagator_class</span><span class="p">,</span>
     <span class="n">originator</span><span class="o">=</span><span class="s2">"ADAM CORE USER"</span><span class="p">,</span>
 <span class="p">)</span>
 </pre></div>
@@ -549,10 +550,10 @@ rows under the label it knows, with a COMMENT naming the content.</p>
 <section id="generate-spk-from-orbits">
 <h2>Generate SPK from <code class="docutils literal notranslate"><span class="pre">Orbits</span></code><a class="headerlink" href="#generate-spk-from-orbits" title="Link to this heading">¶</a></h2>
 <p><code class="docutils literal notranslate"><span class="pre">orbits_to_spk</span></code> can propagate internally if you pass <code class="docutils literal notranslate"><span class="pre">propagator=...</span></code>.
-For production products, use a high-fidelity propagator such as
-<code class="docutils literal notranslate"><span class="pre">adam_assist.ASSISTPropagator</span></code>.</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">adam_assist</span><span class="w"> </span><span class="kn">import</span> <span class="n">ASSISTPropagator</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.orbits</span><span class="w"> </span><span class="kn">import</span> <span class="n">Orbits</span>
+For production products, supply a propagator whose force model and accuracy
+are appropriate for the product. The example assumes that configured instance
+is named <code class="docutils literal notranslate"><span class="pre">propagator</span></code>.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.orbits</span><span class="w"> </span><span class="kn">import</span> <span class="n">Orbits</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.orbits.spice_kernel</span><span class="w"> </span><span class="kn">import</span> <span class="n">orbits_to_spk</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.time</span><span class="w"> </span><span class="kn">import</span> <span class="n">Timestamp</span>
 
@@ -565,7 +566,7 @@ For production products, use a high-fidelity propagator such as
     <span class="n">output_file</span><span class="o">=</span><span class="s2">"objects.bsp"</span><span class="p">,</span>
     <span class="n">start_time</span><span class="o">=</span><span class="n">start_time</span><span class="p">,</span>
     <span class="n">end_time</span><span class="o">=</span><span class="n">end_time</span><span class="p">,</span>
-    <span class="n">propagator</span><span class="o">=</span><span class="n">ASSISTPropagator</span><span class="p">(),</span>
+    <span class="n">propagator</span><span class="o">=</span><span class="n">propagator</span><span class="p">,</span>
     <span class="n">step_days</span><span class="o">=</span><span class="mf">0.25</span><span class="p">,</span>
     <span class="n">window_days</span><span class="o">=</span><span class="mf">32.0</span><span class="p">,</span>
     <span class="n">kernel_type</span><span class="o">=</span><span class="s2">"w03"</span><span class="p">,</span>
@@ -678,7 +679,7 @@ propagator backend and force model choices.</p></li>
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-11-04</div>
+              Last updated on 2026-11-05</div>
           </div>
           <div class="right-details">
             
