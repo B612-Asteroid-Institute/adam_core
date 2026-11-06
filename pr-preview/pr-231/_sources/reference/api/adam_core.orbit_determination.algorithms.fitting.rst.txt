@@ -1,0 +1,7 @@
+adam\_core.orbit\_determination.algorithms.fitting module
+=========================================================
+
+.. automodule:: adam_core.orbit_determination.algorithms.fitting
+   :members:
+   :show-inheritance:
+   :undoc-members:
