@@ -75,17 +75,24 @@ def test_focused_iod_is_deterministic(
     assert first[1].solution.to_pylist() == second[1].solution.to_pylist()
 
 
-def test_iod_fused_matches_pinned_legacy_fixture(
+def test_prefit_iod_matches_core_0_7_baseline_fixture(
     real_data: OrbitDeterminationObservations,
 ) -> None:
-    """Pin the accepted d21 single-arc ASSIST IOD numerical products."""
+    """Pin the accepted Core 0.7 single-arc ASSIST prefit products."""
 
-    fixture = json.loads(
+    fixture_document = json.loads(
         (
             Path(__file__).parents[4]
-            / "migration/artifacts/iod_orchestration_fixture_2026-07-12.json"
+            / "migration/artifacts/iod_prefit_core_0_7_fixture_2026-11-06.json"
         ).read_text()
-    )["case"]
+    )
+    assert fixture_document["authority"]["core_commit"] == (
+        "0b49938eb0be04214a8d07b206227d31b248394a"
+    )
+    assert fixture_document["authority"]["assist_commit"] == (
+        "824f96e58d59c3f7a16ec62831c084aeac2904b6"
+    )
+    fixture = fixture_document["case"]
     observations = real_data[:10]
     assert observations.id.to_pylist() == fixture["observation_ids"]
 
@@ -99,9 +106,10 @@ def test_iod_fused_matches_pinned_legacy_fixture(
         light_time=True,
     )
 
-    # This preliminary orbit is mildly ill-conditioned with respect to the
-    # platform libm RA/Dec conversion. Preserve d21's component-specific
-    # bounds for the macOS-arm64 fixture; see iod_platform_numerics_2026-07-15.md.
+    # This preliminary orbit remains mildly ill-conditioned with respect to
+    # platform libm RA/Dec conversion. Preserve the measured component-specific
+    # cross-platform bounds around the accepted Core 0.7 prefit authority; see
+    # iod_platform_numerics_2026-07-15.md.
     state_atol = [4e-12, 2e-11, 4e-12, 4e-13, 4e-13, 4e-13]
     for axis, atol in enumerate(state_atol):
         np.testing.assert_allclose(

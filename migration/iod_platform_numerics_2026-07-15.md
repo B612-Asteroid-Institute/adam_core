@@ -97,3 +97,22 @@ bound directly covers the measured legacy-compatible platform envelope rather
 than masking a candidate-selection or orchestration difference. No production
 algorithm, root solver, or trigonometric implementation was changed to force
 one platform's last bits onto another.
+
+## Core 0.7 prefit authority refresh (2026-11-06)
+
+The July fixture predates Core 0.7's explicit typed prefit configuration. During
+final release qualification, the retained bridge test was found to compare the
+new prefit path to that historical product even though it had not executed in
+ordinary Core CI without an installed external provider. Exact Linux
+reproduction showed that accepted implementation baseline `0b49938e` and final
+release candidate `ece9d1ed` produce bitwise-identical states, epochs, fit
+statistics, residuals, memberships, and flags across five repetitions with
+Assist `824f96e` and byte-identical Cargo locks. Both differ from the historical
+July product, so expanding the old tolerance would misclassify configuration
+migration as platform noise.
+
+The current prefit regression therefore uses the separately identified
+`iod_prefit_core_0_7_fixture_2026-11-06.json` authority. The July fixture remains
+unchanged as historical evidence, and the same component-specific bounds remain
+the cross-platform allowance around the current authority. No production
+algorithm, configuration, or scientific output changed in this refresh.

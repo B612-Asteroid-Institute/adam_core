@@ -501,6 +501,66 @@ def _release_workflow_failures(project: dict[str, Any]) -> list[str]:
         return failures + ["release candidate wheel workflow is missing"]
 
     text = RELEASE_WORKFLOW.read_text(encoding="utf-8")
+    header = text.split("\njobs:", 1)[0]
+    expected_release_env = (
+        '  ADAM_CORE_RELEASE_BUILD: "1"',
+        "  ADAM_CORE_BUILD_COMMIT: ${{ github.sha }}",
+    )
+    for declaration in expected_release_env:
+        if header.count(declaration) != 1:
+            failures.append(
+                "release workflow must declare exact artifact-build environment "
+                f"{declaration!r} once before jobs"
+            )
+
+    artifact_marker = "\n  artifact-acceptance:\n"
+    extended_marker = "\n  extended-coverage:\n"
+    if text.count(artifact_marker) != 1 or text.count(extended_marker) != 1:
+        failures.append(
+            "release workflow must contain one artifact-acceptance and one "
+            "extended-coverage job"
+        )
+    else:
+        artifact_acceptance = text.split(artifact_marker, 1)[1].split(
+            extended_marker, 1
+        )[0]
+        extended_coverage = text.split(extended_marker, 1)[1]
+        extended_header, separator, _ = extended_coverage.partition("\n    steps:\n")
+        if not separator:
+            failures.append("extended coverage must retain its steps")
+        if "continue-on-error:" in artifact_acceptance:
+            failures.append("artifact acceptance must remain hard gating")
+        if (
+            text.count("continue-on-error:") != 1
+            or extended_header.count("    continue-on-error: true") != 1
+        ):
+            failures.append("only extended coverage may be non-gating at the job level")
+        if extended_header.count("    needs: artifact-acceptance") != 1:
+            failures.append("extended coverage must depend on artifact acceptance")
+
+        safe_install = (
+            "env -u ADAM_CORE_RELEASE_BUILD -u ADAM_CORE_BUILD_COMMIT "
+            "pdm install -G test"
+        )
+        normalized_extended = " ".join(extended_coverage.split())
+        if normalized_extended.count(safe_install) != 1:
+            failures.append(
+                "extended coverage must remove both release-identity variables "
+                "from its ordinary editable test install"
+            )
+        required_extended_checks = (
+            "cargo test -p adam_core_rs_kernel_data -- --ignored",
+            "pdm run test-profile -- src/adam_core",
+            'ADAM_CORE_LIVE_HORIZONS: "1"',
+            'ADAM_CORE_LIVE_QUERY_CLIENTS: "1"',
+            "pdm run test-live-integrations --",
+        )
+        for check in required_extended_checks:
+            if extended_coverage.count(check) != 1:
+                failures.append(
+                    f"extended coverage must retain slow/live check {check!r}"
+                )
+
     install_marker = "Install audited adam-core wheel builder"
     builder = "python migration/scripts/build_release_wheel.py"
     inspector = "python migration/scripts/check_wheel_artifacts.py"
