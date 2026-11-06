@@ -3,10 +3,12 @@
 Set ``ADAM_ASSIST_RUST_REPO`` to an exact candidate checkout; otherwise a
 sibling ``../adam-assist`` checkout is used. The build receives a temporary
 Cargo patch for this checkout's public Core crates and refuses to replace an
-existing downstream Cargo config. Compatible Core patch releases temporarily
-refresh those patched package entries and align spicekit to Core's lock, then
-restore the original lock byte-for-byte after a local develop build. adam-core
-retains no GPL crate sources.
+existing downstream Cargo config. Compatible Core source releases temporarily
+refresh those patched package entries and align spicekit to Core's lock. When
+the reviewed downstream source intentionally has no registry lock yet, a
+patched temporary lock is generated instead. A local develop build restores
+the original lock byte-for-byte, including restoring initial absence.
+adam-core retains no GPL crate sources.
 """
 
 from __future__ import annotations
@@ -26,6 +28,7 @@ from typing import Any
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_REPO = PROJECT_ROOT.parent / "adam-assist"
 PUBLIC_CORE_CRATES = (
+    "adam_core",
     "adam_core_rs_autodiff",
     "adam_core_rs_coords",
     "adam_core_rs_kernel_data",
@@ -39,7 +42,7 @@ class PreparedDownstream:
     config: Path
     remove_cargo_dir: bool
     lock: Path
-    original_lock: bytes
+    original_lock: bytes | None
 
 
 def _downstream_paths(repo: Path) -> tuple[Path, Path]:
@@ -47,8 +50,6 @@ def _downstream_paths(repo: Path) -> tuple[Path, Path]:
     lock = manifest.with_name("Cargo.lock")
     if not manifest.is_file():
         raise SystemExit(f"downstream Rust adam-assist manifest is missing: {manifest}")
-    if not lock.is_file():
-        raise SystemExit(f"downstream Rust adam-assist lock is missing: {lock}")
     return manifest, lock
 
 
@@ -158,20 +159,26 @@ def _refresh_core_lock(
     manifest, lock = paths or _downstream_paths(repo)
 
     version = _current_core_version()
-    before = _locked_packages(lock)
-    command = [cargo, "update", "--manifest-path", str(manifest)]
-    for crate in PUBLIC_CORE_CRATES:
-        command.extend(["--package", crate])
+    before = _locked_packages(lock) if lock.is_file() else None
+    if before is None:
+        command = [cargo, "generate-lockfile", "--manifest-path", str(manifest)]
+    else:
+        command = [cargo, "update", "--manifest-path", str(manifest)]
+        for crate in PUBLIC_CORE_CRATES:
+            command.extend(["--package", crate])
     subprocess.check_call(command, cwd=repo, env=env)
 
+    if not lock.is_file():
+        raise SystemExit(f"Cargo did not create the temporary downstream lock: {lock}")
     after = _locked_packages(lock)
     _verify_patched_core_packages(after, version)
 
-    # One Cargo transaction unlocks all five mutually exact-pinned Core crates.
-    # It may remove obsolete dependency versions or introduce new dependency
-    # names required by Core (for example rawzip), but it may not add a version
-    # for any retained non-Core package except Core's locked spicekit version.
-    _reject_unrelated_version_additions(before, after)
+    if before is not None:
+        # One Cargo transaction unlocks all mutually exact-pinned Core crates.
+        # It may remove obsolete dependency versions or introduce new dependency
+        # names required by Core (for example rawzip), but it may not add a version
+        # for any retained non-Core package except Core's locked spicekit version.
+        _reject_unrelated_version_additions(before, after)
     print(f"prepared downstream Cargo.lock for Core {version}")
 
 
@@ -182,7 +189,7 @@ def _prepare_downstream(
 ) -> PreparedDownstream:
     checked_paths = paths or _downstream_paths(repo)
     _, lock = checked_paths
-    original_lock = lock.read_bytes()
+    original_lock = lock.read_bytes() if lock.is_file() else None
     config, remove_cargo_dir = _write_core_patch(repo)
     prepared = PreparedDownstream(config, remove_cargo_dir, lock, original_lock)
     try:
@@ -194,9 +201,18 @@ def _prepare_downstream(
 
 
 def _restore_downstream(prepared: PreparedDownstream) -> None:
-    prepared.lock.write_bytes(prepared.original_lock)
-    if prepared.lock.read_bytes() != prepared.original_lock:
-        raise RuntimeError(f"failed to restore downstream Cargo lock: {prepared.lock}")
+    if prepared.original_lock is None:
+        prepared.lock.unlink(missing_ok=True)
+        if prepared.lock.exists():
+            raise RuntimeError(
+                f"failed to restore absent downstream Cargo lock: {prepared.lock}"
+            )
+    else:
+        prepared.lock.write_bytes(prepared.original_lock)
+        if prepared.lock.read_bytes() != prepared.original_lock:
+            raise RuntimeError(
+                f"failed to restore downstream Cargo lock: {prepared.lock}"
+            )
     prepared.config.unlink(missing_ok=True)
     if prepared.remove_cargo_dir and prepared.config.parent.exists():
         prepared.config.parent.rmdir()
