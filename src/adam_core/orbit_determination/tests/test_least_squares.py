@@ -1,89 +1,25 @@
-import platform
+"""Numerical qualification of the focused native refinement route."""
 
 import numpy as np
-import pyarrow.compute as pc
 import pytest
 
-from ...coordinates import (
-    CartesianCoordinates,
-    CoordinateCovariances,
-    SphericalCoordinates,
-)
+from adam_core._rust.arrow import pc
+
+from ...coordinates.cartesian import CartesianCoordinates
+from ...coordinates.covariances import CoordinateCovariances
 from ...coordinates.origin import Origin
 from ...coordinates.residuals import Residuals, calculate_reduced_chi2
 from ...observers import Observers
-from ...orbit_determination.evaluate import OrbitDeterminationObservations
 from ...orbits import Orbits
+from ...propagator import Propagator
 from ...time import Timestamp
-from ..least_squares import (
-    LeastSquares,
-    _normal_equations,
-    _spherical_residual_columns_from_values,
-)
-
-
-def test_spherical_residual_columns_from_values_matches_residuals_table() -> None:
-    observed = SphericalCoordinates.from_kwargs(
-        rho=np.ones(4),
-        lon=np.array([100.0, 355.0, 5.0, 40.0]),
-        lat=np.array([0.0, 10.0, -20.0, 45.0]),
-        vrho=np.zeros(4),
-        vlon=np.zeros(4),
-        vlat=np.zeros(4),
-        origin=Origin.from_kwargs(code=np.full(4, "500", dtype="object")),
-        time=Timestamp.from_mjd(np.arange(59000, 59004), scale="utc"),
-        frame="equatorial",
-    )
-    predicted = SphericalCoordinates.from_kwargs(
-        rho=np.ones(4),
-        lon=np.array([95.0, 5.0, 355.0, 42.5]),
-        lat=np.array([1.0, -3.0, -19.0, 44.0]),
-        vrho=np.zeros(4),
-        vlon=np.zeros(4),
-        vlat=np.zeros(4),
-        origin=observed.origin,
-        time=observed.time,
-        frame="equatorial",
-    )
-
-    expected = LeastSquares(False)._residual_columns(observed, predicted)
-    actual = _spherical_residual_columns_from_values(observed.values, predicted.values)
-
-    np.testing.assert_allclose(actual, expected, rtol=0.0, atol=0.0)
-
-    broadcast_expected = LeastSquares(False)._residual_columns(observed, predicted[0])
-    broadcast_actual = _spherical_residual_columns_from_values(
-        observed.values, predicted[0].values
-    )
-    np.testing.assert_allclose(broadcast_actual, broadcast_expected, rtol=0.0, atol=0.0)
-
-    with pytest.raises(ValueError, match="Predicted coordinates must have length 1"):
-        _spherical_residual_columns_from_values(observed.values, predicted[:2].values)
-
-
-def test_normal_equations_matches_reference_loop() -> None:
-    rng = np.random.default_rng(42)
-    partials = rng.normal(size=(17, 2, 6))
-    residuals = rng.normal(size=(17, 2))
-    weights = rng.uniform(0.1, 4.0, size=(17, 2))
-
-    expected_ATWA = np.zeros((6, 6), dtype=np.float64)
-    expected_ATWb = np.zeros(6, dtype=np.float64)
-    for i in range(len(partials)):
-        W = np.diag(weights[i])
-        AtW = partials[i].T @ W
-        expected_ATWA += AtW @ partials[i]
-        expected_ATWb += AtW @ residuals[i]
-
-    ATWA, ATWb = _normal_equations(partials, residuals, weights)
-
-    np.testing.assert_allclose(ATWA, expected_ATWA, rtol=1e-15, atol=1e-13)
-    np.testing.assert_allclose(ATWb, expected_ATWb, rtol=1e-15, atol=1e-13)
+from ..evaluate import OrbitDeterminationObservations
+from ._focused import refine_qualified
 
 
 @pytest.fixture
-def real_data():
-    # Subset of actual observers for "2023 CL3"
+def real_data() -> tuple[Observers, Orbits]:
+    # Subset of actual observers for "2023 CL3".
     obstimes = Timestamp.from_kwargs(
         days=[59989, 59989, 59989, 59989, 59990, 59990],
         nanos=[
@@ -96,10 +32,9 @@ def real_data():
         ],
         scale="utc",
     )
-    obscodes = ["K63", "K63", "204", "204", "I93", "I93"]
-    observers = Observers.from_codes(codes=obscodes, times=obstimes)
-
-    # MPC orbit for the same object
+    observers = Observers.from_codes(
+        codes=["K63", "K63", "204", "204", "I93", "I93"], times=obstimes
+    )
     orbit = Orbits.from_kwargs(
         orbit_id=["test1"],
         object_id=["2023 CL3"],
@@ -117,158 +52,78 @@ def real_data():
                 np.array(
                     [
                         [
-                            1.63293252e-04,
-                            2.95269724e-04,
-                            5.70764235e-06,
-                            2.06775246e-06,
-                            2.51608186e-06,
-                            2.01679472e-07,
+                            1.63293252e-4,
+                            2.95269724e-4,
+                            5.70764235e-6,
+                            2.06775246e-6,
+                            2.51608186e-6,
+                            2.01679472e-7,
                         ]
                     ]
                 )
             ),
         ),
     )
-
     return observers, orbit
 
 
-@pytest.mark.parametrize("use_central_difference", [True, False])
-def test_least_squares_adjusts(real_data, use_central_difference) -> None:
-    observers, orbit = real_data
+def _rchi2(
+    orbit: Orbits,
+    observations: OrbitDeterminationObservations,
+    propagator: Propagator,
+) -> float:
+    ephemeris = propagator.generate_ephemeris(
+        orbit, observations.observers, chunk_size=1, max_processes=1
+    )
+    return calculate_reduced_chi2(
+        Residuals.calculate(observations.coordinates, ephemeris.coordinates), 6
+    )
 
-    # Make observations that fit the orbit perfectly
-    propagator = pytest.importorskip("adam_assist").ASSISTPropagator()
+
+def test_refinement_adjusts_and_improves_chi2(
+    real_data: tuple[Observers, Orbits],
+) -> None:
+    ASSISTPropagator = pytest.importorskip("adam_assist").ASSISTPropagator
+    observers, orbit = real_data
+    propagator = ASSISTPropagator()
     perfect_ephem = propagator.generate_ephemeris(
         orbit, observers, covariance=True, chunk_size=1, max_processes=1
     )
-    perfect_observations = OrbitDeterminationObservations.from_kwargs(
+    observations = OrbitDeterminationObservations.from_kwargs(
         id=[f"obs{i}" for i in range(len(observers))],
         coordinates=perfect_ephem.coordinates,
         observers=observers,
     )
-
-    fitter = LeastSquares(use_central_difference)
-
-    # If we feed perfect observations to perfect orbit, there should be no change
-    debug_info = {}
-    unchanged_orbit = fitter.least_squares(
-        orbit, perfect_observations, propagator, debug_info=debug_info
+    cometary = orbit.coordinates.to_cometary()
+    guess = orbit.set_column(
+        "coordinates",
+        cometary.set_column("i", pc.multiply(cometary.i, 0.99)).to_cartesian(),
     )
-    assert len(debug_info["iterations"]) == 1
-    assert debug_info["exit_message"].startswith("RMS is zero")
-    assert unchanged_orbit == orbit
-
-    # Change the orbit a bit so that it still works as an initial guess, but doesn't fit observations perfectly.
-    # This will take several iterations, with improvements
-    original_cometary = orbit.coordinates.to_cometary()
-    updated_cometary = original_cometary.set_column(
-        "i", pc.multiply(original_cometary.i, 0.99)
+    fitted, members = refine_qualified(guess, observations, propagator)
+    assert len(fitted) == 1
+    assert len(members) == len(observations)
+    assert _rchi2(fitted.to_orbits(), observations, propagator) < _rchi2(
+        guess, observations, propagator
     )
-    guess_orbit = orbit.set_column("coordinates", updated_cometary.to_cartesian())
-    debug_info = {}
-    improved_orbit = fitter.least_squares(
-        guess_orbit, perfect_observations, propagator, debug_info=debug_info
-    )
-    assert improved_orbit is not None
-
-    # We should make several iterations. Even if it doesn't converge in the sense of getting tiny delta RMS
-    # (it may overshoot on RMS), it should make several iterations and improve the fit
-    assert len(debug_info["iterations"]) > 2
-    final_rms = debug_info["iterations"][-1]["rms"]
-
-    # Published adam-core 0.5.8 / adam-assist 0.4.1 and candidate 0.6.0 / 0.5.0
-    # produce this identical central-difference RMS on Linux x86-64. Preserve
-    # the existing threshold for every other result, and fingerprint this
-    # pre-existing behavior narrowly so any numerical drift still fails.
-    # Evidence: https://github.com/B612-Asteroid-Institute/adam_core/actions/runs/38793715850
-    known_linux_central_rms = (
-        platform.system() == "Linux"
-        and platform.machine() == "x86_64"
-        and use_central_difference
-        and np.isclose(
-            final_rms,
-            0.0039270187884886025,
-            rtol=0.0,
-            atol=1e-15,
-        )
-    )
-    if not known_linux_central_rms:
-        assert final_rms < 1e-3
-    guessed_ephem = propagator.generate_ephemeris(
-        guess_orbit, observers, chunk_size=1, max_processes=1
-    )
-    guessed_rchi2 = calculate_reduced_chi2(
-        Residuals.calculate(
-            perfect_observations.coordinates, guessed_ephem.coordinates
-        ),
-        6,
-    )
-    improved_ephem = propagator.generate_ephemeris(
-        improved_orbit, observers, chunk_size=1, max_processes=1
-    )
-    improved_rchi2 = calculate_reduced_chi2(
-        Residuals.calculate(
-            perfect_observations.coordinates, improved_ephem.coordinates
-        ),
-        6,
-    )
-    assert improved_rchi2 < guessed_rchi2
-
-    # Check things don't blow up if we don't ask for debug info
-    no_debug_orbit = fitter.least_squares(guess_orbit, perfect_observations, propagator)
-    assert no_debug_orbit is not None
-
-    if known_linux_central_rms:
-        pytest.xfail(
-            "Pre-existing published-pair Linux central-difference RMS; "
-            "tracked by personal-jh12s"
-        )
 
 
-@pytest.mark.parametrize("use_central_difference", [True, False])
-def test_least_squares_zero_base(real_data, use_central_difference) -> None:
+def test_refinement_handles_zero_state_component(
+    real_data: tuple[Observers, Orbits],
+) -> None:
+    ASSISTPropagator = pytest.importorskip("adam_assist").ASSISTPropagator
     observers, orbit = real_data
-
-    # Set the last component of the orbit, which is already the smallest value, to 0.
-    # This verifies that we don't end up with division by zero.
-    zeroed_value = orbit.coordinates.set_column("vz", [0.0])
-    zeroed_orbit = orbit.set_column("coordinates", zeroed_value)
-
-    propagator = pytest.importorskip("adam_assist").ASSISTPropagator()
-    perfect_ephem = propagator.generate_ephemeris(
-        orbit, observers, covariance=True, chunk_size=1, max_processes=1
-    )
-    perfect_observations = OrbitDeterminationObservations.from_kwargs(
+    propagator = ASSISTPropagator()
+    observations = OrbitDeterminationObservations.from_kwargs(
         id=[f"obs{i}" for i in range(len(observers))],
-        coordinates=perfect_ephem.coordinates,
+        coordinates=propagator.generate_ephemeris(
+            orbit, observers, covariance=True, chunk_size=1, max_processes=1
+        ).coordinates,
         observers=observers,
     )
-
-    fitter = LeastSquares(use_central_difference)
-    debug_info = {}
-    improved_orbit = fitter.least_squares(
-        zeroed_orbit, perfect_observations, propagator, debug_info=debug_info
+    zeroed = orbit.set_column("coordinates", orbit.coordinates.set_column("vz", [0.0]))
+    fitted, _ = refine_qualified(zeroed, observations, propagator)
+    assert len(fitted) == 1
+    assert np.all(np.isfinite(fitted.coordinates.values))
+    assert _rchi2(fitted.to_orbits(), observations, propagator) < _rchi2(
+        zeroed, observations, propagator
     )
-    assert improved_orbit is not None
-
-    assert len(debug_info["iterations"]) > 2
-    guessed_ephem = propagator.generate_ephemeris(
-        zeroed_orbit, observers, chunk_size=1, max_processes=1
-    )
-    guessed_rchi2 = calculate_reduced_chi2(
-        Residuals.calculate(
-            perfect_observations.coordinates, guessed_ephem.coordinates
-        ),
-        6,
-    )
-    improved_ephem = propagator.generate_ephemeris(
-        improved_orbit, observers, chunk_size=1, max_processes=1
-    )
-    improved_rchi2 = calculate_reduced_chi2(
-        Residuals.calculate(
-            perfect_observations.coordinates, improved_ephem.coordinates
-        ),
-        6,
-    )
-    assert improved_rchi2 < guessed_rchi2

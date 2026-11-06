@@ -4,10 +4,10 @@ from typing import List, Optional, Tuple, Union
 
 import numpy as np
 import numpy.typing as npt
-import pyarrow as pa
 import quivr as qv
 
 from adam_core._rust import generate_porkchop_data_arrow
+from adam_core._rust.arrow import pa
 from adam_core.coordinates import CartesianCoordinates
 from adam_core.coordinates.origin import Origin, OriginCodes
 from adam_core.coordinates.spherical import SphericalCoordinates
@@ -275,10 +275,10 @@ class LambertSolutions(qv.Table):
                 b"adam_core_arrival_time_scale": self.arrival_time.scale.encode(),
             }
         )
+        from .._rust.arrow import contiguous_record_batch
+
         table = self.table.combine_chunks().replace_schema_metadata(metadata)
-        return pa.RecordBatch.from_arrays(
-            [column.chunk(0) for column in table.columns], schema=table.schema
-        )
+        return contiguous_record_batch(table)
 
     def _orbit_accessor(self, accessor: str) -> Orbits:
         """One Arrow crossing for the four orbit-producing accessors."""

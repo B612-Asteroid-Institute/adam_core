@@ -21,9 +21,25 @@ the 44-row parity registry is only a benchmark subset.
 | Surface group | Disposition | Evidence |
 |---|---|---|
 | Gibbs, Herrick-Gibbs, Gauss roots/candidates | direct Rust kernels; candidate priority/order preserved; a supplied central-body `mu` consistently governs geometry and velocity rather than reproducing the legacy split-`mu` bug | fixed/random parity, custom-`mu` regression, and timing |
-| least-squares fitter, differential correction, `evaluate_orbits` | fused backend-generic Rust work units; Python preserves public table/errors and unsupported-provider fallback | latest-oracle fixtures, ignored-observation/order/statistics tests, timing |
-| `iod_worker`, linkage IOD, and `initial_orbit_determination` | fused Rust orchestration through the selected backend; Python supplies nondeterministic IDs and fallback for unsupported providers | full-linkage fixture, root/order tests, ASSIST integration, timing |
-| top-level OD batch and scheduling parameters | Rust/ASSIST scheduling; historical Ray parameters are signature-compatible no-ops; `iod_worker_remote` and `od_worker_remote` are retired | serial/parallel parity and no-Ray import tests |
+| least-squares fitter, differential correction, `evaluate_orbits` | adam-core-owned backend-generic Rust algorithms; Python preserves public tables/errors; native providers supply propagation capsules only and unsupported providers fail clearly | active Rust solver/covariance tests, ignored-observation/order/statistics tests, timing |
+| `iod_worker`, linkage IOD, and `initial_orbit_determination` | adam-core-owned Rust linkage orchestration through explicit stage propagation capsules; Python supplies public table IDs only | full-linkage fixture, root/order tests, native capsule integration, timing |
+| top-level OD batch and scheduling parameters | adam-core Rust scheduling; historical Ray parameters are signature-compatible no-ops; `iod_worker_remote` and `od_worker_remote` are retired | serial/parallel parity and no-Ray import tests |
+
+## Core 0.7 OD configuration and observation pipeline
+
+The September 2026 executable-model/plugin design is retired. Core Rust now
+owns a closed ordered `ObservationPipeline`, complete stage configuration,
+resource validation/parsing, fitting, rejection, covariance, and predictor-level
+configured composition. Python exposes immutable declarations, binds explicit
+local paths by semantic slot, marshals tables, and assembles result tables.
+
+| Surface group | Disposition | Evidence |
+|---|---|---|
+| `FillMissingAstrometricUncertainty`, `Efcc18CatalogBiasCorrection`, `StationBandResidualCovarianceAdjustment`, `NightlyBatchDeweighting` | closed Rust variants; order and repetition preserved; no callbacks or transform plugin ABI | native transform/resource tests and exact resource parity |
+| `station_catalog_uncertainty_table`, `efcc18_catalog_bias_table`, `station_band_residual_covariance_table` | explicit content-pinned semantic slots; no Core package discovery, fallback, or runtime download | aggregate hash/schema/row/structure validation with path-free provenance |
+| `OdConfig`, stage configs, `CORE_OD_V1`, `ASTEROID_INSTITUTE_OD_V1` | immutable Rust definitions mirrored in Python; profiles never select propagators | strict native round-trip, profile/explicit parity, fingerprint tests |
+| `fit_least_squares`, `iterative_fit`, `cmc2003_fit_detailed` | Core-owned Rust numerical algorithms; propagation providers expose only the negotiated capsule | native solver/covariance/rejection tests |
+| canonical batch `run_iod`, `run_od`, `refine`, `evaluate_orbits` | Rust-owned deterministic Associations/FittedOrbitMembers grouping and typed failures; Python only marshals and assembles the three direct result tables | native planner/workflow, public-surface, and migration contract tests |
 
 ## Impacts and associations
 
@@ -43,8 +59,12 @@ identities are separate and never used as compute evidence.
 
 ## Closure
 
-No adam-core-owned numerical orchestration gap remains in these domains.
-`approxLangrangeCoeffs` is an intentionally retired Gauss implementation helper;
+The generated manifest remains authoritative: canonical `refine` and
+`evaluate_orbits` are classified `mixed_rust_python_gap` because Python still
+assembles Rust-decided typed columns into quivr tables and native timing is not
+yet represented as a direct Arrow result. This document does not claim that gap
+is closed. `approxLangrangeCoeffs` is an intentionally retired Gauss
+implementation helper;
 the public Gauss solve is Rust-backed. The former generic propagator composition
 helpers (`propagation_worker*`, `ephemeris_worker_ray`, and
 `attach_magnitude_or_phase`) are likewise retired because concrete backends own

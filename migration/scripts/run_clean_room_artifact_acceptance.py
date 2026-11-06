@@ -314,29 +314,24 @@ def main() -> int:
                     "install",
                     "--upgrade",
                     "build",
+                    "maturin",
                     "pip",
                 ],
                 cwd=workspace,
                 log_dir=log_dir,
             )
             _run(
-                "write_core_version",
-                [builder_python, "migration/scripts/write_maturin_version.py"],
-                cwd=core_source,
-                log_dir=log_dir,
-            )
-            _run(
                 "build_adam_core",
                 [
                     builder_python,
-                    "-m",
-                    "build",
-                    "--wheel",
-                    "--outdir",
+                    "migration/scripts/build_release_wheel.py",
+                    "--out",
                     wheelhouse,
-                    core_source,
+                    "--",
+                    "-i",
+                    builder_python,
                 ],
-                cwd=workspace,
+                cwd=core_source,
                 log_dir=log_dir,
             )
             _run(

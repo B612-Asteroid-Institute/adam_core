@@ -2,15 +2,64 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import sys
 from email.parser import Parser
 from email.utils import collapse_rfc2231_value
 from pathlib import Path
 from zipfile import BadZipFile, ZipFile
 
+from packaging.tags import Tag, parse_tag
+from packaging.utils import (
+    InvalidWheelFilename,
+    canonicalize_name,
+    parse_wheel_filename,
+)
+
 NATIVE_MODULE_PREFIX = "adam_core/_rust_native"
 VERSION_MODULE = "adam_core/_version.py"
+RELEASE_INVENTORY = "adam_core/_release_inventory.json"
+RELEASE_INVENTORY_FORMAT = "adam-core-release-inventory-v2"
 FORBIDDEN_RUNTIME_DEPENDENCIES = {"pdm"}
+EXPECTED_DISTRIBUTION = "adam-core"
+EXPECTED_FILENAME_DISTRIBUTION = "adam_core"
+
+
+def _validated_wheel_filename(wheel: Path) -> tuple[str, str, frozenset[Tag]]:
+    """Return the exact canonical identity encoded by a Core wheel filename."""
+
+    try:
+        name, version, build, tags = parse_wheel_filename(wheel.name)
+    except InvalidWheelFilename as error:
+        raise SystemExit(f"{wheel} has an invalid wheel filename: {error}") from error
+
+    raw_parts = wheel.name.removesuffix(".whl").split("-")
+    if len(raw_parts) != 5 or build:
+        raise SystemExit(
+            f"{wheel} has an invalid wheel filename: build tags are not supported"
+        )
+    raw_name, raw_version, python_tag, abi_tag, platform_tag = raw_parts
+    if canonicalize_name(name) != EXPECTED_DISTRIBUTION:
+        raise SystemExit(
+            f"{wheel} has an invalid wheel filename: unexpected distribution {name!r}"
+        )
+    if raw_name != EXPECTED_FILENAME_DISTRIBUTION:
+        raise SystemExit(
+            f"{wheel} has an invalid wheel filename: distribution must be spelled "
+            f"exactly {EXPECTED_FILENAME_DISTRIBUTION!r}"
+        )
+    if raw_version != str(version):
+        raise SystemExit(
+            f"{wheel} has an invalid wheel filename: version must use canonical "
+            f"spelling {str(version)!r}"
+        )
+    raw_tags = (python_tag, abi_tag, platform_tag)
+    if any(value != value.lower() for value in raw_tags):
+        raise SystemExit(
+            f"{wheel} has an invalid wheel filename: tags must be lowercase"
+        )
+    return EXPECTED_DISTRIBUTION, raw_version, tags
 
 
 def _wheel_metadata(archive: ZipFile, wheel: Path) -> tuple[str, str, list[str]]:
@@ -33,6 +82,27 @@ def _wheel_metadata(archive: ZipFile, wheel: Path) -> tuple[str, str, list[str]]
     return name, version, requirements
 
 
+def _wheel_tags(archive: ZipFile, wheel: Path) -> frozenset[Tag]:
+    wheel_files = [
+        name for name in archive.namelist() if name.endswith(".dist-info/WHEEL")
+    ]
+    if len(wheel_files) != 1:
+        raise SystemExit(
+            f"{wheel} should contain exactly one WHEEL file, found {len(wheel_files)}"
+        )
+    metadata = Parser().parsestr(
+        archive.read(wheel_files[0]).decode("utf-8", errors="replace")
+    )
+    raw_tags = metadata.get_all("Tag", [])
+    if not raw_tags:
+        raise SystemExit(f"{wheel} WHEEL metadata is missing Tag")
+    try:
+        tags = frozenset(tag for value in raw_tags for tag in parse_tag(value))
+    except ValueError as error:
+        raise SystemExit(f"{wheel} has an invalid WHEEL Tag: {error}") from error
+    return tags
+
+
 def _runtime_version(archive: ZipFile, wheel: Path) -> str:
     if VERSION_MODULE not in archive.namelist():
         raise SystemExit(f"{wheel} is missing {VERSION_MODULE}")
@@ -44,12 +114,78 @@ def _runtime_version(archive: ZipFile, wheel: Path) -> str:
     return version
 
 
+def _verify_release_inventory(archive: ZipFile, wheel: Path) -> None:
+    if RELEASE_INVENTORY not in archive.namelist():
+        raise SystemExit(f"{wheel} is missing {RELEASE_INVENTORY}")
+    try:
+        inventory = json.loads(archive.read(RELEASE_INVENTORY))
+    except (json.JSONDecodeError, UnicodeDecodeError) as error:
+        raise SystemExit(
+            f"{wheel} has an invalid release inventory: {error}"
+        ) from error
+    if inventory.get("format") != RELEASE_INVENTORY_FORMAT:
+        raise SystemExit(f"{wheel} has an unsupported release inventory format")
+    for field, size in (("commit", 40), ("digest", 64)):
+        value = inventory.get(field)
+        if (
+            not isinstance(value, str)
+            or len(value) != size
+            or any(char not in "0123456789abcdef" for char in value)
+        ):
+            raise SystemExit(f"{wheel} release inventory has invalid {field}")
+    expected = inventory.get("python_files")
+    if not isinstance(expected, dict) or not all(
+        isinstance(name, str) and isinstance(digest, str) and len(digest) == 64
+        for name, digest in expected.items()
+    ):
+        raise SystemExit(f"{wheel} release inventory has invalid python_files")
+    actual = {
+        name
+        for name in archive.namelist()
+        if name.startswith("adam_core/")
+        and name.endswith(".py")
+        and "/tests/" not in name
+        and not Path(name).name.startswith("test_")
+    }
+    if actual != set(expected):
+        missing = sorted(set(expected) - actual)
+        unexpected = sorted(actual - set(expected))
+        raise SystemExit(
+            f"{wheel} packaged Python file set does not match release inventory; "
+            f"missing={missing}, unexpected={unexpected}"
+        )
+    for name, expected_digest in expected.items():
+        actual_digest = hashlib.sha256(archive.read(name)).hexdigest()
+        if actual_digest != expected_digest:
+            raise SystemExit(
+                f"{wheel} packaged Python file {name} does not match its attested digest"
+            )
+
+
 def _inspect_wheel(wheel: Path) -> str:
+    filename_name, filename_version, filename_tags = _validated_wheel_filename(wheel)
     try:
         with ZipFile(wheel) as archive:
             name, metadata_version, requirements = _wheel_metadata(archive, wheel)
+            if name != "adam_core" or canonicalize_name(name) != filename_name:
+                raise SystemExit(
+                    f"{wheel} filename distribution {filename_name!r} does not match "
+                    f"METADATA name {name!r}"
+                )
+            if metadata_version != filename_version:
+                raise SystemExit(
+                    f"{wheel} filename version {filename_version!r} does not match "
+                    f"METADATA version {metadata_version!r}"
+                )
+            wheel_tags = _wheel_tags(archive, wheel)
+            if filename_tags != wheel_tags:
+                raise SystemExit(
+                    f"{wheel} filename tags {sorted(map(str, filename_tags))} do not "
+                    f"match WHEEL tags {sorted(map(str, wheel_tags))}"
+                )
             runtime_version = _runtime_version(archive, wheel)
-            if name not in {"adam_core", "adam-core"}:
+            _verify_release_inventory(archive, wheel)
+            if name != "adam_core":
                 raise SystemExit(f"{wheel} has unexpected package name {name!r}")
             if runtime_version != metadata_version:
                 raise SystemExit(
@@ -66,9 +202,11 @@ def _inspect_wheel(wheel: Path) -> str:
                 .lower()
                 for raw_requirement in requirements
                 for requirement in [
-                    collapse_rfc2231_value(raw_requirement)
-                    if isinstance(raw_requirement, tuple)
-                    else str(raw_requirement)
+                    (
+                        collapse_rfc2231_value(raw_requirement)
+                        if isinstance(raw_requirement, tuple)
+                        else str(raw_requirement)
+                    )
                 ]
                 if ";" not in requirement
             }
@@ -100,8 +238,7 @@ def _inspect_wheel(wheel: Path) -> str:
         raise SystemExit(f"{wheel} is not a valid wheel: {exc}") from exc
 
 
-def main() -> None:
-    artifact_dir = Path(sys.argv[1]) if len(sys.argv) > 1 else Path("dist")
+def inspect_artifact_directory(artifact_dir: Path) -> None:
     if not artifact_dir.exists():
         raise SystemExit(f"{artifact_dir} does not exist")
     if not artifact_dir.is_dir():
@@ -124,6 +261,11 @@ def main() -> None:
         "Wheel artifact inspection passed: "
         + ", ".join(f"{name} ({version})" for name, version in inspected)
     )
+
+
+def main() -> None:
+    artifact_dir = Path(sys.argv[1]) if len(sys.argv) > 1 else Path("dist")
+    inspect_artifact_directory(artifact_dir)
 
 
 if __name__ == "__main__":

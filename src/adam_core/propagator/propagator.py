@@ -1,8 +1,8 @@
 """Abstract propagator framework.
 
-adam_core ships no concrete propagator and no Python composition: only
-Rust-backed propagators (e.g. ``adam_assist.ASSISTPropagator``) are
-supported. Each public surface -- :meth:`Propagator.propagate_orbits`,
+adam_core ships no concrete propagator and no Python composition: concrete
+Rust-backed propagators are supplied by separately installed providers. Each
+public surface -- :meth:`Propagator.propagate_orbits`,
 :meth:`EphemerisMixin.generate_ephemeris`, and
 :meth:`~adam_core.dynamics.impacts.ImpactMixin.detect_collisions` -- is the
 abstract single-crossing contract that a backend implements as one
@@ -14,13 +14,14 @@ backend call.
 The former Python composition (per-chunk Ray fan-out, covariance
 sample/propagate/collapse, the generic light-time ephemeris pipeline, and the
 ``_propagate_orbits``/``_generate_ephemeris`` hooks) has been deleted; its
-behavior is replicated inside the Rust backends and validated by the
-the downstream ``adam-assist`` Rust/parity test suites.
+behavior belongs inside each Rust backend and must be validated by that
+provider's own conformance and parity tests.
 """
 
 import logging
 from abc import ABC, abstractmethod
-from typing import Literal, Optional, Union
+from dataclasses import dataclass, field
+from typing import ClassVar, Literal, Optional, Union
 
 from ..constants import Constants as _Constants
 from ..orbits.ephemeris import Ephemeris
@@ -107,6 +108,34 @@ class EphemerisMixin(ABC):
         ...
 
 
+@dataclass(frozen=True)
+class NativeBackend:
+    """
+    A propagator class's declaration of its compiled propagation provider.
+
+    ``name`` and ``version`` identify the backend and must match the identity
+    embedded in its native capsule. ``work_units`` may contain only
+    ``"propagator_capsule"``: adam-core owns OD/IOD/fitting/rejection and the
+    provider contributes propagation, derivative and dynamics capabilities
+    through that capsule. Construction raises :class:`ValueError` for any
+    algorithm work unit, or for an empty identity field.
+    """
+
+    name: str
+    version: str
+    work_units: frozenset[str] = field(default_factory=frozenset)
+
+    def __post_init__(self) -> None:
+        unsupported = self.work_units - {"propagator_capsule"}
+        if unsupported:
+            raise ValueError(
+                "NativeBackend providers are propagation-only; unsupported "
+                f"work units: {sorted(unsupported)!r}"
+            )
+        if not self.name or not self.version:
+            raise ValueError("NativeBackend name and version must be non-empty")
+
+
 class Propagator(EphemerisMixin):
     """Abstract base for orbit propagators.
 
@@ -116,6 +145,20 @@ class Propagator(EphemerisMixin):
     a covariance -- all inside Rust. adam_core ships no concrete propagator and
     no Python composition; only Rust backends are supported.
     """
+
+    #: Whether this propagator integrates exactly the Kepler two-body
+    #: problem, so that the analytic two-body Jacobian of the orbit
+    #: determination solver (``jacobian="analytic"``) is its exact derivative.
+    #: Any other dynamics leave it False: the solver then warns when the
+    #: analytic Jacobian is requested, and ``jacobian="central"`` differences
+    #: the propagator itself instead.
+    two_body_dynamics: ClassVar[bool] = False
+
+    #: The compiled propagation provider this class exposes (`NativeBackend`),
+    #: or None. The declaration covers the class's own propagation and
+    #: capsule methods: a subclass that overrides any of them is not
+    #: covered for native OD unless it declares a matching backend again.
+    native_backend: ClassVar[Optional[NativeBackend]] = None
 
     @abstractmethod
     def propagate_orbits(

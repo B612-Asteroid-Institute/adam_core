@@ -1,3 +1,4 @@
+use adam_core::od::algorithms::ErfaTimeProvider;
 use adam_core_rs_coords::local_frames::{
     local_frame_covariances, local_frame_jacobians, LocalFrame,
 };
@@ -5,6 +6,9 @@ use adam_core_rs_coords::propagation::{
     generate_ephemeris_barycentric, CovariancePropagation, EphemerisFailureCode, EphemerisOptions,
     EphemerisPhotometryOptions, EpochPolicy, PropagationDiagnostics, PropagationFailureCode,
     PropagationOptions, PropagationRequest, Propagator, TwoBodyPropagator, TwoBodyPropagatorConfig,
+};
+use adam_core_rs_coords::types::arrow::{
+    coordinate_covariance_values_are_all_nan, coordinate_covariance_values_to_six,
 };
 use adam_core_rs_coords::{
     apply_cosine_latitude_correction_flat, apply_linear_covariance_transform_flat,
@@ -14,21 +18,23 @@ use adam_core_rs_coords::{
     cometary_to_cartesian_flat6, compute_residuals_chi2_flat,
     create_sampled_orbit_variants_with_nongrav, fit_orbit_2body_least_squares,
     generate_ephemeris_2body_flat6, keplerian_to_cartesian_flat6, origin_mu_au3_day2,
-    porkchop_grid_flat, rotate_cartesian_time_varying_flat6, rotate_coordinates_to_frame,
-    spherical_to_cartesian_flat6, spherical_to_cartesian_row, tisserand_parameter_flat,
-    transform_values_flat6, transform_with_covariance_flat, weighted_covariance_flat,
-    weighted_mean_flat, ArrowSchemaExport, CoordinateBatch as DataCoordinateBatch,
-    CoordinateRepresentation as DataRepresentation, CoordinateValues, CovarianceBatch,
-    CovarianceUnits, DataFrame, Epoch, Frame, IntoNestedRecordBatch, LeastSquaresConfig,
-    NonGravitationalParametersBatch as DataNonGravBatch, ObserverBatch as DataObserverBatch,
-    OrbitBatch as DataOrbitBatch, OrbitVariantBatch as DataOrbitVariantBatch,
-    OrbitVariantSamplingMethod, OriginArray, OriginId, Representation as CoordsRepresentation,
-    TimeArray, TimeScale, TimeScaleProvider, TryFromNestedRecordBatch,
+    porkchop_grid_flat, rotate_cartesian_covariance_flat, rotate_cartesian_time_varying_flat6,
+    rotate_coordinates_to_frame, spherical_to_cartesian_flat6, spherical_to_cartesian_row,
+    tisserand_parameter_flat, transform_values_flat6, transform_with_covariance_flat,
+    weighted_covariance_flat, weighted_mean_flat, ArrowSchemaExport,
+    CoordinateBatch as DataCoordinateBatch, CoordinateRepresentation as DataRepresentation,
+    CoordinateValues, CovarianceBatch, CovarianceUnits, DataFrame, Epoch, Frame,
+    IntoNestedRecordBatch, LeastSquaresConfig, NonGravitationalParametersBatch as DataNonGravBatch,
+    ObserverBatch as DataObserverBatch, OrbitBatch as DataOrbitBatch,
+    OrbitVariantBatch as DataOrbitVariantBatch, OrbitVariantSamplingMethod, OriginArray, OriginId,
+    Representation as CoordsRepresentation, SchemaError, TimeArray, TimeScale,
+    TryFromNestedRecordBatch,
 };
 use adam_core_rs_spice::global_backend;
 use arrow::pyarrow::{FromPyArrow, ToPyArrow};
 use arrow_array::{
-    Array, Float64Array, Int64Array, LargeStringArray, RecordBatch, StructArray, UInt32Array,
+    Array, Float64Array, Int64Array, LargeListArray, LargeStringArray, RecordBatch, StructArray,
+    UInt32Array,
 };
 use arrow_ipc::reader::StreamReader;
 use arrow_ipc::writer::StreamWriter;
@@ -813,6 +819,49 @@ fn benchmark_transform_coordinates_with_covariance_native(
     })
 }
 
+#[pyfunction(name = "_rotate_cartesian_covariance_numpy")]
+fn rotate_cartesian_covariance_numpy<'py>(
+    py: Python<'py>,
+    matrix: PyReadonlyArray2<'py, f64>,
+    covariances: PyReadonlyArray3<'py, f64>,
+    coordinate_zero_tolerance: f64,
+) -> PyResult<(Bound<'py, PyArray3<f64>>, usize)> {
+    let matrix = matrix.as_array();
+    if matrix.shape() != [6, 6] {
+        return Err(PyValueError::new_err("matrix must have shape (6, 6)"));
+    }
+    let covariances = covariances.as_array();
+    if covariances.ndim() != 3
+        || covariances.shape()[1] != covariances.shape()[2]
+        || !matches!(covariances.shape()[1], 6 | 9)
+    {
+        return Err(PyValueError::new_err(
+            "covariances must have shape (N, 6, 6) or (N, 9, 9)",
+        ));
+    }
+    let rows = covariances.shape()[0];
+    let dimension = covariances.shape()[1];
+    let matrix = matrix
+        .as_slice()
+        .ok_or_else(|| PyValueError::new_err("matrix must be contiguous"))?;
+    let covariances = covariances
+        .as_slice()
+        .ok_or_else(|| PyValueError::new_err("covariances must be contiguous"))?;
+    let (output, near_zero) = py
+        .allow_threads(|| {
+            rotate_cartesian_covariance_flat(
+                covariances,
+                dimension,
+                matrix,
+                coordinate_zero_tolerance,
+            )
+        })
+        .map_err(PyValueError::new_err)?;
+    let output = ndarray::Array3::from_shape_vec((rows, dimension, dimension), output)
+        .map_err(|err| PyValueError::new_err(format!("failed to shape covariance: {err}")))?;
+    Ok((output.into_pyarray(py), near_zero))
+}
+
 #[pyfunction]
 #[pyo3(signature = (coords, time_index, matrices, covariances=None))]
 fn rotate_cartesian_time_varying_numpy<'py>(
@@ -1345,14 +1394,15 @@ fn tisserand_parameter_numpy<'py>(
 pub(crate) fn read_orbit_ipc(bytes: &[u8]) -> PyResult<RecordBatch> {
     let mut reader = StreamReader::try_new(bytes, None)
         .map_err(|err| PyValueError::new_err(format!("invalid Arrow IPC stream: {err}")))?;
-    let batch = reader
-        .next()
-        .ok_or_else(|| PyValueError::new_err("Arrow IPC stream contained no record batches"))?
-        .map_err(|err| PyValueError::new_err(format!("failed to read Arrow IPC batch: {err}")))?;
-    Ok(batch)
+    let schema = reader.schema();
+    match reader.next() {
+        Some(batch) => batch
+            .map_err(|err| PyValueError::new_err(format!("failed to read Arrow IPC batch: {err}"))),
+        None => Ok(RecordBatch::new_empty(schema)),
+    }
 }
 
-fn write_orbit_ipc(batch: &RecordBatch) -> PyResult<Vec<u8>> {
+pub(crate) fn write_orbit_ipc(batch: &RecordBatch) -> PyResult<Vec<u8>> {
     let mut buffer = Vec::new();
     {
         let schema = batch.schema();
@@ -1632,21 +1682,6 @@ fn orbits_propagate_2body_ipc<'py>(
         .map_err(|err| PyValueError::new_err(format!("failed to encode OrbitBatch: {err}")))?;
     let bytes = write_orbit_ipc(&out)?;
     Ok(PyBytes::new(py, &bytes))
-}
-
-/// Provider-owned time rescaling for the typed propagation adapter: delegates
-/// to the ERFA-backed `TimeArray::rescale` service (UTC/TAI/TT/TDB supported;
-/// UT1/GPS fail loudly pending provider contracts).
-struct ErfaTimeProvider;
-
-impl TimeScaleProvider for ErfaTimeProvider {
-    fn rescale(
-        &self,
-        times: &TimeArray,
-        new_scale: TimeScale,
-    ) -> adam_core_rs_coords::types::SchemaResult<TimeArray> {
-        times.rescale(new_scale)
-    }
 }
 
 struct TypedPropagationBatchOutput {
@@ -2264,6 +2299,58 @@ fn orbits_nested_round_trip_arrow<'py>(
         .map_err(|err| PyValueError::new_err(format!("failed to encode OrbitBatch: {err}")))?;
     out.to_pyarrow(py)
         .map_err(|err| PyValueError::new_err(format!("failed to export RecordBatch: {err}")))
+}
+
+/// Test only the six-dimensional coordinate blocks of covariance-list
+/// payloads. Extended A1/A2/A3 covariance values do not make coordinate
+/// covariance defined.
+#[pyfunction(name = "_coordinate_covariance_values_are_all_nan_arrow")]
+fn coordinate_covariance_values_are_all_nan_arrow(batch: &Bound<'_, PyAny>) -> PyResult<bool> {
+    let record_batch = RecordBatch::from_pyarrow_bound(batch)
+        .map_err(|err| PyValueError::new_err(format!("invalid covariance RecordBatch: {err}")))?;
+    let values = record_batch
+        .column_by_name("values")
+        .ok_or_else(|| PyValueError::new_err("missing covariance values column"))?
+        .as_any()
+        .downcast_ref::<LargeListArray>()
+        .ok_or_else(|| PyValueError::new_err("covariance values must be LargeList<Float64>"))?;
+    coordinate_covariance_values_are_all_nan(values).map_err(|err| match err {
+        SchemaError::InvalidRecordBatch(message) => PyValueError::new_err(message),
+        other => PyValueError::new_err(other.to_string()),
+    })
+}
+
+/// Reduce covariance-list payloads to their leading six-dimensional blocks.
+/// Unrelated coordinates, times, origins, strings, and metadata never cross
+/// this boundary.
+#[pyfunction(name = "_coordinate_covariance_values_to_six_arrow")]
+fn coordinate_covariance_values_to_six_arrow<'py>(
+    py: Python<'py>,
+    batch: &Bound<'py, PyAny>,
+) -> PyResult<PyObject> {
+    let record_batch = RecordBatch::from_pyarrow_bound(batch)
+        .map_err(|err| PyValueError::new_err(format!("invalid covariance RecordBatch: {err}")))?;
+    let values = record_batch
+        .column_by_name("values")
+        .ok_or_else(|| PyValueError::new_err("missing covariance values column"))?
+        .as_any()
+        .downcast_ref::<LargeListArray>()
+        .ok_or_else(|| PyValueError::new_err("covariance values must be LargeList<Float64>"))?;
+    let output = coordinate_covariance_values_to_six(values).map_err(|err| match err {
+        SchemaError::InvalidRecordBatch(message) => PyValueError::new_err(message),
+        other => PyValueError::new_err(other.to_string()),
+    })?;
+    let output = std::sync::Arc::new(output) as arrow_array::ArrayRef;
+    let schema = arrow_schema::Schema::new(vec![arrow_schema::Field::new(
+        "values",
+        output.data_type().clone(),
+        false,
+    )]);
+    let output = RecordBatch::try_new(std::sync::Arc::new(schema), vec![output])
+        .map_err(|err| PyRuntimeError::new_err(format!("failed to encode covariance: {err}")))?;
+    output
+        .to_pyarrow(py)
+        .map_err(|err| PyRuntimeError::new_err(format!("failed to export RecordBatch: {err}")))
 }
 
 /// W1 data-model bridge (bead personal-cmy.13 / OD slice 2): round-trip a quivr
@@ -7346,6 +7433,7 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
         m
     )?)?;
     m.add_function(wrap_pyfunction!(rotate_cartesian_time_varying_numpy, m)?)?;
+    m.add_function(wrap_pyfunction!(rotate_cartesian_covariance_numpy, m)?)?;
     m.add_function(wrap_pyfunction!(bound_longitude_residuals_numpy, m)?)?;
     m.add_function(wrap_pyfunction!(bound_longitude_residual_column_numpy, m)?)?;
     m.add_function(wrap_pyfunction!(
@@ -7374,6 +7462,14 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(generate_ephemeris_arrow, m)?)?;
     m.add_function(wrap_pyfunction!(benchmark_generate_ephemeris_arrow, m)?)?;
     m.add_function(wrap_pyfunction!(orbits_nested_round_trip_arrow, m)?)?;
+    m.add_function(wrap_pyfunction!(
+        coordinate_covariance_values_are_all_nan_arrow,
+        m
+    )?)?;
+    m.add_function(wrap_pyfunction!(
+        coordinate_covariance_values_to_six_arrow,
+        m
+    )?)?;
     m.add_function(wrap_pyfunction!(observers_nested_ipc_round_trip, m)?)?;
     m.add_function(wrap_pyfunction!(observations_nested_ipc_round_trip, m)?)?;
     m.add_function(wrap_pyfunction!(exposure_midpoint_ipc, m)?)?;

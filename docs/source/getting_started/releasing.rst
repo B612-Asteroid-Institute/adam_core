@@ -8,33 +8,35 @@ Release artifacts are built once and tested as artifacts. The release-candidate
 workflow builds one wheel for each supported Python/platform pair, installs
 those exact files in isolated binary-only environments, runs ``pip check``,
 proves offline installed-package kernel discovery without duplicate cache
-files, and exercises public SBDB, observer, ephemeris, and ASSIST workflows.
+files, and exercises public SBDB, observer, ephemeris, and
+propagation-provider workflows.
 Publication jobs download those accepted artifacts by workflow run ID; they do
 not rebuild wheels or crates.
 
 The supported matrix is CPython 3.11-3.13 on manylinux 2.17 x86-64 and AArch64
 and macOS Apple silicon and Intel (12 wheels per distribution). The workflow
 checks runner architecture, exact wheel count, runtime/distribution version
-equality, native members, and platform tags. Windows is deferred because
-``libassist-sys 1.2.1`` requires the upstream ASSIST POSIX memory-mapping
-implementation; musllinux is deliberately unsupported.
+equality, native members, and platform tags. Windows and musllinux are not
+current release targets.
 
 Stable release line
 -------------------
 
-The current published baseline is ``adam-core==0.6.0``. The patch release is
-``adam-core==0.6.1`` for Python and ``0.6.1`` for all six public Rust crates.
-Release ``0.6.1`` restores fresh Rust 1.87 consumer resolution after the
-upstream ``zip`` project yanked every pre-9 release: kernel wheel extraction
-now uses ``rawzip`` plus the existing pure-Rust ``flate2`` backend. The
-immutable ``v0.6.0`` tag must never be moved or reused; the patch release uses
-``v0.6.1``.
+The current published baseline is ``adam-core==0.6.1``. The next source
+candidate is the breaking ``adam-core==0.7.0`` release for Python and ``0.7.0``
+for all six public Rust crates. Released ``0.6.1`` does not implement the
+propagation-only v2 provider contract and is not compatible with this source
+line. Release ``0.6.1`` remains the immutable Rust 1.87 packaging repair that
+replaced the yanked pre-9 ``zip`` line with ``rawzip`` plus ``flate2``. Neither
+``v0.6.0`` nor ``v0.6.1`` may be moved or reused; ``v0.7.0`` is created only at
+the separately approved stable-publication boundary.
 
-All internal public Rust dependencies use exact ``=0.6.1`` requirements.
-``adam_core_py`` remains an unpublished wheel implementation crate. Rust 1.87
-is the authoritative MSRV; latest stable is compatibility-only. The Python
-wheel contains the Python veneer and compiled ``adam_core._rust_native``
-extension, so Python consumers do not install the component crates directly.
+All internal public Rust dependencies use exact ``=0.7.0`` requirements.
+``adam_core_py`` is also versioned ``0.7.0`` but remains an unpublished wheel
+implementation crate. Rust 1.87 is the authoritative MSRV; latest stable is
+compatibility-only. The Python wheel contains the Python veneer and compiled
+``adam_core._rust_native`` extension, so Python consumers do not install the
+component crates directly.
 
 Trusted publishing
 ------------------
@@ -66,21 +68,19 @@ Release order
 Stable promotion remains separately approval-gated and proceeds in dependency
 order:
 
-#. prepare an unpublished, science-code-unchanged ``adam-assist 0.5.0`` source
-   candidate declaring compatibility with Core ``>=0.6,<0.7``. Its preliminary
-   Cargo lock may select the path-patched, unpublished Core ``0.6.1`` crates
-   solely for paired acceptance; it is not a publication candidate;
-#. accept the exact Core ``0.6.1`` six-crate set and paired 12-wheel matrix;
+#. prepare and review an exact propagation-only v2 reference-provider source
+   revision for dependent acceptance. The current workflow names this required
+   operational input ``adam_assist_ref`` and requires a full commit SHA; that
+   revision is evidence for the Core candidate, not a Core dependency or
+   publication candidate;
+#. accept the exact Core ``0.7.0`` six-crate set and 12-wheel matrix, including
+   the separately built provider compatibility lane;
 #. publish and verify the six Core crates in dependency order;
-#. publish and verify the exact Core Python wheel set;
-#. finalize the ASSIST Python/Rust requirements and frozen registry-only locks
-   selected at public Core ``0.6.1``;
-#. accept, publish, and verify ``adam_assist 0.5.0`` and the exact
-   ``adam-assist==0.5.0`` wheel set; and
-#. run clean no-lock Cargo 1.87/latest-stable and clean pip/current-uv
-   propagation smoke tests from registry-only environments.
+#. publish and verify the exact Core Python wheel set; and
+#. run clean no-lock Cargo 1.87/latest-stable and clean pip/current-uv smoke
+   tests from registry-only environments.
 
-``adam-assist`` owns ASSIST orchestration and consumes released
-``libassist-sys`` and ``librebound-sys`` directly. A tag, GitHub release,
-protected-environment change, crates.io upload, or PyPI upload is a human
-approval boundary and is never performed as part of source preparation.
+Provider publication and compatibility policy belong to each provider's own
+release process. A tag, GitHub release, protected-environment change,
+crates.io upload, or PyPI upload is a human approval boundary and is never
+performed as part of Core source preparation.

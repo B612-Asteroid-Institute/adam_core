@@ -31,7 +31,7 @@ pub struct KernelSpec {
 }
 
 /// All adam-core data files, in `setup_SPICE` order (the six SPICE kernels),
-/// then the obscodes table, then the ASSIST asteroid ephemeris.
+/// then the obscodes table, then the asteroid ephemeris.
 pub const KERNEL_SPECS: &[KernelSpec] = &[
     KernelSpec {
         id: "leapseconds",
@@ -301,8 +301,7 @@ impl Resolver {
             .map_err(io_error(format!("failed to read {}", path.display())))
     }
 
-    /// The (planets, asteroids) ephemeris paths for
-    /// `assist_rs::Ephemeris::from_paths`.
+    /// The paired planetary and asteroid ephemeris paths.
     pub fn assist_ephemeris_paths(&self) -> Result<(PathBuf, PathBuf), KernelDataError> {
         Ok((self.resolve("de440")?, self.resolve("sb441_n16")?))
     }

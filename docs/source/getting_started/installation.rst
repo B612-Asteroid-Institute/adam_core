@@ -23,17 +23,13 @@ The native release matrix supports CPython 3.11, 3.12, and 3.13 on:
 * macOS 11+ Apple silicon; and
 * macOS Intel x86-64.
 
-Windows wheels are deferred because the reviewed ``libassist-sys 1.2.1``
-backend used by the required adam-assist acceptance stack wraps upstream
-ASSIST code that depends on POSIX ``sys/mman.h``. Windows source builds are not
-a supported substitute, and no unreviewed compatibility port is bundled.
+Windows and musllinux wheels are not current release targets. A source build
+on an unlisted platform is not a substitute for an accepted release artifact.
 
 These wheels are built once, installed and exercised by the clean-room
 acceptance suite, and only those exact tested files are eligible for
-publication. ``musllinux`` is not a supported release target: the SPICE and
-ASSIST native stacks target glibc on Linux, and no native musllinux acceptance
-runner is available. Installing from source requires a Rust toolchain and the
-platform C build tools; release consumers should normally require wheels.
+publication. Installing from source requires a Rust toolchain and the platform
+C build tools; release consumers should normally require wheels.
 
 Optional Installation Profiles
 ------------------------------
@@ -66,18 +62,17 @@ Pip Extras
 Propagator Backends
 -------------------
 
-Propagation and ephemeris generation depend on a compatible propagator implementation.
-A common setup is ``adam-assist``:
+Propagation and ephemeris generation depend on a separately installed
+implementation of the ``adam_core.propagator.Propagator`` contract. Choose and
+configure that implementation in the application; ``adam-core`` does not
+bundle or select one.
 
-.. code-block:: bash
-
-   pip install adam-assist
-
-``adam-core`` owns data models, coordinate/dynamics kernels, provider clients,
-and generic propagator contracts. ``adam-assist`` owns ASSIST orchestration and
-exposes ``adam_assist.ASSISTPropagator``. Its Rust extension consumes the
-reviewed ``libassist-sys`` and ``librebound-sys`` crates directly; there is no
-separate ``assist-rs`` runtime package.
+``adam-core`` owns the data models, coordinate and dynamics kernels, generic
+propagator contracts, and Core orbit-determination workflows. A provider owns
+its propagation implementation and provider-specific data; Core does not
+delegate OD orchestration or fitting to it. Consult the provider's
+documentation for installation, configuration, supported physics, and license
+terms.
 
 Kernel Data Resolution
 ----------------------
@@ -101,8 +96,8 @@ developer artifacts.
 
 .. code-block:: bash
 
-   # install runtime + test + docs dependency groups
-   pdm install -G test -G docs
+   # install runtime + test + docs + exact build-tool dependency groups
+   pdm install -G test -G docs -G build
 
 If an existing local ``pdm.lock`` was generated before the docs group was
 included, PDM may report ``Requested groups not in lockfile: docs``. Refresh the
@@ -110,8 +105,8 @@ ignored local lockfile for the requested groups, then retry the install:
 
 .. code-block:: bash
 
-   pdm lock -G test -G docs
-   pdm install -G test -G docs
+   pdm lock -G test -G docs -G build
+   pdm install -G test -G docs -G build
 
 Then run the documentation builds:
 

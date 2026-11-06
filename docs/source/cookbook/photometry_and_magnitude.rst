@@ -53,11 +53,12 @@ Ephemeris-Level Photometry and Phase Angle
 ------------------------------------------
 
 For operational pipelines, usually compute these through ephemeris generation.
+The example assumes ``propagator`` is a configured implementation supplied by
+the application.
 
 .. code-block:: python
 
    import numpy as np
-   from adam_assist import ASSISTPropagator
    from adam_core.observers import Observers
    from adam_core.orbits.query import query_sbdb
    from adam_core.time import Timestamp
@@ -69,7 +70,6 @@ For operational pipelines, usually compute these through ephemeris generation.
    )
    observers = Observers.from_code("I41", times)
 
-   propagator = ASSISTPropagator()
    ephemeris = propagator.generate_ephemeris(
        orbits,
        observers,

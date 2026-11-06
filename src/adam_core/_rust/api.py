@@ -18,7 +18,8 @@ from __future__ import annotations
 from typing import Optional
 
 import numpy as np
-import pyarrow as pa
+
+from adam_core._rust.arrow import pa
 
 try:
     from adam_core import _rust_native as _native
@@ -31,6 +32,35 @@ except Exception as exc:  # pragma: no cover - depends on build/install state
 
 _REQUIRED_NATIVE_SYMBOLS = (
     "AdamCoreSpiceBackend",
+    "fit_orbit_whitened_ipc",
+    "fit_orbit_whitened_2body_ipc",
+    "validate_fit_covariance_ipc",
+    "iterative_fit_ipc",
+    "iterative_fit_2body_ipc",
+    "cmc2003_fit_ipc",
+    "cmc2003_fit_2body_ipc",
+    "run_iod_config_ipc",
+    "refine_config_ipc",
+    "run_iod_batch_ipc",
+    "run_od_batch_ipc",
+    "refine_batch_ipc",
+    "evaluate_orbits_batch_ipc",
+    "OdConfig",
+    "IodRunConfig",
+    "IodStageConfig",
+    "RefinementRunConfig",
+    "EvaluationConfig",
+    "od_profile_definition",
+    "od_profile_requirements",
+    "bind_od_profile",
+    "explicit_od_config",
+    "explicit_iod_run_config",
+    "iod_stage_config_from_json",
+    "refinement_run_config_from_json",
+    "evaluation_config_from_json",
+    "apply_observation_pipeline_ipc",
+    "benchmark_od_fit_ipc",
+    "native_build_profile",
     "benchmark_transform_coordinates_arrow",
     "benchmark_calc_gauss",
     "benchmark_calc_gibbs",
@@ -111,6 +141,18 @@ _REQUIRED_NATIVE_SYMBOLS = (
     "transform_coordinates_with_covariance_numpy",
     "weighted_covariance_numpy",
     "weighted_mean_numpy",
+    # Public EFCC18 table utilities, ADES conversion, and OD kernels.
+    "efcc18_ra_dec_to_healpix_numpy",
+    "healpix_ang2pix_lonlat_numpy",
+    "efcc18_parse_bias_dat",
+    "efcc18_read_bias_version",
+    "efcc18_catalog_columns_numpy",
+    "efcc18_corrections_numpy",
+    "ades_angular_covariance_numpy",
+    "observation_whitening_matrices_numpy",
+    "whitened_2body_jacobian_numpy",
+    "robust_cost_numpy",
+    "cmc2003_select_numpy",
 )
 
 _missing_native_symbols = tuple(

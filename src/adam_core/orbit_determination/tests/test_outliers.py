@@ -6,9 +6,12 @@ from ...coordinates.residuals import Residuals
 from ...coordinates.spherical import SphericalCoordinates
 from ...observers.observers import Observers
 from ...time.time import Timestamp
-from ..differential_correction import OrbitDeterminationObservations
+from ..algorithms.outliers import (
+    calculate_max_outliers,
+    remove_lowest_probability_observation,
+)
+from ..evaluate import OrbitDeterminationObservations
 from ..fitted_orbits import FittedOrbitMembers
-from ..outliers import calculate_max_outliers, remove_lowest_probability_observation
 
 
 def test_calculate_max_outliers() -> None:
@@ -29,7 +32,7 @@ def test_calculate_max_outliers() -> None:
         calculate_max_outliers(10, 6, 101.0)
 
 
-def test_remove_lowest_probability_observation():
+def test_remove_lowest_probability_observation() -> None:
     # Test that remove lowest probability observation correctly identifies and
     # removes the worst outlier
 
@@ -70,7 +73,7 @@ def test_remove_lowest_probability_observation():
     assert obs_id == "obs03"
 
 
-def test_remove_lowest_probability_observation_multiple():
+def test_remove_lowest_probability_observation_multiple() -> None:
     # Test that remove lowest probability observation correctly identifies and
     # removes the worst outlier when there are multiple observations with the same
     # probability
@@ -112,7 +115,7 @@ def test_remove_lowest_probability_observation_multiple():
     assert obs_id == "obs02"
 
 
-def test_remove_lowest_probability_observation_assertions():
+def test_remove_lowest_probability_observation_assertions() -> None:
 
     # Create observations with 4 observations
     time = Timestamp.from_mjd(np.arange(59000, 59004), scale="utc")

@@ -16,6 +16,9 @@ surface and exercised today:
   ``coordinates.time.scale``) and the ``adam_core_*`` schema keys the Rust codec
   reads. ``adam_core.orbits.arrow_bridge`` imports these so the mapping lives in
   one place.
+* :func:`contiguous_record_batch` -- the input wrapper that turns a (possibly
+  sliced) quivr table into one RecordBatch the Rust nested decoders read
+  correctly.
 * :func:`table_from_record_batch` -- generic output wrapper used by every
   surface to turn a Rust ``RecordBatch`` into its quivr ``Table``.
 * :func:`ensure_spice_backend` -- idempotent SPICE + MPC-obscodes setup that
@@ -29,12 +32,39 @@ bridge rather than being guessed here.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Type, TypeVar
+import importlib
+from types import ModuleType
+from typing import TYPE_CHECKING, Protocol, Type, TypeVar, runtime_checkable
 
 import pyarrow as pa
 
+__all__ = ["pa", "pc"]
+
+
+@runtime_checkable
+class _ComputeFunction(Protocol):
+    def __call__(self, *args: object, **kwargs: object) -> pa.Array: ...
+
+
+class _ComputeProxy:
+    """Typed, validated access to the untyped ``pyarrow.compute`` module."""
+
+    def __init__(self, module: ModuleType) -> None:
+        self._module = module
+
+    def __getattr__(self, name: str) -> _ComputeFunction:
+        function = getattr(self._module, name, None)
+        if not isinstance(function, _ComputeFunction):
+            raise AttributeError(f"pyarrow.compute has no callable {name!r}")
+        return function
+
+
+pc = _ComputeProxy(importlib.import_module("pyarrow.compute"))
+
 if TYPE_CHECKING:
     import quivr as qv
+
+    from ..utils.spice_backend import RustBackend
 
     _TableT = TypeVar("_TableT", bound=qv.Table)
 
@@ -60,6 +90,29 @@ def stamp_adam_core_metadata(
         }
     )
     return table.replace_schema_metadata(metadata)
+
+
+def contiguous_record_batch(table: pa.Table) -> pa.RecordBatch:
+    """One ``RecordBatch`` of ``table`` whose arrays all start at offset 0.
+
+    Slicing a quivr table (``table[i:j]``) keeps Arrow arrays whose ``offset``
+    points into the parent's buffers. The Rust nested-schema decoders
+    (``OrbitBatch``, ``ObserverBatch``, ``OrbitVariantBatch`` and the
+    trajectory / porkchop batches) read nested struct children from the start
+    of those buffers, so a sliced table used to cross as its parent's first
+    rows (``propagate_2body(orbits[1:2], ...)`` propagated row 0). Every
+    offset array is rebuilt with ``pa.concat_arrays`` so the batch carries the
+    sliced rows themselves; flat primitive columns honour offsets either way
+    and are passed through untouched. This is the single input half of the
+    canonical crossing for table-shaped inputs.
+    """
+    arrays = []
+    for column in table.columns:
+        array = column.combine_chunks()
+        if array.offset != 0:
+            array = pa.concat_arrays([array])
+        arrays.append(array)
+    return pa.RecordBatch.from_arrays(arrays, schema=table.schema)
 
 
 def to_quivr_metadata(table: pa.Table) -> pa.Table:
@@ -106,7 +159,7 @@ def table_from_record_batch(
     return cls.from_pyarrow(to_quivr_metadata(table))
 
 
-def ensure_spice_backend():
+def ensure_spice_backend() -> "RustBackend":
     """Idempotent SPICE + MPC-obscodes setup; return the process-global backend.
 
     Centralizes the per-call ``setup_SPICE`` / ``get_backend`` / obscodes wiring
@@ -116,7 +169,8 @@ def ensure_spice_backend():
     Rust-side (lazy on first use) is tracked under personal-cmy.36.1; the kernel
     data provenance that blocks it is personal-3uy.
     """
-    from ..utils.spice import get_backend, setup_mpc_obscodes, setup_SPICE
+    from ..utils.spice import setup_mpc_obscodes, setup_SPICE
+    from ..utils.spice_backend import get_backend
 
     setup_SPICE()
     setup_mpc_obscodes()

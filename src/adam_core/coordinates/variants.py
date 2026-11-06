@@ -3,8 +3,9 @@ from __future__ import annotations
 from typing import Generic, Literal, Optional, Protocol, TypeVar
 
 import numpy as np
-import pyarrow as pa
 import quivr as qv
+
+from adam_core._rust.arrow import pa
 
 from . import types
 from .cartesian import CartesianCoordinates
@@ -101,8 +102,15 @@ def create_coordinate_variants(
         If the input coordinates are not supported.
     """
 
+    # Dense conversion is Python I/O only. The substantive all-undefined
+    # predicate is Rust-owned, while this boundary preserves the historical
+    # public ValueError string and validation precedence.
     covariances = coordinates.covariance.to_matrix()
-    if np.all(np.isnan(covariances)):
+    from adam_core import _rust_native
+
+    if _rust_native.covariance_is_all_nan_numpy(
+        np.ascontiguousarray(covariances, dtype=np.float64)
+    ):
         raise ValueError(
             "Cannot sample coordinate covariances when covariances are all undefined."
         )
@@ -121,8 +129,6 @@ def create_coordinate_variants(
     # Rust-native RNG (decision 2026-07-03: statistically equivalent to, but
     # not bit-identical with, the legacy scipy sampler); the seed is threaded
     # per-row and into the auto-mode fallback, matching VariantOrbits.create.
-    from adam_core import _rust_native
-
     samples, weights, weights_cov, index = (
         _rust_native.sample_coordinate_variants_numpy(
             np.ascontiguousarray(means, dtype=np.float64),

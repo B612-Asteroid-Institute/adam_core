@@ -119,7 +119,12 @@ def _validate_exact_tag(python_version: str) -> None:
 def main() -> None:
     cargo_version, python_version = _cargo_versions()
     _validate_exact_tag(python_version)
-    VERSION_FILE.write_text(f"__version__ = {python_version!r}\n", encoding="utf-8")
+    version_content = f"__version__ = {python_version!r}\n"
+    if (
+        not VERSION_FILE.exists()
+        or VERSION_FILE.read_text(encoding="utf-8") != version_content
+    ):
+        VERSION_FILE.write_text(version_content, encoding="utf-8")
     print(
         f"Wrote {VERSION_FILE.relative_to(REPO_ROOT)} = {python_version} "
         f"from Cargo {cargo_version}"

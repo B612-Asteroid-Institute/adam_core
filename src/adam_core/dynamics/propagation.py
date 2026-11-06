@@ -123,8 +123,8 @@ def propagate_2body(
     if include_nongrav and orbits.has_non_gravitational_parameters():
         raise ValueError(
             "propagate_2body does not support non-gravitational accelerations. "
-            "Use an n-body propagator such as adam_assist.ASSISTPropagator for "
-            "orbits with non-gravitational parameters."
+            "Use a propagator that declares non-gravitational-parameter support "
+            "for orbits with non-gravitational parameters."
         )
     return _propagate_2body_serial(
         orbits,

@@ -21,8 +21,10 @@ When to Use This Guide
 Backend Requirement
 -------------------
 
-Impact analysis requires a propagator that implements ``ImpactMixin`` collision
-detection. For production use, prefer ``adam_assist.ASSISTPropagator``.
+Impact analysis requires an application-supplied propagator that implements
+the ``ImpactMixin`` collision-detection contract. Core does not select a
+provider; verify the chosen implementation's force model and collision
+semantics for the analysis.
 
 Core Pattern
 ------------
@@ -99,11 +101,12 @@ Example mixed configuration:
 Quick Triage Example
 --------------------
 
-Use this for a first-pass estimate before a larger rerun.
+Use this for a first-pass estimate before a larger rerun. The examples in this
+section assume ``propagator`` is a configured ``ImpactMixin`` implementation
+supplied by the application.
 
 .. code-block:: python
 
-   from adam_assist import ASSISTPropagator
    from adam_core.dynamics.impacts import (
        CollisionEvent,
        ImpactProbabilities,
@@ -114,7 +117,6 @@ Use this for a first-pass estimate before a larger rerun.
    from adam_core.orbits.query import query_sbdb
 
    orbit: Orbits = query_sbdb(["2024 YR4"])
-   propagator = ASSISTPropagator()
 
    variants: VariantOrbits
    collisions: CollisionEvent
@@ -141,7 +143,6 @@ collision conditions.
 
 .. code-block:: python
 
-   from adam_assist import ASSISTPropagator
    from adam_core.coordinates import Origin
    from adam_core.dynamics.impacts import (
        CollisionConditions,
@@ -168,8 +169,6 @@ collision conditions.
        collision_distance=[6420.0, 1740.0],
        stopping_condition=[True, True],
    )
-
-   propagator = ASSISTPropagator()
 
    variants: VariantOrbits
    impacts: CollisionEvent

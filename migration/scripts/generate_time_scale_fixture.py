@@ -167,11 +167,11 @@ def build_fixture() -> Fixture:
     tdb_times = by_scale["tdb"]
     return {
         "schema": "adam_core.time_scale_rescale_fixture",
-        "version": 1,
+        "version": 2,
         "generated_by": "migration/scripts/generate_time_scale_fixture.py",
         "source_contract": (
-            "Current Python Timestamp.rescale contract: ERFA UTC/TAI leap-second "
-            "conversion, constant TAI/TT offset, project-local TT/TDB approximation, "
+            "Authoritative ERFA Utctai/Taiutc absolute two-part-JD conversion for "
+            "UTC/TAI edges, constant TAI/TT offset, project-local TT/TDB approximation, "
             "Astropy/IERS-owned UT1 conversions, and pure arithmetic MJD_TDB to ET seconds."
         ),
         "scales": list(SCALES),

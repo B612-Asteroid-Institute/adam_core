@@ -2,9 +2,9 @@ import uuid
 from typing import Literal, Optional
 
 import numpy as np
-import pyarrow as pa
-import pyarrow.compute as pc
 import quivr as qv
+
+from adam_core._rust.arrow import pa, pc
 
 from .._rust.api import add_light_time_numpy
 from ..constants import Constants as c
@@ -37,16 +37,16 @@ class VariantOrbits(qv.Table):
 
     def without_non_gravitational_parameters(self) -> "VariantOrbits":
         """Strip non-grav values and reduce extended covariance to its 6D block."""
+        from .arrow_bridge import _without_nongrav_covariance
+
         variants = self.set_column(
             "non_gravitational_parameters",
             NonGravitationalParameters.nulls(len(self)),
         )
-        if variants.coordinates.covariance.has_nongrav_block():
+        if self.coordinates.covariance.has_nongrav_block():
             variants = variants.set_column(
                 "coordinates.covariance",
-                CoordinateCovariances.from_matrix(
-                    variants.coordinates.covariance.to_matrix()
-                ),
+                _without_nongrav_covariance(self.coordinates.covariance),
             )
         return variants
 

@@ -154,3 +154,39 @@ Before deleting or bypassing a legacy implementation, capture one of:
 After the legacy path is gone or contaminated, use Rust-only latency tracking
 for regression detection. Do not recreate a "legacy" column from the migrated
 package.
+
+## Core orbit-fitting latency diagnostic
+
+`pdm run benchmark-od-fitting` is the maintained benchmark for the Core-owned
+OD implementation. It is intentionally **not** a Rust-vs-legacy promotion gate:
+there is no independent current implementation with equivalent semantics.
+Instead, the artifact keeps two timing boundaries separate over the same
+source-identified deterministic workloads:
+
+- a Rust-owned `std::time::Instant` adapter for configured native refinement
+  over an already prepared IOD handoff and the complete configured `run_od`
+  prepare + IOD + refinement workflow; Arrow decoding, configuration parsing,
+  imports, workload creation, and correctness checks are outside the intervals;
+  and
+- public Python end-to-end `refine` and `run_od` wall clock, including Arrow
+  serialization, provenance checks, and result-table assembly.
+
+The benchmark refuses source/editable execution: build an optimized release
+wheel and install it into a virtual environment whose package files are outside
+every Git checkout, then invoke the benchmark script with that interpreter.
+The artifact records the installed `RECORD`, wheel metadata, release inventory,
+local wheel hash when `direct_url.json` identifies it, and compile-time Cargo
+profile/optimization/target/debug-assertion fields. This keeps repeated public
+provenance checks in the end-to-end boundary without timing source-overlay Git
+inspection from a development checkout.
+
+The default artifact, `migration/artifacts/od_fitting_benchmark_local.json`, is
+machine-specific and gitignored. A controlled-host result may be retained only
+with the exact native build commit, Python/distribution/native versions,
+provider configuration/data fingerprints, individual and combined workload IPC
+hashes, RNG/configuration identity, thread environment, registered SPICE kernel
+hashes, cache state/policy, warmup counts, raw samples, and the correctness
+comparison already emitted by the harness. Native timing precedes public timing;
+each has correctness preflights and per-trial warmups, and no cache is silently
+cleared. Historical Gauss/Gibbs kernel microbenchmarks and Assist-owned OD
+artifacts do not satisfy this end-to-end Core fitting coverage.

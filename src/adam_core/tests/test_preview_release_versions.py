@@ -32,7 +32,7 @@ SPEC.loader.exec_module(MODULE)
         ("0.5.7", "0.5.7"),
         ("0.5.8", "0.5.8"),
         ("0.6.0", "0.6.0"),
-        ("0.6.1", "0.6.1"),
+        ("0.7.0", "0.7.0"),
     ],
 )
 def test_cargo_version_to_pep440(cargo: str, python: str) -> None:
@@ -49,17 +49,17 @@ def test_cargo_version_to_pep440_rejects_unsupported_forms(version: str) -> None
 
 
 def test_python_tag_validation_uses_the_python_release_line() -> None:
-    assert MODULE._python_version_tag_glob("0.6.1") == "v0.6.*"
+    assert MODULE._python_version_tag_glob("0.7.0") == "v0.7.*"
 
 
 def test_stable_release_versions_align_python_and_public_rust_crates() -> None:
-    verify_preview_versions.verify(ROOT, "0.6.1", "0.6.1", "stable")
+    verify_preview_versions.verify(ROOT, "0.7.0", "0.7.0", "stable")
     with pytest.raises(ValueError, match="not a prerelease"):
-        verify_preview_versions.verify(ROOT, "0.6.1", "0.6.1", "preview")
+        verify_preview_versions.verify(ROOT, "0.7.0", "0.7.0", "preview")
 
 
 def test_runtime_versions_must_match_distribution_metadata() -> None:
-    versions = {"adam-core": "0.6.1", "adam-assist": "0.5.0"}
+    versions = {"adam-core": "0.7.0", "adam-assist": "0.5.0"}
     assert _validate_runtime_versions(versions, versions.copy()) == versions
 
     with pytest.raises(AssertionError, match="runtime package version mismatch"):
@@ -73,19 +73,120 @@ def test_release_matrix_generates_and_inspects_runtime_version() -> None:
     workflow = (
         ROOT / ".github/workflows/release-candidate-wheel-matrix.yml"
     ).read_text()
-    writer = "python migration/scripts/write_maturin_version.py"
-    builder = "uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b"
+    builder = "python migration/scripts/build_release_wheel.py"
     inspector = "python migration/scripts/check_wheel_artifacts.py"
 
-    assert workflow.index(writer) < workflow.index(builder) < workflow.index(inspector)
+    assert workflow.count(builder) == 2
+    assert workflow.index(builder) < workflow.index(inspector)
+    assert "python migration/scripts/write_maturin_version.py" not in workflow
     assert "adam_assist_ref:" in workflow
     assert "ADAM_ASSIST_REF: ${{ inputs.adam_assist_ref }}" in workflow
-    assert 'PYTHON_PREVIEW_VERSION: "0.6.1"' in workflow
+    assert 'PYTHON_PREVIEW_VERSION: "0.7.0"' in workflow
 
     extended_coverage = workflow.split("  extended-coverage:", 1)[1]
     assert "adam-assist" not in extended_coverage
     assert "adam_assist" not in extended_coverage
     assert "assist-rust-develop" not in extended_coverage
+
+
+def test_release_builder_uses_declared_exact_tools_and_supported_targets() -> None:
+    """The release matrix and fresh-build guard share one exact tool set."""
+
+    with (ROOT / "pyproject.toml").open("rb") as source:
+        project = tomllib.load(source)
+    expected_tools = [
+        "maturin==1.15.0",
+        "packaging==25.0",
+        "ziglang==0.17.0",
+    ]
+    assert project["dependency-groups"]["build"] == expected_tools
+    assert "override-dependencies" not in project["tool"]["uv"]
+    assert project["tool"]["uv"]["sources"]["adam-core"] == {"workspace": True}
+    assert project["tool"]["pdm"]["scripts"]["release-build-environment-check"] == (
+        "python migration/scripts/validate_release_build_environment.py"
+    )
+
+    with (ROOT / "uv.lock").open("rb") as source:
+        lock = tomllib.load(source)
+    packages = {package["name"]: package for package in lock["package"]}
+    assert packages["adam-core"]["source"] == {"editable": "."}
+    for name, version in (
+        ("maturin", "1.15.0"),
+        ("packaging", "25.0"),
+        ("ziglang", "0.17.0"),
+    ):
+        package = packages[name]
+        assert package["version"] == version
+        assert package["source"] == {"registry": "https://pypi.org/simple"}
+        artifacts = ([package["sdist"]] if "sdist" in package else []) + package[
+            "wheels"
+        ]
+        assert artifacts
+        assert all(artifact["hash"].startswith("sha256:") for artifact in artifacts)
+    assert any(
+        dependency["name"] == "adam-core"
+        for dependency in packages["mpcq"]["dependencies"]
+    )
+
+    workflow = (
+        ROOT / ".github/workflows/release-candidate-wheel-matrix.yml"
+    ).read_text()
+    install_step = workflow.index("Install audited adam-core wheel builder")
+    builder = workflow.index("python migration/scripts/build_release_wheel.py")
+    inspector = workflow.index("python migration/scripts/check_wheel_artifacts.py")
+    assert install_step < builder < inspector
+    for tool in expected_tools:
+        assert workflow.count(f'"{tool}"') == 1
+        assert install_step < workflow.index(f'"{tool}"') < builder
+    assert "--only-binary=:all: packaging" not in workflow
+    expected_cells = {
+        "manylinux-x86_64": (
+            "runner: ubuntu-latest",
+            "system: Linux-x86_64",
+            "target: x86_64-unknown-linux-gnu",
+            "wheel_tag: manylinux*x86_64",
+        ),
+        "manylinux-aarch64": (
+            "runner: ubuntu-24.04-arm",
+            "system: Linux-aarch64",
+            "target: aarch64-unknown-linux-gnu",
+            "wheel_tag: manylinux*aarch64",
+        ),
+    }
+    for name, entries in expected_cells.items():
+        block = workflow.split(f"- name: {name}", 1)[1].split("          - name:", 1)[0]
+        assert all(entry in block for entry in entries)
+    assert "target: x86_64\n" not in workflow
+    assert "target: aarch64\n" not in workflow
+
+    pip_ci = (ROOT / ".github/workflows/pip-build-lint-test-coverage.yml").read_text()
+    rust_job = pip_ci.split("  rust-smoke:", 1)[1].split("\n  benchmark:", 1)[0]
+    assert "pdm install -G test -G build" in rust_job
+    assert "pdm run release-build-environment-check --out dist" in rust_job
+    assert "pdm run rust-build" not in rust_job
+    assert (
+        rust_job.index("pdm install -G test -G build")
+        < rust_job.index("pdm run release-build-environment-check --out dist")
+        < rust_job.index("pdm run wheel-inspect")
+    )
+
+    tier1 = (ROOT / ".github/workflows/tier1-dependent-smoke.yml").read_text()
+    assert "pdm install -G test -G build" in tier1
+    assert (
+        tier1.index("pdm install -G test -G build")
+        < tier1.index("pdm run rust-build")
+        < tier1.index("pdm run wheel-inspect")
+    )
+
+    publish = (ROOT / ".github/workflows/publish.yml").read_text()
+    exact_parser = 'python -m pip install --only-binary=:all: "packaging==25.0"'
+    assert publish.count(exact_parser) == 1
+    assert publish.index(exact_parser) < publish.index(
+        "python migration/scripts/check_wheel_artifacts.py"
+    )
+
+    installation = (ROOT / "docs/source/getting_started/installation.rst").read_text()
+    assert "pdm install -G test -G docs -G build" in installation
 
 
 def test_kernel_data_constrains_icu_for_clean_rust_1_87_consumers() -> None:
@@ -109,15 +210,44 @@ def test_kernel_data_constrains_icu_for_clean_rust_1_87_consumers() -> None:
         "features": ["rust_backend"],
     }
 
+    with (ROOT / "rust/adam_core_rs_coords/Cargo.toml").open("rb") as source:
+        coords_dependencies = tomllib.load(source)["dependencies"]
+    with (ROOT / "rust/adam_core_rs_spice/Cargo.toml").open("rb") as source:
+        spice_dependencies = tomllib.load(source)["dependencies"]
+    assert "faer" not in coords_dependencies
+    assert spice_dependencies["faer"] == {
+        "version": "0.22",
+        "default-features": False,
+        "features": ["std", "linalg", "rayon"],
+    }
+
     workflow = (ROOT / ".github/workflows/rust-crate-release-candidate.yml").read_text()
     assert "Verify clean no-lock Rust 1.87 consumer resolution" in workflow
     assert 'test ! -e "$consumer/Cargo.lock"' in workflow
     assert 'rustc --version | grep -F "rustc 1.87.0"' in workflow
-    assert "clean Rust 1.87 consumer resolved ICU4X 2.2.0 and rawzip 0.5.2" in workflow
-    assert 'if package["name"] in {"zip", "zopfli"}' in workflow
+    assert "clean Rust 1.87 consumer resolved faer std+linalg+rayon" in workflow
+    for forbidden in ("ar_archive_writer", "npyz", "pest_stack_guard", "psm"):
+        assert f'"{forbidden}"' in workflow
+    assert 'faer feature "linalg"' in workflow
+    assert 'faer feature "rayon"' in workflow
+    assert 'faer feature "std"' in workflow
+    assert 'faer feature "(default|npy|rand|sparse|sparse-linalg)"' in workflow
     assert 'cargo package -p "$crate" --locked' in workflow
     assert 'RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps' in workflow
     assert "Latest-stable Rust compatibility (non-authoritative)" in workflow
+    setup_python = (
+        "actions/setup-python@" "a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0"
+    )
+    assert workflow.count("name: Set up supported PyO3 build interpreter") == 2
+    assert workflow.count(f"uses: {setup_python}") == 2
+    assert workflow.count('python-version: "3.13"') == 2
+    package_job, latest_job = workflow.split("  latest-stable-compatibility:", 1)
+    for job in (package_job, latest_job):
+        assert job.count(setup_python) == 1
+        assert job.count('python-version: "3.13"') == 1
+        assert job.index(setup_python) < job.index("dtolnay/rust-toolchain@")
+        assert job.index(setup_python) < job.index("cargo ")
+    assert "PYO3_USE_ABI3_FORWARD_COMPATIBILITY" not in workflow
     assert "dtolnay/rust-toolchain@stable" in workflow
     assert "cargo test --workspace --locked --all-features" in workflow
     assert "--locked --no-default-features" in workflow
@@ -139,8 +269,8 @@ def test_kernel_data_constrains_icu_for_clean_rust_1_87_consumers() -> None:
     )
 
     publisher = (ROOT / ".github/workflows/publish-crates.yml").read_text()
-    assert "default: 0.6.1" in publisher
-    assert 'PYTHON_SOURCE_VERSION: "0.6.1"' in publisher
+    assert "default: 0.7.0" in publisher
+    assert 'PYTHON_SOURCE_VERSION: "0.7.0"' in publisher
     assert "environment: crates-io" in publisher
     assert "--channel stable" in publisher
     assert (
@@ -220,7 +350,7 @@ def test_downstream_core_lock_refresh_is_one_targeted_transaction(
     def fake_check_call(command: list[str], **_: object) -> None:
         commands.append(command)
         after = [
-            *_core_packages("0.6.1"),
+            *_core_packages("0.7.0"),
             _package("unrelated", "1.0.0"),
             _package("rawzip", "0.5.2"),
         ]
@@ -233,7 +363,7 @@ def test_downstream_core_lock_refresh_is_one_targeted_transaction(
         develop_downstream_adam_assist.subprocess, "check_call", fake_check_call
     )
     monkeypatch.setattr(
-        develop_downstream_adam_assist, "_current_core_version", lambda: "0.6.1"
+        develop_downstream_adam_assist, "_current_core_version", lambda: "0.7.0"
     )
 
     develop_downstream_adam_assist._refresh_core_lock(tmp_path, {})
@@ -246,32 +376,32 @@ def test_downstream_core_lock_refresh_is_one_targeted_transaction(
 
 
 def test_patched_core_lock_verification_requires_one_local_aligned_package() -> None:
-    valid = _core_packages("0.6.1")
-    develop_downstream_adam_assist._verify_patched_core_packages(valid, "0.6.1")
+    valid = _core_packages("0.7.0")
+    develop_downstream_adam_assist._verify_patched_core_packages(valid, "0.7.0")
 
     wrong_version = [dict(package) for package in valid]
     wrong_version[0]["version"] = "0.6.0"
-    with pytest.raises(SystemExit, match="exactly one local-path Core 0.6.1"):
+    with pytest.raises(SystemExit, match="exactly one local-path Core 0.7.0"):
         develop_downstream_adam_assist._verify_patched_core_packages(
-            wrong_version, "0.6.1"
+            wrong_version, "0.7.0"
         )
 
     registry_source = [dict(package) for package in valid]
     registry_source[0][
         "source"
     ] = "registry+https://github.com/rust-lang/crates.io-index"
-    with pytest.raises(SystemExit, match="exactly one local-path Core 0.6.1"):
+    with pytest.raises(SystemExit, match="exactly one local-path Core 0.7.0"):
         develop_downstream_adam_assist._verify_patched_core_packages(
-            registry_source, "0.6.1"
+            registry_source, "0.7.0"
         )
 
     duplicate = [*valid, dict(valid[0])]
-    with pytest.raises(SystemExit, match="exactly one local-path Core 0.6.1"):
-        develop_downstream_adam_assist._verify_patched_core_packages(duplicate, "0.6.1")
+    with pytest.raises(SystemExit, match="exactly one local-path Core 0.7.0"):
+        develop_downstream_adam_assist._verify_patched_core_packages(duplicate, "0.7.0")
 
     missing = valid[1:]
-    with pytest.raises(SystemExit, match="exactly one local-path Core 0.6.1"):
-        develop_downstream_adam_assist._verify_patched_core_packages(missing, "0.6.1")
+    with pytest.raises(SystemExit, match="exactly one local-path Core 0.7.0"):
+        develop_downstream_adam_assist._verify_patched_core_packages(missing, "0.7.0")
 
 
 def test_unrelated_lock_guard_allows_removals_but_rejects_added_versions() -> None:
@@ -282,7 +412,7 @@ def test_unrelated_lock_guard_allows_removals_but_rejects_added_versions() -> No
         _package("removed", "1.0.0"),
     ]
     accepted = [
-        *_core_packages("0.6.1"),
+        *_core_packages("0.7.0"),
         _package("retained", "1.0.0"),
         _package("rawzip", "0.5.2"),
     ]
@@ -293,6 +423,28 @@ def test_unrelated_lock_guard_allows_removals_but_rejects_added_versions() -> No
         develop_downstream_adam_assist._reject_unrelated_version_additions(
             before, added_version
         )
+
+
+def test_lock_guard_aligns_spicekit_only_to_the_core_lock() -> None:
+    core_versions = develop_downstream_adam_assist._locked_versions(
+        develop_downstream_adam_assist._locked_packages(ROOT / "Cargo.lock")
+    )
+    (spicekit_version,) = core_versions["spicekit"]
+    before = [_package("spicekit", "0.2.2"), _package("retained", "1.0.0")]
+    aligned = [
+        _package("spicekit", spicekit_version),
+        _package("retained", "1.0.0"),
+    ]
+    develop_downstream_adam_assist._reject_unrelated_version_additions(before, aligned)
+
+    for changed in (
+        [_package("spicekit", "99.0.0"), _package("retained", "1.0.0")],
+        [*aligned, _package("retained", "2.0.0")],
+    ):
+        with pytest.raises(SystemExit, match="added unrelated package versions"):
+            develop_downstream_adam_assist._reject_unrelated_version_additions(
+                before, changed
+            )
 
 
 def test_downstream_prepare_restores_lock_and_config_on_failure(
@@ -446,7 +598,6 @@ def test_rust_ci_is_reproducible_and_downstream_sources_are_exact() -> None:
     nightly = (workflows / "nightly-rust-benchmark.yml").read_text()
     release_matrix = (workflows / "release-candidate-wheel-matrix.yml").read_text()
     tier1 = (workflows / "tier1-dependent-smoke.yml").read_text()
-    assist_sha = "8eba85d28b6b266548f2b3892b90db3857763625"
 
     assert "dtolnay/rust-toolchain@1.87.0" in normal_ci
     assert "components: rustfmt, clippy" in normal_ci
@@ -454,7 +605,35 @@ def test_rust_ci_is_reproducible_and_downstream_sources_are_exact() -> None:
     assert "components: rustfmt, clippy" in crate_ci
     assert "dtolnay/rust-toolchain@1.87.0" in tier1
     assert "adam_assist_ref:" in release_matrix
-    assert assist_sha in tier1
+    tier1_trigger = tier1.split("permissions:", 1)[0]
+    assert "workflow_dispatch:" in tier1_trigger
+    assert "pull_request:" not in tier1_trigger
+    assert "schedule:" not in tier1_trigger
+    assert "adam_assist_ref:" in tier1_trigger
+    assert "required: true" in tier1_trigger
+    assert "c06164a18e8d90d8bf83d7ab58e479dc97e1be41" not in tier1
+    assert "ADAM_ASSIST_REF: ${{ inputs.adam_assist_ref }}" in tier1
+    assert "ref: ${{ env.ADAM_ASSIST_REF }}" in tier1
+    assert tier1.count('[[ "$ADAM_ASSIST_REF" =~ ^[0-9a-f]{40}$ ]]') == 1
+    assert 'test "$(git -C dependent rev-parse HEAD)" = "$ADAM_ASSIST_REF"' in tier1
+    syntax_name = "Validate requested dependent revision syntax"
+    checkout_name = "Checkout requested dependent revision"
+    revision_name = "Verify exact dependent revision"
+    install_name = "Install test and exact build dependencies"
+    metadata_name = "Verify dependent declares Core 0.7 compatibility"
+    assert (
+        tier1.index(syntax_name)
+        < tier1.index(checkout_name)
+        < tier1.index(revision_name)
+    )
+    assert tier1.index(install_name) < tier1.index(metadata_name)
+    metadata_start = tier1.index(metadata_name)
+    metadata_end = tier1.index("\n      - name:", metadata_start)
+    metadata_block = tier1[metadata_start:metadata_end]
+    assert "pdm run python - <<'PY'" in metadata_block
+    assert "\n          python - <<'PY'" not in metadata_block
+    assert 'Version("0.7.0") in core[0].specifier' in metadata_block
+    assert "dependent/pyproject.toml" in metadata_block
     assert "adam-assist" not in normal_ci
     assert "adam_assist" not in normal_ci
     assert "adam-assist" not in nightly
@@ -479,12 +658,12 @@ def test_rust_ci_is_reproducible_and_downstream_sources_are_exact() -> None:
     assert "Verify Core test environment candidate installations" in tier1
     assert 'test_python="$(pdm info --python)"' in tier1
     assert (
-        tier1.count('assert version("adam-core") == adam_core.__version__ == "0.6.1"')
+        tier1.count('assert version("adam-core") == adam_core.__version__ == "0.7.0"')
         == 2
     )
-    assert (
-        tier1.count('assert version("adam-assist") == assist_version == "0.5.0"') == 2
-    )
+    assert tier1.count('assert version("adam-assist") == assist_version') == 2
+    assert 'assist_version == "0.5.0"' not in tier1
+    assert tier1.count("-m pip check") == 2
     assert "Run Core integration tests with the reference propagator" in tier1
     assert "for test_path in \\" in tier1
     assert 'pdm run test -- "$test_path"' in tier1
@@ -529,8 +708,8 @@ def test_rust_ci_is_reproducible_and_downstream_sources_are_exact() -> None:
     assert release_matrix.index("Set up Rust") < matrix_preparer
     assert matrix_preparer < release_matrix.index("Build adam-assist manylinux wheel")
     assert matrix_preparer < release_matrix.index("Build adam-assist native wheel")
-    assert 'version("adam-core") == adam_core.__version__ == "0.6.1"' in tier1
-    assert 'version("adam-assist") == assist_version == "0.5.0"' in tier1
+    assert 'version("adam-core") == adam_core.__version__ == "0.7.0"' in tier1
+    assert 'version("adam-assist") == assist_version' in tier1
 
     for workflow in workflows.glob("*.yml"):
         source = workflow.read_text()

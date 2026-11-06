@@ -14,7 +14,7 @@ an astropy-backed baseline) on an Asteroid Institute “real world” pipeline:
 
 - Rubin X05 MPC observation timestamps (UTC) + RA/Dec astrometry
 - SBDB orbit queries (for known objects)
-- Ephemeris generation with `adam_assist.ASSISTPropagator`
+- Ephemeris generation with a native high-fidelity propagator
 - Residuals computed via `adam_core.coordinates.residuals.Residuals` on equatorial spherical
   coordinates (RA/Dec as lon/lat)
 - Two runs: default `Timestamp.rescale` vs a global override where `Timestamp.rescale`

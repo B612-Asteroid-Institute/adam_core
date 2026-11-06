@@ -6,10 +6,11 @@
 //! the Rust schema.
 
 use super::{
-    CoordinateBatch, CoordinateRepresentation, CoordinateValues, CovarianceBatch, CovarianceUnits,
-    EphemerisBatch, Epoch, Frame, NonGravitationalParametersBatch, ObjectId, ObservatoryCode,
-    ObserverBatch, OrbitBatch, OrbitId, OrbitVariantBatch, OriginArray, OriginId,
-    PhysicalParametersBatch, SchemaError, SchemaResult, TimeArray, TimeScale, Validity, VariantId,
+    coordinate_covariance_block_values, CoordinateBatch, CoordinateRepresentation,
+    CoordinateValues, CovarianceBatch, CovarianceUnits, EphemerisBatch, Epoch, Frame,
+    NonGravitationalParametersBatch, ObjectId, ObservatoryCode, ObserverBatch, OrbitBatch, OrbitId,
+    OrbitVariantBatch, OriginArray, OriginId, PhysicalParametersBatch, SchemaError, SchemaResult,
+    TimeArray, TimeScale, Validity, VariantId,
 };
 use arrow_array::builder::{Float64Builder, LargeListBuilder, LargeStringBuilder};
 use arrow_array::{
@@ -188,6 +189,83 @@ fn nested_time_struct(coordinates: &CoordinateBatch, rows: usize) -> SchemaResul
         None,
     )
     .map_err(|err| SchemaError::Arrow(err.to_string()))
+}
+
+/// Project quivr covariance-list storage to six-dimensional coordinate blocks.
+///
+/// This is deliberately an Arrow payload operation: unrelated coordinate,
+/// time, origin, and schema metadata never enter the transform. List-null rows
+/// and null child elements become writable NaN-filled 6x6 rows, matching the
+/// historical Python `to_matrix()` -> `from_matrix()` behavior whenever a
+/// mixed batch contains at least one extended 9x9 row.
+pub fn coordinate_covariance_values_to_six(
+    values: &LargeListArray,
+) -> SchemaResult<LargeListArray> {
+    let mut output = LargeListBuilder::new(Float64Builder::new());
+    for row in 0..values.len() {
+        if values.is_null(row) {
+            for _ in 0..36 {
+                output.values().append_value(f64::NAN);
+            }
+            output.append(true);
+            continue;
+        }
+
+        let entry = values.value(row);
+        let entry = entry
+            .as_any()
+            .downcast_ref::<Float64Array>()
+            .ok_or_else(|| {
+                SchemaError::InvalidRecordBatch(
+                    "covariance.values items must be Float64".to_string(),
+                )
+            })?;
+        let dimension = match entry.len() {
+            36 => 6,
+            81 => 9,
+            length => {
+                return Err(SchemaError::InvalidRecordBatch(format!(
+                    "Covariance row {row} has {length} values; expected 36 or 81."
+                )))
+            }
+        };
+        let normalized = (0..entry.len())
+            .map(|element| {
+                if entry.is_null(element) {
+                    f64::NAN
+                } else {
+                    entry.value(element)
+                }
+            })
+            .collect::<Vec<_>>();
+        output
+            .values()
+            .append_slice(&coordinate_covariance_block_values(&normalized, dimension)?);
+        output.append(true);
+    }
+    Ok(output.finish())
+}
+
+/// Return whether every value in the six-dimensional coordinate block is NaN.
+///
+/// Extended A1/A2/A3 covariance values are deliberately ignored to preserve
+/// the public `CoordinateCovariances.is_all_nan()` contract. Projection,
+/// mixed-width validation, list-null normalization, and child-null handling
+/// are shared with the authoritative covariance payload transform above.
+pub fn coordinate_covariance_values_are_all_nan(values: &LargeListArray) -> SchemaResult<bool> {
+    let coordinate_blocks = coordinate_covariance_values_to_six(values)?;
+    let values = coordinate_blocks
+        .values()
+        .as_any()
+        .downcast_ref::<Float64Array>()
+        .ok_or_else(|| {
+            SchemaError::InvalidRecordBatch(
+                "projected covariance.values items must be Float64".to_string(),
+            )
+        })?;
+    Ok(values
+        .iter()
+        .all(|value| value.is_none_or(|value| value.is_nan())))
 }
 
 fn nested_covariance_struct(
@@ -1709,6 +1787,87 @@ mod tests {
             Some(covariance),
         )
         .unwrap()
+    }
+
+    #[test]
+    fn covariance_payload_projection_preserves_blocks_and_legacy_null_policy() {
+        let mut builder = LargeListBuilder::new(Float64Builder::new());
+        for value in 0..36 {
+            builder.values().append_value(value as f64);
+        }
+        builder.append(true);
+        for value in 0..81 {
+            builder.values().append_value((100 + value) as f64);
+        }
+        builder.append(true);
+        builder.append(false);
+        for value in 0..36 {
+            if value == 7 {
+                builder.values().append_null();
+            } else {
+                builder.values().append_value((200 + value) as f64);
+            }
+        }
+        builder.append(true);
+        let projected = coordinate_covariance_values_to_six(&builder.finish()).unwrap();
+
+        assert_eq!(projected.len(), 4);
+        assert_eq!(projected.null_count(), 0);
+        let row = |index| {
+            projected
+                .value(index)
+                .as_any()
+                .downcast_ref::<Float64Array>()
+                .unwrap()
+                .clone()
+        };
+        assert_eq!(
+            (0..36).map(|value| value as f64).collect::<Vec<_>>(),
+            row(0).values().to_vec()
+        );
+        let expected_extended = (0..6)
+            .flat_map(|coordinate_row| {
+                (0..6).map(move |coordinate_column| {
+                    (100 + coordinate_row * 9 + coordinate_column) as f64
+                })
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(expected_extended, row(1).values().to_vec());
+        assert!(row(2).values().iter().all(|value| value.is_nan()));
+        assert!(row(3).value(7).is_nan());
+    }
+
+    #[test]
+    fn covariance_payload_projection_rejects_noncanonical_lengths() {
+        let mut builder = LargeListBuilder::new(Float64Builder::new());
+        builder.values().append_slice(&[0.0; 4]);
+        builder.append(true);
+        let error = coordinate_covariance_values_to_six(&builder.finish()).unwrap_err();
+        assert!(matches!(error, SchemaError::InvalidRecordBatch(message) if
+            message == "Covariance row 0 has 4 values; expected 36 or 81."));
+    }
+
+    #[test]
+    fn covariance_payload_all_nan_uses_only_coordinate_block_and_preserves_slices() {
+        let mut builder = LargeListBuilder::new(Float64Builder::new());
+        for index in 0..81 {
+            builder
+                .values()
+                .append_value(if index == 6 * 9 + 6 { 1.0 } else { f64::NAN });
+        }
+        builder.append(true);
+        builder.values().append_slice(&[f64::NAN; 36]);
+        builder.append(true);
+        builder.values().append_slice(&[0.0; 36]);
+        builder.append(true);
+        builder.append(false);
+        let values = builder.finish();
+
+        assert!(!coordinate_covariance_values_are_all_nan(&values).unwrap());
+        let only_undefined = values.slice(0, 2);
+        assert!(coordinate_covariance_values_are_all_nan(&only_undefined).unwrap());
+        let list_null = values.slice(3, 1);
+        assert!(coordinate_covariance_values_are_all_nan(&list_null).unwrap());
     }
 
     #[test]

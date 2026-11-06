@@ -113,6 +113,17 @@ html_theme_options = {
 
 sitemap_url_scheme = "{link}"
 
+# Sphinx does not validate raw figure ``:target:`` URLs, and linkcheck cannot
+# resolve these output-relative ``.html`` paths as source documents. Adjacent
+# :doc: roles validate the same three destinations. The DOI resolves in
+# browsers but rejects automated HEAD/GET checks with HTTP 403.
+linkcheck_ignore = [
+    r"^cookbook/orbit_sources_and_state_tables\.html$",
+    r"^cookbook/transfer_and_porkchop\.html$",
+    r"^use_cases/impact_risk\.html$",
+    r"^https://doi\.org/10\.1051/0004-6361/201936502$",
+]
+
 
 def _apidoc_excludes(package_dir: Path) -> list[str]:
     excludes: list[str] = []
@@ -150,6 +161,46 @@ def _generate_api_reference(_: object) -> None:
             str(package_dir),
             *_apidoc_excludes(package_dir),
         ]
+    )
+
+    # The OD package intentionally re-exports its canonical public API. Rendering
+    # those imported members again on the package page duplicates every table's
+    # ``Columns`` section label; authoritative member docs already live in the
+    # generated submodule pages. Keep the package page as a navigation index.
+    od_package = output_dir / "adam_core.orbit_determination.rst"
+    od_package.write_text(
+        r"""adam\_core.orbit\_determination package
+=======================================
+
+The package exports immutable configuration/profile values, OD result schemas,
+and the four canonical native-backed batch workflows. Expert numerical kernels
+live in the ``algorithms`` namespace. See the
+:doc:`canonical Python and standalone Rust guide </use_cases/orbit_determination>`
+for complete inputs, data flow, examples, products, and error boundaries.
+
+Subpackages
+-----------
+
+.. toctree::
+   :maxdepth: 4
+
+   adam_core.orbit_determination.algorithms
+
+Submodules
+----------
+
+.. toctree::
+   :maxdepth: 4
+
+   adam_core.orbit_determination.config
+   adam_core.orbit_determination.evaluate
+   adam_core.orbit_determination.fitted_orbits
+   adam_core.orbit_determination.observation_pipeline
+   adam_core.orbit_determination.profiles
+   adam_core.orbit_determination.resources
+   adam_core.orbit_determination.workflows
+""",
+        encoding="utf-8",
     )
 
 

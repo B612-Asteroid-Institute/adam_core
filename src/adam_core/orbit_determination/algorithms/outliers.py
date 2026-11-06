@@ -1,10 +1,11 @@
 from typing import Tuple
 
 import numpy as np
-import pyarrow.compute as pc
 
-from .differential_correction import OrbitDeterminationObservations
-from .fitted_orbits import FittedOrbitMembers
+from adam_core._rust.arrow import pc
+
+from ..evaluate import OrbitDeterminationObservations
+from ..fitted_orbits import FittedOrbitMembers
 
 
 def _lowest_probability_observation_index(orbit_members: FittedOrbitMembers) -> int:

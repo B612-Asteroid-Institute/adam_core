@@ -17,7 +17,7 @@ pub use types::{
 };
 
 pub mod ades_io;
-pub use ades_io::{ades_string_to_observations, ades_to_string};
+pub use ades_io::{ades_angular_covariance_flat, ades_string_to_observations, ades_to_string};
 
 pub mod bandpasses;
 pub use bandpasses::{
@@ -26,6 +26,75 @@ pub use bandpasses::{
 };
 
 pub mod healpix;
+
+pub mod efcc18;
+pub use efcc18::{
+    compute_efcc18_corrections, efcc18_catalog_code, efcc18_catalog_column, efcc18_catalog_columns,
+    efcc18_debias_positions, is_efcc18_covered, ra_dec_to_healpix, read_efcc18_bias_version,
+    Efcc18BiasTable, EFCC18_ARCHIVE_URL, EFCC18_BIAS_DAT_SHA256, EFCC18_BIAS_VERSION,
+    EFCC18_CATALOG_CODES, EFCC18_JPL_UNDEBIASED_ASTCATS, EFCC18_NSIDE, EFCC18_N_CATALOGS,
+    EFCC18_N_COMPONENTS, EFCC18_N_TILES, MPC_ASTCAT_TO_EFCC18,
+};
+
+mod observation_uncertainty;
+mod od_batch;
+mod od_config;
+mod od_workflows;
+
+/// Rust-owned Core 0.7 orbit-determination configuration boundary.
+pub mod od {
+    pub use crate::od_batch::{
+        plan_associations, plan_orbit_members, AssociationGroup, OrbitMemberGroup,
+    };
+    pub use crate::od_config::{
+        EvaluationConfig, IodRunConfig, IodStageConfig, ObservationPipeline, ObservationTransform,
+        OdConfig, OdConfigError, RefinementRunConfig, ResidualCovarianceOperation,
+        ResourceBindings, ResourceProblem, ResourceRequirement, ResourceSlot,
+        ResourceValidationError, ValidatedResourceIdentity,
+    };
+    pub use crate::propagation::apply_configured_observation_pipeline;
+
+    /// Focused predictor-level building blocks used by the canonical batch API.
+    pub mod algorithms {
+        pub use crate::od_workflows::{
+            prepare_observations, refine_with_predictor, run_iod_with_predictor,
+            run_od_with_predictors, ConfiguredRunOdOutput, PreparedObservations,
+        };
+    }
+
+    /// Immutable predefined complete configurations.
+    pub mod profiles {
+        pub use crate::od_config::{
+            OdProfile, ProfileIdentity, ASTEROID_INSTITUTE_OD_V1, CORE_OD_V1, EFCC18_BIAS_RESOURCE,
+            V2_FULL_RESOURCE, V2_SIGMA_FILL_RESOURCE,
+        };
+    }
+}
+
+pub use od_config::{
+    EvaluationConfig, IodRunConfig, IodStageConfig, ObservationPipeline, ObservationTransform,
+    OdConfig, OdConfigError, OdProfile, ProfileIdentity, RefinementRunConfig,
+    ResidualCovarianceOperation, ResourceBindings, ResourceProblem, ResourceRequirement,
+    ResourceSlot, ResourceValidationError, ValidatedResourceIdentity, ASTEROID_INSTITUTE_OD_V1,
+    CORE_OD_V1, EFCC18_BIAS_RESOURCE, V2_FULL_RESOURCE, V2_SIGMA_FILL_RESOURCE,
+};
+
+mod veres2017;
+
+pub mod cmc2003;
+pub use cmc2003::{
+    cmc2003_apparitions, cmc2003_expected_residual_chi2, cmc2003_select, Cmc2003Flag,
+    Cmc2003Selection, Cmc2003SelectionOptions, CMC2003_APPARITION_GAP_DAYS, CMC2003_CHI2_FRAC,
+    CMC2003_CHI2_RECOVER, CMC2003_CHI2_REJECT, CMC2003_MAX_ITERATIONS,
+    CMC2003_MAX_REJECTED_FRACTION, CMC2003_MIN_OBS, CMC2003_PSD_FLOOR_FRAC,
+};
+
+pub mod differential_correction;
+pub use differential_correction::{
+    observation_whitening_matrices, robust_cost, robust_jacobian_scale, robust_weights,
+    validate_loss, whiten_residual_pairs, whitened_2body_jacobian, whitened_2body_model_angles,
+    LossType, TwoBodyJacobianTerms, TwoBodyModelConfig, WhiteningError, HUBER_F_SCALE_DEFAULT,
+};
 
 pub mod mpc_designations;
 pub use mpc_designations::MpcDesignationError;
@@ -81,6 +150,13 @@ pub use generic::{
 
 pub mod propagate;
 pub mod propagation;
+pub use propagation::{
+    candidate_orbit_batch, cmc2003_fit_barycentric, evaluate_orbit, fit_orbit_whitened_barycentric,
+    iod_fit, iterative_fit_barycentric, max_outliers, symmetric_eigen_6x6, AstrometrySnapshot,
+    Cmc2003FitConfig, Cmc2003FitOutput, CovarianceValidation, IodCandidateFailure,
+    IterativeFitConfig, IterativeFitOutput, JacobianMethod, OrbitGeometry, RefinedOutput,
+    RefinementConfig, WhitenedFitConfig, WhitenedFitOutput, DELTA_CHI2_WINDOW,
+};
 pub use propagation::{
     generate_ephemeris, generate_ephemeris_barycentric, generate_ephemeris_translated,
     CovariancePropagation, EphemerisDiagnostics, EphemerisFailureCode, EphemerisOptions,
@@ -1188,6 +1264,67 @@ pub fn apply_linear_covariance_transform_flat(
     Ok(output)
 }
 
+/// Rotate 6D or extended 9D Cartesian covariance rows with one 6x6 matrix,
+/// restoring the input NaN mask and zeroing near-zero coordinate-block values.
+/// Returns the transformed rows and the number of values zeroed.
+pub fn rotate_cartesian_covariance_flat(
+    flat_cov: &[f64],
+    dimension: usize,
+    matrix_flat: &[f64],
+    coordinate_zero_tolerance: f64,
+) -> Result<(Vec<f64>, usize), &'static str> {
+    if !coordinate_zero_tolerance.is_finite() || coordinate_zero_tolerance < 0.0 {
+        return Err("coordinate_zero_tolerance must be finite and non-negative");
+    }
+    if matrix_flat.len() != 36 {
+        return Err("matrix_flat length must be 36");
+    }
+    if !matches!(dimension, 6 | 9) {
+        return Err("covariance dimension must be 6 or 9");
+    }
+    if !flat_cov.len().is_multiple_of(dimension * dimension) {
+        return Err("flat_cov length must be N * dimension * dimension");
+    }
+    let rows = flat_cov.len() / (dimension * dimension);
+    let indices = vec![0; rows];
+    // Match the historical NumPy `nan_to_num(..., nan=0.0)` preparation:
+    // NaNs are masked/restored by the shared transform, while infinities are
+    // replaced by the finite extrema before multiplication. In particular,
+    // this prevents zero matrix entries from turning an unrelated infinity
+    // into NaN through IEEE `0 * inf` propagation.
+    let finite_covariance = (dimension == 9).then(|| {
+        flat_cov
+            .iter()
+            .map(|value| {
+                if *value == f64::INFINITY {
+                    f64::MAX
+                } else if *value == f64::NEG_INFINITY {
+                    f64::MIN
+                } else {
+                    *value
+                }
+            })
+            .collect::<Vec<_>>()
+    });
+    let covariance = finite_covariance.as_deref().unwrap_or(flat_cov);
+    let mut output =
+        apply_linear_covariance_transform_flat(covariance, dimension, &indices, matrix_flat)?;
+    let mut near_zero = 0;
+    for row in 0..rows {
+        let row_start = row * dimension * dimension;
+        for coordinate_row in 0..6 {
+            for coordinate_column in 0..6 {
+                let index = row_start + coordinate_row * dimension + coordinate_column;
+                if output[index].abs() < coordinate_zero_tolerance {
+                    output[index] = 0.0;
+                    near_zero += 1;
+                }
+            }
+        }
+    }
+    Ok((output, near_zero))
+}
+
 pub fn rotate_cartesian_time_varying_flat6(
     flat_coords: &[f64],
     flat_cov: &[f64],
@@ -1871,5 +2008,78 @@ mod orbital_public_tests {
 
         let hyperbolic_nu = solve_kepler_true_anomaly(1.2, 0.1, 100, 1e-15);
         assert!(hyperbolic_nu.is_finite());
+    }
+}
+
+#[cfg(test)]
+mod cartesian_covariance_rotation_tests {
+    use super::rotate_cartesian_covariance_flat;
+
+    #[test]
+    fn extended_rotation_preserves_nan_mask_and_nongrav_block() {
+        let mut covariance = vec![0.0_f64; 81];
+        for index in 0..9 {
+            covariance[index * 9 + index] = (index + 1) as f64;
+        }
+        covariance[1] = f64::NAN;
+        covariance[9] = f64::NAN;
+        covariance[2 * 9 + 6] = 0.25;
+        covariance[6 * 9 + 2] = 0.25;
+        let matrix = [
+            0.0, -1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0,
+            0.0, 0.0, 0.0, 0.0, 0.0, -1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+            0.0, 1.0,
+        ];
+        let (rotated, near_zero) =
+            rotate_cartesian_covariance_flat(&covariance, 9, &matrix, 1.0e-25).unwrap();
+
+        assert!(rotated[1].is_nan());
+        assert!(rotated[9].is_nan());
+        assert_eq!(rotated[6 * 9 + 6], covariance[6 * 9 + 6]);
+        assert_eq!(rotated[7 * 9 + 7], covariance[7 * 9 + 7]);
+        assert_eq!(rotated[8 * 9 + 8], covariance[8 * 9 + 8]);
+        assert_eq!(rotated[0], 2.0);
+        assert_eq!(rotated[10], 1.0);
+        assert!(near_zero > 0);
+    }
+
+    #[test]
+    fn extended_rotation_matches_legacy_nan_and_infinity_normalization() {
+        let mut covariance = vec![0.0_f64; 81];
+        covariance[0] = f64::INFINITY;
+        covariance[1] = f64::NEG_INFINITY;
+        covariance[2] = f64::NAN;
+        covariance[6 * 9 + 6] = f64::INFINITY;
+        let mut identity = [0.0_f64; 36];
+        for index in 0..6 {
+            identity[index * 6 + index] = 1.0;
+        }
+
+        let (rotated, _) =
+            rotate_cartesian_covariance_flat(&covariance, 9, &identity, 0.0).unwrap();
+
+        assert_eq!(rotated[0], f64::MAX);
+        assert_eq!(rotated[1], f64::MIN);
+        assert!(rotated[2].is_nan());
+        assert_eq!(rotated[6 * 9 + 6], f64::MAX);
+        assert!(!rotated
+            .iter()
+            .enumerate()
+            .any(|(index, value)| { !matches!(index, 2) && value.is_nan() }));
+    }
+
+    #[test]
+    fn rotation_zeros_only_coordinate_block_near_zero_values() {
+        let mut covariance = vec![0.0_f64; 81];
+        covariance[0] = 1.0e-30;
+        covariance[6 * 9 + 6] = 1.0e-30;
+        let mut identity = [0.0_f64; 36];
+        for index in 0..6 {
+            identity[index * 6 + index] = 1.0;
+        }
+        let (rotated, _) =
+            rotate_cartesian_covariance_flat(&covariance, 9, &identity, 1.0e-25).unwrap();
+        assert_eq!(rotated[0], 0.0);
+        assert_eq!(rotated[6 * 9 + 6], 1.0e-30);
     }
 }

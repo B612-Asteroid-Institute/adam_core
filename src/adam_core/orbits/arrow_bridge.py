@@ -20,14 +20,15 @@ lives here so callers exchange ordinary ``Orbits``/``VariantOrbits`` objects.
 
 from __future__ import annotations
 
-import pyarrow as pa
-
 from adam_core import _rust_native as _rn
+from adam_core._rust.arrow import contiguous_record_batch, pa
 from adam_core._rust.arrow import stamp_adam_core_metadata as _stamp_adam_core_metadata
 from adam_core._rust.arrow import to_quivr_metadata as _to_quivr_metadata
+from adam_core.coordinates.covariances import CoordinateCovariances
 from adam_core.observers import Observers
 from adam_core.orbits import Orbits
 from adam_core.orbits.variants import VariantOrbits
+from adam_core.time import Timestamp
 
 _NESTED_SCHEMA = "OrbitBatch.cartesian.nested.quivr.v1"
 _VARIANT_NESTED_SCHEMA = "OrbitVariantBatch.cartesian.nested.quivr.v1"
@@ -110,6 +111,11 @@ def observers_from_ipc(raw: bytes) -> Observers:
     return Observers.from_pyarrow(_to_quivr_metadata(_read_ipc(raw)))
 
 
+def coordinates_from_ipc(raw: bytes, coordinate_type):
+    """Reconstruct a coordinate table from Rust-produced nested IPC bytes."""
+    return coordinate_type.from_pyarrow(_to_quivr_metadata(_read_ipc(raw)))
+
+
 def coordinates_to_ipc(coordinates, representation: str) -> bytes:
     """Serialize a coordinate table (``cartesian`` or ``spherical``) to Arrow IPC."""
     table = _stamp_adam_core_metadata(
@@ -121,7 +127,15 @@ def coordinates_to_ipc(coordinates, representation: str) -> bytes:
     )
     sink = pa.BufferOutputStream()
     with pa.ipc.new_stream(sink, table.schema) as writer:
-        writer.write_table(table)
+        if len(table):
+            writer.write_table(table)
+        else:
+            writer.write_batch(
+                pa.RecordBatch.from_arrays(
+                    [pa.array([], type=field.type) for field in table.schema],
+                    schema=table.schema,
+                )
+            )
     return sink.getvalue().to_pybytes()
 
 
@@ -136,15 +150,33 @@ def _to_record_batch(
     scale: str,
     schema_name: str,
 ) -> pa.RecordBatch:
-    """Stamp one quivr table and expose its combined chunks as a RecordBatch."""
+    """Stamp one quivr table and expose it as a single contiguous RecordBatch."""
     stamped = _stamp_adam_core_metadata(
         table, representation, frame, scale, schema_name
     )
-    arrays = [
-        column.chunk(0) if column.num_chunks == 1 else column.combine_chunks()
-        for column in stamped.columns
-    ]
-    return pa.RecordBatch.from_arrays(arrays, schema=stamped.schema)
+    return contiguous_record_batch(stamped)
+
+
+def _covariance_values_to_record_batch(
+    covariance: CoordinateCovariances,
+) -> pa.RecordBatch:
+    """Expose only Arrow covariance-list storage to a Rust payload transform."""
+    values = covariance.values
+    if isinstance(values, pa.ChunkedArray):
+        values = values.combine_chunks()
+    return pa.RecordBatch.from_arrays([values], names=["values"])
+
+
+def _without_nongrav_covariance(
+    covariance: CoordinateCovariances,
+) -> CoordinateCovariances:
+    """Drop A1/A2/A3 covariance blocks in Rust without touching coordinates."""
+    if not covariance.has_nongrav_block():
+        return covariance
+    output = _rn._coordinate_covariance_values_to_six_arrow(
+        _covariance_values_to_record_batch(covariance)
+    )
+    return CoordinateCovariances.from_kwargs(values=output.column(0))
 
 
 def orbits_to_record_batch(orbits: Orbits) -> pa.RecordBatch:
@@ -223,9 +255,9 @@ def _evaluate_residuals_2body_ipc_candidate(
     """Diagnostic Arrow-IPC candidate for the OD residual inner loop.
 
     Private per the bridge-naming policy (bead personal-cmy.13.1.4): the
-    canonical public surfaces are ``coordinates.residuals.Residuals.calculate``
-    and ``orbit_determination.evaluate_orbits``; this workflow is their fused
-    2-body transport experiment, kept for the parity/speed harness.
+    canonical public surface is
+    ``coordinates.residuals.Residuals.calculate``. This fused two-body
+    transport experiment is kept only for the parity and speed harness.
 
     ``orbits`` must already be at the observation times (1:1 with the observed
     astrometry and observers). Composes the same 2-body ephemeris + residual
@@ -400,14 +432,14 @@ def _sample_orbit_variants_arrow(
 
 
 def _propagate_orbits_typed_arrow(
-    orbits,
-    times,
+    orbits: Orbits | VariantOrbits,
+    times: Timestamp,
     covariance: bool = False,
     max_iter: int = 1000,
     tol: float = 1e-14,
     chunk_size: int | None = None,
     thread_limit: int | None = None,
-):
+) -> tuple[Orbits | VariantOrbits, list[bool]]:
     """Arrow-native typed propagation for ``Orbits`` or ``VariantOrbits``.
 
     Runs the table through the Rust-canonical ``TwoBodyPropagator``
@@ -420,11 +452,10 @@ def _propagate_orbits_typed_arrow(
     boundary. Returns ``(table, per_row_valid)``.
     """
     is_variants = isinstance(orbits, VariantOrbits)
-    orbit_batch = (
-        variants_to_record_batch(orbits)
-        if is_variants
-        else orbits_to_record_batch(orbits)
-    )
+    if isinstance(orbits, VariantOrbits):
+        orbit_batch = variants_to_record_batch(orbits)
+    else:
+        orbit_batch = orbits_to_record_batch(orbits)
     time_table = times.table.combine_chunks()
     metadata = dict(time_table.schema.metadata or {})
     metadata[b"adam_core_time_scale"] = times.scale.encode()
@@ -448,11 +479,18 @@ def _propagate_orbits_typed_arrow(
         if is_variants
         else orbits_from_record_batch(output)
     )
-    return table, valid
+    if not isinstance(valid, list):
+        raise TypeError("typed propagation validity must be a list")
+    valid_flags: list[bool] = []
+    for item in valid:
+        if not isinstance(item, bool):
+            raise TypeError("typed propagation validity entries must be bool")
+        valid_flags.append(item)
+    return table, valid_flags
 
 
 def _propagate_orbits_2body_ipc_candidate(
-    orbits: Orbits, time, max_iter: int = 100, tol: float = 1e-14
+    orbits: Orbits, time: Timestamp, max_iter: int = 100, tol: float = 1e-14
 ) -> Orbits:
     """Diagnostic Arrow-IPC candidate for ``dynamics.propagate_2body``.
 

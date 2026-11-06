@@ -194,6 +194,14 @@ impl TimeArray {
         }
         Ok(())
     }
+
+    pub fn take(&self, indices: &[usize]) -> SchemaResult<Self> {
+        validate_indices("time", self.len(), indices)?;
+        Self::new(
+            self.scale,
+            indices.iter().map(|&index| self.epochs[index]).collect(),
+        )
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -375,6 +383,23 @@ pub struct CovarianceBatch {
     pub units: CovarianceUnits,
 }
 
+fn coordinate_covariance_block_values(source: &[f64], dimension: usize) -> SchemaResult<[f64; 36]> {
+    if !matches!(dimension, 6 | 9) || source.len() != dimension * dimension {
+        return Err(SchemaError::InvalidCovarianceShape {
+            rows: 1,
+            dimension,
+            values: source.len(),
+        });
+    }
+    let mut coordinate_block = [0.0_f64; 36];
+    for row in 0..6 {
+        for column in 0..6 {
+            coordinate_block[row * 6 + column] = source[row * dimension + column];
+        }
+    }
+    Ok(coordinate_block)
+}
+
 impl CovarianceBatch {
     pub fn new(
         rows: usize,
@@ -459,6 +484,57 @@ impl CovarianceBatch {
             9
         }
     }
+
+    pub fn take(&self, indices: &[usize]) -> SchemaResult<Self> {
+        validate_indices("covariance", self.rows, indices)?;
+        let stride = self.dimension * self.dimension;
+        let mut values = Vec::with_capacity(indices.len() * stride);
+        for &index in indices {
+            values.extend_from_slice(self.row_values(index));
+        }
+        let mut out = Self::new(indices.len(), self.dimension, values, self.units.clone())?;
+        if let Some(validity) = &self.row_validity {
+            out = out.with_row_validity(Validity::from_bools(
+                &indices
+                    .iter()
+                    .map(|&index| validity.is_valid(index))
+                    .collect::<Vec<_>>(),
+            ))?;
+        }
+        Ok(out)
+    }
+
+    /// Return only the leading six-dimensional coordinate covariance block.
+    ///
+    /// Six-dimensional batches are cloned unchanged. Extended nine-dimensional
+    /// solved-state batches are projected row-by-row in Rust while preserving
+    /// covariance units and row validity. Other dimensions fail closed.
+    pub fn coordinate_block(&self) -> SchemaResult<Self> {
+        self.validate()?;
+        if self.dimension == 6 {
+            return Ok(self.clone());
+        }
+        if self.dimension != 9 {
+            return Err(SchemaError::InvalidCovarianceShape {
+                rows: self.rows,
+                dimension: self.dimension,
+                values: self.values_row_major.len(),
+            });
+        }
+
+        let mut values = Vec::with_capacity(self.rows * 6 * 6);
+        for row in 0..self.rows {
+            values.extend_from_slice(&coordinate_covariance_block_values(
+                self.row_values(row),
+                self.dimension,
+            )?);
+        }
+        let coordinate_covariance = Self::new(self.rows, 6, values, self.units.clone())?;
+        match self.row_validity.clone() {
+            Some(validity) => coordinate_covariance.with_row_validity(validity),
+            None => Ok(coordinate_covariance),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -518,6 +594,18 @@ impl CoordinateValues {
             | Self::Cometary(values)
             | Self::Geodetic(values) => values,
         }
+    }
+
+    pub fn take(&self, indices: &[usize]) -> SchemaResult<Self> {
+        validate_indices("coordinate values", self.len(), indices)?;
+        let gather = |values: &[[f64; 6]]| indices.iter().map(|&index| values[index]).collect();
+        Ok(match self {
+            Self::Cartesian(values) => Self::Cartesian(gather(values)),
+            Self::Spherical(values) => Self::Spherical(gather(values)),
+            Self::Keplerian(values) => Self::Keplerian(gather(values)),
+            Self::Cometary(values) => Self::Cometary(gather(values)),
+            Self::Geodetic(values) => Self::Geodetic(gather(values)),
+        })
     }
 }
 
@@ -591,6 +679,42 @@ impl CoordinateBatch {
 
     pub fn representation(&self) -> CoordinateRepresentation {
         self.values.representation()
+    }
+
+    pub fn take(&self, indices: &[usize]) -> SchemaResult<Self> {
+        validate_indices("coordinates", self.len(), indices)?;
+        Self::new(
+            self.values.take(indices)?,
+            self.frame,
+            OriginArray::new(
+                indices
+                    .iter()
+                    .map(|&index| self.origins.origins[index].clone())
+                    .collect(),
+            ),
+            self.times
+                .as_ref()
+                .map(|times| times.take(indices))
+                .transpose()?,
+            self.covariance
+                .as_ref()
+                .map(|covariance| covariance.take(indices))
+                .transpose()?,
+        )
+    }
+
+    /// Clone these coordinates with any extended A1/A2/A3 covariance block
+    /// removed. Coordinate values, origins, times, frame, and null-row identity
+    /// are preserved exactly.
+    pub fn without_non_gravitational_covariance(&self) -> SchemaResult<Self> {
+        let mut coordinates = self.clone();
+        coordinates.covariance = self
+            .covariance
+            .as_ref()
+            .map(CovarianceBatch::coordinate_block)
+            .transpose()?;
+        coordinates.validate()?;
+        Ok(coordinates)
     }
 
     pub fn validate(&self) -> SchemaResult<()> {
@@ -721,6 +845,18 @@ pub struct NonGravitationalParametersRow {
     pub r0: Option<f64>,
 }
 
+impl NonGravitationalParametersRow {
+    /// Whether this row changes the dynamics. Marsden-law metadata and a
+    /// source label do not activate non-gravitational acceleration without a
+    /// non-zero A1, A2 or A3 coefficient.
+    pub fn is_active(&self) -> bool {
+        [self.a1, self.a2, self.a3]
+            .into_iter()
+            .flatten()
+            .any(|value| value != 0.0)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct NonGravitationalParametersBatch {
     pub source: Vec<Option<String>>,
@@ -753,11 +889,7 @@ impl NonGravitationalParametersBatch {
     }
 
     pub fn has_values(&self) -> bool {
-        [&self.a1, &self.a2, &self.a3]
-            .into_iter()
-            .flatten()
-            .flatten()
-            .any(|value| *value != 0.0)
+        (0..self.len()).any(|index| self.row(index).is_active())
     }
 
     pub fn row(&self, index: usize) -> NonGravitationalParametersRow {
@@ -870,6 +1002,28 @@ impl OrbitBatch {
 
     pub fn is_empty(&self) -> bool {
         self.coordinates.is_empty()
+    }
+
+    pub fn take(&self, indices: &[usize]) -> SchemaResult<Self> {
+        validate_indices("orbits", self.len(), indices)?;
+        let mut out = Self::new(
+            indices
+                .iter()
+                .map(|&index| self.orbit_id[index].clone())
+                .collect(),
+            indices
+                .iter()
+                .map(|&index| self.object_id[index].clone())
+                .collect(),
+            self.coordinates.take(indices)?,
+        )?;
+        if let Some(parameters) = &self.physical_parameters {
+            out = out.with_physical_parameters(parameters.take(indices))?;
+        }
+        if let Some(parameters) = &self.non_gravitational_parameters {
+            out = out.with_non_gravitational_parameters(parameters.take(indices))?;
+        }
+        Ok(out)
     }
 
     pub fn validate(&self) -> SchemaResult<()> {
@@ -1005,6 +1159,17 @@ impl ObserverBatch {
 
     pub fn is_empty(&self) -> bool {
         self.coordinates.is_empty()
+    }
+
+    pub fn take(&self, indices: &[usize]) -> SchemaResult<Self> {
+        validate_indices("observers", self.len(), indices)?;
+        Self::new(
+            indices
+                .iter()
+                .map(|&index| self.code[index].clone())
+                .collect(),
+            self.coordinates.take(indices)?,
+        )
     }
 
     pub fn validate(&self) -> SchemaResult<()> {
@@ -1147,6 +1312,15 @@ fn validate_len(field: &str, expected: usize, actual: usize) -> SchemaResult<()>
     })
 }
 
+fn validate_indices(field: &str, rows: usize, indices: &[usize]) -> SchemaResult<()> {
+    if let Some(index) = indices.iter().copied().find(|&index| index >= rows) {
+        return Err(SchemaError::InvalidRecordBatch(format!(
+            "{field} row index {index} is out of bounds for {rows} rows"
+        )));
+    }
+    Ok(())
+}
+
 fn validate_optional_finite(field: &str, values: &[Option<f64>]) -> SchemaResult<()> {
     for (row, value) in values.iter().enumerate() {
         if value.is_some_and(|value| !value.is_finite()) {
@@ -1189,6 +1363,45 @@ mod tests {
     }
 
     #[test]
+    fn coordinate_batch_take_preserves_order_and_rejects_out_of_bounds_rows() {
+        let values = vec![
+            [1.0, 2.0, 3.0, 0.1, 0.2, 0.3],
+            [4.0, 5.0, 6.0, 0.4, 0.5, 0.6],
+        ];
+        let time = TimeArray::new(
+            TimeScale::Tdb,
+            vec![Epoch::new(60_000, 1), Epoch::new(60_001, 2)],
+        )
+        .unwrap();
+        let coordinates = CoordinateBatch::cartesian(
+            values.clone(),
+            Frame::Ecliptic,
+            OriginArray::repeat(OriginId::SolarSystemBarycenter, 2),
+            Some(time),
+            None,
+        )
+        .unwrap();
+
+        let gathered = coordinates.take(&[1, 0, 1]).unwrap();
+        assert_eq!(
+            gathered.values.cartesian().unwrap(),
+            &[values[1], values[0], values[1]]
+        );
+        assert_eq!(
+            gathered.times.unwrap().epochs,
+            vec![
+                Epoch::new(60_001, 2),
+                Epoch::new(60_000, 1),
+                Epoch::new(60_001, 2)
+            ]
+        );
+        assert!(matches!(
+            coordinates.take(&[2]).unwrap_err(),
+            SchemaError::InvalidRecordBatch(_)
+        ));
+    }
+
+    #[test]
     fn coordinate_batch_requires_six_dimensional_covariance() {
         let values = vec![[1.0, 2.0, 3.0, 0.1, 0.2, 0.3]; 1];
         let origins = OriginArray::repeat(OriginId::SolarSystemBarycenter, 1);
@@ -1203,6 +1416,57 @@ mod tests {
             CoordinateBatch::cartesian(values, Frame::Ecliptic, origins, None, Some(covariance))
                 .unwrap_err();
         assert!(matches!(err, SchemaError::InvalidCovarianceShape { .. }));
+    }
+
+    #[test]
+    fn covariance_coordinate_block_projects_nine_dimensions_and_preserves_validity() {
+        let values = (0..2 * 9 * 9).map(|value| value as f64).collect::<Vec<_>>();
+        let validity = Validity::from_bools(&[true, false]);
+        let covariance = CovarianceBatch::new(
+            2,
+            9,
+            values.clone(),
+            CovarianceUnits::Coordinate(CoordinateRepresentation::Cartesian),
+        )
+        .unwrap()
+        .with_row_validity(validity.clone())
+        .unwrap();
+
+        let coordinate = covariance.coordinate_block().unwrap();
+        let mut expected = Vec::new();
+        for row in 0..2 {
+            for coordinate_row in 0..6 {
+                let start = row * 81 + coordinate_row * 9;
+                expected.extend_from_slice(&values[start..start + 6]);
+            }
+        }
+        assert_eq!(coordinate.dimension, 6);
+        assert_eq!(coordinate.values_row_major, expected);
+        assert_eq!(coordinate.row_validity, Some(validity));
+    }
+
+    #[test]
+    fn covariance_coordinate_block_keeps_six_dimensions_and_rejects_other_widths() {
+        let six = CovarianceBatch::new(
+            1,
+            6,
+            vec![3.0; 36],
+            CovarianceUnits::Coordinate(CoordinateRepresentation::Cartesian),
+        )
+        .unwrap();
+        assert_eq!(six.coordinate_block().unwrap(), six);
+
+        let other = CovarianceBatch::new(
+            1,
+            2,
+            vec![0.0; 4],
+            CovarianceUnits::Coordinate(CoordinateRepresentation::Cartesian),
+        )
+        .unwrap();
+        assert!(matches!(
+            other.coordinate_block().unwrap_err(),
+            SchemaError::InvalidCovarianceShape { .. }
+        ));
     }
 
     #[test]
@@ -1269,6 +1533,29 @@ mod tests {
         )
         .unwrap_err();
         assert!(matches!(err, SchemaError::InvalidRecordBatch(_)));
+    }
+
+    #[test]
+    fn non_gravitational_activity_requires_a_nonzero_acceleration_coefficient() {
+        let batch = NonGravitationalParametersBatch {
+            source: vec![Some("source-only".to_string()), Some("zero".to_string())],
+            a1: vec![None, Some(0.0)],
+            a2: vec![None, None],
+            a3: vec![None, None],
+            aln: vec![Some(1.0), Some(1.0)],
+            nk: vec![Some(0.0), Some(0.0)],
+            nm: vec![Some(2.0), Some(2.0)],
+            nn: vec![Some(5.093), Some(5.093)],
+            r0: vec![Some(1.0), Some(1.0)],
+        };
+        assert!(!batch.row(0).is_active());
+        assert!(!batch.row(1).is_active());
+        assert!(!batch.has_values());
+
+        let mut active = batch;
+        active.a2[1] = Some(-1e-12);
+        assert!(active.row(1).is_active());
+        assert!(active.has_values());
     }
 
     #[test]

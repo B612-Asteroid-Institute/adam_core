@@ -13,4 +13,5 @@ Sphinx build using ``sphinx-apidoc``. It is the canonical API reference.
    api/modules
    rust_benchmark_governance
    rust_backend_contracts
+   native_propagator_abi
    rust_public_compatibility

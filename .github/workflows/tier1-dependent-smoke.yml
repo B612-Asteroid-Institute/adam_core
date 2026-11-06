@@ -1,21 +1,33 @@
-name: Tier-1 Dependent Smoke
+name: Tier-1 Exact-Ref Compatibility
 
+# Core 0.7 intentionally lands before a compatible Assist release. Until a
+# separately reviewed Assist candidate exists, this is manual-only and makes
+# no scheduled or pull-request compatibility claim.
 on:
-  pull_request:
-    branches: [ main, "v*" ]
-  schedule:
-    - cron: "0 9 * * 1"
   workflow_dispatch:
+    inputs:
+      adam_assist_ref:
+        description: Exact 40-hex compatible adam-assist candidate revision
+        required: true
+        type: string
 
 permissions:
   contents: read
 
+env:
+  ADAM_ASSIST_REF: ${{ inputs.adam_assist_ref }}
+
 jobs:
-  tier1-smoke:
+  exact-ref-compatibility:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout adam_core
         uses: actions/checkout@v4
+      - name: Validate requested dependent revision syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$ADAM_ASSIST_REF" =~ ^[0-9a-f]{40}$ ]]
       - name: Set up Rust at the public-crate MSRV
         uses: dtolnay/rust-toolchain@1.87.0
         with:
@@ -24,18 +36,42 @@ jobs:
         uses: pdm-project/setup-pdm@v4
         with:
           python-version: '3.12'
-      - name: Install build dependencies
-        run: pdm install -G test
+      - name: Install test and exact build dependencies
+        run: pdm install -G test -G build
       - name: Build Rust wheel
         run: pdm run rust-build
       - name: Verify native wheel artifact
         run: pdm run wheel-inspect
-      - name: Checkout compatible dependent candidate
+      - name: Checkout requested dependent revision
         uses: actions/checkout@v4
         with:
           repository: B612-Asteroid-Institute/adam-assist
-          ref: 8eba85d28b6b266548f2b3892b90db3857763625
+          ref: ${{ env.ADAM_ASSIST_REF }}
           path: dependent
+          fetch-depth: 0
+      - name: Verify exact dependent revision
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C dependent rev-parse HEAD)" = "$ADAM_ASSIST_REF"
+      - name: Verify dependent declares Core 0.7 compatibility
+        run: |
+          pdm run python - <<'PY'
+          import tomllib
+          from packaging.requirements import Requirement
+          from packaging.utils import canonicalize_name
+          from packaging.version import Version
+
+          metadata = tomllib.load(open("dependent/pyproject.toml", "rb"))["project"]
+          core = [
+              requirement
+              for requirement in map(Requirement, metadata["dependencies"])
+              if canonicalize_name(requirement.name) == "adam-core"
+              and requirement.marker is None
+          ]
+          assert len(core) == 1, core
+          assert Version("0.7.0") in core[0].specifier, core[0]
+          PY
       - name: Build reference propagator in the Core test environment
         env:
           ADAM_ASSIST_RUST_REPO: ${{ github.workspace }}/dependent
@@ -51,12 +87,11 @@ jobs:
             naif-de440==2020.12.21.1 \
             jpl-small-bodies-de441-n16==2021.3.31.1
           python -m pip install dist/*.whl
-          # The dependent is installed with --no-deps so the freshly built
-          # adam_core wheel is not replaced from PyPI. Its SPICE kernel data
-          # packages have to be installed explicitly, at the versions the
-          # candidate pins, or its import fails.
-          python -m pip install "naif-de440==2020.12.21.1" "jpl-small-bodies-de441-n16==2021.3.31.1"
+          # Install the exact reviewed checkout without allowing its resolver to
+          # replace the candidate Core wheel. pip check below still enforces the
+          # dependent's declared adam-core requirement without rewriting it.
           python -m pip install --no-deps -e dependent
+          python -m pip check
       - name: Verify exact candidate installations
         run: |
           python - <<'PY'
@@ -65,22 +100,23 @@ jobs:
           import adam_core
           from adam_assist.version import __version__ as assist_version
 
-          assert version("adam-core") == adam_core.__version__ == "0.6.1"
-          assert version("adam-assist") == assist_version == "0.5.0"
+          assert version("adam-core") == adam_core.__version__ == "0.7.0"
+          assert version("adam-assist") == assist_version
           PY
       - name: Run dependent import smoke
         run: python -c "import adam_assist.propagator"
       - name: Verify Core test environment candidate installations
         run: |
           test_python="$(pdm info --python)"
+          "$test_python" -m pip check
           "$test_python" - <<'PY'
           from importlib.metadata import version
 
           import adam_core
           from adam_assist.version import __version__ as assist_version
 
-          assert version("adam-core") == adam_core.__version__ == "0.6.1"
-          assert version("adam-assist") == assist_version == "0.5.0"
+          assert version("adam-core") == adam_core.__version__ == "0.7.0"
+          assert version("adam-assist") == assist_version
           PY
       - name: Run Core integration tests with the reference propagator
         run: |

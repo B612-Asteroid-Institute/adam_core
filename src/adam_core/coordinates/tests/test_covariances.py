@@ -1,7 +1,11 @@
 import numpy as np
 import pytest
 
+from adam_core.coordinates.cartesian import CartesianCoordinates
 from adam_core.coordinates.covariances import _upper_triangular_to_full
+from adam_core.coordinates.origin import Origin
+from adam_core.coordinates.variants import create_coordinate_variants
+from adam_core.time import Timestamp
 
 from ...utils.helpers.orbits import make_real_orbits
 from ..covariances import (
@@ -14,7 +18,90 @@ from ..covariances import (
 )
 
 
-def test_sample_covariance_sigma_points():
+def test_coordinate_variants_all_undefined_error_precedes_other_validation() -> None:
+    coordinates = CartesianCoordinates.from_kwargs(
+        x=[1.0],
+        y=[0.0],
+        z=[0.0],
+        vx=[0.0],
+        vy=[0.01],
+        vz=[0.0],
+        time=Timestamp.from_mjd([60000.0], scale="tdb"),
+        covariance=CoordinateCovariances.nulls(1),
+        origin=Origin.from_kwargs(code=["SUN"]),
+        frame="ecliptic",
+    )
+    expected = (
+        "Cannot sample coordinate covariances when covariances are all undefined."
+    )
+    for kwargs in (
+        {"method": "bogus"},
+        {"method": "monte-carlo", "num_samples": 0},
+        {"method": "sigma-point", "alpha": 0.0},
+    ):
+        with pytest.raises(ValueError) as error:
+            create_coordinate_variants(coordinates, **kwargs)
+        assert str(error.value) == expected
+
+    with pytest.raises(ValueError) as error:
+        create_coordinate_variants(coordinates[:0], method="sigma-point")
+    assert str(error.value) == expected
+
+
+def test_is_all_nan_uses_coordinate_block_in_native_payload(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    covariance = np.full((1, 9, 9), np.nan)
+    covariance[0, 6, 6] = 1.0
+    extended = CoordinateCovariances.from_matrix(covariance)
+    mixed = CoordinateCovariances.from_kwargs(
+        values=[
+            covariance[0].reshape(-1).tolist(),
+            None,
+            np.eye(6).reshape(-1).tolist(),
+        ]
+    )
+    child_nulls = covariance[0].reshape(-1).tolist()
+    child_nulls[0] = None
+    child_null_covariance = CoordinateCovariances.from_kwargs(values=[child_nulls])
+
+    def forbidden(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("dense Python covariance conversion must not execute")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(CoordinateCovariances, "to_matrix", forbidden)
+        patch.setattr(CoordinateCovariances, "to_full_matrix", forbidden)
+        assert extended.is_all_nan()
+        assert mixed[:2].is_all_nan()
+        assert not mixed.is_all_nan()
+        assert child_null_covariance.is_all_nan()
+
+
+def test_native_coordinate_variant_sampling_empty_boundary_and_validation() -> None:
+    from adam_core import _rust_native
+
+    means = np.empty((0, 6), dtype=np.float64)
+    covariances = np.empty((0, 6, 6), dtype=np.float64)
+    samples, weights, weights_cov, source_rows = (
+        _rust_native.sample_coordinate_variants_numpy(means, covariances, "sigma-point")
+    )
+    assert samples.shape == (0, 6)
+    assert weights.shape == weights_cov.shape == source_rows.shape == (0,)
+
+    with pytest.raises(ValueError, match="sigma-point alpha must be positive"):
+        _rust_native.sample_coordinate_variants_numpy(
+            means, covariances, "sigma-point", alpha=0.0
+        )
+    with pytest.raises(
+        ValueError,
+        match="Monte Carlo covariance sampling requires num_samples > 0",
+    ):
+        _rust_native.sample_coordinate_variants_numpy(
+            means, covariances, "monte-carlo", num_samples=0
+        )
+
+
+def test_sample_covariance_sigma_points() -> None:
     # Get a sample of real orbits and test that sigma point sampling
     # allows the state vector and its covariance to be reconstructed
     orbits = make_real_orbits()
@@ -47,7 +134,7 @@ def test_sample_covariance_sigma_points():
         np.testing.assert_allclose(covariance_sg, covariance, rtol=0, atol=1e-14)
 
 
-def test_sample_covariance_sigma_points_small_correlated_public_scale():
+def test_sample_covariance_sigma_points_small_correlated_public_scale() -> None:
     # Frozen release-blocker fixture (bead personal-yv7s): a real public-scale
     # Apophis Cartesian covariance (eigenvalues ~1.91e-23..1.918e-17,
     # condition ~1.0e6) must be reconstructed by the sigma-point cloud far
@@ -132,7 +219,7 @@ def test_sample_covariance_sigma_points_small_correlated_public_scale():
     )
 
 
-def test_make_positive_semidefinite():
+def test_make_positive_semidefinite() -> None:
     non_psd_matrix = np.array(
         [
             [1e-11, 0, 0, 0, 0, 0],
@@ -149,7 +236,7 @@ def test_make_positive_semidefinite():
     assert np.all(np.linalg.eigvals(psd_matrix) >= 0)
 
 
-def test_make_positive_semidefinite_fail():
+def test_make_positive_semidefinite_fail() -> None:
     # Case where eigenvalues exceed the tolerance and should not be flipped
     non_psd_matrix_fail = np.array(
         [
@@ -166,7 +253,7 @@ def test_make_positive_semidefinite_fail():
         make_positive_semidefinite(non_psd_matrix_fail, semidef_tol=1e-15)
 
 
-def test_sample_covariance_random():
+def test_sample_covariance_random() -> None:
     # Get a sample of real orbits and test that random sampling
     # allows the state vector and its covariance to be reconstructed
     orbits = make_real_orbits()
@@ -195,7 +282,7 @@ def test_sample_covariance_random():
         np.testing.assert_allclose(covariance_rs, covariance, rtol=0, atol=1e-14)
 
 
-def test_CoordinateCovariances_from_sigmas():
+def test_CoordinateCovariances_from_sigmas() -> None:
     # Given an array of sigmas, test that the
     # covariance matrices are correctly calculated
     sigmas = np.array(
@@ -229,7 +316,7 @@ def test_CoordinateCovariances_from_sigmas():
     np.testing.assert_equal(cov.to_matrix(), covariances)
 
 
-def test_CoordinateCovariances_to_from_matrix():
+def test_CoordinateCovariances_to_from_matrix() -> None:
     # Given an array of covariances test that the
     # covariance matrices are correctly returned
     covariances = np.zeros((10, 6, 6))
@@ -253,7 +340,7 @@ def test_CoordinateCovariances_to_from_matrix():
     np.testing.assert_equal(cov.to_matrix(), cov_expected)
 
 
-def test_CoordinateCovariances_is_all_nan():
+def test_CoordinateCovariances_is_all_nan() -> None:
     # Test that all_nan convenience method works as intended
     # No NaNs at all
     covariances = np.ones((10, 6, 6))
@@ -277,7 +364,7 @@ def test_CoordinateCovariances_is_all_nan():
     assert cov.is_all_nan()
 
 
-def test_CoordinateCovariances_from_matrix_invalid_shape():
+def test_CoordinateCovariances_from_matrix_invalid_shape() -> None:
     # Test that an error is raised when the shape of the input
     # covariances is invalid
     covariances = np.zeros((10, 6, 5))
@@ -289,7 +376,7 @@ def test_CoordinateCovariances_from_matrix_invalid_shape():
         CoordinateCovariances.from_matrix(covariances)
 
 
-def test__upper_triangular_to_full():
+def test__upper_triangular_to_full() -> None:
     # Test that we can reconstruct a full covariance matrix from an upper triangular matrix.
     expected_array = np.array(
         [

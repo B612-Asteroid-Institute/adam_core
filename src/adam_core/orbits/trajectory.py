@@ -10,8 +10,9 @@ from typing import Optional, cast
 
 import numpy as np
 import numpy.typing as npt
-import pyarrow as pa
 import quivr as qv
+
+from adam_core._rust.arrow import pa
 
 from ..time import Timestamp
 from .orbits import Orbits
@@ -48,13 +49,9 @@ class Trajectory(qv.Table):
             for key, value in defaults.items():
                 metadata.setdefault(key, value)
             table = table.replace_schema_metadata(metadata)
-        batches = table.to_batches()
-        if batches:
-            return batches[0]
-        return pa.RecordBatch.from_arrays(
-            [pa.array([], type=field.type) for field in table.schema],
-            schema=table.schema,
-        )
+        from .._rust.arrow import contiguous_record_batch
+
+        return contiguous_record_batch(table)
 
     def coverage_start_mjd(self) -> npt.NDArray[np.float64]:
         """Coverage-window start times as TDB MJD."""

@@ -1,0 +1,893 @@
+import warnings
+from types import MappingProxyType
+from typing import Any, List, Literal, Optional, Tuple
+
+import numpy as np
+import numpy.typing as npt
+
+from adam_core._rust.arrow import pa, pc
+
+from ... import _rust_native
+from ...coordinates.cartesian import CartesianCoordinates
+from ...coordinates.covariances import CoordinateCovariances
+from ...coordinates.origin import Origin, OriginCodes
+from ...coordinates.residuals import Residuals
+from ...coordinates.transform import transform_coordinates
+from ...orbits.orbits import Orbits
+from ...propagator.propagator import Propagator
+from ...time.time import Timestamp
+from ...utils.spice import get_perturber_state
+from .._native_dispatch import (
+    _warn_if_analytic_jacobian_mismatches,
+    native_propagator,
+)
+from ..config import JacobianName
+from ..evaluate import OrbitDeterminationObservations
+from ..fitted_orbits import FittedOrbitMembers, FittedOrbits
+
+# Acceptance window for the weak-direction consistency check: the measured
+# delta-chi2 at a 1-sigma displacement along the covariance's widest axis
+# should be ~1 for a trustworthy covariance at a converged minimum.
+_DELTA_CHI2_WINDOW = (0.1, 10.0)
+
+# Robust loss functions supported by fit_least_squares. "linear" is ordinary
+# weighted least squares (the cost is chi2); "huber" is Huber's M-estimator.
+LossType = Literal["linear", "huber"]
+
+#: The refinement defaults, read once from Rust's config types: ``fit``
+#: (`WhitenedFitConfig`), ``worst_residual`` (`IterativeFitConfig`),
+#: ``cmc2003`` (`Cmc2003FitConfig`, OrbFit's ``reject.def``) and
+#: ``refinement`` (the default loop). These defaults belong only to the
+#: lower-level algorithm functions; canonical workflows use typed configs.
+OD_DEFAULTS = MappingProxyType(
+    {
+        key: MappingProxyType(value) if isinstance(value, dict) else value
+        for key, value in _rust_native.od_defaults().items()
+    }
+)
+
+# Huber transition point in units of whitened residual components. The value
+# remains Rust-owned through the low-level fit defaults above.
+HUBER_F_SCALE_DEFAULT = OD_DEFAULTS["fit"]["f_scale"]
+
+# Rust Gauss-Newton solver keyword set used by lower-level algorithm helpers.
+_NATIVE_FIT_KWARGS = {"xtol", "ftol", "max_iterations"}
+
+# Solver settings understood by adam-core's native whitened-fit driver.
+_FUSED_WHITENED_KWARGS = {"xtol", "ftol", "gtol", "max_nfev", "max_iterations"}
+# Keyword arguments the rejection loops forward to `fit_least_squares` that
+# adam-core's native drivers understand.
+_FUSED_LOOP_KWARGS = _FUSED_WHITENED_KWARGS | {"jacobian", "validate_covariance"}
+
+
+def _fit_settings(
+    loss: str,
+    f_scale: float,
+    jacobian: str,
+    validate_covariance: bool,
+    kwargs: dict[str, Any],
+) -> dict[str, Any]:
+    """
+    The ``fit_settings`` dict for adam-core's native whitened-fit driver:
+    the `fit_least_squares` options, tolerances, and independent iteration and
+    residual-evaluation budgets. None leaves the evaluation count uncapped.
+    """
+    settings = {
+        "loss": loss,
+        "f_scale": f_scale,
+        "jacobian": jacobian,
+        "validate_covariance": validate_covariance,
+        "xtol": kwargs.get("xtol", 1e-12),
+        "ftol": kwargs.get("ftol", 1e-12),
+        "gtol": kwargs.get("gtol", 1e-12),
+        "max_iterations": kwargs.get("max_iterations", 100),
+        "max_nfev": kwargs.get("max_nfev"),
+    }
+    return settings
+
+
+def _emit_native_warnings(output: dict[str, Any]) -> None:
+    for message in output.get("warnings", ()):
+        warnings.warn(message, category=RuntimeWarning)
+
+
+def _validate_loss(loss: str, f_scale: float) -> None:
+    from adam_core import _rust_native
+
+    _rust_native.validate_robust_loss(loss, f_scale)
+
+
+def _robust_cost(
+    residuals: npt.NDArray[np.float64], loss: str, f_scale: float
+) -> float:
+    """
+    Objective minimized by `fit_least_squares` for the given loss, as a
+    function of the whitened residual components ``r``.
+
+    - ``"linear"``: ``sum(r**2)``, i.e. chi2.
+    - ``"huber"``: ``f_scale**2 * sum(rho(r**2 / f_scale**2))`` with
+      ``rho(z) = z`` for ``z <= 1`` and ``rho(z) = 2 sqrt(z) - 1`` otherwise,
+      which is twice the ``cost`` reported by `scipy.optimize.least_squares`
+      and reduces to chi2 when every component lies inside the quadratic core.
+    """
+    from adam_core import _rust_native
+
+    return float(
+        _rust_native.robust_cost_numpy(
+            np.ascontiguousarray(residuals, dtype=np.float64), loss, f_scale
+        )
+    )
+
+
+def _robust_weights(
+    residuals: npt.NDArray[np.float64], loss: str, f_scale: float
+) -> npt.NDArray[np.float64]:
+    """
+    Iteratively-reweighted-least-squares weight ``rho'(z)`` of each whitened
+    residual component at the solution: 1 inside the quadratic core and
+    ``f_scale / |r|`` in the linear tail (Huber's psi(r) / r). All ones for
+    ``"linear"``.
+    """
+    from adam_core import _rust_native
+
+    return np.asarray(
+        _rust_native.robust_weights_numpy(
+            np.ascontiguousarray(residuals, dtype=np.float64), loss, f_scale
+        ),
+        dtype=np.float64,
+    )
+
+
+def _robust_jacobian_scale(
+    residuals: npt.NDArray[np.float64], loss: str, f_scale: float
+) -> npt.NDArray[np.float64]:
+    """
+    Row scaling that turns the Jacobian of the whitened residual vector into
+    the Gauss-Newton Jacobian of the robust cost, following the convention of
+    `scipy.optimize.least_squares` (``sqrt(rho' + 2 rho'' r**2)``, floored at
+    machine epsilon). For ``"linear"`` this is all ones. For ``"huber"`` the
+    second derivative of the loss vanishes in the linear tail, so components
+    beyond ``f_scale`` contribute (numerically) no curvature: the resulting
+    ``inv(J^T J)`` is the covariance of the M-estimate in which downweighted
+    observations carry no information, consistent with the local shape of
+    the robust cost surface probed by `_weak_direction_delta_chi2`.
+    """
+    from adam_core import _rust_native
+
+    return np.asarray(
+        _rust_native.robust_jacobian_scale_numpy(
+            np.ascontiguousarray(residuals, dtype=np.float64), loss, f_scale
+        ),
+        dtype=np.float64,
+    )
+
+
+def _observation_whitening_matrices(
+    observations: OrbitDeterminationObservations,
+) -> npt.NDArray[np.float64]:
+    """
+    Compute per-observation whitening matrices for the angular residuals.
+
+    For each observation, the 2x2 (lon, lat) block of the coordinate
+    covariance is corrected for cos(latitude) on the longitude axis (matching
+    the convention used by `Residuals.calculate`) and factored as C = L L^T.
+    The returned whitener is L^-1: applied to the cos(latitude)-corrected
+    (lon, lat) residual vector it yields two components whose sum of squares
+    equals the observation's chi2 (Mahalanobis distance squared).
+
+    Missing (NaN) cross terms are treated as zero, matching the convention in
+    `~adam_core.coordinates.residuals.calculate_chi2`.
+
+    Parameters
+    ----------
+    observations : `OrbitDeterminationObservations` (N)
+        Observations whose covariances to factor.
+
+    Returns
+    -------
+    whiteners : `~numpy.ndarray` (N, 2, 2)
+        Inverse lower-triangular Cholesky factor per observation.
+
+    Raises
+    ------
+    ValueError
+        If any observation has non-finite angular variances or a
+        non-positive-definite (lon, lat) covariance block.
+    """
+    from adam_core import _rust_native
+
+    return np.asarray(
+        _rust_native.observation_whitening_matrices_numpy(
+            np.ascontiguousarray(
+                observations.coordinates.covariance.to_matrix(), dtype=np.float64
+            ),
+            np.ascontiguousarray(
+                observations.coordinates.lat.to_numpy(zero_copy_only=False),
+                dtype=np.float64,
+            ),
+            observations.id.to_pylist(),
+        ),
+        dtype=np.float64,
+    )
+
+
+def _whiten_residual_pairs(
+    whiteners: npt.NDArray[np.float64], residual_pairs: npt.NDArray[np.float64]
+) -> npt.NDArray[np.float64]:
+    """Flat (2N,) whitened components from (N, 2) cos(lat)-corrected residuals."""
+    from adam_core import _rust_native
+
+    return np.asarray(
+        _rust_native.whiten_residual_pairs_numpy(
+            np.ascontiguousarray(whiteners, dtype=np.float64),
+            np.ascontiguousarray(residual_pairs, dtype=np.float64),
+        ),
+        dtype=np.float64,
+    )
+
+
+def residual_function(
+    state_vector: npt.NDArray[np.float64],
+    mjd_tdb: float,
+    observations: OrbitDeterminationObservations,
+    propagator: Propagator,
+) -> npt.NDArray[np.float64]:
+    """
+    Compute the whitened angular residuals for a given Cartesian orbit with
+    respect to a set of observations.
+
+    Parameters
+    ----------
+    state_vector : `~numpy.ndarray` (6,)
+        Heliocentric ecliptic state vector of the orbit in Cartesian
+        coordinates.
+    mjd_tdb : float
+        Time of the state vector in MJD TDB.
+    observations : `~adam_core.orbit_determination.OrbitDeterminationObservations` (N)
+        Observations to compute residuals for.
+    propagator : `~adam_core.propagator.Propagator`
+        Propagator to use to generate ephemeris.
+
+    Returns
+    -------
+    residuals : `~numpy.ndarray` (2N,)
+        Whitened (lon, lat) residual components, two per observation: the
+        cos(latitude)-corrected (observed - predicted) angular residual
+        multiplied by the inverse Cholesky factor of the matching observation
+        covariance block. The sum of squares over one observation's pair
+        equals that observation's chi2 (Mahalanobis distance squared), so the
+        least-squares objective matches the historical per-observation
+        sqrt(chi2) convention while remaining differentiable at zero residual
+        and preserving the direction of each residual on the sky.
+    """
+    # Generate ephemeris and compute residuals
+    orbit = Orbits.from_kwargs(
+        coordinates=CartesianCoordinates.from_kwargs(
+            x=state_vector[0:1],
+            y=state_vector[1:2],
+            z=state_vector[2:3],
+            vx=state_vector[3:4],
+            vy=state_vector[4:5],
+            vz=state_vector[5:6],
+            time=Timestamp.from_mjd([mjd_tdb], scale="tdb"),
+            origin=Origin.from_kwargs(code=["SUN"]),
+            frame="ecliptic",
+        )
+    )
+    ephemeris = propagator.generate_ephemeris(
+        orbit, observations.observers, max_processes=1
+    )
+    residuals = Residuals.calculate(observations.coordinates, ephemeris.coordinates)
+
+    # Residuals.calculate returns (observed - predicted) values with the
+    # longitude residual wrapped to [-180, 180] and cos(latitude)-corrected.
+    # Whitening those (lon, lat) pairs with the matching covariance factor
+    # yields components r such that sum(r**2) == sum(chi2).
+    values = residuals.to_array()[:, 1:3]
+    whiteners = _observation_whitening_matrices(observations)
+    return _whiten_residual_pairs(whiteners, values)
+
+
+def _analytic_jacobian_terms(
+    observations: OrbitDeterminationObservations,
+) -> dict[str, Any]:
+    """
+    Precompute the observation-dependent constants of the analytic 2-body
+    Jacobian: observation times, barycentric observer and Sun states, and the
+    whitening factors, all handed to the Rust autodiff kernel.
+    """
+    observers = observations.observers
+    times_tdb = observers.coordinates.time.rescale("tdb")
+    times = times_tdb.mjd().to_numpy(zero_copy_only=False)
+    observer_states = transform_coordinates(
+        observers.coordinates,
+        CartesianCoordinates,
+        frame_out="ecliptic",
+        origin_out=OriginCodes.SOLAR_SYSTEM_BARYCENTER,
+    ).values
+    sun_states = get_perturber_state(
+        OriginCodes.SUN,
+        times_tdb,
+        frame="ecliptic",
+        origin=OriginCodes.SOLAR_SYSTEM_BARYCENTER,
+    ).values
+    lat = observations.coordinates.lat.to_numpy(zero_copy_only=False)
+    cos_lats = np.cos(np.radians(lat))
+    whiteners = _observation_whitening_matrices(observations)
+
+    return {
+        "n": len(observations),
+        "times": np.ascontiguousarray(times, dtype=np.float64),
+        "observer_states": np.ascontiguousarray(observer_states, dtype=np.float64),
+        "sun_states": np.ascontiguousarray(sun_states, dtype=np.float64),
+        "cos_lats": np.ascontiguousarray(cos_lats, dtype=np.float64),
+        "whiteners": np.ascontiguousarray(whiteners, dtype=np.float64),
+        "mu_helio": float(Origin.from_kwargs(code=["SUN"]).mu()[0]),
+        "mu_bary": float(Origin.from_kwargs(code=["SOLAR_SYSTEM_BARYCENTER"]).mu()[0]),
+    }
+
+
+def _analytic_jacobian(
+    state_vector: npt.NDArray[np.float64],
+    epoch_mjd_tdb: float,
+    terms: dict[str, Any],
+) -> npt.NDArray[np.float64]:
+    """
+    Analytic-quality Jacobian of the whitened residual vector with respect to
+    the epoch state: d(obs)/dx(t) chained through the 2-body state transition
+    matrix, computed by forward-mode automatic differentiation in the Rust
+    backend (``whitened_2body_jacobian``). Residuals are (observed -
+    predicted), hence the negation of the model Jacobian is already applied.
+    """
+    from adam_core import _rust_native
+
+    return np.asarray(
+        _rust_native.whitened_2body_jacobian_numpy(
+            np.ascontiguousarray(state_vector, dtype=np.float64),
+            float(epoch_mjd_tdb),
+            terms["times"],
+            terms["observer_states"],
+            terms["sun_states"],
+            terms["cos_lats"],
+            terms["whiteners"],
+            terms["mu_helio"],
+            terms["mu_bary"],
+        ),
+        dtype=np.float64,
+    )
+
+
+def _native_problem(
+    orbit: Orbits, observations: OrbitDeterminationObservations
+) -> tuple[bytes, bytes, bytes]:
+    """The orbit, observed coordinates and observers as the nested Arrow IPC
+    bytes the Rust OD drivers decode, with the SPICE backend ready."""
+    from ..._rust.arrow import ensure_spice_backend
+    from ...orbits.arrow_bridge import (
+        coordinates_to_ipc,
+        observers_to_ipc,
+        orbits_to_ipc,
+    )
+
+    ensure_spice_backend()
+    return (
+        orbits_to_ipc(orbit),
+        coordinates_to_ipc(observations.coordinates, "spherical"),
+        observers_to_ipc(observations.observers),
+    )
+
+
+def _orbit_at(state_vector: npt.NDArray[np.float64], mjd_tdb: float) -> Orbits:
+    """A heliocentric ecliptic `Orbits` row for a state at an epoch."""
+    return Orbits.from_kwargs(
+        orbit_id=["probe"],
+        coordinates=CartesianCoordinates.from_kwargs(
+            x=state_vector[0:1],
+            y=state_vector[1:2],
+            z=state_vector[2:3],
+            vx=state_vector[3:4],
+            vy=state_vector[4:5],
+            vz=state_vector[5:6],
+            time=Timestamp.from_mjd([mjd_tdb], scale="tdb"),
+            origin=Origin.from_kwargs(code=["SUN"]),
+            frame="ecliptic",
+        ),
+    )
+
+
+def _probe_covariance(
+    covariance_matrix: npt.NDArray[np.float64],
+    jacobian_method: str,
+    state_vector: npt.NDArray[np.float64],
+    mjd_tdb: float,
+    observations: OrbitDeterminationObservations,
+    propagator: Propagator,
+    loss: str,
+    f_scale: float,
+) -> dict[str, Any]:
+    """Run adam-core's Rust covariance probe over the provider capsule."""
+    from adam_core import _rust_native
+
+    method = "2-point" if jacobian_method == "solver" else jacobian_method
+    output = _rust_native.validate_fit_covariance_ipc(
+        native_propagator(propagator),
+        *_native_problem(_orbit_at(state_vector, mjd_tdb), observations),
+        [False] * len(observations),
+        np.ascontiguousarray(covariance_matrix, dtype=np.float64).reshape(6, 6),
+        jacobian=method,
+        fit_settings={"loss": loss, "f_scale": f_scale},
+    )
+    if not isinstance(output, dict):
+        raise TypeError("native covariance probe must return a dictionary")
+    typed_output: dict[str, Any] = {}
+    for key, value in output.items():
+        if not isinstance(key, str):
+            raise TypeError("native covariance probe keys must be strings")
+        typed_output[key] = value
+    return typed_output
+
+
+def _weak_direction_delta_chi2(
+    state_vector: npt.NDArray[np.float64],
+    mjd_tdb: float,
+    observations: OrbitDeterminationObservations,
+    propagator: Propagator,
+    covariance_matrix: npt.NDArray[np.float64],
+    cost_solution: float,
+    loss: str = "linear",
+    f_scale: float = 1.0,
+) -> float:
+    """
+    Measure the actual change in the fit cost at a 1-sigma displacement along
+    the covariance's weakest-constrained direction (the Rust probe of
+    `fit_least_squares`; ``cost_solution`` is recomputed natively and kept
+    for signature compatibility).
+
+    If the covariance is trustworthy and the solution sits at the minimum of a
+    locally quadratic cost surface, this is ~1 by construction. Values far
+    below 1 reproduce the fabricated-confidence failure mode where the cost
+    valley is flat over many claimed sigma; values far above 1 indicate the
+    covariance overstates the uncertainty. NaN when the probe could not be
+    evaluated.
+    """
+    del cost_solution
+    output = _probe_covariance(
+        covariance_matrix,
+        "central",
+        state_vector,
+        mjd_tdb,
+        observations,
+        propagator,
+        loss,
+        f_scale,
+    )
+    return float(output["delta_cost"])
+
+
+def _validated_covariance(
+    covariance_matrix: npt.NDArray[np.float64],
+    jacobian_method: str,
+    state_vector: npt.NDArray[np.float64],
+    mjd_tdb: float,
+    observations: OrbitDeterminationObservations,
+    propagator: Propagator,
+    cost_solution: float,
+    loss: str = "linear",
+    f_scale: float = 1.0,
+    residuals_solution: npt.NDArray[np.float64] | None = None,
+) -> npt.NDArray[np.float64]:
+    """
+    The weak-direction consistency check on a fit covariance, as the Rust
+    driver of `fit_least_squares` runs it: for the analytic Jacobian a failed
+    check falls back to the central-difference covariance (the signature of
+    dynamics inside the arc, such as a planetary encounter, that the 2-body
+    state transition matrix does not capture); other Jacobians only warn. The
+    driver's diagnostics are re-emitted as `RuntimeWarning`s.
+    ``cost_solution`` and ``residuals_solution`` are recomputed natively and
+    kept for signature compatibility.
+    """
+    del cost_solution, residuals_solution
+    output = _probe_covariance(
+        covariance_matrix,
+        jacobian_method,
+        state_vector,
+        mjd_tdb,
+        observations,
+        propagator,
+        loss,
+        f_scale,
+    )
+    _emit_native_warnings(output)
+    return np.asarray(output["covariance"], dtype=np.float64)
+
+
+def _member_weights(
+    observations: OrbitDeterminationObservations,
+    included_mask: Optional[pa.Array],
+    included_weights: npt.NDArray[np.float64],
+) -> npt.NDArray[np.float64]:
+    """Per-observation weights in `observations` order: 0 for ignored rows."""
+    weights = np.zeros(len(observations), dtype=np.float64)
+    if included_mask is not None:
+        weights[included_mask.to_numpy(zero_copy_only=False)] = included_weights
+    else:
+        weights[:] = included_weights
+    return weights
+
+
+def _fitted_tables_from_native_output(
+    orbit: Orbits,
+    observations: OrbitDeterminationObservations,
+    output: dict[str, Any],
+    weights: npt.NDArray[np.float64],
+) -> Tuple[FittedOrbits, FittedOrbitMembers]:
+    """
+    Wrap the dict adam-core's native Rust fit driver returns (state,
+    covariance, solver diagnostics and the evaluation over the full
+    observation set) into `FittedOrbits` / `FittedOrbitMembers` without
+    further computation. ``weights`` are the members' effective weights in
+    `observations` order.
+    """
+    state = np.asarray(output["state"], dtype=np.float64)
+    covariance_matrix = np.asarray(output["covariance"], dtype=np.float64)
+    success = bool(output["success"])
+    fitted_orbit = FittedOrbits.from_kwargs(
+        orbit_id=orbit.orbit_id,
+        object_id=orbit.object_id,
+        physical_parameters=orbit.physical_parameters,
+        non_gravitational_parameters=orbit.non_gravitational_parameters,
+        coordinates=CartesianCoordinates.from_kwargs(
+            x=state[0:1],
+            y=state[1:2],
+            z=state[2:3],
+            vx=state[3:4],
+            vy=state[4:5],
+            vz=state[5:6],
+            time=orbit.coordinates.time,
+            covariance=CoordinateCovariances.from_matrix(
+                covariance_matrix.reshape(1, 6, 6)
+            ),
+            origin=orbit.coordinates.origin,
+            frame=orbit.coordinates.frame,
+        ),
+        arc_length=[output["arc_length"]],
+        num_obs=[output["num_obs"]],
+        chi2=[output["chi2"]],
+        reduced_chi2=[output["reduced_chi2"]],
+        iterations=[output["iterations"]],
+        optimizer_iterations=[output["optimizer_iterations"]],
+        success=[success],
+        status_code=[int(output["status_code"])],
+    )
+    residuals = Residuals.from_kwargs(
+        values=np.asarray(output["residual_values"], dtype=np.float64).tolist(),
+        chi2=output["residual_chi2"],
+        dof=output["residual_dof"],
+        probability=output["residual_probability"],
+    )
+    outlier = np.asarray(output["outlier"], dtype=bool)
+    fitted_orbit_members = FittedOrbitMembers.from_kwargs(
+        orbit_id=np.full(len(observations), orbit.orbit_id[0].as_py(), dtype="object"),
+        obs_id=observations.id,
+        residuals=residuals,
+        solution=output["solution"],
+        outlier=outlier,
+        weight=np.asarray(weights, dtype=np.float64),
+    )
+    return fitted_orbit, fitted_orbit_members
+
+
+def fit_least_squares(
+    orbit: Orbits,
+    observations: OrbitDeterminationObservations,
+    propagator: Propagator,
+    ignore: Optional[List[str]] = None,
+    jacobian: JacobianName = OD_DEFAULTS["fit"]["jacobian"],
+    validate_covariance: bool = OD_DEFAULTS["fit"]["validate_covariance"],
+    loss: LossType = OD_DEFAULTS["fit"]["loss"],
+    f_scale: float = HUBER_F_SCALE_DEFAULT,
+    **kwargs: object,
+) -> Tuple[FittedOrbits, FittedOrbitMembers]:
+    """
+    Differentially correct an orbit using (optionally robust) least squares.
+
+    Parameters
+    ----------
+    orbit : `~adam_core.orbits.Orbits` (1)
+        Orbit to differentially correct (heliocentric ecliptic Cartesian).
+    observations : `~adam_core.orbit_determination.OrbitDeterminationObservations` (N)
+        Observations.
+    propagator : `~adam_core.propagator.Propagator`
+        Propagator to use to generate ephemeris.
+    ignore : list of str
+        List of observation IDs to ignore when fitting the orbit with least squares.
+        These observations will be marked as outliers in the fitted orbit members.
+    jacobian : {"auto", "analytic", "propagator", "central", "2-point"}, optional
+        How the residual Jacobian is obtained for both the solver and the
+        solution covariance.
+
+        - ``"auto"`` (default): derivatives that follow the selected
+          dynamics: ``"analytic"`` when the propagator declares two-body
+          dynamics (``Propagator.two_body_dynamics``), ``"propagator"`` when
+          its native backend supplies state-transition matrices, ``"central"``
+          otherwise.
+        - ``"propagator"``: the propagation backend's own state-transition
+          matrices chained through the exact light-time and projection
+          derivatives: exact for that backend's dynamics, at about the cost
+          of one propagation per iteration.
+        - ``"analytic"``: the observation partials (topocentric
+          spherical projection including light time) chained with the 2-body
+          state transition matrix, computed by forward-mode automatic
+          differentiation inside adam-core's native trust-region solver.
+          Residual values remain full N-body through `propagator`. This
+          removes the finite-difference noise that fabricates curvature — and
+          hence collapses the covariance — in weakly constrained
+          (line-of-sight) directions, and improves convergence along flat
+          chi2 valleys.
+        - ``"central"``: the solver and final covariance use a
+          central-difference
+          Jacobian of the whitened residual vector through the full residual
+          pipeline. Use this when the arc contains dynamics the 2-body state
+          transition matrix cannot represent (e.g. a deep planetary
+          encounter).
+        - ``"2-point"``: legacy behavior; the covariance is taken from the
+          solver's forward-difference Jacobian. Retained for comparison; its
+          covariance is untrustworthy in weakly constrained directions. The
+          canonical adam-core Rust solver implements this path over the same
+          selected propagation capsule as every other Jacobian mode.
+
+    validate_covariance : bool, optional
+        If True (default), measure the actual chi2 change at a 1-sigma
+        displacement along the covariance's weakest direction (two extra
+        residual evaluations) and check it is ~1. On failure the analytic
+        path falls back to the central-difference covariance; other paths
+        emit a `RuntimeWarning`. This also serves as the guard against
+        planetary encounters inside the arc invalidating the 2-body state
+        transition matrix. The check remains inside the single adam-core
+        native workflow call; pass ``False`` to omit the extra predictions.
+    loss : {"linear", "huber"}, optional
+        Loss applied to the whitened residual components.
+
+        - ``"linear"`` (default): ordinary weighted least squares; the
+          objective is chi2. Outliers are handled only by hard rejection
+          (``ignore`` here, the rejection loop in `iterative_fit`).
+        - ``"huber"``: Huber's M-estimator. Components within ``f_scale``
+          (1-sigma units) contribute quadratically, larger ones linearly, so
+          a gross outlier's pull on the solution is bounded instead of
+          growing with its residual. No observation is removed: every
+          observation stays in the solution with an iteratively-reweighted
+          least-squares weight of ``min(1, f_scale / |r|)`` per component,
+          reported on the members (see Notes).
+    f_scale : float, optional
+        Huber transition point in units of whitened (1-sigma) residual
+        components. Default `HUBER_F_SCALE_DEFAULT` (1.345), the classical
+        constant giving 95% asymptotic efficiency for Gaussian errors.
+        Ignored for ``loss="linear"``.
+    **kwargs
+        Solver settings forwarded to the Rust driver: ``xtol``, ``ftol``,
+        ``gtol`` (default 1e-12 each, using the documented native stopping rules),
+        ``max_iterations``
+        (positive integer, default 100: optimizer iterations, one Jacobian
+        each), and ``max_nfev`` (positive integer or None, default None:
+        every residual-vector evaluation: the initial state, each accepted or
+        rejected trial, and finite-difference Jacobian columns (six forward or
+        twelve central per iteration). The ``iterations`` column reports that
+        count and ``optimizer_iterations`` reports completed Jacobian/step
+        iterations. Final covariance calculation/validation and fit reporting
+        are outside both limits.
+        Any other keyword raises a `ValueError`: the fit runs natively and no
+        longer forwards arguments to `scipy.optimize.least_squares`.
+
+    Returns
+    -------
+    fitted_orbit : `~adam_core.orbit_determination.FittedOrbits` (1)
+        Fitted orbit.
+    fitted_orbit_members : `~adam_core.orbit_determination.FittedOrbitMembers` (N)
+        Fitted orbit members. ``weight`` holds each observation's effective
+        weight in the solution: 0 for ignored observations, 1 for fully
+        weighted ones and, for ``loss="huber"``, the smaller of the two
+        per-component Huber weights for downweighted observations.
+
+    Notes
+    -----
+    **Solver contract.** The optimizer is adam-core's native unbounded
+    trust-region Gauss-Newton method. Parameters are scaled by their Jacobian
+    column norms, each iteration takes the exact trust-region step of the
+    scaled Gauss-Newton model, a step is accepted when the cost decreases,
+    and the region shrinks fourfold on a poor actual-to-predicted reduction
+    ratio (or a failed / non-finite prediction) and doubles on a good one at
+    the boundary. ``status_code`` reports why the solver stopped and
+    ``success`` is ``status_code > 0``: ``1`` the scaled gradient
+    (``max |g_k| / scale_k``) fell below ``gtol``; ``2`` an accepted step
+    reduced the cost by less than ``ftol * cost`` with ratio above 0.25;
+    ``3`` an accepted step, or a rejected step after the region shrank, was
+    below ``xtol * (xtol + |x|)``; ``4`` both; ``0`` ``max_iterations`` or
+    ``max_nfev`` was reached first; ``-1`` no step decreased the cost while
+    the region was above the ``xtol`` resolution (stalled); ``-2`` the
+    Jacobian or gradient was non-finite at the current iterate. A non-finite
+    quantity never produces ``success=True``. With ``jacobian="analytic"``
+    on a propagator that is not two-body the Jacobian is inexact and the
+    solver converges to that Jacobian's fixed point rather than the cost
+    minimum (see `Propagator.two_body_dynamics`); ``jacobian="central"`` is
+    exact for any propagator. The legacy ``iterations`` output column records
+    every solver residual-vector evaluation, including numerical Jacobians,
+    rather than optimizer iterations; ``optimizer_iterations`` reports the
+    latter. Approximate/exact propagator-Jacobian phases and analytic-to-central
+    fallback share the remaining budgets. Rejection loops receive a fresh
+    budget for each distinct fit.
+
+    With ``loss="huber"`` the reported ``chi2`` / ``reduced_chi2`` remain the
+    plain (unweighted) chi2 of the included observations, so they stay
+    comparable across losses; the minimized robust cost is not stored. The
+    covariance is ``inv(J^T J)`` of the Gauss-Newton Jacobian of the robust
+    cost (the convention of `scipy.optimize.least_squares`): components in
+    the linear tail of the loss contribute no curvature, i.e. downweighted
+    observations carry no information in the covariance, and the
+    weak-direction consistency check probes the robust cost instead of chi2.
+    """
+    assert len(orbit) == 1, "Only one orbit can be differentially corrected"
+    if np.isfinite(observations.coordinates.rho.to_numpy(zero_copy_only=False)).any():
+        raise ValueError("orbit determination requires angular observations")
+    _validate_loss(loss, f_scale)
+    if jacobian not in ("auto", "analytic", "propagator", "central", "2-point"):
+        raise ValueError(
+            f"jacobian must be one of 'auto', 'analytic', 'propagator', 'central', "
+            f"'2-point'; got {jacobian!r}"
+        )
+
+    # TODO: Investigate whether we want to add fitting for the epoch as well
+    # Set up least squares problem
+    mask = (
+        pc.invert(pc.is_in(observations.id, pa.array(ignore)))
+        if ignore is not None
+        else None
+    )
+
+    unsupported = set(kwargs) - _FUSED_WHITENED_KWARGS - _NATIVE_FIT_KWARGS
+    if unsupported:
+        raise ValueError(
+            "fit_least_squares runs the Rust solver and accepts only the solver "
+            "settings xtol, ftol, gtol, max_nfev, max_iterations; got "
+            + ", ".join(f"{key}={kwargs[key]!r}" for key in sorted(unsupported))
+        )
+
+    _warn_if_analytic_jacobian_mismatches(propagator, jacobian)
+
+    # adam-core owns the complete native fit.  The backend contributes only
+    # its capsule-backed propagation and optional derivative capabilities.
+    from adam_core import _rust_native
+
+    ignore_mask = (
+        [False] * len(observations) if mask is None else pc.invert(mask).to_pylist()
+    )
+    output = _rust_native.fit_orbit_whitened_ipc(
+        native_propagator(propagator),
+        *_native_problem(orbit, observations),
+        ignore_mask,
+        fit_settings=_fit_settings(
+            loss, f_scale, jacobian, validate_covariance, kwargs
+        ),
+    )
+    _emit_native_warnings(output)
+    return _fitted_tables_from_native_output(
+        orbit, observations, output, np.asarray(output["weights"], dtype=np.float64)
+    )
+
+
+def iterative_fit(
+    orbit: Orbits,
+    observations: OrbitDeterminationObservations,
+    propagator: Propagator,
+    rchi2_threshold: float = OD_DEFAULTS["worst_residual"]["rchi2_threshold"],
+    min_obs: int = OD_DEFAULTS["worst_residual"]["min_obs"],
+    min_arc_length: float = OD_DEFAULTS["worst_residual"]["min_arc_length"],
+    contamination_percentage: float = OD_DEFAULTS["worst_residual"][
+        "contamination_percentage"
+    ],
+    loss: LossType = OD_DEFAULTS["fit"]["loss"],
+    f_scale: float = HUBER_F_SCALE_DEFAULT,
+    **kwargs: object,
+) -> Tuple[FittedOrbits, FittedOrbitMembers]:
+    """
+    Iteratively fit an orbit using least squares with outlier rejection.
+
+    Wraps `fit_least_squares` with an outlier rejection loop: after each fit,
+    if the reduced chi2 exceeds `rchi2_threshold`, the observation with the
+    worst residual is removed and the fit is repeated. This continues until
+    the fit converges, no more outliers are allowed, or arc length / minimum
+    observation constraints would be violated.
+
+    Parameters
+    ----------
+    orbit : `~adam_core.orbits.Orbits` (1)
+        Initial orbit to differentially correct.
+    observations : `~adam_core.orbit_determination.OrbitDeterminationObservations` (N)
+        Observations to fit against.
+    propagator : `~adam_core.propagator.Propagator`
+        Propagator to use to generate ephemeris.
+    rchi2_threshold : float, optional
+        Reduced chi2 threshold below which the fit is considered converged.
+        Default is 10.0.
+    min_obs : int, optional
+        Minimum number of observations required to retain the fit.
+        Default is 6.
+    min_arc_length : float, optional
+        Minimum arc length in days required to retain the fit.
+        Default is 1.0.
+    contamination_percentage : float, optional
+        Maximum percentage of observations that may be rejected as outliers.
+        Range is [0, 100]. Default is 20.0.
+    loss : {"linear", "huber"}, optional
+        Loss used by every `fit_least_squares` call. ``"huber"`` bounds the
+        influence of large residuals by downweighting them instead of (or in
+        addition to) removing observations; see `fit_least_squares`. To use
+        Huber M-estimation as the sole outlier treatment, pass
+        ``contamination_percentage=0.0`` so that the hard-rejection loop is
+        disabled; with a non-zero contamination the two compose (a robust fit
+        at every pass, with observations still removed while the reduced chi2
+        exceeds ``rchi2_threshold``).
+    f_scale : float, optional
+        Huber transition point in units of whitened (1-sigma) residual
+        components; see `fit_least_squares`. Ignored for ``loss="linear"``.
+    **kwargs
+        Fit settings forwarded to every pass: ``jacobian``,
+        ``validate_covariance`` and the solver tolerances of
+        `fit_least_squares`. Any other keyword raises a `ValueError`.
+
+    Returns
+    -------
+    fitted_orbit : `~adam_core.orbit_determination.FittedOrbits` (1)
+        Best fitted orbit found: the lowest reduced chi2 among the passes
+        whose fit succeeded (converged) or, if none did, the lowest reduced
+        chi2 overall (``success`` is then False).
+    fitted_orbit_members : `~adam_core.orbit_determination.FittedOrbitMembers` (N)
+        Fitted orbit members with residuals, outlier flags and weights.
+    """
+    assert len(orbit) == 1, "Only one orbit can be iteratively fitted"
+
+    unsupported = set(kwargs) - _FUSED_LOOP_KWARGS - _NATIVE_FIT_KWARGS
+    if unsupported:
+        raise ValueError(
+            "iterative_fit runs the Rust rejection loop and accepts only the fit "
+            "settings jacobian, validate_covariance, xtol, ftol, gtol, max_nfev, "
+            "max_iterations; got "
+            + ", ".join(f"{key}={kwargs[key]!r}" for key in sorted(unsupported))
+        )
+    jacobian = kwargs.get("jacobian", OD_DEFAULTS["fit"]["jacobian"])
+    validate_covariance = kwargs.get("validate_covariance", True)
+    if not isinstance(jacobian, str):
+        raise TypeError("jacobian must be a string")
+    if not isinstance(validate_covariance, bool):
+        raise TypeError("validate_covariance must be bool")
+    fit_settings = _fit_settings(
+        loss,
+        f_scale,
+        jacobian,
+        validate_covariance,
+        kwargs,
+    )
+    _warn_if_analytic_jacobian_mismatches(propagator, fit_settings["jacobian"])
+    loop_settings = dict(
+        rchi2_threshold=rchi2_threshold,
+        min_obs=min_obs,
+        min_arc_length=min_arc_length,
+        contamination_percentage=contamination_percentage,
+    )
+
+    from adam_core import _rust_native
+
+    output = _rust_native.iterative_fit_ipc(
+        native_propagator(propagator),
+        *_native_problem(orbit, observations),
+        fit_settings=fit_settings,
+        **loop_settings,
+    )
+    _emit_native_warnings(output)
+    return _fitted_tables_from_native_output(
+        orbit, observations, output, np.asarray(output["weights"], dtype=np.float64)
+    )
+
+
+# Private implementation aliases retained only for Core's internal stage code.
+_fit_least_squares = fit_least_squares
+_iterative_fit = iterative_fit

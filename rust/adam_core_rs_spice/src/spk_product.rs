@@ -459,3 +459,66 @@ pub fn write_orbits_spk(
     write_spk_writers_atomic(&writers, output)?;
     Ok(mappings)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn large_window_chebyshev_fit_preserves_known_coefficients() {
+        const SAMPLE_COUNT: usize = 4097;
+        const DEGREE: usize = 15;
+        let window_start = 1_000.0;
+        let window_end = window_start + (SAMPLE_COUNT - 1) as f64;
+        let mut states = vec![[0.0; 6]; SAMPLE_COUNT];
+        let mut epochs = Vec::with_capacity(SAMPLE_COUNT);
+        for (row, state) in states.iter_mut().enumerate() {
+            let scaled = -1.0 + 2.0 * row as f64 / (SAMPLE_COUNT - 1) as f64;
+            let chebyshev_two = 2.0 * scaled * scaled - 1.0;
+            epochs.push(window_start + row as f64);
+            for (component, value) in state.iter_mut().enumerate() {
+                let component_number = (component + 1) as f64;
+                let expected_spk_value = 100_000.0 * component_number
+                    - 1_000.0 * component_number * scaled
+                    + 25.0 * component_number * chebyshev_two;
+                let unit_scale = if component < 3 {
+                    KM_PER_AU
+                } else {
+                    KM_PER_AU / SECONDS_PER_DAY
+                };
+                *value = expected_spk_value / unit_scale;
+            }
+        }
+
+        let fit = fit_chebyshev(
+            &states,
+            &epochs,
+            window_start,
+            window_end,
+            DEGREE,
+            None,
+            None,
+        )
+        .expect("large-window SVD fit");
+
+        assert_eq!(fit.mid_time, (window_start + window_end) / 2.0);
+        assert_eq!(fit.half_interval, (window_end - window_start) / 2.0);
+        for component in 0..6 {
+            let component_number = (component + 1) as f64;
+            for coefficient in 0..=DEGREE {
+                let expected = match coefficient {
+                    0 => 100_000.0 * component_number,
+                    1 => -1_000.0 * component_number,
+                    2 => 25.0 * component_number,
+                    _ => 0.0,
+                };
+                let actual = fit.coefficients[component * (DEGREE + 1) + coefficient];
+                let tolerance = 2.0e-7 + expected.abs() * 2.0e-12;
+                assert!(
+                    (actual - expected).abs() <= tolerance,
+                    "component {component} coefficient {coefficient}: {actual} != {expected}"
+                );
+            }
+        }
+    }
+}

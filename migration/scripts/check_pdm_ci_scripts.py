@@ -19,7 +19,26 @@ from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PYPROJECT = REPO_ROOT / "pyproject.toml"
+UV_LOCK = REPO_ROOT / "uv.lock"
 WORKFLOW_DIR = REPO_ROOT / ".github" / "workflows"
+RELEASE_WORKFLOW = WORKFLOW_DIR / "release-candidate-wheel-matrix.yml"
+TIER1_WORKFLOW = WORKFLOW_DIR / "tier1-dependent-smoke.yml"
+RUST_CRATE_WORKFLOW = WORKFLOW_DIR / "rust-crate-release-candidate.yml"
+EXPECTED_BUILD_TOOLS = [
+    "maturin==1.15.0",
+    "packaging==25.0",
+    "ziglang==0.17.0",
+]
+EXPECTED_MANYLINUX_TARGETS = [
+    "x86_64-unknown-linux-gnu",
+    "aarch64-unknown-linux-gnu",
+]
+PDM_WHEEL_SCRIPTS = {
+    "wheel-build",
+    "rust-build",
+    "wheel-inspect",
+    "release-build-environment-check",
+}
 
 STALE_REFERENCES = (
     "src/adam_core/tests/test_rust_orbit_determination.py",
@@ -70,9 +89,12 @@ OUTPUT_PREFIXES = (
 )
 
 
-def _load_scripts() -> dict[str, Any]:
-    data = tomllib.loads(PYPROJECT.read_text(encoding="utf-8"))
-    scripts = data.get("tool", {}).get("pdm", {}).get("scripts", {})
+def _load_project() -> dict[str, Any]:
+    return tomllib.loads(PYPROJECT.read_text(encoding="utf-8"))
+
+
+def _load_scripts(project: dict[str, Any]) -> dict[str, Any]:
+    scripts = project.get("tool", {}).get("pdm", {}).get("scripts", {})
     if not isinstance(scripts, dict):
         raise SystemExit("[tool.pdm.scripts] is missing or not a table")
     return scripts
@@ -179,6 +201,10 @@ def _workflow_pdm_run_failures(
     failures: list[str] = []
     for match in re.finditer(r"\bpdm\s+run\s+([A-Za-z0-9_.:-]+)", text):
         script = match.group(1)
+        if script == "python":
+            # `pdm run python` deliberately selects the installed project
+            # interpreter; unlike other names it is an executable, not a script.
+            continue
         if script not in script_names:
             failures.append(f"{source}: `pdm run {script}` has no matching PDM script")
     return failures
@@ -324,6 +350,332 @@ def _required_script_output_failures(scripts: dict[str, Any]) -> list[str]:
     return failures
 
 
+def _job_prefix(text: str, offset: int) -> str:
+    starts = [
+        match.start()
+        for match in re.finditer(r"(?m)^  [A-Za-z0-9_-]+:\s*$", text[:offset])
+    ]
+    return text[starts[-1] : offset] if starts else text[:offset]
+
+
+def _selects_build_group(command: str) -> bool:
+    tokens = _tokens(command)
+    return any(
+        (
+            token in {"-G", "--group"}
+            and index + 1 < len(tokens)
+            and tokens[index + 1] == "build"
+        )
+        or token in {"-Gbuild", "--group=build"}
+        for index, token in enumerate(tokens)
+    )
+
+
+def _workflow_build_dependency_failures(source: str, text: str) -> list[str]:
+    failures: list[str] = []
+    for match in re.finditer(
+        r"\bpdm\s+run\s+(wheel-build|rust-build|wheel-inspect|release-build-environment-check)\b",
+        text,
+    ):
+        prefix = _job_prefix(text, match.start())
+        installs = re.findall(r"(?m)^\s*run:\s*(pdm install[^\n]*)$", prefix)
+        if not installs or not any(
+            _selects_build_group(command) for command in installs
+        ):
+            failures.append(
+                f"{source}: `pdm run {match.group(1)}` requires a preceding "
+                "same-job `pdm install ... -G build`"
+            )
+
+    direct = re.compile(
+        r"python migration/scripts/(?:build_release_wheel|check_wheel_artifacts)\.py"
+    )
+    for match in direct.finditer(text):
+        prefix = _job_prefix(text, match.start())
+        if '"packaging==25.0"' not in prefix:
+            failures.append(
+                f"{source}: direct builder/checker invocation requires a preceding "
+                'same-job exact "packaging==25.0" install'
+            )
+
+    for line in text.splitlines():
+        if "pip install" in line and "packaging" in line:
+            if '"packaging==25.0"' not in line:
+                failures.append(
+                    f"{source}: packaging installs must pin exactly "
+                    '"packaging==25.0"'
+                )
+    return failures
+
+
+def _uv_lock_failures(project: dict[str, Any]) -> list[str]:
+    failures: list[str] = []
+    uv = project.get("tool", {}).get("uv", {})
+    if "override-dependencies" in uv:
+        failures.append(
+            "pyproject.toml: self override prevents dependency groups from being locked"
+        )
+    if uv.get("sources", {}).get("adam-core") != {"workspace": True}:
+        failures.append(
+            "pyproject.toml: adam-core must retain its authoritative workspace source"
+        )
+    if not UV_LOCK.is_file():
+        return failures + ["uv.lock is missing"]
+
+    lock = tomllib.loads(UV_LOCK.read_text(encoding="utf-8"))
+    packages = lock.get("package", [])
+    by_name = {package.get("name"): package for package in packages}
+    root = by_name.get("adam-core")
+    if not isinstance(root, dict) or root.get("source") != {"editable": "."}:
+        failures.append("uv.lock: adam-core must resolve to the editable checkout")
+    for name, version in (
+        ("maturin", "1.15.0"),
+        ("packaging", "25.0"),
+        ("ziglang", "0.17.0"),
+    ):
+        package = by_name.get(name)
+        if not isinstance(package, dict):
+            failures.append(f"uv.lock: missing locked build tool {name}=={version}")
+            continue
+        if package.get("version") != version or set(package.get("source", {})) != {
+            "registry"
+        }:
+            failures.append(
+                f"uv.lock: {name} must be registry-locked at exact version {version}"
+            )
+        artifacts = ([package["sdist"]] if "sdist" in package else []) + package.get(
+            "wheels", []
+        )
+        if not artifacts or not all(
+            str(artifact.get("hash", "")).startswith("sha256:")
+            for artifact in artifacts
+        ):
+            failures.append(f"uv.lock: {name} must include registry artifact hashes")
+    nonregistry = [
+        package.get("name")
+        for package in packages
+        if package.get("name") != "adam-core"
+        and set(package.get("source", {})) != {"registry"}
+    ]
+    if nonregistry:
+        failures.append(
+            "uv.lock: non-root packages must be registry-only: "
+            + ", ".join(sorted(str(name) for name in nonregistry))
+        )
+    mpcq = by_name.get("mpcq", {})
+    if not any(
+        dependency.get("name") == "adam-core"
+        for dependency in mpcq.get("dependencies", [])
+    ):
+        failures.append(
+            "uv.lock: test-only mpcq must resolve its adam-core dependency to the root"
+        )
+    return failures
+
+
+def _release_workflow_failures(project: dict[str, Any]) -> list[str]:
+    failures: list[str] = []
+    build_tools = project.get("dependency-groups", {}).get("build")
+    if build_tools != EXPECTED_BUILD_TOOLS:
+        failures.append(
+            "pyproject.toml: build dependency group must equal "
+            f"{EXPECTED_BUILD_TOOLS!r}"
+        )
+    if not RELEASE_WORKFLOW.is_file():
+        return failures + ["release candidate wheel workflow is missing"]
+
+    text = RELEASE_WORKFLOW.read_text(encoding="utf-8")
+    install_marker = "Install audited adam-core wheel builder"
+    builder = "python migration/scripts/build_release_wheel.py"
+    inspector = "python migration/scripts/check_wheel_artifacts.py"
+    if not all(marker in text for marker in (install_marker, builder, inspector)):
+        failures.append("release workflow is missing install/build/inspect steps")
+    else:
+        install_offset = text.index(install_marker)
+        builder_offset = text.index(builder)
+        inspector_offset = text.index(inspector)
+        if not install_offset < builder_offset < inspector_offset:
+            failures.append(
+                "release workflow must install exact build tools before build/inspect"
+            )
+        for tool in EXPECTED_BUILD_TOOLS:
+            pin = f'"{tool}"'
+            if text.count(pin) != 1:
+                failures.append(
+                    f"release workflow must install exact build tool {tool!r} once"
+                )
+            elif not install_offset < text.index(pin) < builder_offset:
+                failures.append(
+                    f"release workflow must install {tool!r} before its first build"
+                )
+    for target in EXPECTED_MANYLINUX_TARGETS:
+        if f"target: {target}" not in text:
+            failures.append(f"release workflow is missing exact Rust target {target}")
+    expected_cells = {
+        "manylinux-x86_64": (
+            "runner: ubuntu-latest",
+            "system: Linux-x86_64",
+            "target: x86_64-unknown-linux-gnu",
+            "wheel_tag: manylinux*x86_64",
+        ),
+        "manylinux-aarch64": (
+            "runner: ubuntu-24.04-arm",
+            "system: Linux-aarch64",
+            "target: aarch64-unknown-linux-gnu",
+            "wheel_tag: manylinux*aarch64",
+        ),
+    }
+    for cell, entries in expected_cells.items():
+        marker = f"- name: {cell}"
+        if marker not in text:
+            failures.append(f"release workflow is missing matrix cell {cell}")
+            continue
+        block = text.split(marker, 1)[1].split("          - name:", 1)[0]
+        for entry in entries:
+            if entry not in block:
+                failures.append(
+                    f"release workflow matrix cell {cell} must contain {entry!r}"
+                )
+    for shorthand in ("target: x86_64\n", "target: aarch64\n"):
+        if shorthand in text:
+            failures.append(
+                "release workflow must not pass maturin-action target shorthands "
+                "to the maturin CLI"
+            )
+    return failures
+
+
+def _rust_msrv_dependency_failures() -> list[str]:
+    failures: list[str] = []
+    coords_manifest = tomllib.loads(
+        (REPO_ROOT / "rust/adam_core_rs_coords/Cargo.toml").read_text(encoding="utf-8")
+    )
+    spice_manifest = tomllib.loads(
+        (REPO_ROOT / "rust/adam_core_rs_spice/Cargo.toml").read_text(encoding="utf-8")
+    )
+    if "faer" in coords_manifest.get("dependencies", {}):
+        failures.append("coords manifest must not retain its unused faer dependency")
+    expected_faer = {
+        "version": "0.22",
+        "default-features": False,
+        "features": ["std", "linalg", "rayon"],
+    }
+    if spice_manifest.get("dependencies", {}).get("faer") != expected_faer:
+        failures.append(
+            "spice manifest faer dependency must use std+linalg+rayon without defaults"
+        )
+
+    lock = tomllib.loads((REPO_ROOT / "Cargo.lock").read_text(encoding="utf-8"))
+    resolved = {package.get("name") for package in lock.get("package", [])}
+    forbidden = {"ar_archive_writer", "npyz", "pest_stack_guard", "psm"}
+    leaked = sorted(forbidden & resolved)
+    if leaked:
+        failures.append(
+            "Cargo.lock retains incompatible optional faer chain: " + ", ".join(leaked)
+        )
+
+    workflow = RUST_CRATE_WORKFLOW.read_text(encoding="utf-8")
+    for required in (
+        'faer feature "linalg"',
+        'faer feature "rayon"',
+        'faer feature "std"',
+        'faer feature "(default|npy|rand|sparse|sparse-linalg)"',
+        '"ar_archive_writer"',
+        '"npyz"',
+        '"pest_stack_guard"',
+        '"psm"',
+    ):
+        if required not in workflow:
+            failures.append(
+                f"Rust clean-consumer workflow must assert dependency contract {required!r}"
+            )
+    return failures
+
+
+def _tier1_exact_ref_failures() -> list[str]:
+    if not TIER1_WORKFLOW.is_file():
+        return ["Tier-1 exact-ref workflow is missing"]
+    text = TIER1_WORKFLOW.read_text(encoding="utf-8")
+    trigger = text.split("permissions:", 1)[0]
+    failures: list[str] = []
+    if "pull_request:" in trigger or "schedule:" in trigger:
+        failures.append(
+            "Tier-1 compatibility must be manual-only until compatible Assist exists"
+        )
+    for required in (
+        "workflow_dispatch:",
+        "adam_assist_ref:",
+        "required: true",
+        "ADAM_ASSIST_REF: ${{ inputs.adam_assist_ref }}",
+        "ref: ${{ env.ADAM_ASSIST_REF }}",
+        '[[ "$ADAM_ASSIST_REF" =~ ^[0-9a-f]{40}$ ]]',
+        'test "$(git -C dependent rev-parse HEAD)" = "$ADAM_ASSIST_REF"',
+        "Validate requested dependent revision syntax",
+        "Verify dependent declares Core 0.7 compatibility",
+        "pdm run python - <<'PY'",
+        'Version("0.7.0") in core[0].specifier',
+    ):
+        if required not in text:
+            failures.append(f"Tier-1 exact-ref workflow is missing {required!r}")
+    if "c06164a18e8d90d8bf83d7ab58e479dc97e1be41" in text:
+        failures.append(
+            "Tier-1 workflow must not pin the Core-0.6-only Assist revision"
+        )
+    if "dependent/pyproject.toml" not in text:
+        failures.append("Tier-1 workflow must inspect the dependent's own metadata")
+
+    step_names = {
+        "install": "Install test and exact build dependencies",
+        "syntax": "Validate requested dependent revision syntax",
+        "checkout": "Checkout requested dependent revision",
+        "revision": "Verify exact dependent revision",
+        "metadata": "Verify dependent declares Core 0.7 compatibility",
+    }
+    positions = {key: text.find(value) for key, value in step_names.items()}
+    if all(position >= 0 for position in positions.values()):
+        if not positions["syntax"] < positions["checkout"] < positions["revision"]:
+            failures.append(
+                "Tier-1 must validate exact-ref syntax before checkout and HEAD after checkout"
+            )
+        if not positions["install"] < positions["metadata"]:
+            failures.append(
+                "Tier-1 dependent metadata validation must follow the PDM dependency install"
+            )
+        metadata_end = text.find("\n      - name:", positions["metadata"] + 1)
+        metadata_block = text[
+            positions["metadata"] : metadata_end if metadata_end >= 0 else None
+        ]
+        if "pdm run python - <<'PY'" not in metadata_block:
+            failures.append(
+                "Tier-1 dependent metadata validation must use the installed PDM interpreter"
+            )
+        if "\n          python - <<'PY'" in metadata_block:
+            failures.append(
+                "Tier-1 dependent metadata validation must not use bare system Python"
+            )
+    if text.count("-m pip check") < 2:
+        failures.append(
+            "Tier-1 workflow must enforce the dependent's declared requirements in both environments"
+        )
+    if 'assist_version == "0.5.0"' in text:
+        failures.append(
+            "Tier-1 workflow must not claim a frozen Assist version is compatible"
+        )
+
+    release = RELEASE_WORKFLOW.read_text(encoding="utf-8")
+    for required in (
+        "adam_assist_ref:",
+        "ADAM_ASSIST_REF: ${{ inputs.adam_assist_ref }}",
+        "ref: ${{ env.ADAM_ASSIST_REF }}",
+        '[[ "$ADAM_ASSIST_REF" =~ ^[0-9a-f]{40}$ ]]',
+    ):
+        if required not in release:
+            failures.append(
+                f"release-candidate exact-ref matrix lost required contract {required!r}"
+            )
+    return failures
+
+
 def _required_workflow_artifact_failures(
     workflows: list[tuple[Path, str]],
 ) -> list[str]:
@@ -340,7 +692,8 @@ def _required_workflow_artifact_failures(
 
 
 def main() -> None:
-    scripts = _load_scripts()
+    project = _load_project()
+    scripts = _load_scripts(project)
     script_names = set(scripts)
     script_commands = _all_script_commands(scripts)
 
@@ -360,7 +713,12 @@ def main() -> None:
         source = str(path.relative_to(REPO_ROOT))
         failures.extend(_stale_reference_failures(source, text))
         failures.extend(_workflow_pdm_run_failures(source, text, script_names))
+        failures.extend(_workflow_build_dependency_failures(source, text))
     failures.extend(_required_workflow_artifact_failures(workflows))
+    failures.extend(_release_workflow_failures(project))
+    failures.extend(_uv_lock_failures(project))
+    failures.extend(_rust_msrv_dependency_failures())
+    failures.extend(_tier1_exact_ref_failures())
 
     if failures:
         print("PDM/CI script preflight failed:", file=sys.stderr)

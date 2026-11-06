@@ -18,8 +18,11 @@ Implementation Options and Tradeoffs
 * Direct ephemeris generation from initial orbits:
   Simpler request path, potentially more repeated propagation work.
 
-Runnable Example
-----------------
+Provider-Neutral Example
+------------------------
+
+This example assumes ``propagator`` is a configured implementation of
+``adam_core.propagator.Propagator`` supplied by the service.
 
 .. code-block:: python
 
@@ -29,7 +32,6 @@ Runnable Example
    from adam_core.observers import Observers
    from adam_core.orbits.query import query_horizons
    from adam_core.time import Timestamp
-   from adam_assist import ASSISTPropagator
 
    request_object_ids: list[str] = ["Apophis", "Bennu", "Eros"]
    t0: Timestamp = Timestamp.from_mjd([60000.0], scale="tdb")
@@ -39,8 +41,6 @@ Runnable Example
 
    orbits: Orbits = query_horizons(request_object_ids, t0)
    observers: Observers = Observers.from_code("I11", request_times)
-
-   propagator = ASSISTPropagator()
 
    # Pattern A: direct output for one request.
    ephemeris = propagator.generate_ephemeris(

@@ -27,10 +27,11 @@ Boundary Selection Rule
 Complete Surface Status
 -----------------------
 
-The authoritative latest-main inventory is
-``migration/public_surface/manifest.json`` (595 symbols / 67 constants at
-upstream ``9b756803ab3afbe11e33df9e57d30a28e7976b92``). The
-selected parity registry is a benchmark set, not the public-surface count.
+The authoritative inventory for this source tree is
+``migration/public_surface/manifest.json`` (734 symbols / 101 constants).
+Its frozen-upstream reconciliation records the independently classified
+retirements. The selected parity registry is a benchmark set, not the
+public-surface count.
 Every adam-core-owned non-plotting operation is either Rust-backed, a thin
 single-crossing compatibility veneer, or an explicitly documented provider
 boundary. The API examples below describe boundary contracts; they are not an
@@ -119,6 +120,152 @@ Current Migrated APIs
   - Rust entrypoint: ``adam_core._rust_native.gauss_iod_orbits_numpy`` (candidate-generation kernel from precomputed roots).
   - Backend default: legacy path, with Rust path held in ``dual`` mode pending +20% p50/p95 perf gate.
   - Error behavior: velocity-method validation raises ``ValueError`` for unsupported solver names.
+
+- ``orbit_determination.fit_least_squares`` (whitened residuals, Jacobian that follows the dynamics, robust loss)
+  - Derivatives: ``jacobian="auto"`` (default) resolves to ``"analytic"`` for
+    declared two-body dynamics, ``"propagator"`` when the backend supplies
+    state-transition matrices (``Propagator::propagate_stm``), and
+    ``"central"`` otherwise. The propagator route takes optimizer steps with
+    the two-body Jacobian, then converges and evaluates the covariance with
+    the backend's STMs, so the reported solution and covariance carry the
+    selected dynamics' exact derivatives.
+  - Boundary: nested Arrow IPC of the orbit, observed coordinates and
+    observers plus a ``fit_settings`` dict in; a dict of scalars, lists and
+    NumPy arrays out. The complete work unit (solver, Jacobian, loss,
+    covariance probe, final evaluation) runs in Rust; Python converts tables
+    and re-emits the driver's diagnostics as ``RuntimeWarning``. The supplied
+    ``Propagator`` contributes only its external-propagator capsule
+    (``propagator_capsule``). The solver and evaluation remain adam-core code;
+    a propagator without a capsule raises ``TypeError`` and is never called
+    back from Rust.
+  - Rust entrypoints: ``adam_core._rust_native.observation_whitening_matrices_numpy``
+    (``(N, 6, 6)`` covariance + ``(N,)`` latitude -> ``(N, 2, 2)`` inverse Cholesky
+    factors), ``whiten_residual_pairs_numpy``, ``whitened_2body_jacobian_numpy``
+    (``(2N, 6)`` forward-mode autodiff Jacobian of the whitened 2-body model;
+    barycentric ecliptic observer and Sun states in), ``robust_cost_numpy`` /
+    ``robust_weights_numpy`` / ``robust_jacobian_scale_numpy`` and
+    ``validate_robust_loss``.
+  - Error behavior: raises ``ValueError`` naming the observation whose
+    (lon, lat) covariance block is non-finite or not positive definite, on shape
+    mismatch, and on an unknown loss or non-positive ``f_scale``.
+  - Dispatch: ``fit_least_squares`` always invokes adam-core's
+    ``fit_orbit_whitened_ipc`` driver with the selected capsule
+    (``propagator=None`` selects the in-tree two-body backend). The generic
+    Rust implementation is
+    ``adam_core_rs_coords::fit_orbit_whitened_barycentric`` and remains the
+    single definition of whitening, robust loss, Jacobian policy, covariance
+    and final evaluation. Providers do not implement least-squares work
+    units. Only ``xtol``, ``ftol``, ``gtol`` and ``max_nfev`` are accepted;
+    any other solver keyword raises ``ValueError`` (there is no scipy path).
+
+- OD configuration and canonical Rust batch workflows
+  - Status: canonical batch ``run_iod`` / ``run_od`` / ``refine`` /
+    ``evaluate_orbits`` are exported. Every route returns fitted orbits,
+    explicit fitted members, and typed scientific failures; expert numerical
+    kernels remain under ``adam_core.orbit_determination.algorithms``.
+  - Boundary: nested Arrow IPC plus explicit typed configuration. Rust returns
+    authoritative output disposition, success/status, solution/outlier flags,
+    state retention, failure classification, fingerprints, and provenance;
+    Python only wraps those columns into quivr tables. Route, complete
+    configuration (including profile selection), input identity, and propagated
+    IOD metadata are covered by a validated consistency digest. This unkeyed
+    digest detects inconsistent fields; it is not authentication or a
+    tamper-proof signature. Python does not infer composition eligibility from
+    a mutable route string.
+  - Python
+    binds semantic resource slots and marshals tables; Rust validates exact
+    resource identity, parses tables, executes the ordered observation
+    pipeline, and owns numerical loops. There are no model callback/native-spec
+    dictionaries.
+  - Rust configuration types live under ``adam_core_rs_coords::od``; profiles
+    live under ``od::profiles``. Implemented focused Rust composition functions
+    under ``od::algorithms`` are ``prepare_observations``,
+    ``run_iod_with_predictor``, ``refine_with_predictor``, and
+    ``run_od_with_predictors``. The last applies the pipeline once and gives
+    both stages the same prepared coordinates.
+  - External native propagators expose the propagation-only
+    ``adam_core.propagator.v2`` capsule. Capsule adoption validates its ABI,
+    identity fields, and capabilities. The current predictor-level composition
+    accepts an already-adopted predictor and does not itself sequence global
+    provider/resource/ID preflight. Providers never select transforms, profiles,
+    grouping, fitting, rejection, covariance, or OD algorithms.
+  - The canonical batch layer rejects invalid IDs/member mappings and
+    malformed resource/config/provider contracts
+    atomically before pipeline or numerical work. Configuration JSON uses
+    correctly rounded float parsing, so every finite Python ``float`` bit is
+    retained through native persistence and consistency validation. Canonical
+    Python calls make
+    one near-linear Rust planning/preparation pass and carry a deferred provider
+    resolver that is invoked only after that pass; empty and malformed batches
+    never bind a provider. The layer defines empty-group behavior, typed
+    per-group scientific failures, deterministic overlapping grouping, and
+    canonical Rust runtime provenance.
+  - Every present OD covariance is dimension-checked before snapshots,
+    transforms, fixed-stride indexing, or lon/lat variance interpretation.
+    Missing covariance may reach an explicitly configured fill transform;
+    unsupported dimensions fail rather than being projected through a fallback.
+    Python only marshals covariance storage. Rust owns selection, validation,
+    transforms, whitening, rejection, fitting, and output covariance.
+  - CMC2003 finalization uses one central-difference Jacobian through the full
+    predictor for all observations. Selected rows form the covariance; all
+    rows supply rejection/recovery projections. Huber plus CMC2003 remains a
+    heuristic combination without calibrated rejection statistics.
+  - Closed-form native tests in
+    ``adam_core_rs_coords::propagation::od_refine`` independently pin weighted
+    least-squares covariance, robust stationarity/weights, final-mask
+    covariance, derivative fallback, weak-direction probes, and full-predictor
+    CMC finalization. Capsule parity tests separately compare the external
+    provider route with the built-in two-body driver; retired Python prediction
+    callbacks are not test or production oracles.
+  - Weak-direction covariance validation first probes both signs at 1 sigma.
+    After a failed probe it repeats at 0.1 sigma: a curvature signal scales by
+    about 0.01, while propagation/evaluation noise does not. The latter is
+    reported with an integration-tolerance hint and does not trigger the
+    analytic-Jacobian central-difference fallback. Provider errors propagate;
+    only in-band rejected/non-finite probe outcomes become diagnostic warnings.
+    This is a fit-surface consistency check, not an uncertainty-realism claim.
+  - Python may resolve the installed public EFCC18 package's exported path, but
+    passes that path explicitly. The standalone Rust route receives explicit
+    ``ResourceBindings`` and performs the identical byte/schema/structure
+    validation. Neither Rust route downloads, discovers packages, or falls back.
+    See ``rust/adam_core/examples/validate_core_od_resource.rs``.
+
+- ``orbit_determination.algorithms.cmc2003_fit_detailed``
+  - Boundary: the whole loop is the adam-core ``cmc2003_fit_ipc`` driver
+    above over the selected propagation capsule; the decision kernels below
+    remain callable on their own for diagnostics.
+  - Rust entrypoints: ``adam_core._rust_native.cmc2003_apparitions_numpy``,
+    ``cmc2003_expected_residual_chi2_numpy`` (``(N, 2)`` whitened residuals,
+    ``(2N, 6)`` Jacobian, optional ``(6, 6)`` covariance, selection mask),
+    ``cmc2003_select_numpy``.
+  - Error behavior: raises ``ValueError`` on shape mismatch.
+
+- ``orbit_determination.ObservationPipeline``
+  - Boundary: an ordered, immutable declaration of native transforms plus
+    explicit bindings from semantic resource slots to local paths. Python does
+    not discover data packages, interpret transforms, or execute callbacks.
+  - Rust entrypoint: ``adam_core._rust_native.apply_observation_pipeline_ipc``
+    validates every required resource before applying any transform and returns
+    both original and used astrometry with canonical configuration provenance.
+  - Contract: declaration order and repeated transforms are authoritative.
+    Deliberate no-transform behavior is represented only by
+    ``ObservationPipeline.as_supplied()`` and is recorded as
+    ``transforms=[]``. Resource paths are excluded from canonical provenance.
+  - Error behavior: missing resources, byte-identity mismatches, schema errors,
+    and structural mismatches are aggregated before propagation or fitting;
+    an explicitly selected profile never falls back to another profile.
+
+- ``observations.efcc18`` (star-catalog debiasing)
+  - Boundary: NumPy ``float64`` RA/Dec/JD arrays and Python catalog lists; the
+    ``(49152, 26, 4)`` float32 table crosses as a contiguous NumPy array.
+  - Rust implementation: profile binding parses ``bias.dat`` internally and
+    the closed pipeline applies catalog corrections. No public native model
+    dictionary or in-memory bias-table bypass is exposed.
+  - Contract: row ``k`` of ``bias.dat`` is HEALPix ring pixel ``k``; the Rust
+    test suite pins the 8 published ``tiles.dat`` anchors and, when
+    ``ADAM_CORE_EFCC18_TILES_DAT`` names a local copy, all 49152 tile centres.
+  - Error behavior: raises ``ValueError`` on a malformed table layout, a wrong
+    table shape, or a colatitude outside ``[0, pi]``.
 
 Fallback and Waivers
 --------------------

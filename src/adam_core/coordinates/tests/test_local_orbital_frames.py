@@ -1,9 +1,11 @@
 from decimal import Decimal, getcontext
 
 import numpy as np
+import numpy.typing as npt
 import pytest
 
 from ...dynamics.propagation import propagate_2body
+from ...orbits import Orbits
 from ...time import Timestamp
 from ...utils.helpers.orbits import make_real_orbits
 from .. import CoordinateCovariances, Origin
@@ -12,18 +14,18 @@ from ..transform import transform_coordinates
 
 
 @pytest.fixture
-def orbits():
+def orbits() -> Orbits:
     orbits = make_real_orbits(5)
     coordinates = transform_coordinates(orbits.coordinates, frame_out="equatorial")
     return orbits.set_column("coordinates", coordinates)
 
 
-def with_covariances(orbits, matrices):
+def with_covariances(orbits: Orbits, matrices: npt.NDArray[np.float64]) -> Orbits:
     covariance = CoordinateCovariances.from_matrix(matrices)
     return orbits.set_column("coordinates.covariance", covariance)
 
 
-def test_table_and_jacobians(orbits):
+def test_table_and_jacobians(orbits: Orbits) -> None:
     source = orbits.coordinates.covariance.to_matrix()
     source[2] = np.nan
     orbits = with_covariances(orbits, source)
@@ -40,13 +42,19 @@ def test_table_and_jacobians(orbits):
     assert LocalFrameCovariances.from_orbits(orbits).frame == "VNC_ROTATING"
 
 
-def test_errors(orbits):
+def test_errors(orbits: Orbits) -> None:
     coords = orbits.coordinates
     with pytest.raises(ValueError, match="Unknown local orbital frame 'LVLH'"):
         local_frame_jacobians(coords, "LVLH")
     nan = with_covariances(orbits, np.full((5, 6, 6), np.nan))
     with pytest.raises(ValueError, match="no covariance"):
         LocalFrameCovariances.from_orbits(nan)
+    extended_nongrav_only = np.full((5, 9, 9), np.nan)
+    extended_nongrav_only[:, 6, 6] = 1.0
+    with pytest.raises(ValueError, match="no covariance"):
+        LocalFrameCovariances.from_orbits(
+            with_covariances(orbits, extended_nongrav_only)
+        )
     with pytest.raises(ValueError, match="inertial frame, got 'itrf93'"):
         local_frame_jacobians(transform_coordinates(coords, frame_out="itrf93"), "VNC")
     radial = coords.set_column("vx", coords.x).set_column("vy", coords.y)
@@ -59,7 +67,7 @@ def test_errors(orbits):
     assert local_frame_jacobians(mars, "RSW_ROTATING", mu=1e-12).shape == (5, 6, 6)
 
 
-def test_jacobian_and_product_match_a_decimal_reference(orbits):
+def test_jacobian_and_product_match_a_decimal_reference(orbits: Orbits) -> None:
     """The double-double evaluation against 50 digit Decimal arithmetic: Jacobian
     blocks within one ulp of their largest entry, the product within one ulp each."""
     getcontext().prec = 50

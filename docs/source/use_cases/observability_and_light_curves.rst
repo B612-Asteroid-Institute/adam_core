@@ -22,15 +22,17 @@ Implementation Options and Tradeoffs
 * Variant ensemble collapse:
   Better uncertainty characterization; higher runtime and memory cost.
 
-Runnable Example
-----------------
+Provider-Neutral Example
+------------------------
+
+The example assumes ``propagator`` is a configured implementation of
+``adam_core.propagator.Propagator`` supplied by the application.
 
 .. code-block:: python
 
    import numpy as np
    import pyarrow as pa
    import pyarrow.compute as pc
-   from adam_assist import ASSISTPropagator
    from adam_core.orbits import Orbits
    from adam_core.observers import Observers
    from adam_core.orbits.query import query_sbdb
@@ -42,7 +44,6 @@ Runnable Example
    times: Timestamp = Timestamp.from_mjd(np.arange(60200.0, 60240.0, 1.0), scale="utc")
    observers: Observers = Observers.from_code("I41", times)
 
-   propagator = ASSISTPropagator()
    ephem = propagator.generate_ephemeris(
        orbits,
        observers,
