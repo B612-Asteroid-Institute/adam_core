@@ -258,6 +258,7 @@ jobs:
   extended-coverage:
     name: Slow fixtures and live service integrations
     needs: artifact-acceptance
+    continue-on-error: true
     runs-on: ubuntu-latest
     steps:
       - name: Checkout adam-core candidate
@@ -272,7 +273,9 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install Core and optional test providers
-        run: pdm install -G test
+        run: >-
+          env -u ADAM_CORE_RELEASE_BUILD -u ADAM_CORE_BUILD_COMMIT
+          pdm install -G test
       - name: Run live Rust kernel-data integrations
         run: cargo test -p adam_core_rs_kernel_data -- --ignored
       - name: Run slow scientific validation fixtures

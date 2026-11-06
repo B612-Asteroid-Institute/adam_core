@@ -87,10 +87,134 @@ def test_release_matrix_generates_and_inspects_runtime_version() -> None:
     assert "ADAM_ASSIST_REF: ${{ inputs.adam_assist_ref }}" in workflow
     assert 'PYTHON_PREVIEW_VERSION: "0.7.0"' in workflow
 
+    header = workflow.split("\njobs:", 1)[0]
+    assert header.count('  ADAM_CORE_RELEASE_BUILD: "1"') == 1
+    assert header.count("  ADAM_CORE_BUILD_COMMIT: ${{ github.sha }}") == 1
+
+    artifact_acceptance = workflow.split("  artifact-acceptance:", 1)[1].split(
+        "  extended-coverage:", 1
+    )[0]
     extended_coverage = workflow.split("  extended-coverage:", 1)[1]
+    extended_header = extended_coverage.split("\n    steps:", 1)[0]
+    assert "continue-on-error:" not in artifact_acceptance
+    assert workflow.count("continue-on-error:") == 1
+    assert extended_header.count("    continue-on-error: true") == 1
+    assert extended_header.count("    needs: artifact-acceptance") == 1
     assert "adam-assist" not in extended_coverage
     assert "adam_assist" not in extended_coverage
     assert "assist-rust-develop" not in extended_coverage
+    assert (
+        "env -u ADAM_CORE_RELEASE_BUILD -u ADAM_CORE_BUILD_COMMIT "
+        "pdm install -G test" in " ".join(extended_coverage.split())
+    )
+    for check in (
+        "cargo test -p adam_core_rs_kernel_data -- --ignored",
+        "pdm run test-profile -- src/adam_core",
+        'ADAM_CORE_LIVE_HORIZONS: "1"',
+        'ADAM_CORE_LIVE_QUERY_CLIENTS: "1"',
+        "pdm run test-live-integrations --",
+    ):
+        assert extended_coverage.count(check) == 1
+
+
+@pytest.mark.parametrize(
+    ("original", "replacement"),
+    [
+        ('  ADAM_CORE_RELEASE_BUILD: "1"', '  ADAM_CORE_RELEASE_BUILD: "0"'),
+        (
+            "  ADAM_CORE_BUILD_COMMIT: ${{ github.sha }}",
+            "  ADAM_CORE_BUILD_COMMIT: HEAD",
+        ),
+        (
+            "env -u ADAM_CORE_RELEASE_BUILD -u ADAM_CORE_BUILD_COMMIT",
+            "env -u ADAM_CORE_BUILD_COMMIT",
+        ),
+        (
+            "env -u ADAM_CORE_RELEASE_BUILD -u ADAM_CORE_BUILD_COMMIT",
+            "env -u ADAM_CORE_RELEASE_BUILD",
+        ),
+        (
+            "env -u ADAM_CORE_RELEASE_BUILD -u ADAM_CORE_BUILD_COMMIT",
+            "env",
+        ),
+    ],
+)
+def test_release_policy_rejects_artifact_or_extended_install_env_mutation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    original: str,
+    replacement: str,
+) -> None:
+    workflow = (
+        ROOT / ".github/workflows/release-candidate-wheel-matrix.yml"
+    ).read_text()
+    assert original in workflow
+    mutated = workflow.replace(original, replacement, 1)
+    path = tmp_path / "release-candidate-wheel-matrix.yml"
+    path.write_text(mutated)
+    monkeypatch.setattr(check_pdm_ci_scripts, "RELEASE_WORKFLOW", path)
+    with (ROOT / "pyproject.toml").open("rb") as source:
+        project = tomllib.load(source)
+
+    failures = check_pdm_ci_scripts._release_workflow_failures(project)
+
+    assert any(
+        "artifact-build environment" in failure
+        or "remove both release-identity variables" in failure
+        for failure in failures
+    )
+
+
+@pytest.mark.parametrize(
+    ("original", "replacement"),
+    [
+        ("    continue-on-error: true", "    continue-on-error: false"),
+        (
+            "  artifact-acceptance:\n",
+            "  artifact-acceptance:\n    continue-on-error: true\n",
+        ),
+        ("    needs: artifact-acceptance", "    needs: lint"),
+        (
+            "cargo test -p adam_core_rs_kernel_data -- --ignored",
+            "cargo test -p adam_core_rs_kernel_data",
+        ),
+        (
+            "pdm run test-profile -- src/adam_core",
+            "pdm run test-profile",
+        ),
+        ('ADAM_CORE_LIVE_HORIZONS: "1"', 'ADAM_CORE_LIVE_HORIZONS: "0"'),
+        (
+            'ADAM_CORE_LIVE_QUERY_CLIENTS: "1"',
+            'ADAM_CORE_LIVE_QUERY_CLIENTS: "0"',
+        ),
+        ("pdm run test-live-integrations --", "pdm run test --"),
+    ],
+)
+def test_release_policy_rejects_extended_coverage_boundary_mutation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    original: str,
+    replacement: str,
+) -> None:
+    workflow = (
+        ROOT / ".github/workflows/release-candidate-wheel-matrix.yml"
+    ).read_text()
+    assert original in workflow
+    path = tmp_path / "release-candidate-wheel-matrix.yml"
+    path.write_text(workflow.replace(original, replacement, 1))
+    monkeypatch.setattr(check_pdm_ci_scripts, "RELEASE_WORKFLOW", path)
+    with (ROOT / "pyproject.toml").open("rb") as source:
+        project = tomllib.load(source)
+
+    failures = check_pdm_ci_scripts._release_workflow_failures(project)
+
+    assert any(
+        "hard gating" in failure
+        or "non-gating" in failure
+        or "depend on artifact acceptance" in failure
+        or "retain slow/live check" in failure
+        for failure in failures
+    )
 
 
 def test_release_builder_uses_declared_exact_tools_and_supported_targets() -> None:
