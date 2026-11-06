@@ -473,6 +473,22 @@ def _uv_lock_failures(project: dict[str, Any]) -> list[str]:
     return failures
 
 
+def _release_matrix_cell(text: str, cell: str) -> tuple[str, ...] | None:
+    marker = f"          - name: {cell}\n"
+    if text.count(marker) != 1:
+        return None
+    tail = text.split(marker, 1)[1]
+    boundaries = [
+        offset
+        for boundary in ("\n          - name:", "\n    steps:")
+        if (offset := tail.find(boundary)) >= 0
+    ]
+    if not boundaries:
+        return None
+    block = tail[: min(boundaries)]
+    return tuple(line.strip() for line in block.splitlines() if line.strip())
+
+
 def _release_workflow_failures(project: dict[str, Any]) -> list[str]:
     failures: list[str] = []
     build_tools = project.get("dependency-groups", {}).get("build")
@@ -524,15 +540,34 @@ def _release_workflow_failures(project: dict[str, Any]) -> list[str]:
             "target: aarch64-unknown-linux-gnu",
             "wheel_tag: manylinux*aarch64",
         ),
+        "macos-arm64": (
+            "runner: macos-15",
+            "system: Darwin-arm64",
+            "family: native",
+            "wheel_tag: macosx*arm64",
+        ),
+        "macos-x86_64": (
+            "runner: macos-15-intel",
+            "system: Darwin-x86_64",
+            "family: native",
+            "wheel_tag: macosx*x86_64",
+        ),
     }
+    exact_cells = {"macos-arm64", "macos-x86_64"}
     for cell, entries in expected_cells.items():
-        marker = f"- name: {cell}"
-        if marker not in text:
+        actual = _release_matrix_cell(text, cell)
+        if actual is None:
             failures.append(f"release workflow is missing matrix cell {cell}")
             continue
-        block = text.split(marker, 1)[1].split("          - name:", 1)[0]
+        if cell in exact_cells:
+            if actual != entries:
+                failures.append(
+                    f"release workflow matrix cell {cell} must equal {entries!r}, "
+                    f"found {actual!r}"
+                )
+            continue
         for entry in entries:
-            if entry not in block:
+            if entry not in actual:
                 failures.append(
                     f"release workflow matrix cell {cell} must contain {entry!r}"
                 )
