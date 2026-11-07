@@ -12,7 +12,9 @@ import quivr as qv
 import scipy.optimize
 
 from ..dynamics.propagation import propagate_2body
+from ..observations import SourceCatalog
 from ..observers.observers import Observers
+from ..orbits import Orbits
 from .bandpasses.api import bandpass_delta_mag, map_to_canonical_filter_bands
 from .hg12star import (
     _G12STAR_BOUNDS,
@@ -26,14 +28,6 @@ from .magnitude_common import (
     _hg_phase_correction_dg,
     hg_phase_correction,
 )
-
-if TYPE_CHECKING:
-    # mpcq is an optional dependency (install via `adam_core[mpc]`); it is only
-    # referenced in type annotations here, which `from __future__ import
-    # annotations` keeps from being evaluated at runtime. This keeps
-    # `import adam_core.photometry` working without mpcq installed.
-    from mpcq import MPCObservations
-    from mpcq.orbits import MPCOrbits
 
 logger = logging.getLogger(__name__)
 
@@ -297,7 +291,7 @@ def _apply_color_terms(
 
 
 def _prepare_geometry(
-    obs: MPCObservations,
+    obs: SourceCatalog,
     object_coords,
 ) -> tuple[
     np.ndarray,
@@ -318,12 +312,12 @@ def _prepare_geometry(
     `_resolve_channels`. valid_mask selects rows with finite mag, finite positive
     rmsmag.
     """
-    stn = np.asarray(obs.stn.to_numpy(zero_copy_only=False), dtype=object).astype(str)
-    observers = Observers.from_codes(stn, obs.obstime)
+    stn = np.asarray(obs.observatory_code.to_numpy(zero_copy_only=False), dtype=object).astype(str)
+    observers = Observers.from_codes(stn, obs.time)
 
     mag = obs.mag.to_numpy(zero_copy_only=False).astype(np.float64)
-    rmsmag = obs.rmsmag.to_numpy(zero_copy_only=False).astype(np.float64)
-    bands = np.asarray(obs.band.to_numpy(zero_copy_only=False), dtype=object).astype(
+    rmsmag = obs.mag_sigma.to_numpy(zero_copy_only=False).astype(np.float64)
+    bands = np.asarray(obs.filter.to_numpy(zero_copy_only=False), dtype=object).astype(
         str
     )
     channels, filter_ids = _resolve_channels(stn, bands)
@@ -694,8 +688,8 @@ def _fit_per_band_h(
 
 
 def estimate_colors(
-    observations: MPCObservations,
-    orbits: MPCOrbits,
+    observations: SourceCatalog,
+    orbits: Orbits,
     phi_type: Literal["HG12star", "HG", "c1c2"],
     force_g_bounds: bool = True,
     color_term_composition: str | tuple[float, float] | None = None,
@@ -713,10 +707,10 @@ def estimate_colors(
     Parameters
     ----------
     observations
-        MPC astrometric/photometric observations.  Must have valid ``requested_provid``,
-        ``obstime``, ``mag``, ``band``, and ``stn`` columns.
+        astrometric/photometric observations.  Must have valid ``object_id``,
+        ``time``, ``mag``, ``filter``, and ``observatory_code`` columns.
     orbits
-        MPC fitted orbits for the same objects.  Used to propagate positions
+        fitted orbits for the same objects.  Used to propagate positions
         to each observation epoch.
     phi_type
         Phase function type: "HG12star" (Penttilä 2016), "HG" (standard H-G),
@@ -778,18 +772,18 @@ def estimate_colors(
         )
 
     len_before = len(observations)
-    observations = observations.apply_mask(pc.is_valid(observations.band))
+    observations = observations.apply_mask(pc.is_valid(observations.filter))
     observations = observations.apply_mask(pc.is_valid(observations.mag))
     if len(observations) != len_before:
         logger.info("Removed %d null bands", len_before - len(observations))
     unique_ids = [
-        x for x in pc.unique(observations.requested_provid).to_pylist() if x is not None
+        x for x in pc.unique(observations.object_id).to_pylist() if x is not None
     ]
 
     rows: list[dict[str, object]] = []
 
     for obj_id in unique_ids:
-        obs_mask = pc.equal(observations.requested_provid, obj_id)
+        obs_mask = pc.equal(observations.object_id, obj_id)
         obs = observations.apply_mask(obs_mask)
 
         # Per-object outputs default to None (no fit produced) and are overwritten
@@ -836,7 +830,7 @@ def estimate_colors(
         }
         rows.append(row)
 
-        orb_mask = pc.equal(orbits.requested_provid, obj_id)
+        orb_mask = pc.equal(orbits.object_id, obj_id)
         orb = orbits.apply_mask(orb_mask)
         if len(orb) != 1:
             if len(orb) == 0:
@@ -850,8 +844,7 @@ def estimate_colors(
             continue
 
         try:
-            adam_orbits = orb.orbits()
-            propagated = propagate_2body(adam_orbits, obs.obstime)
+            propagated = propagate_2body(orb, obs.time)
             object_coords = propagated.coordinates
 
             mag, rmsmag, channels, filter_ids, r, delta, alpha_deg, valid = (
