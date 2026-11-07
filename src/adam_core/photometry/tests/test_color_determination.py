@@ -9,6 +9,9 @@ import pyarrow.compute as pc
 import pytest
 import quivr as qv
 
+from adam_core.coordinates import CometaryCoordinates, Origin
+from adam_core.observations import SourceCatalog
+from adam_core.orbits import Orbits
 from adam_core.time import Timestamp
 
 from .. import color_determination
@@ -41,74 +44,54 @@ HG_TOLERANCE = 0.06
 C1C2_TOLERANCE = 0.06
 
 
-def _load_fixture_observations(fx: np.lib.npyio.NpzFile):
-    mpcq = pytest.importorskip("mpcq")
+def _load_fixture_observations(fx: np.lib.npyio.NpzFile) -> SourceCatalog:
     n = int(fx["mag_obs"].shape[0])
     obstime = Timestamp.from_kwargs(
         days=pa.array(fx["obstime_days"].tolist(), type=pa.int64()),
         nanos=pa.array(fx["obstime_nanos"].tolist(), type=pa.int64()),
         scale="utc",
     )
-    return mpcq.MPCObservations.from_kwargs(
-        requested_provid=[str(fx["object_id"][0])] * n,
-        primary_designation=[None] * n,
-        obsid=fx["obsid"].astype(str).tolist(),
-        trksub=[None] * n,
-        provid=[str(fx["object_id"][0])] * n,
-        permid=[None] * n,
-        submission_id=[None] * n,
-        obssubid=[None] * n,
-        obstime=obstime,
+
+    return SourceCatalog.from_kwargs(
+        id=np.arange(n).astype(str).tolist(),
+        object_id=[str(fx["object_id"][0])] * n,
+        exposure_id=fx["obsid"].astype(str).tolist(),
+        time=obstime,
         ra=fx["ra"].tolist(),
         dec=fx["dec"].tolist(),
-        rmsra=[None] * n,
-        rmsdec=[None] * n,
-        rmscorr=[None] * n,
+        ra_sigma=[None] * n,
+        dec_sigma=[None] * n,
         mag=fx["mag_obs"].tolist(),
-        rmsmag=fx["rmsmag"].tolist(),
-        band=fx["band"].astype(str).tolist(),
-        stn=fx["station"].astype(str).tolist(),
-        updated_at=None,
-        created_at=None,
-        status=[None] * n,
-        astcat=[None] * n,
-        mode=[None] * n,
+        mag_sigma=fx["rmsmag"].tolist(),
+        filter=fx["band"].astype(str).tolist(),
+        observatory_code=fx["station"].astype(str).tolist(),
+        catalog_id=fx["station"].astype(str).tolist(),
     )
 
 
-def _load_fixture_orbits(fx: np.lib.npyio.NpzFile):
-    orbits = pytest.importorskip("mpcq.orbits")
+def _load_fixture_orbits(fx: np.lib.npyio.NpzFile) -> Orbits:
     obj_id = str(fx["object_id"][0])
     epoch = Timestamp.from_kwargs(
         days=pa.array([int(fx["epoch_days"][0])], type=pa.int64()),
         nanos=pa.array([int(fx["epoch_nanos"][0])], type=pa.int64()),
         scale="tdb",
     )
-    return orbits.MPCOrbits.from_kwargs(
-        requested_provid=[obj_id],
-        primary_designation=[None],
-        id=[None],
-        provid=[obj_id],
-        epoch=epoch,
-        q=fx["q"].tolist(),
-        e=fx["e"].tolist(),
-        i=fx["inc"].tolist(),
-        node=fx["node"].tolist(),
-        argperi=fx["argperi"].tolist(),
-        peri_time=fx["peri_time"].tolist(),
-        q_unc=[None],
-        e_unc=[None],
-        i_unc=[None],
-        node_unc=[None],
-        argperi_unc=[None],
-        peri_time_unc=[None],
-        a1=[None],
-        a2=[None],
-        a3=[None],
-        h=fx["H_v_mpc"].tolist(),
-        g=fx["G_mpc"].tolist(),
-        created_at=None,
-        updated_at=None,
+    return Orbits.from_kwargs(
+        orbit_id=[None],
+        object_id=[obj_id],
+        coordinates=CometaryCoordinates.from_kwargs(
+            q=fx["q"].tolist(),
+            e=fx["e"].tolist(),
+            i=fx["inc"].tolist(),
+            raan=fx["node"].tolist(),
+            ap=fx["argperi"].tolist(),
+            tp=fx["peri_time"].tolist(),
+            time=epoch,
+            origin=Origin.from_kwargs(
+                code=pa.repeat("SUN", len(epoch)),
+            ),
+            frame="ecliptic",
+        ).to_cartesian(),
     )
 
 
@@ -288,7 +271,7 @@ def test_failed_objects_do_not_abort_the_batch() -> None:
 
     unusable = _load_fixture_observations(no_photometry)
     unusable = unusable.set_column(
-        "band", pa.array(["V"] * len(unusable), type=unusable.band.type)
+        "filter", pa.array(["V"] * len(unusable), type=unusable.filter.type)
     )
     observations = qv.concatenate(
         [_load_fixture_observations(fx) for fx in (no_orbit, two_orbits)]
@@ -555,7 +538,7 @@ def _cross_system_case():
     is_r = fx["filter_id"].astype(str) == "LSST_r"
     band = np.where(is_r, "SDSS_r", fx["band"].astype(str))
     observations = observations.set_column(
-        "band", pa.array(band.tolist(), type=observations.band.type)
+        "filter", pa.array(band.tolist(), type=observations.filter.type)
     )
     return observations, _load_fixture_orbits(fx)
 
