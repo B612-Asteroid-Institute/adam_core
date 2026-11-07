@@ -12,15 +12,15 @@
     "plotting_policy": "plotting/display may remain Python; all other symbols require review"
   },
   "summary": {
-    "symbols": 647,
+    "symbols": 746,
     "by_kind": {
-      "class": 89,
-      "classmethod": 32,
-      "constant": 78,
-      "constructor": 4,
-      "function": 229,
-      "method": 148,
-      "property": 67
+      "class": 120,
+      "classmethod": 42,
+      "constant": 101,
+      "constructor": 5,
+      "function": 239,
+      "method": 151,
+      "property": 88
     },
     "by_domain": {
       "constants": 4,
@@ -29,19 +29,19 @@
       "missions": 16,
       "observations": 63,
       "observers": 19,
-      "orbit_determination": 33,
-      "orbits": 115,
+      "orbit_determination": 105,
+      "orbits": 116,
       "photometry": 73,
-      "propagator": 7,
+      "propagator": 8,
       "time": 38,
       "utils": 70
     },
     "by_implementation_class": {
-      "compatibility_data_or_external_generic": 165,
-      "mixed_rust_python_gap": 95,
+      "compatibility_data_or_external_generic": 219,
+      "mixed_rust_python_gap": 96,
       "plotting_exemption_candidate": 16,
-      "python_gap_or_external_boundary": 240,
-      "rust_veneer_candidate_see_domain_audit": 131
+      "python_gap_or_external_boundary": 265,
+      "rust_veneer_candidate_see_domain_audit": 150
     },
     "plotting_exemption_candidates": 16,
     "unreviewed": 0
@@ -49,7 +49,7 @@
   "frozen_updated_upstream_reconciliation": {
     "commit": "757c09fca86adf9e3d5899952db3d379e09413f6",
     "upstream_symbols": 600,
-    "current_symbols": 647,
+    "current_symbols": 746,
     "upstream_only_symbols": 22,
     "all_upstream_only_symbols_classified": true,
     "disposition": "The listed upstream implementation helpers are intentionally retired; their useful public workflows are Rust-backed or are explicit provider boundaries in the referenced domain audit.",
