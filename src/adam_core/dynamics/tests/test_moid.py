@@ -1,5 +1,4 @@
 import numpy as np
-import pytest
 import quivr as qv
 
 from ...coordinates.keplerian import KeplerianCoordinates
@@ -33,6 +32,41 @@ def test_calculate_moid_identical_circular_flat_minimum_time_is_witness():
     dt_at_min = moid_time.mjd().to_numpy(zero_copy_only=False)[0] - epoch_mjd
     period = 2.0 * np.pi * np.sqrt(1.0 / circular.coordinates.origin.mu()[0])
     assert 0.0 <= dt_at_min <= period
+
+
+def test_calculate_moid_delegates_science_to_shared_rust_kernel(monkeypatch):
+    epoch_mjd = 59000.0
+    orbit = Orbits.from_kwargs(
+        orbit_id=["delegation"],
+        coordinates=KeplerianCoordinates.from_kwargs(
+            a=[1.0],
+            e=[0.1],
+            i=[2.0],
+            ap=[3.0],
+            raan=[4.0],
+            M=[5.0],
+            time=Timestamp.from_mjd([epoch_mjd], scale="tdb"),
+            frame="ecliptic",
+            origin=Origin.from_kwargs(code=["SUN"]),
+        ).to_cartesian(),
+    )
+    from adam_core._rust import api as rust_api
+
+    calls = []
+
+    def _native(primary, secondary, mu):
+        calls.append((primary.copy(), secondary.copy(), mu))
+        return 0.25, 1.5
+
+    monkeypatch.setattr(rust_api, "calculate_moid_numpy", _native)
+    moid, witness = calculate_moid(orbit, orbit)
+
+    assert moid == 0.25
+    assert len(calls) == 1
+    np.testing.assert_array_equal(calls[0][0], orbit.coordinates.values[0])
+    np.testing.assert_array_equal(calls[0][1], orbit.coordinates.values[0])
+    assert calls[0][2] == orbit.coordinates.origin.mu()[0]
+    assert witness.mjd().to_numpy(zero_copy_only=False)[0] == epoch_mjd + 1.5
 
 
 def test_calculate_moid_circular_orbits():
@@ -212,9 +246,7 @@ def test_calculate_moid_noncircular_orbits():
     np.testing.assert_allclose(moid_31, 0.0, rtol=0, atol=1e-6)
 
 
-@pytest.mark.parametrize("max_processes", [1, 2])
-def test_calculate_perturber_moids(max_processes):
-    # Test that the MOID we can multiprocess the moid calculation
+def test_calculate_perturber_moids():
     pertubers = [OriginCodes.EARTH, OriginCodes.MARS_BARYCENTER, OriginCodes.MERCURY]
 
     time = Timestamp.from_mjd([59000.0], scale="tdb")
@@ -229,9 +261,7 @@ def test_calculate_perturber_moids(max_processes):
     )
     orbits = qv.concatenate([earth, mars])
 
-    moids = calculate_perturber_moids(
-        orbits, pertubers, max_processes=max_processes, chunk_size=1
-    )
+    moids = calculate_perturber_moids(orbits, pertubers)
 
     assert len(moids) == 6
     assert (
@@ -294,7 +324,11 @@ def test_calculate_perturber_moids_uses_record_batch_and_direct_wrap(monkeypatch
     )
 
     from adam_core._rust import api as rust_api
+    from adam_core.utils import spice as spice_module
 
+    # Initialization is an explicit caller responsibility, not hidden inside
+    # the MOID facade.
+    spice_module.setup_SPICE()
     native = rust_api.calculate_perturber_moids_arrow
     called = {"value": False}
 
@@ -306,6 +340,10 @@ def test_calculate_perturber_moids_uses_record_batch_and_direct_wrap(monkeypatch
     def _forbid_from_kwargs(*args, **kwargs):
         raise AssertionError("PerturberMOIDs.from_kwargs must not rebuild Rust output")
 
+    def _forbid_implicit_spice_setup(*args, **kwargs):
+        raise AssertionError("calculate_perturber_moids must not initialize SPICE")
+
+    monkeypatch.setattr(spice_module, "setup_SPICE", _forbid_implicit_spice_setup)
     monkeypatch.setattr(
         "adam_core.dynamics.moid.calculate_perturber_moids_arrow",
         _checked,

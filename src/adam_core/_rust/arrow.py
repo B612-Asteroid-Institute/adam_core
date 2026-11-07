@@ -22,8 +22,8 @@ surface and exercised today:
 * :func:`table_from_record_batch` -- generic output wrapper used by every
   surface to turn a Rust ``RecordBatch`` into its quivr ``Table``.
 * :func:`ensure_spice_backend` -- idempotent SPICE + MPC-obscodes setup that
-  returns the process-global Rust backend, so veneers stop orchestrating
-  ``setup_SPICE`` / ``get_backend`` / obscodes loading inline per call.
+  returns the process-global Rust backend. Kernel paths cross once into the
+  Rust-owned batch initializer; veneers do not orchestrate individual loads.
 
 Input-side builders are surface-specific (each surface packs different columns)
 and live with their surface; they are added as surfaces convert onto this
@@ -162,12 +162,10 @@ def table_from_record_batch(
 def ensure_spice_backend() -> "RustBackend":
     """Idempotent SPICE + MPC-obscodes setup; return the process-global backend.
 
-    Centralizes the per-call ``setup_SPICE`` / ``get_backend`` / obscodes wiring
-    so surface veneers do not orchestrate it inline. Both setup calls are
-    idempotent (kernels are furnsh-idempotent by path; obscodes load only when
-    the backend reports zero loaded sites). Moving this initialization fully
-    Rust-side (lazy on first use) is tracked under personal-cmy.36.1; the kernel
-    data provenance that blocks it is personal-3uy.
+    Python resolves installed data-package paths, then ``setup_SPICE`` passes
+    the complete set through one typed call. Rust owns kernel validation,
+    deduplication, load order, and process-global state. Observatory JSON is
+    likewise loaded only when the Rust backend reports no sites.
     """
     from ..utils.spice import setup_mpc_obscodes, setup_SPICE
     from ..utils.spice_backend import get_backend

@@ -919,13 +919,10 @@ fn add_light_time_numpy<'py>(
 }
 
 #[pyfunction]
-#[pyo3(signature = (primary_orbit, secondary_orbit, mu, max_iter=100, xtol=1e-10))]
 fn calculate_moid_numpy(
     primary_orbit: PyReadonlyArray1<'_, f64>,
     secondary_orbit: PyReadonlyArray1<'_, f64>,
     mu: f64,
-    max_iter: usize,
-    xtol: f64,
 ) -> PyResult<(f64, f64)> {
     let p_arr = primary_orbit.as_array();
     let s_arr = secondary_orbit.as_array();
@@ -936,18 +933,15 @@ fn calculate_moid_numpy(
     }
     let p = [p_arr[0], p_arr[1], p_arr[2], p_arr[3], p_arr[4], p_arr[5]];
     let s = [s_arr[0], s_arr[1], s_arr[2], s_arr[3], s_arr[4], s_arr[5]];
-    Ok(calculate_moid(p, s, mu, max_iter, xtol))
+    calculate_moid(p, s, mu).map_err(|err| PyValueError::new_err(err.to_string()))
 }
 
 #[pyfunction]
-#[pyo3(signature = (primary_orbits, secondary_orbits, mus, max_iter=100, xtol=1e-10))]
 fn calculate_moid_batch_numpy<'py>(
     py: Python<'py>,
     primary_orbits: PyReadonlyArray2<'py, f64>,
     secondary_orbits: PyReadonlyArray2<'py, f64>,
     mus: PyReadonlyArray1<'py, f64>,
-    max_iter: usize,
-    xtol: f64,
 ) -> PyResult<(Bound<'py, PyArray1<f64>>, Bound<'py, PyArray1<f64>>)> {
     let p_arr = primary_orbits.as_array();
     let s_arr = secondary_orbits.as_array();
@@ -972,7 +966,8 @@ fn calculate_moid_batch_numpy<'py>(
     let mu_slice = mu_arr
         .as_slice()
         .ok_or_else(|| PyValueError::new_err("mus must be contiguous"))?;
-    let (moids, dts) = calculate_moid_batch(p_slice, s_slice, mu_slice, max_iter, xtol);
+    let (moids, dts) = calculate_moid_batch(p_slice, s_slice, mu_slice)
+        .map_err(|error| PyValueError::new_err(error.to_string()))?;
     Ok((
         ndarray::Array1::from_vec(moids).into_pyarray(py),
         ndarray::Array1::from_vec(dts).into_pyarray(py),
@@ -1335,8 +1330,7 @@ fn benchmark_tisserand_parameter_numpy(
 }
 
 #[pyfunction]
-#[pyo3(signature = (primary_orbits, secondary_orbits, mus, reps, trials, warmup_reps=1, max_iter=100, xtol=1e-10))]
-#[allow(clippy::too_many_arguments)]
+#[pyo3(signature = (primary_orbits, secondary_orbits, mus, reps, trials, warmup_reps=1))]
 fn benchmark_calculate_moid_numpy(
     primary_orbits: PyReadonlyArray2<'_, f64>,
     secondary_orbits: PyReadonlyArray2<'_, f64>,
@@ -1344,8 +1338,6 @@ fn benchmark_calculate_moid_numpy(
     reps: usize,
     trials: usize,
     warmup_reps: usize,
-    max_iter: usize,
-    xtol: f64,
 ) -> PyResult<Vec<Vec<f64>>> {
     let p_shape = primary_orbits.shape();
     let s_shape = secondary_orbits.shape();
@@ -1359,6 +1351,14 @@ fn benchmark_calculate_moid_numpy(
     let mus = mus.as_slice()?.to_vec();
     if mus.len() != p_shape[0] {
         return Err(PyValueError::new_err("mus must have length N"));
+    }
+    for (row, &mu) in mus.iter().enumerate() {
+        let base = row * 6;
+        let primary: [f64; 6] = p[base..base + 6].try_into().unwrap();
+        let secondary: [f64; 6] = s[base..base + 6].try_into().unwrap();
+        calculate_moid(primary, secondary, mu).map_err(|error| {
+            PyValueError::new_err(format!("global MOID solver failed for row {row}: {error}"))
+        })?;
     }
     Ok(benchmark_samples(reps, trials, warmup_reps, || {
         (0..mus.len())
@@ -1366,15 +1366,15 @@ fn benchmark_calculate_moid_numpy(
                 let base = row * 6;
                 let primary: [f64; 6] = p[base..base + 6].try_into().unwrap();
                 let secondary: [f64; 6] = s[base..base + 6].try_into().unwrap();
-                calculate_moid(primary, secondary, mus[row], max_iter, xtol)
+                calculate_moid(primary, secondary, mus[row])
+                    .expect("prevalidated MOID benchmark row")
             })
             .collect::<Vec<_>>()
     }))
 }
 
 #[pyfunction]
-#[pyo3(signature = (primary_orbits, secondary_orbits, mus, reps, trials, warmup_reps=1, max_iter=100, xtol=1e-10))]
-#[allow(clippy::too_many_arguments)]
+#[pyo3(signature = (primary_orbits, secondary_orbits, mus, reps, trials, warmup_reps=1))]
 fn benchmark_calculate_moid_batch_numpy(
     primary_orbits: PyReadonlyArray2<'_, f64>,
     secondary_orbits: PyReadonlyArray2<'_, f64>,
@@ -1382,8 +1382,6 @@ fn benchmark_calculate_moid_batch_numpy(
     reps: usize,
     trials: usize,
     warmup_reps: usize,
-    max_iter: usize,
-    xtol: f64,
 ) -> PyResult<Vec<Vec<f64>>> {
     let p_shape = primary_orbits.shape();
     let s_shape = secondary_orbits.shape();
@@ -1398,8 +1396,9 @@ fn benchmark_calculate_moid_batch_numpy(
     if mus.len() != p_shape[0] {
         return Err(PyValueError::new_err("mus must have length N"));
     }
+    calculate_moid_batch(&p, &s, &mus).map_err(|error| PyValueError::new_err(error.to_string()))?;
     Ok(benchmark_samples(reps, trials, warmup_reps, || {
-        calculate_moid_batch(&p, &s, &mus, max_iter, xtol)
+        calculate_moid_batch(&p, &s, &mus).expect("prevalidated MOID benchmark batch")
     }))
 }
 

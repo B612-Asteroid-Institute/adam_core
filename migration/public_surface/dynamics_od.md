@@ -14,7 +14,7 @@ the 44-row parity registry is only a benchmark subset.
 | two-body propagation, arc batches, covariance propagation, ephemeris generation, light time | one Rust/Arrow crossing for public defaults | random/fixed parity, covariance fixtures, scaling and native timing |
 | supplied abstract/custom propagator or optional SPK propagation | explicit provider boundary | provider/fallback tests |
 | porkchop/C3 mission grids and mission departure preparation | fused Rust computation crossing; Python wraps tables and supplied providers | fixture parity, scaling, native timing |
-| historical Ray workers and scalar orchestration helpers (`*_worker_ray`, `moid_worker`, `lambert_worker`, scalar MOID internals) | intentionally retired implementation details; fused Rust batch entrypoints own the same useful workflows and `max_processes` remains signature-compatible | all retired symbol IDs are recorded in the manifest; no-Ray imports, public workflow parity, and native timing |
+| historical Ray workers and scalar orchestration helpers (`*_worker_ray`, `moid_worker`, `lambert_worker`, scalar MOID internals) | intentionally retired implementation details; fused Rust batch entrypoints own the same useful workflows; obsolete MOID process/chunk and solver controls are removed rather than shimmed | all retired symbol IDs are recorded in the manifest; no-Ray imports, public workflow parity, API-contract tests, and native timing |
 
 ## Orbit determination and IOD
 

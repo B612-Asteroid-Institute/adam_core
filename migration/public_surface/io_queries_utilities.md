@@ -255,12 +255,13 @@ composition as the failure fallback so `NotCovered`/wrapped-`ValueError`
 contracts stay byte-identical; fused-vs-legacy bit-exact equality is asserted
 in tests, and both crossings have Rust-Instant timing with the cache cleared
 before every sample. `clear_spkez_cache` clears the retained Python cache and
-the Rust-side cache together. `setup_SPICE`/`setup_mpc_obscodes` remain
-Python package-data discovery loops over idempotent Rust loads (kernel
-lifecycle explicitly preserved; Rust-side lazy init tracked under
-personal-cmy.36.1, data provenance under personal-3uy). Fixed-kernel
-integration tests validate adam-core wiring while leaving CSPICE oracle
-breadth to spicekit.
+the Rust-side cache together. `setup_SPICE(kernels=None)` resolves package-data
+paths and passes the complete ordered set through one typed Rust initializer;
+`setup_mpc_obscodes()` likewise loads package data only when the Rust backend
+reports no sites. Rust owns validation, load order, deduplication, and
+process-global state, so neither initializer exposes a no-op `force` control.
+Fixed-kernel integration tests validate adam-core wiring while leaving CSPICE
+oracle breadth to spicekit.
 
 ### Generic utilities and execution
 

@@ -1005,8 +1005,6 @@ def make_calculate_moid(rng: np.random.Generator, n: int) -> Sample:
         "primary_orbits": primary,
         "secondary_orbits": secondary,
         "mus": mus,
-        "max_iter": 100,
-        "xtol": 1e-10,
     }
     return Sample(rust_kwargs=kw, legacy_kwargs=kw)
 
@@ -1045,8 +1043,12 @@ def make_calculate_perturber_moids(rng: np.random.Generator, n: int) -> Sample:
     ``n`` is the number of primary orbit rows. Each row is paired against a
     small fixed perturber set inside ``calculate_perturber_moids`` so the
     runner validates Orbits construction, SPICE perturber-state lookup,
-    batched Rust MOID dispatch, and PerturberMOIDs table assembly.
+    batched Rust MOID dispatch, and PerturberMOIDs table assembly. Backend
+    initialization is explicit and occurs outside every timed invocation.
     """
+    from adam_core.utils.spice import setup_SPICE
+
+    setup_SPICE()
     coords = _kep_to_cart(_sample_moid_keplerian_elements(rng, n))
     time_mjd = rng.uniform(59000.0, 60500.0, size=n).astype(np.float64)
     orbit_ids = np.array([f"o{i:05d}" for i in range(n)], dtype=object)
@@ -1057,8 +1059,6 @@ def make_calculate_perturber_moids(rng: np.random.Generator, n: int) -> Sample:
         "perturber_codes": np.array(["EARTH", "MARS_BARYCENTER"], dtype=object),
         "origin_code": "SUN",
         "frame": "ecliptic",
-        "chunk_size": 8,
-        "max_processes": 1,
     }
     return Sample(rust_kwargs=kw, legacy_kwargs=kw)
 

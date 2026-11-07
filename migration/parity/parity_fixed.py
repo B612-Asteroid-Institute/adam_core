@@ -77,8 +77,6 @@ def _moid_identical_circular_flat_minimum_sample() -> _inputs.Sample:
         "primary_orbits": cart,
         "secondary_orbits": cart.copy(),
         "mus": np.full(1, _inputs.MU_SUN, dtype=np.float64),
-        "max_iter": 100,
-        "xtol": 1e-10,
     }
     return _inputs.Sample(rust_kwargs=kwargs, legacy_kwargs=kwargs)
 
@@ -120,8 +118,6 @@ def _moid_unique_minimum_sample() -> _inputs.Sample:
         "primary_orbits": primary,
         "secondary_orbits": secondary,
         "mus": np.full(1, _inputs.MU_SUN, dtype=np.float64),
-        "max_iter": 100,
-        "xtol": 1e-10,
     }
     return _inputs.Sample(rust_kwargs=kwargs, legacy_kwargs=kwargs)
 

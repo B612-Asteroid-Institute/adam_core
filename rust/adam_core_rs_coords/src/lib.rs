@@ -253,9 +253,10 @@ pub use lambert::{izzo_lambert, izzo_lambert_batch_flat, porkchop_grid_flat};
 
 pub mod coordinate_frame;
 pub mod moid;
+mod moid_distlink;
 pub mod orbit_least_squares;
 pub mod orbit_propagation;
-pub use moid::{calculate_moid, calculate_moid_batch};
+pub use moid::{calculate_moid, calculate_moid_batch, MoidBatchError, MoidError};
 pub use orbit_least_squares::{fit_orbit_2body_least_squares, LeastSquaresConfig, LeastSquaresFit};
 
 // Canonical legacy-named surface aliases. These bare names match the legacy

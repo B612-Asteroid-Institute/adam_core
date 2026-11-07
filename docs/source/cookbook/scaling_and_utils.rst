@@ -20,6 +20,7 @@ Advanced Options
    from adam_core.coordinates.origin import OriginCodes
    from adam_core.utils import get_perturber_state, setup_SPICE
 
+   # Repeated setup is idempotent; Rust owns kernel deduplication.
    setup_SPICE()
    earth_state = get_perturber_state(
        OriginCodes.EARTH,

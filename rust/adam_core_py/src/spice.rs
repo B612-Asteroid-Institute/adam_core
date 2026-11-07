@@ -735,6 +735,12 @@ impl PyAdamCoreSpiceBackend {
         Ok(self.lock()?.spkez_state_cache_len())
     }
 
+    fn initialize_kernels(&self, paths: Vec<String>) -> PyResult<()> {
+        self.lock()?
+            .initialize_kernels(&paths)
+            .map_err(spice_err_to_py)
+    }
+
     fn furnsh(&self, path: &str) -> PyResult<()> {
         self.lock()?.furnsh(path).map_err(spice_err_to_py)
     }
