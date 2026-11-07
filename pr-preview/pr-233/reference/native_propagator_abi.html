@@ -1,0 +1,782 @@
+<!doctype html>
+<html class="no-js" lang="en" data-content_root="../">
+  <head><meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="color-scheme" content="light dark"><meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="index" title="Index" href="../genindex.html"><link rel="search" title="Search" href="../search.html"><link rel="next" title="Rust Migration Public Compatibility" href="rust_public_compatibility.html"><link rel="prev" title="Rust Backend Contracts" href="rust_backend_contracts.html">
+        <link rel="canonical" href="https://adam-core.readthedocs.io/en/latest/reference/native_propagator_abi.html">
+
+    <!-- Generated with Sphinx 8.2.3 and Furo 2025.12.19 -->
+        <title>Native propagation-provider ABI - adam_core</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=d111a655" />
+    <link rel="stylesheet" type="text/css" href="../_static/styles/furo.css?v=7bdb33bb" />
+    <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
+    <link rel="stylesheet" type="text/css" href="../_static/mystnb.11b39860a7a0cbfd473a3ad8a317855267ff0bd372690045ca344a6b62be495e.css" />
+    <link rel="stylesheet" type="text/css" href="../_static/styles/furo-extensions.css?v=8dab3a3b" />
+    <link rel="stylesheet" type="text/css" href="../_static/custom.css?v=0404406e" />
+    
+    
+
+
+<style>
+  body {
+    --color-code-background: #f2f2f2;
+  --color-code-foreground: #1e1e1e;
+  --color-brand-primary: #0f766e;
+  --color-brand-content: #0369a1;
+  
+  }
+  @media not print {
+    body[data-theme="dark"] {
+      --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  --color-brand-primary: #5eead4;
+  --color-brand-content: #7dd3fc;
+  
+    }
+    @media (prefers-color-scheme: dark) {
+      body:not([data-theme="light"]) {
+        --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  --color-brand-primary: #5eead4;
+  --color-brand-content: #7dd3fc;
+  
+      }
+    }
+  }
+</style></head>
+  <body>
+    
+    <script>
+      document.body.dataset.theme = localStorage.getItem("theme") || "auto";
+    </script>
+    
+
+<svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+  <symbol id="svg-toc" viewBox="0 0 24 24">
+    <title>Contents</title>
+    <svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 1024 1024">
+      <path d="M408 442h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8zm-8 204c0 4.4 3.6 8 8 8h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56zm504-486H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zm0 632H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zM115.4 518.9L271.7 642c5.8 4.6 14.4.5 14.4-6.9V388.9c0-7.4-8.5-11.5-14.4-6.9L115.4 505.1a8.74 8.74 0 0 0 0 13.8z"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-menu" viewBox="0 0 24 24">
+    <title>Menu</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-menu">
+      <line x1="3" y1="12" x2="21" y2="12"></line>
+      <line x1="3" y1="6" x2="21" y2="6"></line>
+      <line x1="3" y1="18" x2="21" y2="18"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-arrow-right" viewBox="0 0 24 24">
+    <title>Expand</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-chevron-right">
+      <polyline points="9 18 15 12 9 6"></polyline>
+    </svg>
+  </symbol>
+  <symbol id="svg-sun" viewBox="0 0 24 24">
+    <title>Light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="feather-sun">
+      <circle cx="12" cy="12" r="5"></circle>
+      <line x1="12" y1="1" x2="12" y2="3"></line>
+      <line x1="12" y1="21" x2="12" y2="23"></line>
+      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+      <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+      <line x1="1" y1="12" x2="3" y2="12"></line>
+      <line x1="21" y1="12" x2="23" y2="12"></line>
+      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+      <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon" viewBox="0 0 24 24">
+    <title>Dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-moon">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454z" />
+    </svg>
+  </symbol>
+  <symbol id="svg-sun-with-moon" viewBox="0 0 24 24">
+    <title>Auto light/dark, in light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path style="opacity: 50%" d="M 5.411 14.504 C 5.471 14.504 5.532 14.504 5.591 14.504 C 3.639 16.319 4.383 19.569 6.931 20.352 C 7.693 20.586 8.512 20.551 9.25 20.252 C 8.023 23.207 4.056 23.725 2.11 21.184 C 0.166 18.642 1.702 14.949 4.874 14.536 C 5.051 14.512 5.231 14.5 5.411 14.5 L 5.411 14.504 Z"/>
+      <line x1="14.5" y1="3.25" x2="14.5" y2="1.25"/>
+      <line x1="14.5" y1="15.85" x2="14.5" y2="17.85"/>
+      <line x1="10.044" y1="5.094" x2="8.63" y2="3.68"/>
+      <line x1="19" y1="14.05" x2="20.414" y2="15.464"/>
+      <line x1="8.2" y1="9.55" x2="6.2" y2="9.55"/>
+      <line x1="20.8" y1="9.55" x2="22.8" y2="9.55"/>
+      <line x1="10.044" y1="14.006" x2="8.63" y2="15.42"/>
+      <line x1="19" y1="5.05" x2="20.414" y2="3.636"/>
+      <circle cx="14.5" cy="9.55" r="3.6"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon-with-sun" viewBox="0 0 24 24">
+    <title>Auto light/dark, in dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path d="M 8.282 7.007 C 8.385 7.007 8.494 7.007 8.595 7.007 C 5.18 10.184 6.481 15.869 10.942 17.24 C 12.275 17.648 13.706 17.589 15 17.066 C 12.851 22.236 5.91 23.143 2.505 18.696 C -0.897 14.249 1.791 7.786 7.342 7.063 C 7.652 7.021 7.965 7 8.282 7 L 8.282 7.007 Z"/>
+      <line style="opacity: 50%" x1="18" y1="3.705" x2="18" y2="2.5"/>
+      <line style="opacity: 50%" x1="18" y1="11.295" x2="18" y2="12.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="4.816" x2="14.464" y2="3.964"/>
+      <line style="opacity: 50%" x1="20.711" y1="10.212" x2="21.563" y2="11.063"/>
+      <line style="opacity: 50%" x1="14.205" y1="7.5" x2="13.001" y2="7.5"/>
+      <line style="opacity: 50%" x1="21.795" y1="7.5" x2="23" y2="7.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="10.184" x2="14.464" y2="11.036"/>
+      <line style="opacity: 50%" x1="20.711" y1="4.789" x2="21.563" y2="3.937"/>
+      <circle style="opacity: 50%" cx="18" cy="7.5" r="2.169"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-pencil" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-pencil-code">
+      <path d="M4 20h4l10.5 -10.5a2.828 2.828 0 1 0 -4 -4l-10.5 10.5v4" />
+      <path d="M13.5 6.5l4 4" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+  <symbol id="svg-eye" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-eye-code">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M10 12a2 2 0 1 0 4 0a2 2 0 0 0 -4 0" />
+      <path
+        d="M11.11 17.958c-3.209 -.307 -5.91 -2.293 -8.11 -5.958c2.4 -4 5.4 -6 9 -6c3.6 0 6.6 2 9 6c-.21 .352 -.427 .688 -.647 1.008" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+</svg>
+
+<input type="checkbox" class="sidebar-toggle" name="__navigation" id="__navigation" aria-label="Toggle site navigation sidebar">
+<input type="checkbox" class="sidebar-toggle" name="__toc" id="__toc" aria-label="Toggle table of contents sidebar">
+<label class="overlay sidebar-overlay" for="__navigation"></label>
+<label class="overlay toc-overlay" for="__toc"></label>
+
+<a class="skip-to-content muted-link" href="#furo-main-content">Skip to content</a>
+
+
+
+<div class="page">
+  <header class="mobile-header">
+    <div class="header-left">
+      <label class="nav-overlay-icon" for="__navigation">
+        <span class="icon"><svg><use href="#svg-menu"></use></svg></span>
+      </label>
+    </div>
+    <div class="header-center">
+      <a href="../index.html"><div class="brand">adam_core</div></a>
+    </div>
+    <div class="header-right">
+      <div class="theme-toggle-container theme-toggle-header">
+        <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
+          <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+          <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+          <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+          <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+        </button>
+      </div>
+      <label class="toc-overlay-icon toc-header-icon" for="__toc">
+        <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
+      </label>
+    </div>
+  </header>
+  <aside class="sidebar-drawer">
+    <div class="sidebar-container">
+      
+      <div class="sidebar-sticky"><a class="sidebar-brand" href="../index.html">
+  
+  <span class="sidebar-brand-text">adam_core</span>
+  
+</a><form class="sidebar-search-container" method="get" action="../search.html" role="search">
+  <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
+  <input type="hidden" name="check_keywords" value="yes">
+  <input type="hidden" name="area" value="default">
+</form>
+<div id="searchbox"></div><div class="sidebar-scroll"><div class="sidebar-tree">
+  <p class="caption" role="heading"><span class="caption-text">Documentation</span></p>
+<ul class="current">
+<li class="toctree-l1 has-children"><a class="reference internal" href="../getting_started/index.html">Getting Started</a><input aria-label="Toggle navigation of Getting Started" class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" role="switch" type="checkbox"/><label for="toctree-checkbox-1"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="../getting_started/installation.html">Installation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../getting_started/releasing.html">Release Process</a></li>
+</ul>
+</li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../use_cases/index.html">Use Cases</a><input aria-label="Toggle navigation of Use Cases" class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" role="switch" type="checkbox"/><label for="toctree-checkbox-2"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="../cookbook/time_and_windows.html">Working with Time</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../cookbook/orbit_sources_and_state_tables.html">Using Orbits</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../cookbook/coordinates_classes.html">Coordinate Classes Guide</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../cookbook/coordinate_covariances.html">Coordinate Covariances</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../cookbook/coordinate_transforms.html">Coordinate Transforms</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../cookbook/observations_and_observers.html">Observations and Observers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../cookbook/propagation_and_ephemeris.html">Propagation and Ephemeris</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../cookbook/residuals.html">Residuals and Fit Quality</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../cookbook/coordinates_and_residuals.html">Coordinates, Covariances, Transforms, and Residuals</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../cookbook/variant_sampling_and_collapse.html">Variant Sampling and Collapse</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../cookbook/photometry_and_magnitude.html">Photometry, Phase Angle, and Light Curves</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../cookbook/rotation_periods.html">Rotation Periods and Measured Confidence</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../cookbook/moid_analysis.html">MOID Analysis</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../cookbook/transfer_and_porkchop.html">Lambert Solutions, Transfers, and Porkchop Plots</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../cookbook/oem_and_spk_io.html">Trajectory Interchange: OEM and SPK Workflows</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../cookbook/openspace_visualization.html">OpenSpace Visualization Assets</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../cookbook/ades_module.html">ADES Module: Parse, Build, and Exchange</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../use_cases/orbit_determination.html">Orbit determination</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../use_cases/neo_tracking.html">NEO Tracking for Follow-Up</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../use_cases/source_multiplexing.html">Multi-Source Orbit Ingest for APIs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../use_cases/ephemeris_service.html">Ephemeris Generation for Services</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../use_cases/observability_and_light_curves.html">Observability and Light Curves</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../use_cases/impact_risk.html">Impact Risk Analysis</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../cookbook/scaling_and_utils.html">Scaling and Utilities</a></li>
+</ul>
+</li>
+<li class="toctree-l1 current has-children"><a class="reference internal" href="index.html">Reference</a><input aria-label="Toggle navigation of Reference" checked="" class="toctree-checkbox" id="toctree-checkbox-3" name="toctree-checkbox-3" role="switch" type="checkbox"/><label for="toctree-checkbox-3"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul class="current">
+<li class="toctree-l2 has-children"><a class="reference internal" href="api/modules.html">adam_core</a><input aria-label="Toggle navigation of adam_core" class="toctree-checkbox" id="toctree-checkbox-4" name="toctree-checkbox-4" role="switch" type="checkbox"/><label for="toctree-checkbox-4"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l3 has-children"><a class="reference internal" href="api/adam_core.html">adam_core package</a><input aria-label="Toggle navigation of adam_core package" class="toctree-checkbox" id="toctree-checkbox-5" name="toctree-checkbox-5" role="switch" type="checkbox"/><label for="toctree-checkbox-5"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4 has-children"><a class="reference internal" href="api/adam_core.coordinates.html">adam_core.coordinates package</a><input aria-label="Toggle navigation of adam_core.coordinates package" class="toctree-checkbox" id="toctree-checkbox-6" name="toctree-checkbox-6" role="switch" type="checkbox"/><label for="toctree-checkbox-6"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5"><a class="reference internal" href="api/adam_core.coordinates.cartesian.html">adam_core.coordinates.cartesian module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/adam_core.coordinates.cometary.html">adam_core.coordinates.cometary module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/adam_core.coordinates.covariances.html">adam_core.coordinates.covariances module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/adam_core.coordinates.geodetics.html">adam_core.coordinates.geodetics module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/adam_core.coordinates.keplerian.html">adam_core.coordinates.keplerian module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/adam_core.coordinates.local_orbital_frames.html">adam_core.coordinates.local_orbital_frames module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/adam_core.coordinates.origin.html">adam_core.coordinates.origin module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/adam_core.coordinates.residuals.html">adam_core.coordinates.residuals module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/adam_core.coordinates.spherical.html">adam_core.coordinates.spherical module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/adam_core.coordinates.transform.html">adam_core.coordinates.transform module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/adam_core.coordinates.types.html">adam_core.coordinates.types module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/adam_core.coordinates.units.html">adam_core.coordinates.units module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/adam_core.coordinates.variants.html">adam_core.coordinates.variants module</a></li>
+</ul>
+</li>
+<li class="toctree-l4 has-children"><a class="reference internal" href="api/adam_core.dynamics.html">adam_core.dynamics package</a><input aria-label="Toggle navigation of adam_core.dynamics package" class="toctree-checkbox" id="toctree-checkbox-7" name="toctree-checkbox-7" role="switch" type="checkbox"/><label for="toctree-checkbox-7"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5"><a class="reference internal" href="api/adam_core.dynamics.aberrations.html">adam_core.dynamics.aberrations module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/adam_core.dynamics.barker.html">adam_core.dynamics.barker module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/adam_core.dynamics.chi.html">adam_core.dynamics.chi module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/adam_core.dynamics.ephemeris.html">adam_core.dynamics.ephemeris module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/adam_core.dynamics.exceptions.html">adam_core.dynamics.exceptions module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/adam_core.dynamics.impacts.html">adam_core.dynamics.impacts module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/adam_core.dynamics.kepler.html">adam_core.dynamics.kepler module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/adam_core.dynamics.lagrange.html">adam_core.dynamics.lagrange module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/adam_core.dynamics.lambert.html">adam_core.dynamics.lambert module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/adam_core.dynamics.moid.html">adam_core.dynamics.moid module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/adam_core.dynamics.plots.html">adam_core.dynamics.plots module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/adam_core.dynamics.propagation.html">adam_core.dynamics.propagation module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/adam_core.dynamics.stumpff.html">adam_core.dynamics.stumpff module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/adam_core.dynamics.tisserand.html">adam_core.dynamics.tisserand module</a></li>
+</ul>
+</li>
+<li class="toctree-l4 has-children"><a class="reference internal" href="api/adam_core.missions.html">adam_core.missions package</a><input aria-label="Toggle navigation of adam_core.missions package" class="toctree-checkbox" id="toctree-checkbox-8" name="toctree-checkbox-8" role="switch" type="checkbox"/><label for="toctree-checkbox-8"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5"><a class="reference internal" href="api/adam_core.missions.porkchop.html">adam_core.missions.porkchop module</a></li>
+</ul>
+</li>
+<li class="toctree-l4 has-children"><a class="reference internal" href="api/adam_core.observations.html">adam_core.observations package</a><input aria-label="Toggle navigation of adam_core.observations package" class="toctree-checkbox" id="toctree-checkbox-9" name="toctree-checkbox-9" role="switch" type="checkbox"/><label for="toctree-checkbox-9"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5"><a class="reference internal" href="api/adam_core.observations.ades.html">adam_core.observations.ades module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/adam_core.observations.arrow_bridge.html">adam_core.observations.arrow_bridge module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/adam_core.observations.associations.html">adam_core.observations.associations module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/adam_core.observations.detections.html">adam_core.observations.detections module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/adam_core.observations.efcc18.html">adam_core.observations.efcc18 module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/adam_core.observations.exposures.html">adam_core.observations.exposures module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/adam_core.observations.obs80.html">adam_core.observations.obs80 module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/adam_core.observations.photometry.html">adam_core.observations.photometry module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/adam_core.observations.source_catalog.html">adam_core.observations.source_catalog module</a></li>
+</ul>
+</li>
+<li class="toctree-l4 has-children"><a class="reference internal" href="api/adam_core.observers.html">adam_core.observers package</a><input aria-label="Toggle navigation of adam_core.observers package" class="toctree-checkbox" id="toctree-checkbox-10" name="toctree-checkbox-10" role="switch" type="checkbox"/><label for="toctree-checkbox-10"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5"><a class="reference internal" href="api/adam_core.observers.observers.html">adam_core.observers.observers module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/adam_core.observers.state.html">adam_core.observers.state module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/adam_core.observers.utils.html">adam_core.observers.utils module</a></li>
+</ul>
+</li>
+<li class="toctree-l4 has-children"><a class="reference internal" href="api/adam_core.orbit_determination.html">adam_core.orbit_determination package</a><input aria-label="Toggle navigation of adam_core.orbit_determination package" class="toctree-checkbox" id="toctree-checkbox-11" name="toctree-checkbox-11" role="switch" type="checkbox"/><label for="toctree-checkbox-11"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5 has-children"><a class="reference internal" href="api/adam_core.orbit_determination.algorithms.html">adam_core.orbit_determination.algorithms package</a><input aria-label="Toggle navigation of adam_core.orbit_determination.algorithms package" class="toctree-checkbox" id="toctree-checkbox-12" name="toctree-checkbox-12" role="switch" type="checkbox"/><label for="toctree-checkbox-12"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l6"><a class="reference internal" href="api/adam_core.orbit_determination.algorithms.fitting.html">adam_core.orbit_determination.algorithms.fitting module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="api/adam_core.orbit_determination.algorithms.gauss.html">adam_core.orbit_determination.algorithms.gauss module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="api/adam_core.orbit_determination.algorithms.gibbs.html">adam_core.orbit_determination.algorithms.gibbs module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="api/adam_core.orbit_determination.algorithms.herrick_gibbs.html">adam_core.orbit_determination.algorithms.herrick_gibbs module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="api/adam_core.orbit_determination.algorithms.iod.html">adam_core.orbit_determination.algorithms.iod module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="api/adam_core.orbit_determination.algorithms.outliers.html">adam_core.orbit_determination.algorithms.outliers module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="api/adam_core.orbit_determination.algorithms.rejection.html">adam_core.orbit_determination.algorithms.rejection module</a></li>
+</ul>
+</li>
+<li class="toctree-l5"><a class="reference internal" href="api/adam_core.orbit_determination.config.html">adam_core.orbit_determination.config module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/adam_core.orbit_determination.evaluate.html">adam_core.orbit_determination.evaluate module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/adam_core.orbit_determination.fitted_orbits.html">adam_core.orbit_determination.fitted_orbits module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/adam_core.orbit_determination.observation_pipeline.html">adam_core.orbit_determination.observation_pipeline module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/adam_core.orbit_determination.profiles.html">adam_core.orbit_determination.profiles module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/adam_core.orbit_determination.resources.html">adam_core.orbit_determination.resources module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/adam_core.orbit_determination.workflows.html">adam_core.orbit_determination.workflows module</a></li>
+</ul>
+</li>
+<li class="toctree-l4 has-children"><a class="reference internal" href="api/adam_core.orbits.html">adam_core.orbits package</a><input aria-label="Toggle navigation of adam_core.orbits package" class="toctree-checkbox" id="toctree-checkbox-13" name="toctree-checkbox-13" role="switch" type="checkbox"/><label for="toctree-checkbox-13"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5 has-children"><a class="reference internal" href="api/adam_core.orbits.openspace.html">adam_core.orbits.openspace package</a><input aria-label="Toggle navigation of adam_core.orbits.openspace package" class="toctree-checkbox" id="toctree-checkbox-14" name="toctree-checkbox-14" role="switch" type="checkbox"/><label for="toctree-checkbox-14"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l6"><a class="reference internal" href="api/adam_core.orbits.openspace.assets.html">adam_core.orbits.openspace.assets module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="api/adam_core.orbits.openspace.lua.html">adam_core.orbits.openspace.lua module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="api/adam_core.orbits.openspace.renderable.html">adam_core.orbits.openspace.renderable module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="api/adam_core.orbits.openspace.translation.html">adam_core.orbits.openspace.translation module</a></li>
+</ul>
+</li>
+<li class="toctree-l5 has-children"><a class="reference internal" href="api/adam_core.orbits.query.html">adam_core.orbits.query package</a><input aria-label="Toggle navigation of adam_core.orbits.query package" class="toctree-checkbox" id="toctree-checkbox-15" name="toctree-checkbox-15" role="switch" type="checkbox"/><label for="toctree-checkbox-15"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l6"><a class="reference internal" href="api/adam_core.orbits.query.horizons.html">adam_core.orbits.query.horizons module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="api/adam_core.orbits.query.neocc.html">adam_core.orbits.query.neocc module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="api/adam_core.orbits.query.sbdb.html">adam_core.orbits.query.sbdb module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="api/adam_core.orbits.query.scout.html">adam_core.orbits.query.scout module</a></li>
+</ul>
+</li>
+<li class="toctree-l5"><a class="reference internal" href="api/adam_core.orbits.arrow_bridge.html">adam_core.orbits.arrow_bridge module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/adam_core.orbits.classification.html">adam_core.orbits.classification module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/adam_core.orbits.ephemeris.html">adam_core.orbits.ephemeris module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/adam_core.orbits.non_gravitational_parameters.html">adam_core.orbits.non_gravitational_parameters module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/adam_core.orbits.oem_io.html">adam_core.orbits.oem_io module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/adam_core.orbits.orbits.html">adam_core.orbits.orbits module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/adam_core.orbits.physical_parameters.html">adam_core.orbits.physical_parameters module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/adam_core.orbits.plots.html">adam_core.orbits.plots module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/adam_core.orbits.spice_kernel.html">adam_core.orbits.spice_kernel module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/adam_core.orbits.trajectory.html">adam_core.orbits.trajectory module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/adam_core.orbits.variants.html">adam_core.orbits.variants module</a></li>
+</ul>
+</li>
+<li class="toctree-l4 has-children"><a class="reference internal" href="api/adam_core.photometry.html">adam_core.photometry package</a><input aria-label="Toggle navigation of adam_core.photometry package" class="toctree-checkbox" id="toctree-checkbox-16" name="toctree-checkbox-16" role="switch" type="checkbox"/><label for="toctree-checkbox-16"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5 has-children"><a class="reference internal" href="api/adam_core.photometry.bandpasses.html">adam_core.photometry.bandpasses package</a><input aria-label="Toggle navigation of adam_core.photometry.bandpasses package" class="toctree-checkbox" id="toctree-checkbox-17" name="toctree-checkbox-17" role="switch" type="checkbox"/><label for="toctree-checkbox-17"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l6"><a class="reference internal" href="api/adam_core.photometry.bandpasses.api.html">adam_core.photometry.bandpasses.api module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="api/adam_core.photometry.bandpasses.constants.html">adam_core.photometry.bandpasses.constants module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="api/adam_core.photometry.bandpasses.tables.html">adam_core.photometry.bandpasses.tables module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="api/adam_core.photometry.bandpasses.vendor.html">adam_core.photometry.bandpasses.vendor module</a></li>
+</ul>
+</li>
+<li class="toctree-l5 has-children"><a class="reference internal" href="api/adam_core.photometry.rotation.html">adam_core.photometry.rotation package</a><input aria-label="Toggle navigation of adam_core.photometry.rotation package" class="toctree-checkbox" id="toctree-checkbox-18" name="toctree-checkbox-18" role="switch" type="checkbox"/><label for="toctree-checkbox-18"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l6"><a class="reference internal" href="api/adam_core.photometry.rotation.core.html">adam_core.photometry.rotation.core module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="api/adam_core.photometry.rotation.estimator.html">adam_core.photometry.rotation.estimator module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="api/adam_core.photometry.rotation.jax_backend.html">adam_core.photometry.rotation.jax_backend module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="api/adam_core.photometry.rotation.wrappers.html">adam_core.photometry.rotation.wrappers module</a></li>
+</ul>
+</li>
+<li class="toctree-l5"><a class="reference internal" href="api/adam_core.photometry.absolute_magnitude.html">adam_core.photometry.absolute_magnitude module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/adam_core.photometry.lightcurve.html">adam_core.photometry.lightcurve module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/adam_core.photometry.magnitude.html">adam_core.photometry.magnitude module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/adam_core.photometry.magnitude_common.html">adam_core.photometry.magnitude_common module</a></li>
+</ul>
+</li>
+<li class="toctree-l4 has-children"><a class="reference internal" href="api/adam_core.propagator.html">adam_core.propagator package</a><input aria-label="Toggle navigation of adam_core.propagator package" class="toctree-checkbox" id="toctree-checkbox-19" name="toctree-checkbox-19" role="switch" type="checkbox"/><label for="toctree-checkbox-19"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5"><a class="reference internal" href="api/adam_core.propagator.propagator.html">adam_core.propagator.propagator module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/adam_core.propagator.types.html">adam_core.propagator.types module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/adam_core.propagator.utils.html">adam_core.propagator.utils module</a></li>
+</ul>
+</li>
+<li class="toctree-l4 has-children"><a class="reference internal" href="api/adam_core.time.html">adam_core.time package</a><input aria-label="Toggle navigation of adam_core.time package" class="toctree-checkbox" id="toctree-checkbox-20" name="toctree-checkbox-20" role="switch" type="checkbox"/><label for="toctree-checkbox-20"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5"><a class="reference internal" href="api/adam_core.time.time.html">adam_core.time.time module</a></li>
+</ul>
+</li>
+<li class="toctree-l4 has-children"><a class="reference internal" href="api/adam_core.utils.html">adam_core.utils package</a><input aria-label="Toggle navigation of adam_core.utils package" class="toctree-checkbox" id="toctree-checkbox-21" name="toctree-checkbox-21" role="switch" type="checkbox"/><label for="toctree-checkbox-21"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5 has-children"><a class="reference internal" href="api/adam_core.utils.helpers.html">adam_core.utils.helpers package</a><input aria-label="Toggle navigation of adam_core.utils.helpers package" class="toctree-checkbox" id="toctree-checkbox-22" name="toctree-checkbox-22" role="switch" type="checkbox"/><label for="toctree-checkbox-22"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l6 has-children"><a class="reference internal" href="api/adam_core.utils.helpers.data.html">adam_core.utils.helpers.data package</a><input aria-label="Toggle navigation of adam_core.utils.helpers.data package" class="toctree-checkbox" id="toctree-checkbox-23" name="toctree-checkbox-23" role="switch" type="checkbox"/><label for="toctree-checkbox-23"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l7"><a class="reference internal" href="api/adam_core.utils.helpers.data.get_test_data.html">adam_core.utils.helpers.data.get_test_data module</a></li>
+</ul>
+</li>
+<li class="toctree-l6"><a class="reference internal" href="api/adam_core.utils.helpers.observations.html">adam_core.utils.helpers.observations module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="api/adam_core.utils.helpers.orbits.html">adam_core.utils.helpers.orbits module</a></li>
+</ul>
+</li>
+<li class="toctree-l5 has-children"><a class="reference internal" href="api/adam_core.utils.plots.html">adam_core.utils.plots package</a><input aria-label="Toggle navigation of adam_core.utils.plots package" class="toctree-checkbox" id="toctree-checkbox-24" name="toctree-checkbox-24" role="switch" type="checkbox"/><label for="toctree-checkbox-24"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l6"><a class="reference internal" href="api/adam_core.utils.plots.data.html">adam_core.utils.plots.data package</a></li>
+<li class="toctree-l6"><a class="reference internal" href="api/adam_core.utils.plots.logos.html">adam_core.utils.plots.logos package</a></li>
+</ul>
+</li>
+<li class="toctree-l5"><a class="reference internal" href="api/adam_core.utils.bounded_lru.html">adam_core.utils.bounded_lru module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/adam_core.utils.http.html">adam_core.utils.http module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/adam_core.utils.iter.html">adam_core.utils.iter module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/adam_core.utils.mpc.html">adam_core.utils.mpc module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/adam_core.utils.spice.html">adam_core.utils.spice module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/adam_core.utils.spice_backend.html">adam_core.utils.spice_backend module</a></li>
+</ul>
+</li>
+<li class="toctree-l4"><a class="reference internal" href="api/adam_core.constants.html">adam_core.constants module</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="rust_benchmark_governance.html">Rust Benchmark Governance</a></li>
+<li class="toctree-l2"><a class="reference internal" href="rust_backend_contracts.html">Rust Backend Contracts</a></li>
+<li class="toctree-l2 current current-page"><a class="current reference internal" href="#">Native propagation-provider ABI</a></li>
+<li class="toctree-l2"><a class="reference internal" href="rust_public_compatibility.html">Rust Migration Public Compatibility</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../non_grav_support.html">Non-Gravitational Support</a></li>
+</ul>
+
+</div>
+</div>
+
+      </div>
+      
+    </div>
+  </aside>
+  <div class="main">
+    <div class="content">
+      <div class="article-container">
+        <a href="#" class="back-to-top muted-link">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+            <path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8v12z"></path>
+          </svg>
+          <span>Back to top</span>
+        </a>
+        <div class="content-icon-container">
+          <div class="view-this-page">
+  <a class="muted-link" href="https://github.com/B612-Asteroid-Institute/adam_core/blob/main/docs/source/reference/native_propagator_abi.rst?plain=true" title="View this page">
+    <svg><use href="#svg-eye"></use></svg>
+    <span class="visually-hidden">View this page</span>
+  </a>
+</div><div class="edit-this-page">
+  <a class="muted-link" href="https://github.com/B612-Asteroid-Institute/adam_core/edit/main/docs/source/reference/native_propagator_abi.rst" rel="edit" title="Edit this page">
+    <svg><use href="#svg-pencil"></use></svg>
+    <span class="visually-hidden">Edit this page</span>
+  </a>
+</div><div class="theme-toggle-container theme-toggle-content">
+            <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
+              <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+              <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+              <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+              <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+            </button>
+          </div>
+          <label class="toc-overlay-icon toc-content-icon" for="__toc">
+            <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
+          </label>
+        </div>
+        <article role="main" id="furo-main-content">
+          <section id="native-propagation-provider-abi">
+<h1>Native propagation-provider ABI<a class="headerlink" href="#native-propagation-provider-abi" title="Link to this heading">¶</a></h1>
+<section id="scope-and-ownership">
+<h2>Scope and ownership<a class="headerlink" href="#scope-and-ownership" title="Link to this heading">¶</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">adam-core</span></code> owns orbit determination: IOD candidate policy, least squares,
+rejection, ranging, linkage orchestration, settings, result tables and
+provenance. A separately built provider may contribute only propagation and
+derivatives through the private capsule described here.
+It must not provide <code class="docutils literal notranslate"><span class="pre">run_iod</span></code>, <code class="docutils literal notranslate"><span class="pre">run_od</span></code>, fitting or rejection work units.
+Python enters an adam-core workflow once (including a linkage batch);
+prediction calls inside that workflow are batched C-ABI calls and never Python
+callbacks.</p>
+<p>Canonical standalone Rust workflows that select an external provider also use
+ABI v2. The provider integration
+owns an <code class="docutils literal notranslate"><span class="pre">ExternalPropagatorV2</span></code> table, its NUL-terminated identity and
+fingerprint strings, its callbacks, and its callback context in stable memory.
+It validates that table with the unsafe
+<code class="docutils literal notranslate"><span class="pre">ExternalPropagator::from_raw(table_ptr)</span></code> constructor, retains every owned
+allocation for longer than the returned wrapper and every workflow call, then
+borrows the validated wrapper through <code class="docutils literal notranslate"><span class="pre">OdPropagator::external(&amp;external)</span></code>.
+The constructor validates the advertised ABI shape, identity, capabilities,
+and complete fields; it cannot prove that foreign pointers remain alive,
+immutable, thread-safe, or unwind-safe.</p>
+<p>Calling <code class="docutils literal notranslate"><span class="pre">from_raw</span></code> is sound only when the pointer is non-null, readable and
+properly aligned for its advertised <code class="docutils literal notranslate"><span class="pre">struct_size</span></code>; every read string and
+callback/context allocation outlives the wrapper; those values remain
+immutable; callbacks honor all buffer rules, may run concurrently, retain no
+request pointers, and never unwind across the C ABI. Moving an owner that would
+invalidate any table or context address is forbidden. The compiling reference
+<code class="docutils literal notranslate"><span class="pre">rust/adam_core/examples/od_external_provider.rs</span></code> makes this ownership and
+unsafe boundary explicit without fabricating a provider table. Lower-level
+predictor algorithms may be generic over the Rust <code class="docutils literal notranslate"><span class="pre">Propagator</span></code> trait, but
+there is no conversion from an arbitrary trait implementation to
+<code class="docutils literal notranslate"><span class="pre">OdPropagator::external</span></code> and the four canonical workflows do not accept that
+trait directly.</p>
+<p>The Python capsule is the ownership boundary between separately built extension
+modules: its destructor owns the table/context lifetime, and adam-core retains
+the capsule while its validated wrapper is used. This does not make adam-core
+link to a GPL-covered provider. An application that instead directly links a
+GPL-covered Rust provider creates a different distribution situation and must
+satisfy that provider’s license; projects should evaluate their own obligations.</p>
+</section>
+<section id="discovery-and-identity">
+<h2>Discovery and identity<a class="headerlink" href="#discovery-and-identity" title="Link to this heading">¶</a></h2>
+<p>A Python propagator declares <code class="docutils literal notranslate"><span class="pre">NativeBackend(name,</span> <span class="pre">version,</span>
+<span class="pre">work_units=frozenset({&quot;propagator_capsule&quot;}))</span></code>. <code class="docutils literal notranslate"><span class="pre">version</span></code> is the canonical
+Cargo SemVer exported by that provider’s native extension (for example
+<code class="docutils literal notranslate"><span class="pre">provider_native.propagator_semver()</span></code>), not the Python distribution’s PEP
+440-normalized <code class="docutils literal notranslate"><span class="pre">__version__</span></code>. Thus a native <code class="docutils literal notranslate"><span class="pre">1.2.3-rc.4</span></code> remains exactly
+that spelling even when Python package metadata says <code class="docutils literal notranslate"><span class="pre">1.2.3rc4</span></code>. Its
+<code class="docutils literal notranslate"><span class="pre">propagator_capsule()</span></code> returns a <code class="docutils literal notranslate"><span class="pre">PyCapsule</span></code> named exactly
+<code class="docutils literal notranslate"><span class="pre">adam_core.propagator.v2</span></code>. Adam-core retains the bound capsule factory as a
+lazy descriptor: static native preflight runs first, empty batches never invoke
+the factory, and the capsule is created only for a valid nonempty execution.
+Adam-core then retains the capsule for the complete native call and compares the
+declaration’s name, native SemVer and two-body
+declaration with the immutable identity in the table. Constructing <code class="docutils literal notranslate"><span class="pre">NativeBackend</span></code> with an algorithm work unit (rather than
+only <code class="docutils literal notranslate"><span class="pre">propagator_capsule</span></code>), or with an empty identity field, raises
+<code class="docutils literal notranslate"><span class="pre">ValueError</span></code>. Empty or mismatched capsule identities fail before propagation.
+Subclasses that override propagation or the capsule method need a new
+declaration.</p>
+<p>The capsule points to <code class="docutils literal notranslate"><span class="pre">ExternalPropagatorV2</span></code> in
+<code class="docutils literal notranslate"><span class="pre">adam_core_rs_coords::propagation</span></code>. <code class="docutils literal notranslate"><span class="pre">abi_version</span></code> must equal <strong>2</strong> exactly;
+there is no major/minor compatibility rule. The distinct v2 capsule name and
+version intentionally prevent provisional v1 tables from being interpreted as
+the stabilized layout.</p>
+<p>Every structure has a frozen required prefix and four reserved pointer-sized
+words. Providers set <code class="docutils literal notranslate"><span class="pre">struct_size</span></code> to the bytes they actually supply. Every
+reserved word completely covered by that advertised size must be zero; a
+non-zero word is a protocol error. Consumers require
+<code class="docutils literal notranslate"><span class="pre">EXTERNAL_PROPAGATOR_V2_MIN_SIZE</span></code> for the mandatory
+table fields and <code class="docutils literal notranslate"><span class="pre">EXTERNAL_PROPAGATOR_V2_STM_SIZE</span></code> before reading the optional
+STM slot. Requests similarly require <code class="docutils literal notranslate"><span class="pre">PROPAGATE_REQUEST_V2_MIN_SIZE</span></code> or
+<code class="docutils literal notranslate"><span class="pre">PROPAGATE_STM_REQUEST_V2_MIN_SIZE</span></code>. A larger structure is accepted and the
+unknown suffix is ignored; a shorter prefix is rejected before any omitted
+field is read. Existing prefix fields must never be reordered or retyped.
+ABI v2 uses the process target’s C pointer/<code class="docutils literal notranslate"><span class="pre">size_t</span></code> layout; provider and
+consumer necessarily share that target because their extensions are loaded in
+one process. The exported prefix constants are computed as the exact end of the
+last required field. Compile-time assertions prove that each copied mandatory
+<code class="docutils literal notranslate"><span class="pre">repr(C)</span></code> prefix ends there without unread tail padding; after its field-end
+size check the optional STM callback is read as one aligned field, never as a
+padded whole-prefix structure. On 64-bit targets the frozen values are
+<code class="docutils literal notranslate"><span class="pre">EXTERNAL_PROPAGATOR_V2_MIN_SIZE</span> <span class="pre">=</span> <span class="pre">72</span></code>,
+<code class="docutils literal notranslate"><span class="pre">EXTERNAL_PROPAGATOR_V2_STM_SIZE</span> <span class="pre">=</span> <span class="pre">80</span></code>,
+<code class="docutils literal notranslate"><span class="pre">EXTERNAL_PROPAGATOR_V2_LEGACY_FULL_SIZE</span> <span class="pre">=</span> <span class="pre">112</span></code>,
+<code class="docutils literal notranslate"><span class="pre">EXTERNAL_PROPAGATOR_V2_METADATA_SIZE</span> <span class="pre">=</span> <span class="pre">128</span></code>,
+<code class="docutils literal notranslate"><span class="pre">PROPAGATE_REQUEST_V2_MIN_SIZE</span> <span class="pre">=</span> <span class="pre">168</span></code> and
+<code class="docutils literal notranslate"><span class="pre">PROPAGATE_STM_REQUEST_V2_MIN_SIZE</span> <span class="pre">=</span> <span class="pre">112</span></code> bytes. Generic adam-core Rust APIs
+remain available on every supported target. Providers must compile against the
+exact exported v2 definitions and target-specific constants, not copy an
+inferred layout.</p>
+</section>
+<section id="reproducibility-metadata-suffix">
+<h2>Reproducibility metadata suffix<a class="headerlink" href="#reproducibility-metadata-suffix" title="Link to this heading">¶</a></h2>
+<p>The frozen table prefix and four reserved words retain their original offsets.
+A complete legacy table ends at <code class="docutils literal notranslate"><span class="pre">EXTERNAL_PROPAGATOR_V2_LEGACY_FULL_SIZE</span></code>
+(112 bytes on 64-bit targets). The append-only suffix adds two immutable
+NUL-terminated lowercase 64-character SHA-256 strings,
+<code class="docutils literal notranslate"><span class="pre">configuration_fingerprint</span></code> and <code class="docutils literal notranslate"><span class="pre">data_fingerprint</span></code>; a complete suffix ends
+at <code class="docutils literal notranslate"><span class="pre">EXTERNAL_PROPAGATOR_V2_METADATA_SIZE</span></code> (128 bytes on 64-bit targets).
+Sizes between those boundaries are rejected because they advertise only part
+of an atomic metadata contract. General propagation remains compatible with a
+short or legacy v2 table, but native OD fails clearly unless both hashes are
+present. The provider hashes every dynamics-affecting configuration input and
+all external ephemeris/model data. Adam-core decodes and copies this metadata
+from the exact retained capsule used by each IOD/refinement stage before
+releasing the GIL; provenance never asks Python for a second capsule afterward.
+Unknown fields appended after the complete suffix remain ignored.</p>
+<section id="provider-metadata-contract">
+<h3>Provider metadata contract<a class="headerlink" href="#provider-metadata-contract" title="Link to this heading">¶</a></h3>
+<p>A propagation-only capsule provider does not add an OD callback or move any
+Core workflow into the provider. Its table must append both metadata fields
+after the frozen reserved words, retain stable NUL-terminated storage for the
+capsule lifetime, and advertise at least
+<code class="docutils literal notranslate"><span class="pre">EXTERNAL_PROPAGATOR_V2_METADATA_SIZE</span></code>. The configuration hash covers every
+setting that can change propagated states (including integration and force
+model choices); the data hash covers the exact immutable ephemeris, kernel,
+and other dynamics data content. A shorter legacy v2 table remains usable for
+general propagation but is intentionally rejected by native OD as
+provenance-incomplete.</p>
+</section>
+</section>
+<section id="capabilities">
+<h2>Capabilities<a class="headerlink" href="#capabilities" title="Link to this heading">¶</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">capabilities</span></code> is a bit set. General propagation ignores unknown capability
+bits for forward compatibility. Canonical OD workflows instead record the
+provider’s complete capability set in provenance and reject any bit unknown to
+this Core with <code class="docutils literal notranslate"><span class="pre">ValueError</span></code> before propagation. Known bits retain their
+specified fail-closed validation, so a provider cannot omit semantics required
+by the current request:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">EXTERNAL_PROPAGATOR_CAP_THREAD_SAFE</span></code> is mandatory. All callbacks and the
+context they reference may be used concurrently from arbitrary native
+threads while the capsule is alive.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">EXTERNAL_PROPAGATOR_CAP_STM</span></code> requires a non-null <code class="docutils literal notranslate"><span class="pre">propagate_stm</span></code>
+callback. Its <code class="docutils literal notranslate"><span class="pre">PropagateStmRequestV2</span></code> has independent ABI-version and
+structure-size fields. It returns states and row-major 6-by-6 derivatives
+<code class="docutils literal notranslate"><span class="pre">d</span> <span class="pre">state(t)</span> <span class="pre">/</span> <span class="pre">d</span> <span class="pre">state(epoch)</span></code> for a batch of target times. The callback
+receives the orbit’s fixed non-gravitational row, so the STM follows the
+same dynamics as propagation.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">EXTERNAL_PROPAGATOR_CAP_NON_GRAVITATIONAL</span></code> means <code class="docutils literal notranslate"><span class="pre">propagate</span></code> accepts the
+per-orbit A1, A2, A3, ALN, NK, NM, NN and R0 array. A NaN means that field is
+null. A row is dynamically active only when at least one of A1/A2/A3 is
+non-zero, matching adam-core’s in-process two-body check. For an active row,
+null Marsden constants mean the standard asteroid convention:
+<code class="docutils literal notranslate"><span class="pre">ALN=1</span></code>, <code class="docutils literal notranslate"><span class="pre">NK=0</span></code>, <code class="docutils literal notranslate"><span class="pre">NM=2</span></code>, <code class="docutils literal notranslate"><span class="pre">NN=5.093</span></code>, <code class="docutils literal notranslate"><span class="pre">R0=1</span> <span class="pre">au</span></code>. Adam-core fails
+closed instead of dropping active non-gravitational acceleration when this
+bit is absent.</p></li>
+</ul>
+<p>The current state-fitting API consumes state STMs. The v2 STM request carries
+the fixed non-gravitational row but <strong>does not carry physical parameters</strong>.
+STM capability is table-wide, not conditional on a request: a provider whose
+supported propagation model permits physical fields to affect its state
+variational equations must not advertise v2 STM support at all. Adam-core must
+use central finite differences through full propagation instead.
+Parameter-partial or physical-parameter-aware STM support requires an appended
+request/callback plus a new known capability bit; it must not be smuggled into
+the v2 state STM layout.</p>
+</section>
+<section id="propagation-request">
+<h2>Propagation request<a class="headerlink" href="#propagation-request" title="Link to this heading">¶</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">PropagateRequestV2</span></code> and <code class="docutils literal notranslate"><span class="pre">PropagateStmRequestV2</span></code> each carry their own
+<code class="docutils literal notranslate"><span class="pre">abi_version</span></code> and <code class="docutils literal notranslate"><span class="pre">struct_size</span></code>.
+States use au and au/day. Epochs and target times are exact <code class="docutils literal notranslate"><span class="pre">(days,</span>
+<span class="pre">nanoseconds)</span></code> pairs. Time scales, frame and origin are NUL-terminated strings.
+Adam-core converts both time arrays to the table’s <code class="docutils literal notranslate"><span class="pre">integration_time_scale</span></code>
+before the call. Output states stay in the requested frame and origin.</p>
+<p>The callback receives all orbits and target times in one request. For
+<code class="docutils literal notranslate"><span class="pre">pairwise</span> <span class="pre">==</span> <span class="pre">0</span></code> output is orbit-major with <code class="docutils literal notranslate"><span class="pre">n_orbits</span> <span class="pre">*</span> <span class="pre">n_times</span></code> rows. For
+<code class="docutils literal notranslate"><span class="pre">pairwise</span> <span class="pre">==</span> <span class="pre">1</span></code> orbit <em>i</em> maps to time <em>i</em> and both lengths must match.
+<code class="docutils literal notranslate"><span class="pre">out_valid</span> <span class="pre">==</span> <span class="pre">0</span></code> marks an individual failed row; a successful callback may
+therefore return partial row failures without failing the request.
+<code class="docutils literal notranslate"><span class="pre">out_failure_codes</span></code> is an optional caller-owned byte buffer with one entry per
+output row. When it is non-null, providers write 0 for every valid row and one
+of these stable values for every invalid row: 1 <code class="docutils literal notranslate"><span class="pre">NonFiniteInputState</span></code>, 2
+<code class="docutils literal notranslate"><span class="pre">NonFiniteOutputState</span></code>, 3 <code class="docutils literal notranslate"><span class="pre">NonFiniteCovariance</span></code>, 4
+<code class="docutils literal notranslate"><span class="pre">SolverZeroDerivative</span></code>, 5 <code class="docutils literal notranslate"><span class="pre">SolverMaxIterations</span></code> or 6
+<code class="docutils literal notranslate"><span class="pre">IntegratorFailure</span></code>. Unknown codes, non-zero codes on valid rows, and zero
+codes on invalid rows are fatal protocol errors. When the pointer is null,
+validity remains available but the caller has elected not to receive a code.</p>
+<p>A non-null physical-parameter pointer has
+<code class="docutils literal notranslate"><span class="pre">n_orbits</span> <span class="pre">*</span> <span class="pre">EXTERNAL_PHYSICAL_PARAMETERS_WIDTH</span></code> values in
+<code class="docutils literal notranslate"><span class="pre">H_v,</span> <span class="pre">H_v_sigma,</span> <span class="pre">G,</span> <span class="pre">G_sigma,</span> <span class="pre">sigma_eff,</span> <span class="pre">chi2_red</span></code> order. It reconstructs the
+same optional <code class="docutils literal notranslate"><span class="pre">PhysicalParametersBatch</span></code> that an in-process <code class="docutils literal notranslate"><span class="pre">Propagator</span></code>
+receives; these values may affect provider physics and are preserved on output.
+A non-null non-gravitational pointer has
+<code class="docutils literal notranslate"><span class="pre">n_orbits</span> <span class="pre">*</span> <span class="pre">EXTERNAL_NON_GRAVITATIONAL_WIDTH</span></code> values in the order listed
+above. Before encoding nulls as NaN, the adam-core consumer rejects every
+present non-finite physical or non-gravitational value; <code class="docutils literal notranslate"><span class="pre">Some(NaN)</span></code> can never
+silently become null. A provider decodes NaN as the specified null sentinel but
+must reject every other non-finite value (positive or negative infinity) as
+<code class="docutils literal notranslate"><span class="pre">INVALID</span></code> before constructing typed batches or invoking either propagation
+callback. Providers must apply the complete active non-gravitational row
+consistently in propagation and in any derivatives they advertise. Adam-core
+carries both typed batches through every candidate, finite-difference batch,
+rejection refit and returned <code class="docutils literal notranslate"><span class="pre">FittedOrbits</span></code> table.</p>
+<p>All non-empty input and output arrays, including the error buffer, must occupy
+non-overlapping address ranges and must have the lengths implied by the request.
+Providers validate checked products before constructing slices. Input strings
+are NUL terminated and immutable for the call. Output buffers are writable only
+for the call and must not alias each other or any input.</p>
+</section>
+<section id="lifetime-errors-and-panics">
+<h2>Lifetime, errors and panics<a class="headerlink" href="#lifetime-errors-and-panics" title="Link to this heading">¶</a></h2>
+<p>The provider owns the table, identity/fingerprint strings, callbacks and
+context. In Python they remain valid and immutable until the capsule destructor
+runs. In standalone Rust they remain valid and immutable longer than the
+<code class="docutils literal notranslate"><span class="pre">ExternalPropagator</span></code> wrapper and all <code class="docutils literal notranslate"><span class="pre">OdPropagator</span></code> borrows created from it;
+the owner must not move address-sensitive table/context storage. Adam-core owns
+every request and output buffer, which is valid only for the duration of its
+callback. A provider must neither retain those pointers nor call Python from a
+callback.</p>
+<p>Callback status values are <code class="docutils literal notranslate"><span class="pre">OK=0</span></code>, <code class="docutils literal notranslate"><span class="pre">ERROR=1</span></code>, <code class="docutils literal notranslate"><span class="pre">PANIC=2</span></code> and
+<code class="docutils literal notranslate"><span class="pre">INVALID=3</span></code> and are not interchangeable. <code class="docutils literal notranslate"><span class="pre">ERROR</span></code> is a provider operation
+failure, <code class="docutils literal notranslate"><span class="pre">PANIC</span></code> is a caught provider panic/exception, and <code class="docutils literal notranslate"><span class="pre">INVALID</span></code> is a
+malformed ABI request or protocol violation. On any non-OK status the whole
+request fails; adam-core never converts it into candidate-local row invalidity.
+The provider writes a NUL-terminated message when the validated v2 prefix
+includes an error buffer. Messages may be truncated. An ABI-version mismatch
+must not write through v2-only error offsets because only the two-field header
+has been established. No Rust panic, C++ exception or other language unwind may
+cross the C ABI.</p>
+<p>Only <code class="docutils literal notranslate"><span class="pre">OK</span></code> may contain candidate-local failures. In that case
+<code class="docutils literal notranslate"><span class="pre">out_valid=0</span></code> marks a failed row and the optional stable per-row code preserves
+its <code class="docutils literal notranslate"><span class="pre">PropagationFailureCode</span></code>; ABI v2 has no per-row message. Adam-core
+classifies a state row marked valid but containing non-finite output as
+<code class="docutils literal notranslate"><span class="pre">NonFiniteOutputState</span></code>. A non-finite state/STM row is never accepted as valid.
+Unknown statuses and <code class="docutils literal notranslate"><span class="pre">INVALID</span></code> map to a fatal protocol error; <code class="docutils literal notranslate"><span class="pre">ERROR</span></code> and
+<code class="docutils literal notranslate"><span class="pre">PANIC</span></code> map to fatal backend errors with distinct text. The same distinction
+applies to linkage batches: row-local failures may reject one candidate, while
+a malformed request, callback error, panic or protocol violation aborts the
+whole core-owned batch.</p>
+</section>
+<section id="migration-from-backend-owned-od-methods">
+<h2>Migration from backend-owned OD methods<a class="headerlink" href="#migration-from-backend-owned-od-methods" title="Link to this heading">¶</a></h2>
+<p>Provider packages should delete or deprecate Python and PyO3 methods such as
+<code class="docutils literal notranslate"><span class="pre">fit_least_squares</span></code>, <code class="docutils literal notranslate"><span class="pre">fit_least_squares_evaluated</span></code>, <code class="docutils literal notranslate"><span class="pre">od_fit</span></code>,
+<code class="docutils literal notranslate"><span class="pre">initial_orbit_determination</span></code>, <code class="docutils literal notranslate"><span class="pre">run_iod_linkages</span></code> and <code class="docutils literal notranslate"><span class="pre">run_od_fit</span></code>.
+Core 0.7 accepts explicit typed configuration in its canonical batch and
+predictor-level algorithms and passes the provider only as the stage
+propagator. Providers must not publish backend-owned OD compatibility routes;
+there is no bridge package.</p>
+</section>
+</section>
+
+        </article>
+      </div>
+      <footer>
+        
+        <div class="related-pages">
+          <a class="next-page" href="rust_public_compatibility.html">
+              <div class="page-info">
+                <div class="context">
+                  <span>Next</span>
+                </div>
+                <div class="title">Rust Migration Public Compatibility</div>
+              </div>
+              <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
+            </a>
+          <a class="prev-page" href="rust_backend_contracts.html">
+              <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
+              <div class="page-info">
+                <div class="context">
+                  <span>Previous</span>
+                </div>
+                
+                <div class="title">Rust Backend Contracts</div>
+                
+              </div>
+            </a>
+        </div>
+        <div class="bottom-of-page">
+          <div class="left-details">
+            <div class="copyright">
+                Copyright &#169; 2023-2026, B612 Asteroid Institute
+            </div>
+            Made with <a href="https://www.sphinx-doc.org/">Sphinx</a> and <a class="muted-link" href="https://pradyunsg.me">@pradyunsg</a>'s
+            
+            <a href="https://github.com/pradyunsg/furo">Furo</a>
+            <div class="last-updated">
+              Last updated on 2026-11-07</div>
+          </div>
+          <div class="right-details">
+            
+          </div>
+        </div>
+        
+      </footer>
+    </div>
+    <aside class="toc-drawer">
+      
+      
+      <div class="toc-sticky toc-scroll">
+        <div class="toc-title-container">
+          <span class="toc-title">
+            On this page
+          </span>
+        </div>
+        <div class="toc-tree-container">
+          <div class="toc-tree">
+            <ul>
+<li><a class="reference internal" href="#">Native propagation-provider ABI</a><ul>
+<li><a class="reference internal" href="#scope-and-ownership">Scope and ownership</a></li>
+<li><a class="reference internal" href="#discovery-and-identity">Discovery and identity</a></li>
+<li><a class="reference internal" href="#reproducibility-metadata-suffix">Reproducibility metadata suffix</a><ul>
+<li><a class="reference internal" href="#provider-metadata-contract">Provider metadata contract</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#capabilities">Capabilities</a></li>
+<li><a class="reference internal" href="#propagation-request">Propagation request</a></li>
+<li><a class="reference internal" href="#lifetime-errors-and-panics">Lifetime, errors and panics</a></li>
+<li><a class="reference internal" href="#migration-from-backend-owned-od-methods">Migration from backend-owned OD methods</a></li>
+</ul>
+</li>
+</ul>
+
+          </div>
+        </div>
+      </div>
+      
+      
+    </aside>
+  </div>
+</div><script src="../_static/documentation_options.js?v=b9678aa1"></script>
+    <script src="../_static/doctools.js?v=9bcbadda"></script>
+    <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../_static/scripts/furo.js?v=46bd48cc"></script>
+    <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
+    <script src="../_static/copybutton.js?v=f281be69"></script>
+    </body>
+</html>
