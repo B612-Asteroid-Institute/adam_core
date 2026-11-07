@@ -12,13 +12,13 @@
     "plotting_policy": "plotting/display may remain Python; all other symbols require review"
   },
   "summary": {
-    "symbols": 742,
+    "symbols": 746,
     "by_kind": {
-      "class": 119,
+      "class": 120,
       "classmethod": 42,
       "constant": 101,
       "constructor": 5,
-      "function": 236,
+      "function": 239,
       "method": 151,
       "property": 88
     },
@@ -31,16 +31,16 @@
       "observers": 19,
       "orbit_determination": 105,
       "orbits": 116,
-      "photometry": 69,
+      "photometry": 73,
       "propagator": 8,
       "time": 38,
       "utils": 70
     },
     "by_implementation_class": {
-      "compatibility_data_or_external_generic": 218,
+      "compatibility_data_or_external_generic": 219,
       "mixed_rust_python_gap": 96,
       "plotting_exemption_candidate": 16,
-      "python_gap_or_external_boundary": 262,
+      "python_gap_or_external_boundary": 265,
       "rust_veneer_candidate_see_domain_audit": 150
     },
     "plotting_exemption_candidates": 16,
@@ -49,7 +49,7 @@
   "frozen_updated_upstream_reconciliation": {
     "commit": "757c09fca86adf9e3d5899952db3d379e09413f6",
     "upstream_symbols": 600,
-    "current_symbols": 742,
+    "current_symbols": 746,
     "upstream_only_symbols": 22,
     "all_upstream_only_symbols_classified": true,
     "disposition": "The listed upstream implementation helpers are intentionally retired; their useful public workflows are Rust-backed or are explicit provider boundaries in the referenced domain audit.",
@@ -16494,6 +16494,90 @@
       "audit_document": "migration/public_surface/photometry_constants.md"
     },
     {
+      "id": "adam_core.photometry.color_determination:ColorFit",
+      "module": "adam_core.photometry.color_determination",
+      "qualname": "ColorFit",
+      "name": "ColorFit",
+      "kind": "class",
+      "domain": "photometry",
+      "source": "src/adam_core/photometry/color_determination.py",
+      "line": 138,
+      "explicit_export": null,
+      "plotting_exemption_candidate": false,
+      "signals": {
+        "plotting": false,
+        "rust_reference": false,
+        "python_loop": true,
+        "numpy_reference": false,
+        "pyarrow_reference": false,
+        "quivr_reference": true,
+        "external_io_reference": false
+      },
+      "review_status": "domain_audited",
+      "implementation_class": "compatibility_data_or_external_generic",
+      "rust_entrypoint": null,
+      "parity_coverage": "compatibility_or_schema_see_domain_audit",
+      "native_timing": "not_applicable_data_or_generic",
+      "tracking_issue": "personal-cmy.37.6",
+      "audit_document": "migration/public_surface/photometry_constants.md"
+    },
+    {
+      "id": "adam_core.photometry.color_determination:estimate_colors",
+      "module": "adam_core.photometry.color_determination",
+      "qualname": "estimate_colors",
+      "name": "estimate_colors",
+      "kind": "function",
+      "domain": "photometry",
+      "source": "src/adam_core/photometry/color_determination.py",
+      "line": 700,
+      "explicit_export": null,
+      "plotting_exemption_candidate": false,
+      "signals": {
+        "plotting": false,
+        "rust_reference": false,
+        "python_loop": true,
+        "numpy_reference": true,
+        "pyarrow_reference": true,
+        "quivr_reference": false,
+        "external_io_reference": false
+      },
+      "review_status": "domain_audited",
+      "implementation_class": "python_gap_or_external_boundary",
+      "rust_entrypoint": null,
+      "parity_coverage": "see_domain_audit",
+      "native_timing": "missing_or_not_applicable_see_domain_audit",
+      "tracking_issue": "personal-cmy.37.6",
+      "audit_document": "migration/public_surface/photometry_constants.md"
+    },
+    {
+      "id": "adam_core.photometry.hg12star:hg12star_correction",
+      "module": "adam_core.photometry.hg12star",
+      "qualname": "hg12star_correction",
+      "name": "hg12star_correction",
+      "kind": "function",
+      "domain": "photometry",
+      "source": "src/adam_core/photometry/hg12star.py",
+      "line": 153,
+      "explicit_export": null,
+      "plotting_exemption_candidate": false,
+      "signals": {
+        "plotting": false,
+        "rust_reference": false,
+        "python_loop": true,
+        "numpy_reference": true,
+        "pyarrow_reference": false,
+        "quivr_reference": false,
+        "external_io_reference": false
+      },
+      "review_status": "domain_audited",
+      "implementation_class": "python_gap_or_external_boundary",
+      "rust_entrypoint": null,
+      "parity_coverage": "see_domain_audit",
+      "native_timing": "missing_or_not_applicable_see_domain_audit",
+      "tracking_issue": "personal-cmy.37.6",
+      "audit_document": "migration/public_surface/photometry_constants.md"
+    },
+    {
       "id": "adam_core.photometry.lightcurve:reduced_magnitude",
       "module": "adam_core.photometry.lightcurve",
       "qualname": "reduced_magnitude",
@@ -16529,7 +16613,7 @@
       "kind": "function",
       "domain": "photometry",
       "source": "src/adam_core/photometry/magnitude.py",
-      "line": 205,
+      "line": 238,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -16557,7 +16641,7 @@
       "kind": "function",
       "domain": "photometry",
       "source": "src/adam_core/photometry/magnitude.py",
-      "line": 254,
+      "line": 287,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -16613,7 +16697,7 @@
       "kind": "function",
       "domain": "photometry",
       "source": "src/adam_core/photometry/magnitude.py",
-      "line": 148,
+      "line": 181,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -16634,6 +16718,34 @@
       "audit_document": "migration/public_surface/photometry_constants.md"
     },
     {
+      "id": "adam_core.photometry.magnitude:observing_geometry",
+      "module": "adam_core.photometry.magnitude",
+      "qualname": "observing_geometry",
+      "name": "observing_geometry",
+      "kind": "function",
+      "domain": "photometry",
+      "source": "src/adam_core/photometry/magnitude.py",
+      "line": 148,
+      "explicit_export": null,
+      "plotting_exemption_candidate": false,
+      "signals": {
+        "plotting": false,
+        "rust_reference": false,
+        "python_loop": true,
+        "numpy_reference": true,
+        "pyarrow_reference": false,
+        "quivr_reference": false,
+        "external_io_reference": false
+      },
+      "review_status": "domain_audited",
+      "implementation_class": "python_gap_or_external_boundary",
+      "rust_entrypoint": null,
+      "parity_coverage": "see_domain_audit",
+      "native_timing": "missing_or_not_applicable_see_domain_audit",
+      "tracking_issue": "personal-cmy.37.6",
+      "audit_document": "migration/public_surface/photometry_constants.md"
+    },
+    {
       "id": "adam_core.photometry.magnitude:predict_magnitudes",
       "module": "adam_core.photometry.magnitude",
       "qualname": "predict_magnitudes",
@@ -16641,7 +16753,7 @@
       "kind": "function",
       "domain": "photometry",
       "source": "src/adam_core/photometry/magnitude.py",
-      "line": 303,
+      "line": 336,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -16697,7 +16809,7 @@
       "kind": "function",
       "domain": "photometry",
       "source": "src/adam_core/photometry/magnitude_common.py",
-      "line": 87,
+      "line": 130,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -16725,7 +16837,7 @@
       "kind": "function",
       "domain": "photometry",
       "source": "src/adam_core/photometry/magnitude_common.py",
-      "line": 138,
+      "line": 181,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -16753,7 +16865,7 @@
       "kind": "function",
       "domain": "photometry",
       "source": "src/adam_core/photometry/magnitude_common.py",
-      "line": 107,
+      "line": 150,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -16781,7 +16893,7 @@
       "kind": "function",
       "domain": "photometry",
       "source": "src/adam_core/photometry/magnitude_common.py",
-      "line": 127,
+      "line": 170,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -16809,7 +16921,7 @@
       "kind": "function",
       "domain": "photometry",
       "source": "src/adam_core/photometry/magnitude_common.py",
-      "line": 48,
+      "line": 91,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -16837,7 +16949,7 @@
       "kind": "function",
       "domain": "photometry",
       "source": "src/adam_core/photometry/magnitude_common.py",
-      "line": 72,
+      "line": 115,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -16865,7 +16977,7 @@
       "kind": "function",
       "domain": "photometry",
       "source": "src/adam_core/photometry/magnitude_common.py",
-      "line": 28,
+      "line": 50,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -17621,7 +17733,7 @@
       "kind": "function",
       "domain": "photometry",
       "source": "src/adam_core/photometry/rotation/wrappers.py",
-      "line": 450,
+      "line": 445,
       "explicit_export": true,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -17649,7 +17761,7 @@
       "kind": "function",
       "domain": "photometry",
       "source": "src/adam_core/photometry/rotation/wrappers.py",
-      "line": 262,
+      "line": 257,
       "explicit_export": true,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -17677,7 +17789,7 @@
       "kind": "function",
       "domain": "photometry",
       "source": "src/adam_core/photometry/rotation/wrappers.py",
-      "line": 295,
+      "line": 290,
       "explicit_export": true,
       "plotting_exemption_candidate": false,
       "signals": {

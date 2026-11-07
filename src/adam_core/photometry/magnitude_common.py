@@ -23,6 +23,28 @@ BandpassComposition: TypeAlias = Union[str, tuple[float, float]]
 _HG_PHI1_SCALE, _HG_PHI1_EXP = 3.33, 0.63
 _HG_PHI2_SCALE, _HG_PHI2_EXP = 1.87, 1.22
 _HG_PHASE_FLOOR = 1.0e-12
+# Validity bounds on G for the H-G phase function as implemented here.  This is
+# the exponential form of the basis functions, without the small-angle smoothing
+# term of Bowell's full formula, so sbpy's bounds of about [-0.253, 1.194] (which
+# are for the full formula) do not carry over.  Within these bounds
+# ``(1 - G) * phi1 + G * phi2`` decreases monotonically over 0 < alpha < 180 deg,
+# i.e. the object always dims with increasing phase angle.  The upper bound is
+# exact: at opposition d(phi1)/d(alpha) -> -inf while d(phi2)/d(alpha) -> 0, so for
+# G > 1 the negative-weighted phi1 term brightens the object just off opposition.
+# The lower bound is the G at which d(phi)/d(alpha) first reaches zero, at
+# alpha ~ 103 deg (G = -0.25519), rounded inward.
+_HG_G_BOUNDS = (-0.255, 1.0)
+
+
+def _hg_phase_basis(
+    alpha_deg: npt.NDArray[np.float64] | float,
+) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
+    """The two IAU basis functions ``phi_i = exp(-A_i * tan(alpha/2) ** B_i)``."""
+    alpha_rad = np.radians(np.asarray(alpha_deg, dtype=np.float64))
+    tan_half = np.tan(0.5 * alpha_rad)
+    phi1 = np.exp(-_HG_PHI1_SCALE * np.power(tan_half, _HG_PHI1_EXP))
+    phi2 = np.exp(-_HG_PHI2_SCALE * np.power(tan_half, _HG_PHI2_EXP))
+    return phi1, phi2
 
 
 def hg_phase_correction(
@@ -36,12 +58,33 @@ def hg_phase_correction(
     ``phi_i = exp(-A_i * tan(alpha/2) ** B_i)``.  Zero at opposition (alpha = 0) and
     positive (fainter) for larger phase angles.  NumPy implementation for CPU callers.
     """
-    alpha_rad = np.radians(np.asarray(alpha_deg, dtype=np.float64))
-    tan_half = np.tan(0.5 * alpha_rad)
-    phi1 = np.exp(-_HG_PHI1_SCALE * np.power(tan_half, _HG_PHI1_EXP))
-    phi2 = np.exp(-_HG_PHI2_SCALE * np.power(tan_half, _HG_PHI2_EXP))
+    phi1, phi2 = _hg_phase_basis(alpha_deg)
     phase = np.clip((1.0 - G) * phi1 + G * phi2, _HG_PHASE_FLOOR, None)
     return -2.5 * np.log10(phase)
+
+
+def _hg_phase_correction_dg(
+    alpha_deg: npt.NDArray[np.float64] | float,
+    G: float,
+) -> npt.NDArray[np.float64]:
+    """
+    Analytic ``d(hg_phase_correction)/dG`` at ``alpha_deg``.
+
+    Supplying this to a least-squares fit makes the residual Jacobian exact,
+    which is what lets a rank test distinguish a genuinely degenerate fit (e.g.
+    a single phase angle, where ``G`` trades off against the absolute magnitude
+    exactly) from a merely ill-conditioned one; a finite-difference Jacobian
+    blurs that distinction at the ~1e-8 level.  Zero wherever
+    `hg_phase_correction` clips at ``_HG_PHASE_FLOOR``, so the two agree on the
+    flat region.
+    """
+    phi1, phi2 = _hg_phase_basis(alpha_deg)
+    phase = (1.0 - G) * phi1 + G * phi2
+    return np.where(
+        phase > _HG_PHASE_FLOOR,
+        -2.5 / np.log(10.0) * (phi2 - phi1) / np.clip(phase, _HG_PHASE_FLOOR, None),
+        0.0,
+    )
 
 
 @lru_cache(maxsize=1)
