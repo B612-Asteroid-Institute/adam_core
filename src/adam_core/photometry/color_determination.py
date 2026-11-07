@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Any, Literal
+from typing import Any, Literal
 
 import numpy as np
 import pyarrow.compute as pc
@@ -191,13 +191,15 @@ class ColorFit(qv.Table):
     # Where this object's observations went.  These partition `num_obs` exactly:
     # num_obs = num_invalid + num_unsupported_filter + num_clipped + num_used.
     num_obs = qv.Int64Column(nullable=True)
-    # Non-finite magnitude, or a missing/non-positive reported uncertainty.
+    # Missing or non-finite magnitude, or a missing/non-positive reported
+    # uncertainty.
     num_invalid = qv.Int64Column(nullable=True)
     # Valid photometry whose (station, band) does not resolve to a g/i/r/u
-    # channel: V, PS1_w, unfiltered reports.  Never entered the fit, and so is
-    # not a statement about its quality (see `_MIN_RETAINED_FRACTION`). Invalid
-    # takes precedence, so this can be smaller than the count `_resolve_channels`
-    # logs: a row with no magnitude is unfittable whatever its filter.
+    # channel: V, PS1_w, unfiltered reports, a null filter.  Never entered the
+    # fit, and so is not a statement about its quality (see
+    # `_MIN_RETAINED_FRACTION`). Invalid takes precedence, so this can be
+    # smaller than the count `_resolve_channels` logs: a row with no magnitude
+    # is unfittable whatever its filter.
     num_unsupported_filter = qv.Int64Column(nullable=True)
     # Eligible observations rejected by the iterative 3-sigma clip.
     num_clipped = qv.Int64Column(nullable=True)
@@ -221,8 +223,9 @@ def _resolve_channels(
     label quirks, e.g. G96 "G" -> SDSS_g, ATLAS "o" -> ATLAS_o, LSST encodings, etc).
     The canonical filter is then looked up in the `_CHANNEL_FILTERS` allow-list, so
     only filters close to the channel's target passband contribute to its fit.
-    Anything else (V, PS1_w, Bessell_R, SkyMapper_g, SDSS_u, ...) and rows with no
-    resolvable filter are returned as ``None`` (excluded downstream).
+    Anything else (V, PS1_w, Bessell_R, SkyMapper_g, SDSS_u, ...), rows with no
+    resolvable filter, and rows with no reported band at all (``None``) are
+    returned as ``None`` (excluded downstream).
 
     Returns ``(channels, filter_ids)``, each an object array of length
     ``len(bands)``. ``channels`` entries are one of ``"g"``, ``"i"``, ``"r"``,
@@ -230,9 +233,15 @@ def _resolve_channels(
     ``None``) and is kept so callers can apply inter-system color-term corrections
     (see `_apply_color_terms`).
     """
-    # on_unknown="skip" leaves unresolvable rows as None instead of raising, so
-    # unfiltered reports and unmapped bands are simply dropped from the fit.
-    filter_ids = map_to_canonical_filter_bands(stn, bands, on_unknown="skip")
+    # Only reported bands (non-null) bands go through the mapping. on_unknown="skip"
+    # leaves unresolvable rows as None instead of raising, so unfiltered reports
+    # and unmapped bands are simply dropped from the fit.
+    has_band = np.array([b is not None for b in bands], dtype=bool)
+    filter_ids = np.full(len(bands), None, dtype=object)
+    if np.any(has_band):
+        filter_ids[has_band] = map_to_canonical_filter_bands(
+            stn[has_band], bands[has_band], on_unknown="skip"
+        )
     channels = np.empty(len(filter_ids), dtype=object)
     for i, fid in enumerate(filter_ids.tolist()):
         channels[i] = None if fid is None else _FILTER_CHANNEL.get(str(fid))
@@ -310,16 +319,17 @@ def _prepare_geometry(
     ``channels`` holds the resolved g/i/r/u color channel (or ``None``) for each
     row and ``filter_ids`` the canonical vendored filter ID (or ``None``); see
     `_resolve_channels`. valid_mask selects rows with finite mag, finite positive
-    rmsmag.
+    rmsmag; a null mag or mag_sigma converts to NaN and so is invalid.
     """
-    stn = np.asarray(obs.observatory_code.to_numpy(zero_copy_only=False), dtype=object).astype(str)
+    stn = np.asarray(
+        obs.observatory_code.to_numpy(zero_copy_only=False), dtype=object
+    ).astype(str)
     observers = Observers.from_codes(stn, obs.time)
 
     mag = obs.mag.to_numpy(zero_copy_only=False).astype(np.float64)
     rmsmag = obs.mag_sigma.to_numpy(zero_copy_only=False).astype(np.float64)
-    bands = np.asarray(obs.filter.to_numpy(zero_copy_only=False), dtype=object).astype(
-        str
-    )
+    # Kept as an object array so a null filter stays None rather than "None".
+    bands = np.asarray(obs.filter.to_numpy(zero_copy_only=False), dtype=object)
     channels, filter_ids = _resolve_channels(stn, bands)
 
     r, delta, alpha_deg = observing_geometry(object_coords, observers)
@@ -707,8 +717,12 @@ def estimate_colors(
     Parameters
     ----------
     observations
-        astrometric/photometric observations.  Must have valid ``object_id``,
-        ``time``, ``mag``, ``filter``, and ``observatory_code`` columns.
+        astrometric/photometric observations, grouped into objects by
+        ``object_id`` (rows with a null ``object_id`` are skipped).  ``mag``,
+        ``mag_sigma`` and ``filter`` may be null: every row of an object is kept
+        and counted in its ``num_obs``, a row with no usable magnitude or
+        uncertainty as ``num_invalid``, and one whose filter is null or does not
+        resolve to a g/i/r/u channel as ``num_unsupported_filter``.
     orbits
         fitted orbits for the same objects.  Used to propagate positions
         to each observation epoch.
@@ -771,11 +785,12 @@ def estimate_colors(
             f"Unsupported phi_type {phi_type!r}; expected one of {_PHI_TYPES}"
         )
 
-    len_before = len(observations)
-    observations = observations.apply_mask(pc.is_valid(observations.filter))
-    observations = observations.apply_mask(pc.is_valid(observations.mag))
-    if len(observations) != len_before:
-        logger.info("Removed %d null bands", len_before - len(observations))
+    # Rows with missing photometry are kept: they flow into each object's counts
+    # (see `ColorFit.num_invalid` / `num_unsupported_filter`) rather than being
+    # dropped here. Only rows with no object to attribute them to are skipped.
+    n_no_object = observations.object_id.null_count
+    if n_no_object:
+        logger.warning(f"Skipping {n_no_object} observation(s) with no object_id")
     unique_ids = [
         x for x in pc.unique(observations.object_id).to_pylist() if x is not None
     ]

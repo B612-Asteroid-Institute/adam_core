@@ -306,6 +306,101 @@ def test_failed_objects_do_not_abort_the_batch() -> None:
         _assert_colors_close(result, object_id, _paper_colors(fx), HG12STAR_TOLERANCE)
 
 
+def _with_nulls(
+    observations: SourceCatalog, column: str, null: np.ndarray
+) -> SourceCatalog:
+    """Null out ``column`` on the rows selected by the boolean mask ``null``."""
+    values = getattr(observations, column)
+    return observations.set_column(
+        column, pc.if_else(pa.array(null), pa.nulls(len(null), values.type), values)
+    )
+
+
+# Fixtures whose photometry is all valid and all in a g/i/r channel, so any
+# invalid or unsupported row in these tests is one the test put there.
+_CLEAN_FIXTURES = ("color_fixture_2025_MS34.npz", "color_fixture_2025_MU8.npz")
+
+
+def _load_clean_fixture(name: str) -> tuple[SourceCatalog, Orbits]:
+    path = DATA_DIR / name
+    if not path.exists():
+        pytest.skip(f"Missing fixture {name}")
+    fx = np.load(path, allow_pickle=True)
+    return _load_fixture_observations(fx), _load_fixture_orbits(fx)
+
+
+def test_null_photometry_rows_are_counted_not_dropped() -> None:
+    """
+    Rows with a null magnitude, uncertainty or filter stay in the object's
+    counts: the first two as invalid (whatever the filter), a null filter as
+    unsupported. The fit itself is the one obtained without those rows.
+    """
+    observations, orbits = _load_clean_fixture(_CLEAN_FIXTURES[0])
+    idx = np.arange(len(observations)) % 9
+    null_mag = (idx == 0) | (idx == 2)
+    null_sigma = idx == 4
+    # idx == 2 has neither magnitude nor filter: invalid takes precedence.
+    null_filter = (idx == 2) | (idx == 7)
+
+    mixed = _with_nulls(observations, "mag", null_mag)
+    mixed = _with_nulls(mixed, "mag_sigma", null_sigma)
+    mixed = _with_nulls(mixed, "filter", null_filter)
+    clean = observations.apply_mask(~(null_mag | null_sigma | null_filter))
+
+    result = estimate_colors(mixed, orbits, "HG12star", force_g_bounds=False)
+    expected = estimate_colors(clean, orbits, "HG12star", force_g_bounds=False)
+
+    row = result.table.to_pylist()[0]
+    assert row["status"] == "ok"
+    assert row["num_obs"] == len(observations)
+    assert row["num_invalid"] == int(np.sum(null_mag | null_sigma))
+    assert row["num_unsupported_filter"] == int(np.sum(null_filter & ~null_mag))
+    assert row["num_obs"] == (
+        row["num_invalid"]
+        + row["num_unsupported_filter"]
+        + row["num_clipped"]
+        + row["num_used"]
+    )
+    for field in ("num_clipped", "num_used", "g_filter", "r_filter", "i_filter"):
+        assert row[field] == getattr(expected, field)[0].as_py(), field
+    for field in ("g_mag", "r_mag", "i_mag", "g_r", "g_i", "r_i", "phase_param"):
+        np.testing.assert_allclose(
+            row[field], getattr(expected, field)[0].as_py(), rtol=1e-12, err_msg=field
+        )
+
+
+@pytest.mark.parametrize("column", ["mag", "mag_sigma", "filter"])
+def test_all_null_object_has_no_usable_photometry(column: str) -> None:
+    """
+    An object whose every row lacks ``column`` is reported as
+    "no_usable_photometry" with all its rows accounted for, while the other
+    object in the batch is fit as usual.
+    """
+    empty_obs, empty_orb = _load_clean_fixture(_CLEAN_FIXTURES[0])
+    good_obs, good_orb = _load_clean_fixture(_CLEAN_FIXTURES[1])
+    n = len(empty_obs)
+    empty_obs = _with_nulls(empty_obs, column, np.ones(n, dtype=bool))
+
+    result = estimate_colors(
+        qv.concatenate([empty_obs, good_obs]),
+        qv.concatenate([empty_orb, good_orb]),
+        "HG12star",
+        force_g_bounds=False,
+    )
+
+    empty, good = result.table.to_pylist()
+    assert empty["status"] == "no_usable_photometry"
+    assert empty["g_r"] is None
+    assert empty["num_obs"] == n
+    assert empty["num_used"] == 0
+    if column == "filter":
+        assert (empty["num_invalid"], empty["num_unsupported_filter"]) == (0, n)
+    else:
+        assert (empty["num_invalid"], empty["num_unsupported_filter"]) == (n, 0)
+    assert good["status"] == "ok"
+    assert good["num_obs"] == len(good_obs)
+
+
 @pytest.mark.parametrize(
     "exc, expected_status, expected_error",
     [
