@@ -4058,18 +4058,34 @@ pub trait SphericalPredictor {
 }
 
 /// [`SphericalPredictor`] over a Rust [`Propagator`]: one
-/// `generate_ephemeris_barycentric` crossing per prediction.
-pub struct PropagatorPredictor<'a, P, T> {
+/// `generate_ephemeris_barycentric` crossing per prediction. The time provider
+/// remains concrete when inferred so a thread-safe provider preserves `Sync`;
+/// existing three-parameter type annotations retain the trait-object default.
+pub struct PropagatorPredictor<'a, P, T, S: TimeScaleProvider + ?Sized = dyn TimeScaleProvider + 'a>
+{
     pub propagator: &'a P,
     pub options: &'a EphemerisOptions,
-    pub provider: &'a dyn TimeScaleProvider,
+    pub provider: &'a S,
     pub translation_provider: &'a T,
 }
 
-impl<P, T> SphericalPredictor for PropagatorPredictor<'_, P, T>
+struct TimeScaleProviderRef<'a, S: TimeScaleProvider + ?Sized>(&'a S);
+
+impl<S: TimeScaleProvider + ?Sized> TimeScaleProvider for TimeScaleProviderRef<'_, S> {
+    fn rescale(
+        &self,
+        times: &TimeArray,
+        new_scale: crate::TimeScale,
+    ) -> crate::types::SchemaResult<TimeArray> {
+        self.0.rescale(times, new_scale)
+    }
+}
+
+impl<P, T, S> SphericalPredictor for PropagatorPredictor<'_, P, T, S>
 where
     P: Propagator,
     T: OriginTranslationProvider,
+    S: TimeScaleProvider + ?Sized,
 {
     fn civil_times_mjd(&self, observed: &CoordinateBatch) -> PropagationResultValue<Vec<f64>> {
         Ok(observed
@@ -4080,12 +4096,12 @@ where
                     "orbit determination requires observation times".to_string(),
                 )
             })?
-            .rescale_with_provider(crate::TimeScale::Utc, self.provider)?
+            .rescale_with_provider(crate::TimeScale::Utc, &TimeScaleProviderRef(self.provider))?
             .mjd_values())
     }
 
     fn dynamical_times_mjd(&self, observed: &CoordinateBatch) -> PropagationResultValue<Vec<f64>> {
-        observed_times_mjd_tdb(observed, self.provider)
+        observed_times_mjd_tdb(observed, &TimeScaleProviderRef(self.provider))
     }
 
     fn dynamical_epoch_in_scale(
@@ -4095,7 +4111,7 @@ where
     ) -> PropagationResultValue<crate::Epoch> {
         Ok(
             crate::TimeArray::new(crate::TimeScale::Tdb, vec![mjd_epoch(mjd_tdb)])?
-                .rescale_with_provider(scale, self.provider)?
+                .rescale_with_provider(scale, &TimeScaleProviderRef(self.provider))?
                 .epochs[0],
         )
     }
@@ -4131,7 +4147,7 @@ where
             geometry,
             observers,
             self.options,
-            self.provider,
+            &TimeScaleProviderRef(self.provider),
             self.translation_provider,
         )
     }

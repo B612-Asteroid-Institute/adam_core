@@ -7,10 +7,10 @@
 //! failure order. An invocation-fatal group lowers a stage-local cancellation
 //! bound: already-running work settles, lower indices remain eligible to replace
 //! the bound, and unstarted later work is skipped. Each non-empty canonical call
-//! snapshots SPICE once before group scheduling;
-//! `run_od` shares that immutable generation across IOD and refinement.
-//! Predictor-level numerical kernels remain
-//! available under [`crate::od::algorithms`], but are not alternate batch APIs.
+//! acquires the initialized SPICE backend before group scheduling and shares
+//! direct read access across all of its stages. Predictor-level numerical
+//! kernels remain available under [`crate::od::algorithms`], but are not
+//! alternate batch APIs.
 //!
 //! # Example
 //!
@@ -55,7 +55,7 @@ use adam_core_rs_coords::{
     CovarianceUnits, DataFrame, ObjectId, ObserverBatch, OrbitBatch, OrbitId, OriginArray,
     OriginId, SchemaError, SourceCatalogBatch, TimeArray, TimeScale, Validity,
 };
-use adam_core_rs_spice::{global_backend, AdamCoreSpiceSnapshot};
+use adam_core_rs_spice::{global_backend, AdamCoreSpiceBackend};
 use rayon::prelude::*;
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
@@ -128,7 +128,8 @@ pub mod algorithms {
     }
 
     /// Process-global SPICE origin translation for PyO3 expert drivers and
-    /// predictor-level callers. Canonical batch OD uses an invocation snapshot.
+    /// predictor-level callers. Canonical batch OD holds one direct backend
+    /// guard for the invocation instead of locking once per prediction.
     #[derive(Debug, Clone, Copy, Default)]
     pub struct GlobalSpiceTranslation;
 
@@ -140,7 +141,7 @@ pub mod algorithms {
             frame: DataFrame,
             times: &TimeArray,
         ) -> Result<Vec<[f64; 6]>, SchemaError> {
-            let backend = global_backend().lock().map_err(|_| {
+            let backend = global_backend().read().map_err(|_| {
                 SchemaError::InvalidRecordBatch("SPICE backend lock is poisoned".to_string())
             })?;
             OriginTranslationProvider::origin_translation_vectors(
@@ -523,59 +524,14 @@ impl OdPropagatorSource for OdPropagator<'_> {
     }
 }
 
-// Every canonical backend is safe to share: `Propagator` requires `Sync`, and
-// ABI-v2 construction rejects external callbacks without THREAD_SAFE.
-#[derive(Clone, Copy)]
-enum PredictionBackend<'a> {
-    TwoBody(&'a TwoBodyPropagator),
-    External(&'a ExternalPropagator),
-}
-
 struct PredictionService<'a> {
-    backend: PredictionBackend<'a>,
-    options: &'a EphemerisOptions,
+    predictor: &'a (dyn SphericalPredictor + Sync),
     metadata: ProviderMetadata,
-}
-
-impl PredictionService<'_> {
-    fn with_predictor<R>(
-        &self,
-        context: &OdExecutionContext<'_>,
-        operation: impl FnOnce(&dyn SphericalPredictor) -> R,
-    ) -> R {
-        match self.backend {
-            PredictionBackend::TwoBody(propagator) => {
-                let predictor = PropagatorPredictor {
-                    propagator,
-                    options: self.options,
-                    provider: context.time_provider,
-                    translation_provider: context.translation_provider,
-                };
-                operation(&predictor)
-            }
-            PredictionBackend::External(propagator) => {
-                let predictor = PropagatorPredictor {
-                    propagator,
-                    options: self.options,
-                    provider: context.time_provider,
-                    translation_provider: context.translation_provider,
-                };
-                operation(&predictor)
-            }
-        }
-    }
 }
 
 struct OdExecutionContext<'a> {
     time_provider: &'a ErfaTimeProvider,
-    translation_provider: &'a AdamCoreSpiceSnapshot,
-}
-
-fn global_translation_snapshot() -> Result<AdamCoreSpiceSnapshot, OdBatchError> {
-    global_backend()
-        .lock()
-        .map(|backend| backend.snapshot())
-        .map_err(|_| OdBatchError::new(OdBatchErrorCode::Runtime, "SPICE backend lock is poisoned"))
+    translation_provider: &'a AdamCoreSpiceBackend,
 }
 
 /// Stage-local best-effort invocation-fatal cancellation bound.
@@ -671,24 +627,36 @@ fn with_stage_predictor<R>(
 ) -> Result<R, OdBatchError> {
     let settings = canonical_stage_settings(config)?;
     let time = ErfaTimeProvider;
-    let translation = global_translation_snapshot()?;
+    let translation = global_backend().read().map_err(|_| {
+        OdBatchError::new(OdBatchErrorCode::Runtime, "SPICE backend lock is poisoned")
+    })?;
     let context = OdExecutionContext {
         time_provider: &time,
         translation_provider: &translation,
     };
     match &provider.backend {
         OdPropagatorBackend::TwoBody => {
-            let service = PredictionService {
-                backend: PredictionBackend::TwoBody(&settings.two_body),
+            let predictor = PropagatorPredictor {
+                propagator: &settings.two_body,
                 options: &settings.options,
+                provider: &time,
+                translation_provider: &*translation,
+            };
+            let service = PredictionService {
+                predictor: &predictor,
                 metadata: two_body_provider_metadata(&settings.two_body),
             };
             driver(&service, &context)
         }
         OdPropagatorBackend::External(propagator) => {
-            let service = PredictionService {
-                backend: PredictionBackend::External(propagator),
+            let predictor = PropagatorPredictor {
+                propagator: *propagator,
                 options: &settings.options,
+                provider: &time,
+                translation_provider: &*translation,
+            };
+            let service = PredictionService {
+                predictor: &predictor,
                 metadata: provider.external_metadata()?,
             };
             driver(&service, &context)
@@ -709,35 +677,57 @@ fn with_stage_predictors<R>(
     let iod = canonical_stage_settings(iod_config)?;
     let refinement = canonical_stage_settings(refinement_config)?;
     let time = ErfaTimeProvider;
-    let translation = global_translation_snapshot()?;
+    let translation = global_backend().read().map_err(|_| {
+        OdBatchError::new(OdBatchErrorCode::Runtime, "SPICE backend lock is poisoned")
+    })?;
     let context = OdExecutionContext {
         time_provider: &time,
         translation_provider: &translation,
     };
     match &provider.backend {
         OdPropagatorBackend::TwoBody => {
-            let iod_service = PredictionService {
-                backend: PredictionBackend::TwoBody(&iod.two_body),
+            let iod_predictor = PropagatorPredictor {
+                propagator: &iod.two_body,
                 options: &iod.options,
+                provider: &time,
+                translation_provider: &*translation,
+            };
+            let refinement_predictor = PropagatorPredictor {
+                propagator: &refinement.two_body,
+                options: &refinement.options,
+                provider: &time,
+                translation_provider: &*translation,
+            };
+            let iod_service = PredictionService {
+                predictor: &iod_predictor,
                 metadata: two_body_provider_metadata(&iod.two_body),
             };
             let refinement_service = PredictionService {
-                backend: PredictionBackend::TwoBody(&refinement.two_body),
-                options: &refinement.options,
+                predictor: &refinement_predictor,
                 metadata: two_body_provider_metadata(&refinement.two_body),
             };
             driver(&iod_service, &refinement_service, &context)
         }
         OdPropagatorBackend::External(propagator) => {
+            let iod_predictor = PropagatorPredictor {
+                propagator: *propagator,
+                options: &iod.options,
+                provider: &time,
+                translation_provider: &*translation,
+            };
+            let refinement_predictor = PropagatorPredictor {
+                propagator: *propagator,
+                options: &refinement.options,
+                provider: &time,
+                translation_provider: &*translation,
+            };
             let metadata = provider.external_metadata()?;
             let iod_service = PredictionService {
-                backend: PredictionBackend::External(propagator),
-                options: &iod.options,
+                predictor: &iod_predictor,
                 metadata: metadata.clone(),
             };
             let refinement_service = PredictionService {
-                backend: PredictionBackend::External(propagator),
-                options: &refinement.options,
+                predictor: &refinement_predictor,
                 metadata,
             };
             driver(&iod_service, &refinement_service, &context)
@@ -3096,16 +3086,14 @@ fn run_iod_prepared(
                 None,
             );
             let orbit_id = default_orbit_id(&group.group_id, &config_sha, &input_fingerprint);
-            let result = service.with_predictor(context, |predictor| {
-                run_iod_with_predictor(
-                    predictor,
-                    &prepared,
-                    &observers,
-                    config.stage(),
-                    context.time_provider,
-                    context.translation_provider,
-                )
-            });
+            let result = run_iod_with_predictor(
+                service.predictor,
+                &prepared,
+                &observers,
+                config.stage(),
+                context.time_provider,
+                context.translation_provider,
+            );
             let group_result = match result {
                 Ok(iod) => {
                     let failure = iod_failure(&group.group_id, &iod, group.source_indices.len());
@@ -3360,17 +3348,15 @@ fn run_od_prepared(
                 let seed = iod
                     .seed_orbit()?
                     .expect("accepted IOD result has a seed orbit");
-                let refined = refinement_service.with_predictor(context, |predictor| {
-                    refine_with_predictor(
-                        predictor,
-                        &seed,
-                        &group.prepared,
-                        &observers,
-                        &config.for_refinement(),
-                        context.time_provider,
-                        context.translation_provider,
-                    )
-                });
+                let refined = refine_with_predictor(
+                    refinement_service.predictor,
+                    &seed,
+                    &group.prepared,
+                    &observers,
+                    &config.for_refinement(),
+                    context.time_provider,
+                    context.translation_provider,
+                );
                 let group_result = match refined {
                     Ok(refined) => {
                         let failure = refinement_failure(
@@ -4052,17 +4038,15 @@ fn refine_prepared(
                 let seed_provenance = input.provenance[group.orbit_index]
                     .as_ref()
                     .expect("validated provenance");
-                let refined = service.with_predictor(context, |predictor| {
-                    refine_with(
-                        predictor,
-                        &seed,
-                        &prepared.observations,
-                        &observers,
-                        &refinement,
-                        context.time_provider,
-                        context.translation_provider,
-                    )
-                });
+                let refined = refine_with(
+                    service.predictor,
+                    &seed,
+                    &prepared.observations,
+                    &observers,
+                    &refinement,
+                    context.time_provider,
+                    context.translation_provider,
+                );
                 let group_result = match refined {
                     Ok(refined) => {
                         let failure = refinement_failure(
@@ -4224,8 +4208,8 @@ impl PreparedEvaluation<'_> {
     /// Execute using stage settings and identity derived from `provider`.
     fn execute(self, provider: &OdPropagator<'_>) -> Result<OdBatchResult, OdBatchError> {
         let fit = *self.config.prediction_fit();
-        with_stage_predictor(provider, fit, |service, context| {
-            evaluate_prepared(self.inner, &self.config, service, context)
+        with_stage_predictor(provider, fit, |service, _context| {
+            evaluate_prepared(self.inner, &self.config, service)
         })
     }
 }
@@ -4291,7 +4275,6 @@ fn evaluate_prepared(
     prepared: PreparedMemberBatch<'_>,
     config: &EvaluationConfig,
     service: &PredictionService<'_>,
-    context: &OdExecutionContext<'_>,
 ) -> Result<OdBatchResult, OdBatchError> {
     let PreparedMemberBatch {
         input,
@@ -4333,17 +4316,15 @@ fn evaluate_prepared(
                     .iter()
                     .map(|&row| input.members.outlier[row].unwrap_or(false))
                     .collect::<Vec<_>>();
-                let evaluated = service.with_predictor(context, |predictor| {
-                    evaluate_orbit(
-                        predictor,
-                        state,
-                        &orbit,
-                        &prepared.observations,
-                        &observers,
-                        &ignore,
-                        parameters,
-                    )
-                });
+                let evaluated = evaluate_orbit(
+                    service.predictor,
+                    state,
+                    &orbit,
+                    &prepared.observations,
+                    &observers,
+                    &ignore,
+                    parameters,
+                );
                 let group_result = match evaluated {
                     Ok(evaluation) => {
                         let input_fingerprint = group_input_fingerprint(
@@ -4512,10 +4493,11 @@ mod tests {
     };
     use adam_core_rs_coords::{Epoch, ObservatoryCode, TimeColumn};
     use adam_core_rs_spice::{SpkWriter, Type9Segment};
+    use std::panic::{catch_unwind, AssertUnwindSafe};
     use std::path::PathBuf;
     use std::process::{Command, Stdio};
     use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-    use std::sync::{mpsc, Arc, Mutex};
+    use std::sync::{mpsc, Arc, Barrier, Mutex};
     use std::time::{Duration, Instant};
 
     static SPICE_FIXTURE_LOCK: Mutex<()> = Mutex::new(());
@@ -4552,7 +4534,7 @@ mod tests {
 
     impl Drop for FurnishedKernel {
         fn drop(&mut self) {
-            if let Ok(mut backend) = global_backend().lock() {
+            if let Ok(mut backend) = global_backend().write() {
                 backend.unload(&self.0);
             }
             let _ = std::fs::remove_file(&self.0);
@@ -4713,6 +4695,85 @@ mod tests {
         )
     }
 
+    struct ReentrantSpicePropagator {
+        inner: TwoBodyPropagator,
+    }
+
+    impl ReentrantSpicePropagator {
+        fn read_core_spice(&self, times: &TimeArray) -> PropagationResultValue<()> {
+            let origins = OriginArray::repeat(OriginId::SolarSystemBarycenter, times.len());
+            OriginTranslationProvider::origin_translation_vectors(
+                &algorithms::GlobalSpiceTranslation,
+                &origins,
+                &OriginId::SolarSystemBarycenter,
+                DataFrame::Ecliptic,
+                times,
+            )
+            .map(|_| ())
+            .map_err(PropagationError::from)
+        }
+    }
+
+    impl Propagator for ReentrantSpicePropagator {
+        type Shard = <TwoBodyPropagator as Propagator>::Shard;
+
+        fn supports_stm(&self) -> bool {
+            self.inner.supports_stm()
+        }
+
+        fn propagate_stm(
+            &self,
+            state: [f64; 6],
+            non_gravitational_parameters: Option<
+                adam_core_rs_coords::NonGravitationalParametersRow,
+            >,
+            epoch_tdb: Epoch,
+            times_tdb: &[Epoch],
+        ) -> PropagationResultValue<Vec<StmRow>> {
+            let times = TimeArray::new(TimeScale::Tdb, times_tdb.to_vec())?;
+            self.read_core_spice(&times)?;
+            self.inner
+                .propagate_stm(state, non_gravitational_parameters, epoch_tdb, times_tdb)
+        }
+
+        fn backend(&self) -> adam_core_rs_coords::propagation::BackendIdentity {
+            self.inner.backend()
+        }
+
+        fn integration_time_scale(&self) -> TimeScale {
+            self.inner.integration_time_scale()
+        }
+
+        fn supports(&self, mode: CovariancePropagation) -> bool {
+            self.inner.supports(mode)
+        }
+
+        fn create_shard(&self) -> Self::Shard {
+            self.inner.create_shard()
+        }
+
+        fn propagate(
+            &self,
+            request: &PropagationRequest<'_>,
+            provider: &dyn TimeScaleProvider,
+        ) -> PropagationResultValue<PropagationResult> {
+            self.read_core_spice(request.times)?;
+            self.inner.propagate(request, provider)
+        }
+    }
+
+    fn owned_reentrant_spice() -> OwnedExternalPropagator<ReentrantSpicePropagator> {
+        OwnedExternalPropagator::new_with_fingerprints(
+            ReentrantSpicePropagator {
+                inner: TwoBodyPropagator::default(),
+            },
+            "test.reentrant-core-spice",
+            "1.0.0",
+            &"c".repeat(64),
+            &"d".repeat(64),
+        )
+    }
+
     fn explicit_config() -> OdConfig {
         OdConfig::explicit(
             ObservationPipeline::as_supplied(),
@@ -4870,7 +4931,7 @@ mod tests {
             .expect("zero-Sun SPK segment");
         writer.write(&path).expect("zero-Sun SPK");
         global_backend()
-            .lock()
+            .write()
             .expect("SPICE backend")
             .furnsh(&path)
             .expect("furnish zero-Sun SPK");
@@ -6001,6 +6062,135 @@ mod tests {
     }
 
     #[test]
+    fn same_pool_global_spice_reader_reenters_canonical_stage() {
+        const CHILD_ENV: &str = "ADAM_CORE_OD_SAME_POOL_READER_CHILD";
+        if std::env::var_os(CHILD_ENV).is_none() {
+            run_child_test(
+                "od::tests::same_pool_global_spice_reader_reenters_canonical_stage",
+                CHILD_ENV,
+                Duration::from_secs(30),
+            );
+            return;
+        }
+
+        let pool = rayon::ThreadPoolBuilder::new()
+            .num_threads(1)
+            .build()
+            .expect("single-thread reader pool");
+        pool.install(|| {
+            with_stage_predictor(
+                &OdPropagator::two_body(),
+                WhitenedFitConfig::default(),
+                |_service, _context| {
+                    let completed = AtomicUsize::new(0);
+                    let times = TimeArray::new(TimeScale::Tdb, vec![Epoch::new(60_000, 0)])?;
+                    let origins = OriginArray::repeat(OriginId::SolarSystemBarycenter, times.len());
+                    rayon::scope(|scope| {
+                        scope.spawn(|_| {
+                            let vectors = OriginTranslationProvider::origin_translation_vectors(
+                                &algorithms::GlobalSpiceTranslation,
+                                &origins,
+                                &OriginId::SolarSystemBarycenter,
+                                DataFrame::Ecliptic,
+                                &times,
+                            )
+                            .expect("same-pool global SPICE read");
+                            completed.store(vectors.len(), Ordering::Release);
+                        });
+                    });
+                    if completed.load(Ordering::Acquire) != times.len() {
+                        return Err(OdBatchError::new(
+                            OdBatchErrorCode::Runtime,
+                            "same-pool reader did not complete",
+                        ));
+                    }
+                    Ok(())
+                },
+            )
+        })
+        .expect("canonical stage with same-pool SPICE reader");
+    }
+
+    #[test]
+    fn in_process_provider_can_reenter_core_spice() {
+        const CHILD_ENV: &str = "ADAM_CORE_OD_REENTRANT_PROVIDER_CHILD";
+        if std::env::var_os(CHILD_ENV).is_none() {
+            run_child_test(
+                "od::tests::in_process_provider_can_reenter_core_spice",
+                CHILD_ENV,
+                Duration::from_secs(60),
+            );
+            return;
+        }
+
+        let _fixture_lock = SPICE_FIXTURE_LOCK
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        let _kernel = FurnishedKernel(zero_sun_spk());
+        let owned = owned_reentrant_spice();
+        // SAFETY: the owned ABI table and context outlive this workflow.
+        let external = unsafe { ExternalPropagator::from_raw(owned.table()) }
+            .expect("reentrant external propagator");
+        let input = associated_groups(scientific_observation_batch(), 4);
+        let result = run_od(
+            &input,
+            &explicit_config(),
+            &OdPropagator::external(&external),
+        )
+        .expect("provider re-entering Core SPICE");
+        assert_eq!(result.group_views().count(), 4);
+    }
+
+    #[test]
+    fn canonical_stage_readers_overlap() {
+        const CHILD_ENV: &str = "ADAM_CORE_OD_CONCURRENT_READERS_CHILD";
+        if std::env::var_os(CHILD_ENV).is_none() {
+            run_child_test(
+                "od::tests::canonical_stage_readers_overlap",
+                CHILD_ENV,
+                Duration::from_secs(30),
+            );
+            return;
+        }
+
+        let barrier = Arc::new(Barrier::new(2));
+        let threads = (0..2)
+            .map(|_| {
+                let barrier = Arc::clone(&barrier);
+                std::thread::spawn(move || {
+                    with_stage_predictor(
+                        &OdPropagator::two_body(),
+                        WhitenedFitConfig::default(),
+                        |_service, _context| {
+                            barrier.wait();
+                            Ok(())
+                        },
+                    )
+                })
+            })
+            .collect::<Vec<_>>();
+        for thread in threads {
+            thread
+                .join()
+                .expect("canonical reader thread")
+                .expect("canonical reader");
+        }
+    }
+
+    #[test]
+    fn canonical_read_guard_panic_does_not_poison_global_backend() {
+        let panic = catch_unwind(AssertUnwindSafe(|| {
+            let _result: Result<(), OdBatchError> = with_stage_predictor(
+                &OdPropagator::two_body(),
+                WhitenedFitConfig::default(),
+                |_service, _context| panic!("read-guard probe"),
+            );
+        }));
+        assert!(panic.is_err());
+        assert!(global_backend().read().is_ok());
+    }
+
+    #[test]
     fn public_long_arc_workflows_complete_without_nested_spice_deadlock() {
         const CHILD_ENV: &str = "ADAM_CORE_OD_LONG_ARC_CHILD";
         if std::env::var_os(CHILD_ENV).is_none() {
@@ -6055,13 +6245,13 @@ mod tests {
             let mut first = true;
             while !peer_stop.load(Ordering::Acquire) {
                 let backend = global_backend()
-                    .lock()
+                    .read()
                     .unwrap_or_else(|error| error.into_inner());
                 if first {
-                    ready_tx.send(()).expect("signal held SPICE lock");
+                    ready_tx.send(()).expect("signal held SPICE read guard");
                     first = false;
-                    // Give the competing plain thread time to reach OD group
-                    // scheduling while this thread still owns the global lock.
+                    // Give the competing canonical call time to acquire its
+                    // own read guard before this peer enters the shared pool.
                     std::thread::sleep(Duration::from_millis(250));
                 }
                 let vectors = OriginTranslationProvider::origin_translation_vectors(
@@ -6077,7 +6267,7 @@ mod tests {
                 std::thread::sleep(Duration::from_millis(1));
             }
         });
-        ready_rx.recv().expect("peer acquired SPICE lock");
+        ready_rx.recv().expect("peer acquired SPICE read guard");
 
         let group_count = rayon::current_num_threads().saturating_mul(2).max(16);
         let input = associated_groups(scientific_observation_batch(), group_count);
@@ -6086,6 +6276,30 @@ mod tests {
         stop.store(true, Ordering::Release);
         peer.join().expect("SPICE peer");
         assert_eq!(result.group_views().count(), group_count);
+    }
+
+    #[test]
+    fn canonical_stage_holds_initialized_spice_backend_read_guard() {
+        let _fixture_lock = SPICE_FIXTURE_LOCK
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        let guard_was_held = with_stage_predictor(
+            &OdPropagator::two_body(),
+            WhitenedFitConfig::default(),
+            |_service, context| {
+                let _direct_backend: &AdamCoreSpiceBackend = context.translation_provider;
+                std::thread::spawn(|| {
+                    matches!(
+                        global_backend().try_write(),
+                        Err(std::sync::TryLockError::WouldBlock)
+                    )
+                })
+                .join()
+                .map_err(|_| OdBatchError::new(OdBatchErrorCode::Runtime, "lock probe panicked"))
+            },
+        )
+        .expect("canonical stage");
+        assert!(guard_was_held);
     }
 
     #[test]

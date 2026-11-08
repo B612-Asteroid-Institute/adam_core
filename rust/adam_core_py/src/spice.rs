@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::hint::black_box;
-use std::sync::MutexGuard;
+use std::sync::{RwLockReadGuard, RwLockWriteGuard, TryLockError};
 use std::time::Instant;
 
 use adam_core_rs_coords::{
@@ -14,8 +14,9 @@ use adam_core_rs_spice::{
         fit_chebyshev, type3_segment, type9_segment, write_orbits_spk, write_spk_writers_atomic,
         SpkKernelType, SpkProductOptions,
     },
-    AdamCoreSpiceBackend, NaifFrame, PckError, PckFile, SpiceBackendError, SpkError, SpkFile,
-    SpkWriter, SpkWriterError, Type3Record, Type3Segment, Type9Segment, SPK_SUMMARIES_PER_RECORD,
+    try_initialize_global_kernels, AdamCoreSpiceBackend, GlobalKernelInitializationError,
+    NaifFrame, PckError, PckFile, SpiceBackendError, SpkError, SpkFile, SpkWriter, SpkWriterError,
+    Type3Record, Type3Segment, Type9Segment, SPK_SUMMARIES_PER_RECORD,
 };
 use arrow::pyarrow::{FromPyArrow, ToPyArrow};
 use arrow_array::{Array, Float64Array, Int64Array, LargeStringArray, RecordBatch};
@@ -157,6 +158,20 @@ fn lock_err_to_py() -> PyErr {
     PyRuntimeError::new_err("adam-core SPICE backend lock is poisoned")
 }
 
+fn busy_backend_to_py() -> PyErr {
+    PyRuntimeError::new_err(
+        "adam-core SPICE backend is busy; kernel mutation is allowed only during initialization",
+    )
+}
+
+fn global_initialization_err_to_py(error: GlobalKernelInitializationError) -> PyErr {
+    match error {
+        GlobalKernelInitializationError::Busy => busy_backend_to_py(),
+        GlobalKernelInitializationError::Poisoned => lock_err_to_py(),
+        GlobalKernelInitializationError::Backend(error) => spice_err_to_py(error),
+    }
+}
+
 /// Thin Python veneer over the process-global Rust SPICE backend
 /// (`adam_core_rs_spice::global_backend`). Kernel state is owned entirely in
 /// Rust and shared by every consumer, so multiple `AdamCoreSpiceBackend()`
@@ -168,8 +183,16 @@ fn lock_err_to_py() -> PyErr {
 pub struct PyAdamCoreSpiceBackend;
 
 impl PyAdamCoreSpiceBackend {
-    fn lock(&self) -> PyResult<MutexGuard<'static, AdamCoreSpiceBackend>> {
-        global_backend().lock().map_err(|_| lock_err_to_py())
+    fn read(&self) -> PyResult<RwLockReadGuard<'static, AdamCoreSpiceBackend>> {
+        global_backend().read().map_err(|_| lock_err_to_py())
+    }
+
+    fn try_write(&self) -> PyResult<RwLockWriteGuard<'static, AdamCoreSpiceBackend>> {
+        match global_backend().try_write() {
+            Ok(backend) => Ok(backend),
+            Err(TryLockError::WouldBlock) => Err(busy_backend_to_py()),
+            Err(TryLockError::Poisoned(_)) => Err(lock_err_to_py()),
+        }
     }
 
     /// Pure-Rust implementation behind the Arrow-native observers crossing.
@@ -250,7 +273,7 @@ impl PyAdamCoreSpiceBackend {
             })?;
 
         let flat = self
-            .lock()?
+            .read()?
             .observer_states_from_codes(&unique_codes, &slots, &tdb_times, frame, &origin)
             .map_err(observer_states_err_to_py)?;
         let states: Vec<[f64; 6]> = flat
@@ -282,18 +305,18 @@ impl PyAdamCoreSpiceBackend {
 
     /// Paths of every kernel currently loaded in the process-global backend.
     fn registered_kernels(&self) -> PyResult<Vec<String>> {
-        Ok(self.lock()?.registered_kernels())
+        Ok(self.read()?.registered_kernels())
     }
 
     /// Whether `path` is currently loaded in the process-global backend.
     fn is_registered(&self, path: &str) -> PyResult<bool> {
-        Ok(self.lock()?.is_registered(path))
+        Ok(self.read()?.is_registered(path))
     }
 
     /// Unload every kernel and clear custom name bindings from the
     /// process-global backend. Primarily for test isolation.
     fn clear(&self) -> PyResult<()> {
-        self.lock()?.clear();
+        self.try_write()?.clear();
         Ok(())
     }
 
@@ -301,13 +324,13 @@ impl PyAdamCoreSpiceBackend {
     /// shipped by the Python `mpc_obscodes` package). Space-based codes with
     /// non-finite geodetics are skipped. Returns the number of ground sites.
     fn load_mpc_obscodes(&self, json: &str) -> PyResult<usize> {
-        self.lock()?
+        self.try_write()?
             .load_mpc_obscodes(json)
             .map_err(spice_err_to_py)
     }
 
     fn mpc_obscodes_loaded(&self) -> PyResult<usize> {
-        Ok(self.lock()?.mpc_obscodes_loaded())
+        Ok(self.read()?.mpc_obscodes_loaded())
     }
 
     /// Single-crossing ``Observers.from_codes`` state generation:
@@ -367,7 +390,7 @@ impl PyAdamCoreSpiceBackend {
             })
             .collect::<PyResult<Vec<usize>>>()?;
         let out = self
-            .lock()?
+            .read()?
             .observer_states_from_codes(&unique_codes, &slots, &times, frame, &origin)
             .map_err(spice_err_to_py)?;
         let arr = ndarray::Array2::from_shape_vec((code_indices.len(), 6), out)
@@ -562,7 +585,7 @@ impl PyAdamCoreSpiceBackend {
         let tdb_days: Vec<i64> = tdb.epochs.iter().map(|epoch| epoch.days).collect();
         let tdb_nanos: Vec<i64> = tdb.epochs.iter().map(|epoch| epoch.nanos).collect();
         let flat = self
-            .lock()?
+            .read()?
             .perturber_states_cached(
                 target_id,
                 origin_id,
@@ -609,7 +632,7 @@ impl PyAdamCoreSpiceBackend {
         let tdb_nanos: Vec<i64> = tdb.epochs.iter().map(|epoch| epoch.nanos).collect();
         let run_once = || -> PyResult<RecordBatch> {
             // Semantic result cache cleared before every sample (cache policy).
-            let mut backend = self.lock()?;
+            let backend = self.read()?;
             backend.clear_spkez_state_cache();
             let flat = backend
                 .perturber_states_cached(
@@ -661,7 +684,7 @@ impl PyAdamCoreSpiceBackend {
         let times = TimeArray::from_parts(scale, days, nanos)
             .map_err(|err| PyValueError::new_err(format!("invalid times: {err}")))?;
         let coordinates = self
-            .lock()?
+            .read()?
             .state_batch(
                 &OriginId::Naif(body_id),
                 &OriginId::from_code(origin_code),
@@ -703,7 +726,7 @@ impl PyAdamCoreSpiceBackend {
         let origin = OriginId::from_code(origin_code);
         let run_once = || -> PyResult<RecordBatch> {
             let coordinates = self
-                .lock()?
+                .read()?
                 .state_batch(&target, &origin, frame_enum, &times)
                 .map_err(spice_err_to_py)?;
             coordinates
@@ -727,26 +750,24 @@ impl PyAdamCoreSpiceBackend {
     }
 
     fn clear_spkez_state_cache(&self) -> PyResult<()> {
-        self.lock()?.clear_spkez_state_cache();
+        self.read()?.clear_spkez_state_cache();
         Ok(())
     }
 
     fn spkez_state_cache_len(&self) -> PyResult<usize> {
-        Ok(self.lock()?.spkez_state_cache_len())
+        Ok(self.read()?.spkez_state_cache_len())
     }
 
     fn initialize_kernels(&self, paths: Vec<String>) -> PyResult<()> {
-        self.lock()?
-            .initialize_kernels(&paths)
-            .map_err(spice_err_to_py)
+        try_initialize_global_kernels(&paths).map_err(global_initialization_err_to_py)
     }
 
     fn furnsh(&self, path: &str) -> PyResult<()> {
-        self.lock()?.furnsh(path).map_err(spice_err_to_py)
+        try_initialize_global_kernels(&[path]).map_err(global_initialization_err_to_py)
     }
 
     fn unload(&self, path: &str) -> PyResult<()> {
-        self.lock()?.unload(path);
+        self.try_write()?.unload(path);
         Ok(())
     }
 
@@ -758,7 +779,7 @@ impl PyAdamCoreSpiceBackend {
         observer: i32,
     ) -> PyResult<(f64, f64, f64, f64, f64, f64)> {
         let state = self
-            .lock()?
+            .read()?
             .spkez(target, et, frame, observer)
             .map_err(spice_err_to_py)?;
         Ok((state[0], state[1], state[2], state[3], state[4], state[5]))
@@ -774,7 +795,7 @@ impl PyAdamCoreSpiceBackend {
     ) -> PyResult<Bound<'py, PyArray2<f64>>> {
         let ets = ets.as_slice()?;
         let out = self
-            .lock()?
+            .read()?
             .spkez_batch(target, observer, frame, ets)
             .map_err(spice_err_to_py)?;
         let arr = ndarray::Array2::from_shape_vec((ets.len(), 6), out)
@@ -791,7 +812,7 @@ impl PyAdamCoreSpiceBackend {
     ) -> PyResult<Bound<'py, PyArray3<f64>>> {
         let ets = ets.as_slice()?;
         let out = self
-            .lock()?
+            .read()?
             .pxform_batch(frame_from, frame_to, ets)
             .map_err(spice_err_to_py)?;
         let arr = ndarray::Array3::from_shape_vec((ets.len(), 3, 3), out)
@@ -808,7 +829,7 @@ impl PyAdamCoreSpiceBackend {
     ) -> PyResult<Bound<'py, PyArray3<f64>>> {
         let ets = ets.as_slice()?;
         let out = self
-            .lock()?
+            .read()?
             .sxform_batch(frame_from, frame_to, ets)
             .map_err(spice_err_to_py)?;
         let arr = ndarray::Array3::from_shape_vec((ets.len(), 6, 6), out)
@@ -817,7 +838,7 @@ impl PyAdamCoreSpiceBackend {
     }
 
     fn bodn2c(&self, name: &str) -> PyResult<i32> {
-        self.lock()?.bodn2c(name).map_err(spice_err_to_py)
+        self.read()?.bodn2c(name).map_err(spice_err_to_py)
     }
 }
 
@@ -1033,7 +1054,7 @@ fn spk_write_orbits_product(
         kernel_type: SpkKernelType::parse(kernel_type).map_err(spk_product_err_to_py)?,
     };
     let backend = global_backend()
-        .lock()
+        .read()
         .map_err(|_| PyRuntimeError::new_err("SPICE backend lock is poisoned"))?;
     write_orbits_spk(
         &backend,
@@ -1067,8 +1088,8 @@ fn benchmark_spk_write_orbits_product(
         kernel_type: SpkKernelType::parse(kernel_type).map_err(spk_product_err_to_py)?,
     };
     let run_once = || -> PyResult<()> {
-        let mut backend = global_backend()
-            .lock()
+        let backend = global_backend()
+            .read()
             .map_err(|_| PyRuntimeError::new_err("SPICE backend lock is poisoned"))?;
         backend.clear_spkez_state_cache();
         write_orbits_spk(
@@ -1271,7 +1292,7 @@ impl NaifSpkWriter {
             .first()
             .ok_or_else(|| PyValueError::new_err("SPK segment requires an origin"))?;
         let backend = global_backend()
-            .lock()
+            .read()
             .map_err(|_| PyRuntimeError::new_err("SPICE backend lock is poisoned"))?;
         let segment = type3_segment(
             &backend,
@@ -1321,7 +1342,7 @@ impl NaifSpkWriter {
             .first()
             .ok_or_else(|| PyValueError::new_err("SPK segment requires an origin"))?;
         let backend = global_backend()
-            .lock()
+            .read()
             .map_err(|_| PyRuntimeError::new_err("SPICE backend lock is poisoned"))?;
         let segment = type9_segment(
             &backend,
@@ -1402,7 +1423,7 @@ pub(crate) fn mission_time_grid(
 
 #[allow(clippy::too_many_arguments)]
 fn prepare_major_body_orbits(
-    backend: &mut AdamCoreSpiceBackend,
+    backend: &AdamCoreSpiceBackend,
     start_days: &[i64],
     start_nanos: &[i64],
     start_scale: &str,
@@ -1454,11 +1475,11 @@ fn prepare_major_body_orbits_arrow<'py>(
     origin_id: i32,
     origin_code: &str,
 ) -> PyResult<PyObject> {
-    let mut backend = global_backend()
-        .lock()
+    let backend = global_backend()
+        .read()
         .map_err(|_| PyRuntimeError::new_err("SPICE backend lock is poisoned"))?;
     prepare_major_body_orbits(
-        &mut backend,
+        &backend,
         start_days.as_slice()?,
         start_nanos.as_slice()?,
         start_scale,
@@ -1502,12 +1523,12 @@ fn benchmark_prepare_major_body_orbits(
     let mut output = Vec::with_capacity(trials);
     for _ in 0..trials {
         for _ in 0..warmup_reps {
-            let mut backend = global_backend()
-                .lock()
+            let backend = global_backend()
+                .read()
                 .map_err(|_| PyRuntimeError::new_err("SPICE backend lock is poisoned"))?;
             backend.clear_spkez_state_cache();
             black_box(prepare_major_body_orbits(
-                &mut backend,
+                &backend,
                 &start_days,
                 &start_nanos,
                 start_scale,
@@ -1522,13 +1543,13 @@ fn benchmark_prepare_major_body_orbits(
         }
         let mut samples = Vec::with_capacity(reps);
         for _ in 0..reps {
-            let mut backend = global_backend()
-                .lock()
+            let backend = global_backend()
+                .read()
                 .map_err(|_| PyRuntimeError::new_err("SPICE backend lock is poisoned"))?;
             backend.clear_spkez_state_cache();
             let started = Instant::now();
             black_box(prepare_major_body_orbits(
-                &mut backend,
+                &backend,
                 &start_days,
                 &start_nanos,
                 start_scale,

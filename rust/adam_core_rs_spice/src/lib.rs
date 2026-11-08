@@ -11,7 +11,7 @@ use std::collections::{HashMap, VecDeque};
 use std::fs::File;
 use std::io::{self, Read};
 use std::path::Path;
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::{Mutex, OnceLock, RwLock, TryLockError};
 
 use adam_core_rs_coords::types::{
     CoordinateBatch, Epoch, Frame, OriginArray, OriginId, SchemaError, SchemaResult, TimeArray,
@@ -109,7 +109,20 @@ impl SpiceBackendError {
     }
 }
 
-#[derive(Clone)]
+/// Failure from fail-fast initialization of the process-global kernel set.
+#[doc(hidden)]
+#[derive(Debug, Error)]
+pub enum GlobalKernelInitializationError {
+    #[error(
+        "adam-core SPICE backend is busy; kernel mutation is allowed only during initialization"
+    )]
+    Busy,
+    #[error("adam-core SPICE backend lock is poisoned")]
+    Poisoned,
+    #[error(transparent)]
+    Backend(#[from] SpiceBackendError),
+}
+
 enum Kernel {
     /// An SPK or a binary PCK. Its reader lives in the backend's pool.
     Binary { path: String },
@@ -134,42 +147,13 @@ impl Kernel {
 /// CSPICE `furnsh` priority. Text-kernel body bindings are replayed in load
 /// order so the most recent binding wins.
 pub struct AdamCoreSpiceBackend {
-    kernels: Arc<Vec<Kernel>>,
-    pool: Arc<KernelPool>,
-    custom_names: Arc<HashMap<String, i32>>,
-    obscodes: Arc<HashMap<String, GroundObserverSite>>,
-    spkez_state_cache: SpkezStateCache,
-}
-
-/// Immutable, lock-free view of one exact global SPICE backend generation.
-///
-/// Canonical OD acquires one snapshot on its calling thread before scheduling
-/// groups. Loaded kernel readers, name bindings, and observatory definitions
-/// remain fixed for that invocation even if the process-global backend changes.
-///
-/// This is a doc-hidden cross-crate implementation seam for `adam_core`; it is
-/// not a supported consumer-facing alternative to [`global_backend`].
-#[doc(hidden)]
-pub struct AdamCoreSpiceSnapshot {
-    backend: AdamCoreSpiceBackend,
-}
-
-impl OriginTranslationProvider for AdamCoreSpiceSnapshot {
-    fn origin_translation_vectors(
-        &self,
-        origins: &OriginArray,
-        target_origin: &OriginId,
-        frame: Frame,
-        times: &TimeArray,
-    ) -> SchemaResult<Vec<[f64; 6]>> {
-        OriginTranslationProvider::origin_translation_vectors(
-            &self.backend,
-            origins,
-            target_origin,
-            frame,
-            times,
-        )
-    }
+    kernels: Vec<Kernel>,
+    pool: KernelPool,
+    custom_names: HashMap<String, i32>,
+    obscodes: HashMap<String, GroundObserverSite>,
+    spkez_state_cache: Mutex<SpkezStateCache>,
+    #[cfg(test)]
+    probe_spkez_cache_lock_scope: bool,
 }
 
 /// Key of the fused perturber-state epoch cache: the Rust mirror of the
@@ -232,14 +216,67 @@ impl SpkezStateCache {
 /// `spice_backend.py` / `PyAdamCoreSpiceBackend` and every Rust-native
 /// consumer (coordinate transforms, ephemeris, observers, OD) share this one
 /// backend, so kernel-load bookkeeping can never desync from what is actually
-/// loaded (the root cause behind personal-cmy.23). The backend holds only
-/// memory-mapped/parsed readers, which are inherited read-only across a Ray
-/// fork, so no per-PID rebuild is required.
-static GLOBAL_BACKEND: OnceLock<Mutex<AdamCoreSpiceBackend>> = OnceLock::new();
+/// loaded (the root cause behind personal-cmy.23). Furnish the process kernel
+/// set during initialization before concurrent computation. Scientific callers
+/// take shared read guards; canonical OD holds one read guard per non-empty
+/// invocation and shares direct immutable access with its workers. Kernel-set
+/// mutation requires an exclusive write guard and is unsupported concurrently
+/// with scientific work. The backend holds only memory-mapped/parsed readers,
+/// which are inherited read-only across a Ray fork, so no per-PID rebuild is
+/// required.
+static GLOBAL_BACKEND: OnceLock<RwLock<AdamCoreSpiceBackend>> = OnceLock::new();
 
 /// Return the process-global SPICE backend, initializing it empty on first use.
-pub fn global_backend() -> &'static Mutex<AdamCoreSpiceBackend> {
-    GLOBAL_BACKEND.get_or_init(|| Mutex::new(AdamCoreSpiceBackend::new()))
+///
+/// This intentionally exposes reader/writer ownership: use [`RwLock::read`] for
+/// scientific queries and [`RwLock::write`] only during initialization, before
+/// concurrent work starts. Blocking on [`RwLock::write`] during in-flight or
+/// re-entrant scientific work is unsupported and may deadlock. Runtime kernel
+/// mutation attempts must use [`RwLock::try_write`] and fail rather than queue
+/// behind readers.
+pub fn global_backend() -> &'static RwLock<AdamCoreSpiceBackend> {
+    GLOBAL_BACKEND.get_or_init(|| RwLock::new(AdamCoreSpiceBackend::new()))
+}
+
+fn all_kernel_paths_registered<P: AsRef<Path>>(
+    backend: &AdamCoreSpiceBackend,
+    paths: &[P],
+) -> bool {
+    paths
+        .iter()
+        .all(|path| backend.is_registered(&path.as_ref().display().to_string()))
+}
+
+/// Initialize exact paths in the process-global backend without blocking an
+/// active scientific reader.
+///
+/// If every exact path is already registered, this is a shared-read no-op.
+/// A genuinely missing path proceeds through `try_write`; another initializer
+/// may win that transition, so the complete set is checked again under the
+/// exclusive guard before parsing or mutation.
+#[doc(hidden)]
+pub fn try_initialize_global_kernels<P: AsRef<Path>>(
+    paths: &[P],
+) -> Result<(), GlobalKernelInitializationError> {
+    {
+        let backend = global_backend()
+            .read()
+            .map_err(|_| GlobalKernelInitializationError::Poisoned)?;
+        if all_kernel_paths_registered(&backend, paths) {
+            return Ok(());
+        }
+    }
+
+    let mut backend = match global_backend().try_write() {
+        Ok(backend) => backend,
+        Err(TryLockError::WouldBlock) => return Err(GlobalKernelInitializationError::Busy),
+        Err(TryLockError::Poisoned(_)) => return Err(GlobalKernelInitializationError::Poisoned),
+    };
+    if all_kernel_paths_registered(&backend, paths) {
+        return Ok(());
+    }
+    backend.initialize_kernels(paths)?;
+    Ok(())
 }
 
 /// Earth-fixed observer described by MPC observatory parallax coefficients.
@@ -333,43 +370,34 @@ pub struct TransformOutput {
 impl AdamCoreSpiceBackend {
     pub fn new() -> Self {
         Self {
-            kernels: Arc::new(Vec::new()),
-            pool: Arc::new(KernelPool::new()),
-            custom_names: Arc::new(HashMap::new()),
-            obscodes: Arc::new(HashMap::new()),
-            spkez_state_cache: SpkezStateCache::default(),
-        }
-    }
-
-    /// Capture the currently loaded readers and lookup maps without rereading
-    /// kernel files. Mutations detach the global backend generation lazily.
-    ///
-    /// This doc-hidden method exists only for the cross-crate canonical OD
-    /// implementation and is not a supported consumer-facing backend API.
-    #[doc(hidden)]
-    pub fn snapshot(&self) -> AdamCoreSpiceSnapshot {
-        AdamCoreSpiceSnapshot {
-            backend: Self {
-                kernels: Arc::clone(&self.kernels),
-                pool: Arc::clone(&self.pool),
-                custom_names: Arc::clone(&self.custom_names),
-                obscodes: Arc::clone(&self.obscodes),
-                spkez_state_cache: SpkezStateCache::default(),
-            },
+            kernels: Vec::new(),
+            pool: KernelPool::new(),
+            custom_names: HashMap::new(),
+            obscodes: HashMap::new(),
+            spkez_state_cache: Mutex::new(SpkezStateCache::default()),
+            #[cfg(test)]
+            probe_spkez_cache_lock_scope: false,
         }
     }
 
     /// Clear the fused perturber-state epoch cache (semantic result cache;
     /// cleared by `adam_core.utils.spice.clear_spkez_cache` and before every
     /// native benchmark sample per the cache policy).
-    pub fn clear_spkez_state_cache(&mut self) {
-        self.spkez_state_cache.clear();
+    pub fn clear_spkez_state_cache(&self) {
+        self.spkez_state_cache
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .clear();
     }
 
     /// Number of entries in the fused perturber-state epoch cache
     /// (diagnostics/tests).
     pub fn spkez_state_cache_len(&self) -> usize {
-        self.spkez_state_cache.map.len()
+        self.spkez_state_cache
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .map
+            .len()
     }
 
     /// Fused legacy `get_perturber_state` core: dedup rows by integer TDB
@@ -381,7 +409,7 @@ impl AdamCoreSpiceBackend {
     /// forward and negated reverse cache entries, and gather to input row
     /// order. Returns flat `N * 6` states.
     pub fn perturber_states_cached(
-        &mut self,
+        &self,
         target: i32,
         observer: i32,
         frame: &str,
@@ -402,6 +430,13 @@ impl AdamCoreSpiceBackend {
             inverse.push(slot);
         }
 
+        // Cache mutation is isolated from the immutable kernel registry and
+        // pool. Concurrent scientific readers therefore share the outer
+        // backend RwLock and serialize only this small semantic cache.
+        let mut cache = self
+            .spkez_state_cache
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
         let mut states: Vec<[f64; 6]> = vec![[0.0; 6]; unique.len()];
         let mut missing: Vec<usize> = Vec::new();
         for (slot, &(epoch_days, epoch_nanos)) in unique.iter().enumerate() {
@@ -412,7 +447,7 @@ impl AdamCoreSpiceBackend {
                 days: epoch_days,
                 nanos: epoch_nanos,
             };
-            if let Some(state) = self.spkez_state_cache.get(&forward) {
+            if let Some(state) = cache.get(&forward) {
                 states[slot] = state;
                 continue;
             }
@@ -423,18 +458,33 @@ impl AdamCoreSpiceBackend {
                 days: epoch_days,
                 nanos: epoch_nanos,
             };
-            if let Some(state) = self.spkez_state_cache.get(&reverse) {
+            if let Some(state) = cache.get(&reverse) {
                 let negated = [
                     -state[0], -state[1], -state[2], -state[3], -state[4], -state[5],
                 ];
                 states[slot] = negated;
-                self.spkez_state_cache.put(forward, negated, cache_maxsize);
+                cache.put(forward, negated, cache_maxsize);
                 continue;
             }
             missing.push(slot);
         }
+        drop(cache);
 
         if !missing.is_empty() {
+            // This immediate, non-blocking test probe guards the lock boundary:
+            // no cache guard may cross into SPK resolution, whose large batches
+            // enter Rayon below.
+            #[cfg(test)]
+            if self.probe_spkez_cache_lock_scope {
+                match self.spkez_state_cache.try_lock() {
+                    Ok(probe) => drop(probe),
+                    Err(std::sync::TryLockError::Poisoned(error)) => drop(error.into_inner()),
+                    Err(std::sync::TryLockError::WouldBlock) => {
+                        panic!("SPKEZ cache mutex is held across SPK batch resolution")
+                    }
+                }
+            }
+
             let miss_times = TimeArray::from_parts(
                 TimeScale::Tdb,
                 missing.iter().map(|&slot| unique[slot].0).collect(),
@@ -442,6 +492,10 @@ impl AdamCoreSpiceBackend {
             )?;
             let ets = miss_times.tdb_et_seconds()?;
             let flat = self.spkez_batch(target, observer, frame, &ets)?;
+            let mut cache = self
+                .spkez_state_cache
+                .lock()
+                .unwrap_or_else(|error| error.into_inner());
             // Legacy `batched / scale` conversion vector.
             let unit = [
                 KM_PER_AU,
@@ -458,7 +512,7 @@ impl AdamCoreSpiceBackend {
                 }
                 states[slot] = state;
                 let (epoch_days, epoch_nanos) = unique[slot];
-                self.spkez_state_cache.put(
+                cache.put(
                     SpkezStateKey {
                         target,
                         observer,
@@ -469,7 +523,7 @@ impl AdamCoreSpiceBackend {
                     state,
                     cache_maxsize,
                 );
-                self.spkez_state_cache.put(
+                cache.put(
                     SpkezStateKey {
                         target: observer,
                         observer: target,
@@ -499,7 +553,7 @@ impl AdamCoreSpiceBackend {
     /// `Observers.from_codes` fast path and the coordinate-transform
     /// orchestrator resolve observatory origins from one shared source.
     pub fn load_mpc_obscodes(&mut self, json: &str) -> Result<usize, SpiceBackendError> {
-        self.obscodes = Arc::new(parse_mpc_obscodes(json)?);
+        self.obscodes = parse_mpc_obscodes(json)?;
         Ok(self.obscodes.len())
     }
 
@@ -596,10 +650,10 @@ impl AdamCoreSpiceBackend {
     /// isolation (a Rust-level reset of the process-global backend) and any
     /// caller that needs a clean kernel pool.
     pub fn clear(&mut self) {
-        self.kernels = Arc::new(Vec::new());
-        self.pool = Arc::new(KernelPool::new());
-        self.custom_names = Arc::new(HashMap::new());
-        self.obscodes = Arc::new(HashMap::new());
+        self.kernels.clear();
+        self.pool.clear();
+        self.custom_names.clear();
+        self.obscodes.clear();
     }
 
     /// Native `transform_coordinates`: the full composition -- representation
@@ -848,32 +902,6 @@ impl AdamCoreSpiceBackend {
         Ok(())
     }
 
-    fn rebuild_binary_pool<'a>(
-        kernels: impl IntoIterator<Item = &'a Kernel>,
-    ) -> Result<KernelPool, SpiceBackendError> {
-        let mut pool = KernelPool::new();
-        for kernel in kernels {
-            let Kernel::Binary { path } = kernel else {
-                continue;
-            };
-            pool.furnish(path)
-                .map_err(|source| furnish_error(path.clone(), source))?;
-        }
-        Ok(pool)
-    }
-
-    fn mutable_pool(&mut self) -> Result<&mut KernelPool, SpiceBackendError> {
-        if Arc::get_mut(&mut self.pool).is_none() {
-            self.pool = Arc::new(Self::rebuild_binary_pool(self.kernels.iter())?);
-        }
-        Ok(Arc::get_mut(&mut self.pool).expect("detached kernel pool is uniquely owned"))
-    }
-
-    /// Furnish one kernel path.
-    ///
-    /// When a snapshot is alive, detaching the binary pool reopens registered
-    /// paths. External removal or replacement of those files is unsupported;
-    /// a reopen failure may therefore identify an older registered path.
     pub fn furnsh<P: AsRef<Path>>(&mut self, path: P) -> Result<(), SpiceBackendError> {
         let path = path.as_ref();
         let path_s = path.display().to_string();
@@ -883,10 +911,10 @@ impl AdamCoreSpiceBackend {
 
         match peek_daf_idword(path)? {
             Some(idword) if idword.starts_with(b"DAF/SPK") || idword.starts_with(b"DAF/PCK") => {
-                self.mutable_pool()?
+                self.pool
                     .furnish(path)
                     .map_err(|source| furnish_error(path_s.clone(), source))?;
-                Arc::make_mut(&mut self.kernels).push(Kernel::Binary { path: path_s });
+                self.kernels.push(Kernel::Binary { path: path_s });
             }
             _ => {
                 let content =
@@ -898,7 +926,7 @@ impl AdamCoreSpiceBackend {
                     return Err(SpiceBackendError::UnsupportedTextKernel { path: path_s });
                 }
                 let has_bindings = !content.bindings.is_empty();
-                Arc::make_mut(&mut self.kernels).push(Kernel::Text {
+                self.kernels.push(Kernel::Text {
                     path: path_s,
                     content,
                 });
@@ -910,40 +938,15 @@ impl AdamCoreSpiceBackend {
         Ok(())
     }
 
-    /// Unload one registered kernel path.
-    ///
-    /// When a snapshot is alive, detaching the binary pool reopens every
-    /// remaining registered path. External removal or replacement of those
-    /// files is unsupported. Because this established API is infallible, a
-    /// failed reopen leaves the current global generation unchanged rather
-    /// than partially applying the unload.
     pub fn unload<P: AsRef<Path>>(&mut self, path: P) {
-        let path = path.as_ref();
-        let path_s = path.display().to_string();
-        let had_binary = self
-            .kernels
-            .iter()
-            .any(|kernel| matches!(kernel, Kernel::Binary { path } if path == &path_s));
-        if had_binary {
-            if let Some(pool) = Arc::get_mut(&mut self.pool) {
-                pool.unload(path);
-            } else {
-                let Ok(pool) = Self::rebuild_binary_pool(
-                    self.kernels.iter().filter(|kernel| kernel.path() != path_s),
-                ) else {
-                    // Keep the old generation internally consistent if an
-                    // externally removed remaining kernel cannot be reopened.
-                    return;
-                };
-                self.pool = Arc::new(pool);
-            }
-        }
+        let path_s = path.as_ref().display().to_string();
+        self.pool.unload(path.as_ref());
         let mut had_text = false;
-        Arc::make_mut(&mut self.kernels).retain(|kernel| {
-            if kernel.path() != path_s {
+        self.kernels.retain(|k| {
+            if k.path() != path_s {
                 return true;
             }
-            had_text |= matches!(kernel, Kernel::Text { .. });
+            had_text |= matches!(k, Kernel::Text { .. });
             false
         });
         if had_text {
@@ -1427,15 +1430,15 @@ impl AdamCoreSpiceBackend {
     }
 
     fn rebuild_name_index(&mut self) {
-        let mut custom_names = HashMap::new();
-        for k in self.kernels.iter() {
+        self.custom_names.clear();
+        for k in &self.kernels {
             if let Kernel::Text { content, .. } = k {
                 for binding in &content.bindings {
-                    custom_names.insert(normalize_name(&binding.name), binding.code);
+                    self.custom_names
+                        .insert(normalize_name(&binding.name), binding.code);
                 }
             }
         }
-        self.custom_names = Arc::new(custom_names);
     }
 
     /// Most recently loaded structured `KPL/LSK` leapseconds-kernel content,
@@ -2325,6 +2328,38 @@ mod tests {
     }
 
     #[test]
+    fn global_initializer_is_idempotent_while_read_guard_is_held() {
+        let mut lsk_file = NamedTempFile::new().unwrap();
+        write!(lsk_file, "{SAMPLE_LSK}").unwrap();
+        lsk_file.flush().unwrap();
+        let path = lsk_file.path().display().to_string();
+        let mut missing_lsk = NamedTempFile::new().unwrap();
+        write!(missing_lsk, "{SAMPLE_LSK}").unwrap();
+        missing_lsk.flush().unwrap();
+        let missing_path = missing_lsk.path().display().to_string();
+
+        try_initialize_global_kernels(std::slice::from_ref(&path)).unwrap();
+
+        let read_guard = global_backend().read().expect("canonical read guard");
+        try_initialize_global_kernels(std::slice::from_ref(&path))
+            .expect("idempotent batch initialization under a reader");
+        try_initialize_global_kernels(std::slice::from_ref(&path))
+            .expect("idempotent single-path furnishing under a reader");
+        assert!(read_guard.is_registered(&path));
+
+        let error = try_initialize_global_kernels(std::slice::from_ref(&missing_path))
+            .expect_err("a real mutation must fail fast while the reader is held");
+        assert!(matches!(error, GlobalKernelInitializationError::Busy));
+        assert!(!read_guard.is_registered(&missing_path));
+        drop(read_guard);
+
+        global_backend()
+            .write()
+            .expect("cleanup write guard")
+            .unload(&path);
+    }
+
+    #[test]
     fn initialize_kernels_owns_batch_deduplication() {
         let mut lsk_file = NamedTempFile::new().unwrap();
         write!(lsk_file, "{SAMPLE_LSK}").unwrap();
@@ -2451,6 +2486,31 @@ mod tests {
     }
 
     #[test]
+    fn perturber_cache_releases_mutex_before_parallel_spkez_batch() {
+        let (_dir, path) = write_test_spk();
+        let mut backend = AdamCoreSpiceBackend::new();
+        backend.furnsh(path).unwrap();
+        backend.probe_spkez_cache_lock_scope = true;
+
+        // Exactly the top-level parallel threshold, with unique in-coverage
+        // epochs, forces the cache-miss path into resolve_chunked's Rayon
+        // branch. The non-blocking probe immediately before spkez_batch above
+        // fails instead of hanging if the cache mutex is still held.
+        assert!(rayon::current_thread_index().is_none());
+        let rows = RAYON_SERIAL_THRESHOLD_EPOCHS;
+        let days = vec![51_544; rows];
+        let nanos = (0..rows)
+            .map(|row| 43_200_000_000_000 + row as i64 * 1_000_000)
+            .collect::<Vec<_>>();
+        let states = backend
+            .perturber_states_cached(42, 0, "J2000", &days, &nanos, rows * 2)
+            .expect("parallel cache-miss resolution");
+
+        assert_eq!(states.len(), rows * 6);
+        assert_eq!(backend.spkez_state_cache_len(), rows * 2);
+    }
+
+    #[test]
     fn state_batch_returns_coordinate_batch_in_adam_core_units() {
         let (_dir, path) = write_test_spk();
         let mut backend = AdamCoreSpiceBackend::new();
@@ -2483,11 +2543,10 @@ mod tests {
     fn origin_translation_vectors_group_sources_and_preserve_row_order() {
         let (_dir, path) = write_test_spk();
         let mut backend = AdamCoreSpiceBackend::new();
-        backend.furnsh(&path).unwrap();
+        backend.furnsh(path).unwrap();
         let times = tdb_times();
         let origins = OriginArray::new(vec![OriginId::SolarSystemBarycenter, OriginId::Naif(42)]);
 
-        let snapshot = backend.snapshot();
         let vectors = backend
             .origin_translation_vectors(
                 &origins,
@@ -2496,97 +2555,9 @@ mod tests {
                 &times,
             )
             .unwrap();
-        let snapshot_vectors = OriginTranslationProvider::origin_translation_vectors(
-            &snapshot,
-            &origins,
-            &OriginId::SolarSystemBarycenter,
-            Frame::Equatorial,
-            &times,
-        )
-        .unwrap();
 
         assert_eq!(vectors[0], [0.0; 6]);
         assert_eq!(vectors[1], [2.0, 4.0, 6.0, 2.0, 4.0, 6.0]);
-        assert_eq!(
-            vectors
-                .iter()
-                .flatten()
-                .map(|value| value.to_bits())
-                .collect::<Vec<_>>(),
-            snapshot_vectors
-                .iter()
-                .flatten()
-                .map(|value| value.to_bits())
-                .collect::<Vec<_>>(),
-        );
-
-        let long_times = TimeArray::from_parts(
-            TimeScale::Tdb,
-            vec![51_544; RAYON_SERIAL_THRESHOLD_EPOCHS],
-            (0..RAYON_SERIAL_THRESHOLD_EPOCHS)
-                .map(|row| 43_200_000_000_000 + row as i64 * 90_000_000)
-                .collect(),
-        )
-        .expect("long snapshot epochs");
-        let long_origins = OriginArray::repeat(OriginId::Naif(42), RAYON_SERIAL_THRESHOLD_EPOCHS);
-        let global_long = backend
-            .origin_translation_vectors(
-                &long_origins,
-                &OriginId::SolarSystemBarycenter,
-                Frame::Equatorial,
-                &long_times,
-            )
-            .expect("global long translation");
-        let snapshot_long = OriginTranslationProvider::origin_translation_vectors(
-            &snapshot,
-            &long_origins,
-            &OriginId::SolarSystemBarycenter,
-            Frame::Equatorial,
-            &long_times,
-        )
-        .expect("snapshot long translation");
-        assert_eq!(
-            global_long
-                .iter()
-                .flatten()
-                .map(|value| value.to_bits())
-                .collect::<Vec<_>>(),
-            snapshot_long
-                .iter()
-                .flatten()
-                .map(|value| value.to_bits())
-                .collect::<Vec<_>>(),
-        );
-
-        backend.unload(&path);
-        assert!(backend
-            .origin_translation_vectors(
-                &origins,
-                &OriginId::SolarSystemBarycenter,
-                Frame::Equatorial,
-                &times,
-            )
-            .is_err());
-        let retained = OriginTranslationProvider::origin_translation_vectors(
-            &snapshot,
-            &origins,
-            &OriginId::SolarSystemBarycenter,
-            Frame::Equatorial,
-            &times,
-        )
-        .expect("snapshot retains its immutable kernel generation");
-        assert_eq!(
-            retained
-                .iter()
-                .flatten()
-                .map(|value| value.to_bits())
-                .collect::<Vec<_>>(),
-            snapshot_vectors
-                .iter()
-                .flatten()
-                .map(|value| value.to_bits())
-                .collect::<Vec<_>>(),
-        );
     }
 
     #[test]
