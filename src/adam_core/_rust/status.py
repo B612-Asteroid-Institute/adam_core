@@ -440,7 +440,7 @@ API_MIGRATIONS: Final[tuple[ApiMigration, ...]] = (
         ),
         covered_subcases=(
             "Batched primary/secondary Cartesian orbit pairs",
-            "Per-row MOID distance and optimizer dt_at_min outputs",
+            "Per-row MOID distance and deterministic witness dt_at_min outputs",
         ),
     ),
     ApiMigration(

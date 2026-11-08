@@ -25,6 +25,7 @@ statrs = "0.18"
 nalgebra = "0.33"
 sha2 = "0.10"
 bytes = "1"
+num-complex = "0.4"
 
 [lib]
 path = "src/lib.rs"

@@ -1705,7 +1705,7 @@
       "kind": "class",
       "signature": "(qv.Table)",
       "path": "src/adam_core/dynamics/moid.py",
-      "line": 35
+      "line": 19
     },
     {
       "module": "adam_core.dynamics.moid",
@@ -1713,15 +1713,15 @@
       "kind": "function",
       "signature": "(primary_ellipse: Orbits, secondary_ellipse: Orbits)",
       "path": "src/adam_core/dynamics/moid.py",
-      "line": 42
+      "line": 26
     },
     {
       "module": "adam_core.dynamics.moid",
       "qualname": "calculate_perturber_moids",
       "kind": "function",
-      "signature": "(orbits: Orbits, perturber: Union[OriginCodes, List[OriginCodes]], chunk_size: int=100, max_processes: Optional[int]=1)",
+      "signature": "(orbits: Orbits, perturber: OriginCodes | list[OriginCodes])",
       "path": "src/adam_core/dynamics/moid.py",
-      "line": 71
+      "line": 49
     },
     {
       "module": "adam_core.dynamics.plots",
@@ -3935,9 +3935,9 @@
       "module": "adam_core.utils.spice",
       "qualname": "setup_SPICE",
       "kind": "function",
-      "signature": "(kernels: Optional[List[str]]=None, force: bool=False)",
+      "signature": "(kernels: Optional[List[str]]=None)",
       "path": "src/adam_core/utils/spice.py",
-      "line": 122
+      "line": 125
     },
     {
       "module": "adam_core.utils.spice",

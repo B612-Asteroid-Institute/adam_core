@@ -30,12 +30,13 @@ Batch MOIDs Against Perturbers
 
    from adam_core.coordinates.origin import OriginCodes
    from adam_core.dynamics.moid import calculate_perturber_moids
+   from adam_core.utils.spice import setup_SPICE
 
+   # Initialize the process-global Rust SPICE backend explicitly.
+   setup_SPICE()
    moids = calculate_perturber_moids(
        orbits=candidate_orbits,
        perturber=[OriginCodes.EARTH, OriginCodes.MARS_BARYCENTER, OriginCodes.VENUS],
-       chunk_size=100,
-       max_processes=8,
    )
 
    print(moids.to_dataframe().head())

@@ -43,6 +43,11 @@ class RustBackend:
         self._inner = adam_core_spice_backend()
         self._lock = threading.Lock()
 
+    def initialize_kernels(self, paths: list[str]) -> None:
+        """Initialize an ordered kernel set in one typed Rust call."""
+        with self._lock:
+            self._inner.initialize_kernels(paths)
+
     def furnsh(self, path: str) -> None:
         with self._lock:
             self._inner.furnsh(path)

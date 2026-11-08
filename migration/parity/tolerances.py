@@ -490,33 +490,30 @@ TOLERANCES: dict[str, ToleranceSpec] = {
             "dt_at_min": OutputTol(atol=1e-3, rtol=1e-8),
         },
         rationale=(
-            "Single-pair MOID over two Cartesian orbit states. Both sides use "
-            "the same nested bounded-minimization formulation: outer Brent "
-            "search over primary-orbit dt and inner bounded search over the "
-            "secondary ellipse anomaly. A supplemental fixed fixture covers "
+            "Single-pair MOID over two Cartesian orbit states. The current "
+            "implementation uses the global Baluev-Mikryukov critical-point "
+            "algorithm; the frozen baseline uses nested bounded minimization. "
+            "A supplemental fixed fixture covers "
             "the identical-circular flat-minimum case and compares only the "
             "unique distance; a second non-degenerate fixture pins dt_at_min at "
-            "1e-6 day so optimizer time regressions cannot hide behind the "
+            "1e-6 day so witness-time regressions cannot hide behind the "
             "randomized flat-minimum slack."
         ),
-        dominant_column="dt_at_min from the outer bounded minimizer",
+        dominant_column="deterministic primary-orbit witness dt_at_min",
         physical_magnitude=(
             "MOID atol 1e-9 AU ≈ 150 m in random fuzz; the flat-minimum "
             "fixed fixtures tighten the distance to 1e-12 AU and pin a "
             "well-conditioned unique argmin to 1e-6 day ≈ 86 ms. dt_at_min "
-            "atol 1e-3 day ≈ 86 s remains only as the randomized optimizer "
+            "atol 1e-3 day ≈ 86 s remains only as the randomized witness "
             "envelope; degenerate flat minima treat the returned time as a "
             "finite witness, not a unique science output."
         ),
         root_cause=(
-            "Rust carries a scipy-style bounded minimizer but not scipy's exact "
-            "floating-point branch history. The baseline oracle keeps upstream "
-            "tolerances (inner xatol via tol=1e-12, outer tol=1e-14, "
-            "propagation max_iter=1000/tol=1e-14). Very flat minima can shift "
-            "the reported argmin substantially while preserving the distance; "
-            "identical circular orbits make this non-uniqueness explicit."
+            "The global critical-point solver and the frozen baseline's local "
+            "optimizer can choose different equivalent witnesses on flat or "
+            "repeated minima while preserving the minimum distance."
         ),
-        verdict="algorithm-equivalent optimizer parity for the direct NumPy boundary.",
+        verdict="global-solver parity for the direct NumPy boundary.",
     ),
     "dynamics.calculate_moid_batch": ToleranceSpec(
         outputs={
@@ -528,15 +525,15 @@ TOLERANCES: dict[str, ToleranceSpec] = {
             "pairs. The legacy oracle loops over the same baseline-main scalar "
             "MOID formulation used by dynamics.calculate_moid."
         ),
-        dominant_column="dt_at_min from the outer bounded minimizer",
+        dominant_column="deterministic primary-orbit witness dt_at_min",
         physical_magnitude=(
-            "Same randomized optimizer envelope as dynamics.calculate_moid: "
+            "Same randomized witness envelope as dynamics.calculate_moid: "
             "MOID atol 1e-9 AU ≈ 150 m and dt_at_min atol 1e-3 day ≈ 86 s."
         ),
         root_cause=(
             "The Rust batch path only changes dispatch and Rayon scheduling over "
-            "independent scalar MOID solves; per-row optimizer branch-history "
-            "differences are the same as dynamics.calculate_moid."
+            "independent global scalar MOID solves; witness differences versus "
+            "the frozen local optimizer are the same as dynamics.calculate_moid."
         ),
         verdict="raw-kernel parity; performance rows are diagnostic, not promotion gates.",
     ),
@@ -550,16 +547,16 @@ TOLERANCES: dict[str, ToleranceSpec] = {
         rationale=(
             "Public PerturberMOIDs orchestration over Orbits inputs. The gate "
             "compares stable numeric encodings of orbit_id/perturber ordering "
-            "plus the science outputs from the same nested MOID optimizer used "
-            "by dynamics.calculate_moid."
+            "plus the science outputs from the same global MOID solver used by "
+            "dynamics.calculate_moid."
         ),
-        dominant_column="time_mjd / dt_at_min from the outer bounded minimizer",
+        dominant_column="time_mjd / deterministic primary-orbit witness dt_at_min",
         physical_magnitude=(
             "MOID atol 1e-9 AU ≈ 150 m. time_mjd atol 1e-3 day ≈ 86 s; "
             "row identity columns are exact."
         ),
         root_cause=(
-            "Same optimizer branch-history drift as the direct MOID boundary, "
+            "Equivalent-witness differences versus the frozen local optimizer, "
             "plus last-ulp SPICE state differences between baseline-main and "
             "migration SPICE backends."
         ),

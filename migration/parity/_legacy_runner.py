@@ -357,10 +357,7 @@ def _moid_one(
     primary_orbit: np.ndarray,
     secondary_orbit: np.ndarray,
     mu: float,
-    max_iter: int,
-    xtol: float,
 ) -> tuple[float, float]:
-    del max_iter, xtol  # legacy baseline uses upstream scipy/propagation defaults
 
     from scipy.optimize import minimize_scalar
 
@@ -411,15 +408,13 @@ def _dynamics_calculate_moid(
     primary_orbits: np.ndarray,
     secondary_orbits: np.ndarray,
     mus: np.ndarray,
-    max_iter: int,
-    xtol: float,
 ) -> dict[str, np.ndarray]:
     n = primary_orbits.shape[0]
     moids = np.empty(n, dtype=np.float64)
     dts = np.empty(n, dtype=np.float64)
     for i in range(n):
         moids[i], dts[i] = _moid_one(
-            primary_orbits[i], secondary_orbits[i], float(mus[i]), max_iter, xtol
+            primary_orbits[i], secondary_orbits[i], float(mus[i])
         )
     return {"moid": moids, "dt_at_min": dts}
 
@@ -519,8 +514,6 @@ def _dynamics_calculate_perturber_moids(
     perturber_codes: np.ndarray,
     origin_code: str,
     frame: str,
-    chunk_size: int,
-    max_processes: int,
 ) -> dict[str, np.ndarray]:
     from adam_core.coordinates.cartesian import CartesianCoordinates
     from adam_core.coordinates.origin import Origin, OriginCodes
@@ -542,12 +535,7 @@ def _dynamics_calculate_perturber_moids(
     )
     orbits = Orbits.from_kwargs(orbit_id=orbit_ids, coordinates=coordinate_rows)
     perturbers = [OriginCodes[str(code)] for code in perturber_codes]
-    moids = calculate_perturber_moids(
-        orbits,
-        perturbers,
-        chunk_size=chunk_size,
-        max_processes=max_processes,
-    )
+    moids = calculate_perturber_moids(orbits, perturbers)
     return _pack_perturber_moids(moids)
 
 

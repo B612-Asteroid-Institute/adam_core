@@ -57,6 +57,7 @@ dependencies = [
  "bytes",
  "erfars",
  "nalgebra",
+ "num-complex",
  "parquet",
  "rayon",
  "serde",

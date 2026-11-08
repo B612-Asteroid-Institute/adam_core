@@ -781,6 +781,21 @@ impl AdamCoreSpiceBackend {
         }
     }
 
+    /// Load an ordered set of kernel paths through the Rust-owned registry.
+    ///
+    /// Path validation, format detection, parsing, load-order semantics, and
+    /// duplicate suppression all remain inside this backend. This is the
+    /// shared standalone/Python initialization entry point.
+    pub fn initialize_kernels<P: AsRef<Path>>(
+        &mut self,
+        paths: &[P],
+    ) -> Result<(), SpiceBackendError> {
+        for path in paths {
+            self.furnsh(path)?;
+        }
+        Ok(())
+    }
+
     pub fn furnsh<P: AsRef<Path>>(&mut self, path: P) -> Result<(), SpiceBackendError> {
         let path = path.as_ref();
         let path_s = path.display().to_string();
@@ -1105,7 +1120,6 @@ impl AdamCoreSpiceBackend {
     /// Rust MOID kernel against the `primary` Cartesian orbits, all in Rust.
     /// Returns `(moids, dt_mins)`, each laid out perturber-major then
     /// orbit-minor (`p * n + i`), matching the Python veneer's row assembly.
-    #[allow(clippy::too_many_arguments)]
     pub fn calculate_perturber_moids(
         &self,
         primary_flat: &[f64],
@@ -1114,8 +1128,6 @@ impl AdamCoreSpiceBackend {
         perturbers: &[OriginId],
         frame: Frame,
         origin: &OriginId,
-        max_iter: usize,
-        xtol: f64,
     ) -> Result<(Vec<f64>, Vec<f64>), SpiceBackendError> {
         if !primary_flat.len().is_multiple_of(6) {
             return Err(SpiceBackendError::NotCovered(
@@ -1133,12 +1145,26 @@ impl AdamCoreSpiceBackend {
                 "times length must match primary orbit rows".to_string(),
             ));
         }
+        if self.kernels.is_empty() {
+            return Err(SpiceBackendError::NotCovered(
+                "SPICE backend has no loaded kernels; initialize it with explicit kernel paths before calculating perturber MOIDs"
+                    .to_string(),
+            ));
+        }
         let mut moids = Vec::with_capacity(perturbers.len() * n);
         let mut dt_mins = Vec::with_capacity(perturbers.len() * n);
         for perturber in perturbers {
             let secondary = self.state_vectors(perturber, origin, frame, times)?;
             let secondary_flat: Vec<f64> = secondary.iter().flatten().copied().collect();
-            let (m, dt) = calculate_moid_batch(primary_flat, &secondary_flat, mus, max_iter, xtol);
+            let (m, dt) =
+                calculate_moid_batch(primary_flat, &secondary_flat, mus).map_err(|error| {
+                    SpiceBackendError::NotCovered(format!(
+                        "global MOID solver failed for perturber {} row {}: {}",
+                        perturber.code(),
+                        error.row,
+                        error.source
+                    ))
+                })?;
             moids.extend(m);
             dt_mins.extend(dt);
         }
@@ -2101,6 +2127,40 @@ mod tests {
         assert_eq!(lsk.delta_at.len(), 2);
         assert_eq!(lsk.delta_at[0].leap_seconds, 10);
         assert_eq!(lsk.delta_at[1].leap_seconds, 11);
+    }
+
+    #[test]
+    fn perturber_moids_require_explicit_kernel_initialization() {
+        let backend = AdamCoreSpiceBackend::new();
+        let times = TimeArray::new(TimeScale::Tdb, vec![Epoch::new(60_000, 0)]).unwrap();
+        let error = backend
+            .calculate_perturber_moids(
+                &[1.0, 0.0, 0.0, 0.0, 0.017, 0.0],
+                &[2.95912208284120e-4],
+                &times,
+                &[OriginId::from_code("EARTH")],
+                Frame::Ecliptic,
+                &OriginId::from_code("SUN"),
+            )
+            .unwrap_err();
+        assert!(error
+            .to_string()
+            .contains("initialize it with explicit kernel paths"));
+    }
+
+    #[test]
+    fn initialize_kernels_owns_batch_deduplication() {
+        let mut lsk_file = NamedTempFile::new().unwrap();
+        write!(lsk_file, "{SAMPLE_LSK}").unwrap();
+        lsk_file.flush().unwrap();
+
+        let mut backend = AdamCoreSpiceBackend::new();
+        backend
+            .initialize_kernels(&[lsk_file.path(), lsk_file.path()])
+            .unwrap();
+
+        assert_eq!(backend.registered_kernels().len(), 1);
+        assert!(backend.leapseconds().is_some());
     }
 
     #[test]

@@ -458,15 +458,11 @@ def gauss_iod_orbits_arrow(
 def calculate_perturber_moids_arrow(
     orbit_batch: pa.RecordBatch,
     perturber_codes: list[str],
-    max_iter: int = 100,
-    xtol: float = 1e-10,
 ) -> pa.RecordBatch:
     """Return the finished PerturberMOIDs RecordBatch entirely from Rust."""
     return _native.calculate_perturber_moids_arrow(
         orbit_batch,
         list(perturber_codes),
-        max_iter,
-        xtol,
     )
 
 
@@ -498,8 +494,6 @@ def calculate_perturber_moids_native(
     perturber_codes: list[str],
     frame: str,
     origin_code: str,
-    max_iter: int = 100,
-    xtol: float = 1e-10,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Fully-Rust perturber-MOID orchestrator (single Python->Rust crossing).
 
@@ -517,8 +511,6 @@ def calculate_perturber_moids_native(
         list(perturber_codes),
         frame,
         origin_code,
-        max_iter,
-        xtol,
     )
 
 
@@ -1163,8 +1155,6 @@ def calculate_moid_numpy(
     primary_orbit: np.ndarray,
     secondary_orbit: np.ndarray,
     mu: float,
-    max_iter: int = 100,
-    xtol: float = 1e-10,
 ) -> tuple[float, float]:
     """Returns `(moid, dt_at_min)`. Both orbits given as 6-vector Cartesian
     (x, y, z, vx, vy, vz). mu is the gravitational parameter of the central
@@ -1173,8 +1163,6 @@ def calculate_moid_numpy(
         _as_contiguous_f64(primary_orbit),
         _as_contiguous_f64(secondary_orbit),
         mu,
-        max_iter,
-        xtol,
     )
 
 
@@ -1182,8 +1170,6 @@ def calculate_moid_batch_numpy(
     primary_orbits: np.ndarray,
     secondary_orbits: np.ndarray,
     mus: np.ndarray | list[float] | tuple[float, ...],
-    max_iter: int = 100,
-    xtol: float = 1e-10,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Batched MOID over N (primary, secondary) orbit pairs. Rayon-parallel.
 
@@ -1193,8 +1179,6 @@ def calculate_moid_batch_numpy(
         _as_contiguous_f64(primary_orbits),
         _as_contiguous_f64(secondary_orbits),
         _as_contiguous_f64(mus),
-        max_iter,
-        xtol,
     )
 
 

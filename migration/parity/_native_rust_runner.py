@@ -669,8 +669,6 @@ def _calculate_moid(
     primary_orbits: Any,
     secondary_orbits: Any,
     mus: Any,
-    max_iter: int,
-    xtol: float,
     reps: int,
     warmup: int,
     trials: int,
@@ -686,7 +684,6 @@ def _calculate_moid(
         trials=trials,
         entrypoint="adam_core_rs_coords::calculate_moid",
         kernel="canonical per-pair calculate_moid loop",
-        suffix_args=(int(max_iter), float(xtol)),
     )
 
 
@@ -695,8 +692,6 @@ def _calculate_moid_batch(
     primary_orbits: Any,
     secondary_orbits: Any,
     mus: Any,
-    max_iter: int,
-    xtol: float,
     reps: int,
     warmup: int,
     trials: int,
@@ -712,7 +707,6 @@ def _calculate_moid_batch(
         trials=trials,
         entrypoint="adam_core_rs_coords::calculate_moid_batch",
         kernel="calculate_moid_batch",
-        suffix_args=(int(max_iter), float(xtol)),
     )
 
 
@@ -958,8 +952,6 @@ def _calculate_perturber_moids(
         reps,
         trials,
         warmup,
-        100,
-        1e-10,
     )
     return NativeRustTiming(
         status="measured",

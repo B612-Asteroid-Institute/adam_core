@@ -5848,8 +5848,6 @@ fn benchmark_residuals_calculate_arrow(
 fn perturber_moids_record_batch(
     orbit_batch: &RecordBatch,
     perturber_codes: &[String],
-    max_iter: usize,
-    xtol: f64,
 ) -> Result<RecordBatch, String> {
     if perturber_codes.is_empty() {
         return Err("perturber MOIDs require at least one perturber".to_string());
@@ -5897,8 +5895,6 @@ fn perturber_moids_record_batch(
             &perturbers,
             coordinates.frame,
             &origin,
-            max_iter,
-            xtol,
         )
         .map_err(|err| err.to_string())?;
     drop(backend);
@@ -5957,18 +5953,15 @@ fn perturber_moids_record_batch(
 
 /// Arrow-native public perturber-MOID surface.
 #[pyfunction]
-#[pyo3(signature = (orbit_batch, perturber_codes, max_iter=100, xtol=1e-10))]
 fn calculate_perturber_moids_arrow<'py>(
     py: Python<'py>,
     orbit_batch: &Bound<'py, PyAny>,
     perturber_codes: Vec<String>,
-    max_iter: usize,
-    xtol: f64,
 ) -> PyResult<PyObject> {
     let orbits = RecordBatch::from_pyarrow_bound(orbit_batch)
         .map_err(|err| PyValueError::new_err(format!("invalid Orbits RecordBatch: {err}")))?;
     let output = py
-        .allow_threads(|| perturber_moids_record_batch(&orbits, &perturber_codes, max_iter, xtol))
+        .allow_threads(|| perturber_moids_record_batch(&orbits, &perturber_codes))
         .map_err(PyValueError::new_err)?;
     output
         .to_pyarrow(py)
@@ -5977,16 +5970,13 @@ fn calculate_perturber_moids_arrow<'py>(
 
 /// Rust-owned Instant timer for the Arrow-native perturber-MOID surface.
 #[pyfunction]
-#[pyo3(signature = (orbit_batch, perturber_codes, reps, trials, warmup_reps=1, max_iter=100, xtol=1e-10))]
-#[allow(clippy::too_many_arguments)]
+#[pyo3(signature = (orbit_batch, perturber_codes, reps, trials, warmup_reps=1))]
 fn benchmark_calculate_perturber_moids_arrow(
     orbit_batch: &Bound<'_, PyAny>,
     perturber_codes: Vec<String>,
     reps: usize,
     trials: usize,
     warmup_reps: usize,
-    max_iter: usize,
-    xtol: f64,
 ) -> PyResult<Vec<Vec<f64>>> {
     if reps == 0 || trials == 0 {
         return Err(PyValueError::new_err("reps and trials must be >= 1"));
@@ -5994,7 +5984,7 @@ fn benchmark_calculate_perturber_moids_arrow(
     let orbits = RecordBatch::from_pyarrow_bound(orbit_batch)
         .map_err(|err| PyValueError::new_err(format!("invalid Orbits RecordBatch: {err}")))?;
     let run_once = || -> PyResult<()> {
-        let output = perturber_moids_record_batch(&orbits, &perturber_codes, max_iter, xtol)
+        let output = perturber_moids_record_batch(&orbits, &perturber_codes)
             .map_err(PyRuntimeError::new_err)?;
         black_box(output);
         Ok(())
@@ -6577,8 +6567,6 @@ fn calculate_perturber_moids_native<'py>(
     perturber_codes: Vec<String>,
     frame: &str,
     origin_code: &str,
-    max_iter: usize,
-    xtol: f64,
 ) -> PyResult<(Bound<'py, PyArray1<f64>>, Bound<'py, PyArray1<f64>>)> {
     let arr = primary.as_array();
     if arr.ncols() != 6 {
@@ -6630,8 +6618,6 @@ fn calculate_perturber_moids_native<'py>(
             &perturbers,
             frame_value,
             &origin,
-            max_iter,
-            xtol,
         )
         .map_err(|err| PyRuntimeError::new_err(err.to_string()))?;
     Ok((moids.into_pyarray(py), dt_mins.into_pyarray(py)))

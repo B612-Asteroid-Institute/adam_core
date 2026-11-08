@@ -1,3 +1,4 @@
+import inspect
 from pathlib import Path
 
 import numpy as np
@@ -13,6 +14,7 @@ from ..spice import (
     get_spice_body_state,
     list_registered_kernels,
     register_spice_kernel,
+    setup_mpc_obscodes,
     setup_SPICE,
     unregister_spice_kernel,
 )
@@ -27,6 +29,49 @@ JWST_START_TIME = Timestamp.from_mjd(np.array([58849.0]), scale="tdb")  # 2020-0
 JWST_END_TIME = Timestamp.from_mjd(np.array([60314.0]), scale="tdb")  # 2024-01-01
 
 
+def test_setup_spice_delegates_kernel_set_in_one_rust_call(monkeypatch):
+    from .. import spice as spice_module
+
+    class Backend:
+        def __init__(self):
+            self.calls = []
+
+        def initialize_kernels(self, paths):
+            self.calls.append(paths)
+
+    backend = Backend()
+    monkeypatch.setattr(spice_module, "get_backend", lambda: backend)
+
+    spice_module.setup_SPICE(["first.bsp", "first.bsp", "second.tls"])
+
+    assert backend.calls == [["first.bsp", "first.bsp", "second.tls"]]
+
+
+def test_setup_contract_has_no_obsolete_force_control():
+    assert tuple(inspect.signature(setup_SPICE).parameters) == ("kernels",)
+    assert tuple(inspect.signature(setup_mpc_obscodes).parameters) == ()
+
+    with pytest.raises(TypeError):
+        setup_SPICE(force=True)
+    with pytest.raises(TypeError):
+        setup_mpc_obscodes(force=True)
+
+
+def test_setup_mpc_obscodes_uses_rust_loaded_count(monkeypatch):
+    from .. import spice as spice_module
+
+    class Backend:
+        def mpc_obscodes_loaded(self):
+            return 1
+
+        def load_mpc_obscodes(self, _content):
+            raise AssertionError("loaded MPC obscodes must not be reloaded")
+
+    monkeypatch.setattr(spice_module, "get_backend", Backend)
+
+    spice_module.setup_mpc_obscodes()
+
+
 def test_list_registered_kernels():
     """Test listing registered kernels."""
     # kernels could already be loaded, so let's list and unregister all of them first
@@ -36,7 +81,7 @@ def test_list_registered_kernels():
     assert len(list_registered_kernels()) == 0
 
     # register all the default kernels
-    setup_SPICE(force=True)
+    setup_SPICE()
     assert len(list_registered_kernels()) == len(DEFAULT_KERNELS)
 
 
@@ -187,7 +232,7 @@ def test_get_perturber_state_spkez_cache(monkeypatch):
     from .. import spice as spice_mod
 
     clear_spkez_cache()
-    setup_SPICE(force=True)
+    setup_SPICE()
     _force_legacy_perturber_path(monkeypatch)
 
     # Use a time grid with duplicates to ensure both in-call uniquing and cross-call caching.
@@ -221,7 +266,7 @@ def test_get_perturber_state_reverse_pair_cache(monkeypatch):
     from .. import spice as spice_mod
 
     clear_spkez_cache()
-    setup_SPICE(force=True)
+    setup_SPICE()
     _force_legacy_perturber_path(monkeypatch)
 
     t = Timestamp.from_mjd(np.array([60000.0, 60000.5, 60001.0]), scale="tdb")
@@ -254,7 +299,7 @@ def test_get_perturber_state_fused_matches_legacy(monkeypatch):
     # bit-for-bit: same TDB rescale, ET arithmetic, readers, and unit order.
     from .. import spice as spice_mod
 
-    setup_SPICE(force=True)
+    setup_SPICE()
     times_by_scale = [
         Timestamp.from_mjd(np.array([60000.0, 60000.0, 60000.5, 60001.0]), scale="tdb"),
         Timestamp.from_mjd(np.array([60000.0, 60001.25]), scale="utc"),
@@ -287,7 +332,7 @@ def test_get_perturber_state_fused_matches_legacy(monkeypatch):
 def test_get_spice_body_state_fused_matches_legacy(monkeypatch):
     from .. import spice as spice_mod
 
-    setup_SPICE(force=True)
+    setup_SPICE()
     t = Timestamp.from_mjd(np.array([60000.0, 60000.5, 60001.0]), scale="tdb")
     for frame in ("ecliptic", "equatorial"):
         fused = get_spice_body_state(399, t, frame=frame, origin=OriginCodes.SUN)
@@ -312,7 +357,7 @@ def test_perturber_and_body_state_native_timing():
 
     from ..spice import get_backend
 
-    setup_SPICE(force=True)
+    setup_SPICE()
     t = Timestamp.from_mjd(np.array([60000.0, 60000.5, 60001.0]), scale="tdb")
     time_table = t.table.combine_chunks()
     batch = pa.RecordBatch.from_arrays(

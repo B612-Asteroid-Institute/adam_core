@@ -43,6 +43,18 @@ This file contains notable changes in adam-core
 
 ### Changed
 
+- MOID APIs now expose only algorithm-owned controls: Python
+  ``calculate_perturber_moids`` no longer accepts ignored ``chunk_size`` or
+  ``max_processes``, and NumPy/PyO3/Rust/SPICE/benchmark MOID entry points no
+  longer accept ignored ``max_iter`` or ``xtol``. The canonical Rust scalar and
+  batch functions return typed errors; the old NaN compatibility surface and
+  helper exports were removed.
+- SPICE kernel paths now cross Python in one typed initialization call. Rust
+  owns path validation, parsing, load order, deduplication, and process-global
+  ``KernelPool`` state. Perturber-MOID calls require this backend to be
+  initialized explicitly rather than invoking Python-owned setup internally.
+  The no-op ``force`` controls were removed from ``setup_SPICE`` and
+  ``setup_mpc_obscodes``.
 - Python OD code is a typed declaration, resource-binding, Arrow-marshalling,
   and result-assembly boundary. Numerical expert functions live under
   ``adam_core.orbit_determination.algorithms``; propagators contribute only
@@ -84,6 +96,9 @@ This file contains notable changes in adam-core
 
 ### Fixed
 
+- MOID uses the pure-Rust global Baluev-Mikryukov/DISTLINK critical-point
+  solver through every scalar, batch, and SPICE-backed path, with deterministic
+  witnesses and row-specific typed failures.
 - Canonical OD configuration JSON now preserves every finite ``f64`` bit
   across Python construction, Rust parsing, persisted provenance, and later
   validation. Configuration identity is validated before observation-pipeline

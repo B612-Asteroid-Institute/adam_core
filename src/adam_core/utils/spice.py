@@ -122,17 +122,14 @@ def _jd_tdb_to_et(jd_tdb: np.ndarray) -> np.ndarray:
     return et
 
 
-def setup_SPICE(kernels: Optional[List[str]] = None, force: bool = False):
+def setup_SPICE(kernels: Optional[List[str]] = None):
     """
     Load SPICE kernels.
 
-    This function checks to see if SPICE has already been initialized for the current process.
-    If it has, then it does nothing. If it has not, then it loads the desired kernels into SPICE.
-    If force is set to True, then the kernels will be loaded regardless of whether or not SPICE
-    has already been initialized. SPICE has a limit on the number of kernels that can be loaded
-    at once, so it is recommended to only load the kernels that are needed for the current
-    calculation (calling sp.furnsh multiple times will load the same kernel multiple times, which
-    will cause an error.)
+    Resolve kernel data paths in Python and pass the complete ordered set to
+    the process-global Rust backend in one typed call. Rust owns validation,
+    parsing, load order, and duplicate suppression. Repeated calls are
+    idempotent by path.
 
     The default kernels loaded are those provided by the NAIF data packages:
 
@@ -146,27 +143,21 @@ def setup_SPICE(kernels: Optional[List[str]] = None, force: bool = False):
     Parameters
     ----------
     kernels :
-        List of SPICE kernels to load into SPICE. If None, then the default kernels will be loaded.
+        List of SPICE kernel paths. If None, load the default data-package paths.
 
     """
     if kernels is None:
         kernels = DEFAULT_KERNELS
 
-    # The process-global Rust backend is the single source of truth for what
-    # is loaded, and ``furnsh`` is idempotent by path (Rust dedups), so simply
-    # furnsh-ing each kernel is a cheap no-op when already loaded and a real
-    # load into a freshly cleared/rebuilt backend otherwise. This self-heals
-    # after any backend reset (a test calling ``clear``) with no separate
-    # Python-side bookkeeping to desync (personal-cmy.23). ``force`` is
-    # retained for API compatibility; furnsh idempotency makes it a no-op.
-    del force
-    backend = get_backend()
-    for kernel in kernels:
-        backend.furnsh(kernel)
+    # Python resolves installed data-wheel paths; one typed Rust call owns
+    # path validation, format parsing, load order, deduplication, and the
+    # process-global KernelPool state. This self-heals after a backend reset
+    # without Python-side load bookkeeping.
+    get_backend().initialize_kernels(list(kernels))
     return
 
 
-def setup_mpc_obscodes(force: bool = False) -> None:
+def setup_mpc_obscodes() -> None:
     """Ensure the MPC observatory parallax table is loaded into the
     process-global Rust backend (the canonical obscodes loader).
 
@@ -177,7 +168,7 @@ def setup_mpc_obscodes(force: bool = False) -> None:
     observatory-code origins) rely on this.
     """
     backend = get_backend()
-    if not force and backend.mpc_obscodes_loaded() > 0:
+    if backend.mpc_obscodes_loaded() > 0:
         return
     from mpc_obscodes import mpc_obscodes
 

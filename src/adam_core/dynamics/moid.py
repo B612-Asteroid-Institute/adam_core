@@ -1,27 +1,11 @@
+"""Global minimum-orbit-intersection distance (MOID).
+
+The numerical kernel is a safe pure-Rust port of the error-controlled
+critical-point method of Baluev & Mikryukov (2019), *Astronomy and Computing*
+27, 11-22, derived from the MIT-licensed distlink 2.0 reference implementation.
+The Python layer provides thin scalar and SPICE-backed adapters around the
+shared Rust kernels.
 """
-Implementation of SGD-MOID
-
-References
-----------
-[1] Hedo, J. M. et al. (2019). Minimum orbital intersection distance: an asymptotic approach.
-    Astronomy & Astrophysics, 633, A22. https://doi.org/10.1051/0004-6361/201936502
-
-Algorithm 1:
-From an arbitrary point P_0 on the primary ellipse,
-project the point onto the plane of the other ellipse.
-
-Then find the minimum distance from the projected point,
-using a minimization function.
-
-Algorithm 2:
-
-1. Divide up the primary ellipse into a series of points
-2. For each point, run algorithm 1
-3. After finding the point with the lowest distance,
-search for the overall minimum.
-"""
-
-from typing import List, Optional, Union
 
 import numpy as np
 import pyarrow as pa
@@ -45,9 +29,9 @@ def calculate_moid(
     """
     Calculate the Minimum Orbit Intersection Distance (MOID) between two orbits.
 
-    Rust-backed fused kernel: nested Brent's-method bounded minimizations
-    (outer over propagation dt, inner over ellipse angle), propagate +
-    ellipse-distance all in Rust.
+    Pure-Rust global critical-point kernel with a deterministic primary-orbit
+    witness epoch. This bounded API accepts elliptic conics;
+    hyperbolic, parabolic, non-finite, and degenerate inputs raise ``ValueError``.
     """
     from .._rust.api import calculate_moid_numpy
 
@@ -70,17 +54,14 @@ def calculate_moid(
 
 def calculate_perturber_moids(
     orbits: Orbits,
-    perturber: Union[OriginCodes, List[OriginCodes]],
-    chunk_size: int = 100,
-    max_processes: Optional[int] = 1,
+    perturber: OriginCodes | list[OriginCodes],
 ) -> PerturberMOIDs:
     """
     Calculate the minimum orbit intersection distance (MOID) for all orbits with respect
     to the perturbing body or bodies.
 
-    Implementation: a single Rust call per perturber, parallelized internally
-    via rayon. No Ray dispatch — `max_processes` and `chunk_size` are accepted
-    for API compatibility but the Rust kernel auto-detects available cores.
+    One Arrow crossing delegates SPICE state lookup, perturber orchestration,
+    and the internally parallel batch calculation to shared Rust paths.
 
     Parameters
     ----------
@@ -88,24 +69,21 @@ def calculate_perturber_moids(
         The orbits to calculate the MOID for.
     perturber : OriginCodes or List[OriginCodes]
         The perturbing body or bodies to calculate the MOID for.
-    chunk_size : int, optional
-        Accepted for API compatibility; not used (rayon parallelizes the
-        whole batch internally).
-    max_processes : int, optional
-        Accepted for API compatibility; not used.
-
     Returns
     -------
     PerturberMOIDs
         A table containing the MOID and time for each orbit with respect to
         the perturbing body or bodies.
+
+    Raises
+    ------
+    ValueError
+        If the Rust SPICE backend has not been initialized, any input is not a
+        supported finite elliptic conic, or the solver's reliability checks
+        fail.
     """
     from .._rust.api import calculate_perturber_moids_arrow
     from ..orbits.arrow_bridge import orbits_to_record_batch
-    from ..utils.spice import setup_SPICE
-
-    del chunk_size  # API compat
-    del max_processes  # API compat
 
     assert len(orbits.orbit_id.unique()) == len(orbits)
     assert len(orbits.coordinates.origin.code.unique()) == 1
@@ -117,10 +95,6 @@ def calculate_perturber_moids(
 
     if len(orbits) == 0:
         return PerturberMOIDs.empty()
-
-    # The native orchestrator reads the process-global SPICE backend directly
-    # (perturber spkez), so ensure the default kernels are furnsh-ed.
-    setup_SPICE()
 
     # Single Arrow crossing: Rust decodes the Orbits RecordBatch, runs the
     # perturber loop + per-perturber spkez + batched MOID kernel, and returns

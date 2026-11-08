@@ -74,7 +74,7 @@ These have canonical randomized parity tolerance specs and tiny/small/large spee
 - `dynamics.generate_ephemeris_2body_with_covariance(...)`
 - `dynamics.add_light_time(orbits, t0, observer_positions, lt_tol=1e-10, mu=MU, max_iter=1000, tol=1e-15, max_lt_iter=10)`
 - `dynamics.calculate_moid(primary_ellipse, secondary_ellipse)`
-- `dynamics.calculate_perturber_moids(orbits, perturber, chunk_size=100, max_processes=1)`
+- `dynamics.calculate_perturber_moids(orbits, perturber)`
 - `dynamics.solve_lambert(r1, r2, tof, mu=MU, prograde=True, max_iter=35, tol=1e-10)`
 - `dynamics.tisserand_parameter(a, e, i, third_body='jupiter')`
 - `dynamics.generate_porkchop_data(departure_orbits, arrival_orbits, propagation_origin=SUN, prograde=True, max_iter=35, tol=1e-10, max_processes=1)`
@@ -98,7 +98,7 @@ These have canonical fuzz parity, but speed is not a public-promotion gate. Some
 - `coordinates.rotate_cartesian_time_varying(coords, time_index, matrices, covariances=None)`
 - `dynamics.propagate_2body_along_arc(orbit, dts, mu, max_iter=100, tol=1e-15)`
 - `dynamics.propagate_2body_arc_batch(orbits, dts, mus, max_iter=100, tol=1e-15)`
-- `dynamics.calculate_moid_batch(primary_orbits, secondary_orbits, mus, max_iter=100, xtol=1e-10)`
+- `dynamics.calculate_moid_batch(primary_orbits, secondary_orbits, mus)`
 - `missions.porkchop_grid(dep_states, dep_mjds, arr_states, arr_mjds, mu, prograde=True, maxiter=35, atol=1e-10, rtol=1e-10)`
 - `statistics.weighted_mean(samples, W)`
 - `statistics.weighted_covariance(mean, samples, W_cov)`
