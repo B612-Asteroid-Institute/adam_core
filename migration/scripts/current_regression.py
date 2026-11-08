@@ -41,6 +41,11 @@ CONTRACTUALLY_EXACT_OUTPUTS = {
     ("orbits.VariantOrbits.create", "weights"),
     ("orbits.VariantOrbits.create", "weights_cov"),
 }
+RETIRED_MOID_INPUTS = {
+    "dynamics.calculate_moid": frozenset({"max_iter", "xtol"}),
+    "dynamics.calculate_moid_batch": frozenset({"max_iter", "xtol"}),
+    "dynamics.calculate_perturber_moids": frozenset({"chunk_size", "max_processes"}),
+}
 
 
 @dataclass(frozen=True)
@@ -327,6 +332,18 @@ def _kernel_identity(provenance: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
+def _assert_no_retired_moid_inputs(fixture: Mapping[str, Any]) -> None:
+    apis = fixture.get("apis", {})
+    for api_id, retired in RETIRED_MOID_INPUTS.items():
+        for case in apis.get(api_id, ()):
+            stale = sorted(retired.intersection(case.get("inputs", {})))
+            if stale:
+                raise AssertionError(
+                    f"{api_id}.{case.get('case_id', '<unknown>')}: "
+                    f"retired MOID inputs persisted: {stale}"
+                )
+
+
 def check_fixture(
     path: Path, *, requested: list[str] | None = None
 ) -> CurrentRegressionResult:
@@ -353,7 +370,12 @@ def check_fixture(
         raise AssertionError("current regression fixed-fixture coverage changed")
 
     api_ids = _selected_api_ids(requested)
+    if "dynamics.calculate_perturber_moids" in api_ids:
+        from adam_core.utils.spice import setup_SPICE
+
+        setup_SPICE()
     expected_apis = fixture["apis"]
+    _assert_no_retired_moid_inputs(fixture)
     missing = sorted(set(api_ids) - set(expected_apis))
     if missing:
         raise AssertionError(f"current regression fixture is missing APIs: {missing}")

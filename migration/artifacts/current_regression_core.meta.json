@@ -1,7 +1,7 @@
 {
   "schema_version": 2,
   "fixture": "current_regression_core.json.gz",
-  "fixture_sha256": "2a418a692810d5d612896264c21412d41ed5c1b824f1e61ae2b17669ae58d6da",
+  "fixture_sha256": "a0d9e059838e570c24a5ca7ab25aacef32b1a79b1f88c71cb405fa37dace16f4",
   "accepted_candidate": "468fb1a270dd193bc2e7cb24bd232cfdc6a8ccbe",
   "baseline_authority": "757c09fca86adf9e3d5899952db3d379e09413f6",
   "coverage": {
@@ -13,5 +13,33 @@
     "outputs": 855,
     "contractually_exact_outputs": 128
   },
-  "normal_test_runtime": "current adam-core only; no frozen-runtime imports, subprocesses, runners, or conditional skips"
+  "normal_test_runtime": "current adam-core only; no frozen-runtime imports, subprocesses, runners, or conditional skips",
+  "moid_recapture": {
+    "apis": [
+      "dynamics.calculate_moid",
+      "dynamics.calculate_moid_batch",
+      "dynamics.calculate_perturber_moids"
+    ],
+    "authority": "corrective current-implementation recapture for API-contract fixture maintenance; existing tolerances retained; not independently reviewed",
+    "case_count": 26,
+    "date": "2026-11-08",
+    "fixed_cases": 2,
+    "fuzz_cases": 24,
+    "retired_inputs_removed": {
+      "dynamics.calculate_moid": [
+        "max_iter",
+        "xtol"
+      ],
+      "dynamics.calculate_moid_batch": [
+        "max_iter",
+        "xtol"
+      ],
+      "dynamics.calculate_perturber_moids": [
+        "chunk_size",
+        "max_processes"
+      ]
+    },
+    "source_commit": "9f51569decef28268d7e840185550c9d3880aa3e",
+    "unrelated_cases": "preserved byte-semantically at decoded JSON case-object level"
+  }
 }

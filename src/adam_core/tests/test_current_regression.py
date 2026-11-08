@@ -33,6 +33,15 @@ def test_current_regression_runner_has_no_legacy_runtime_dependency() -> None:
     assert "migration.parity._timing_cache" not in sys.modules
 
 
+def test_current_regression_fixture_has_no_retired_moid_controls() -> None:
+    fixture = current_regression._read_fixture(current_regression.DEFAULT_FIXTURE)
+
+    current_regression._assert_no_retired_moid_inputs(fixture)
+    for api_id, retired in current_regression.RETIRED_MOID_INPUTS.items():
+        for case in fixture["apis"][api_id]:
+            assert retired.isdisjoint(case["inputs"])
+
+
 def test_current_regression_fixture_contains_every_reviewed_case() -> None:
     fixture = current_regression._read_fixture(current_regression.DEFAULT_FIXTURE)
     cases = [case for api_cases in fixture["apis"].values() for case in api_cases]
