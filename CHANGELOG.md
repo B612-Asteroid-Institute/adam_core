@@ -55,6 +55,22 @@ This file contains notable changes in adam-core
   initialized explicitly rather than invoking Python-owned setup internally.
   The no-op ``force`` controls were removed from ``setup_SPICE`` and
   ``setup_mpc_obscodes``.
+- Canonical Rust and Python OD batches now execute independent association or
+  orbit/member groups concurrently on Rayon's shared pool. Indexed collection
+  preserves first-appearance product and failure order, exact ``run_od``
+  composition, and invocation-wide fatal-error behavior; inner propagation and
+  coordinate kernels share the same pool in ordinary Rust composition rather
+  than creating per-group thread pools. A fatal group lowers a stage-local
+  cancellation bound without interrupting already-running work; lower indices
+  remain eligible to establish earlier precedence, and every stage is a barrier.
+  Each non-empty canonical invocation captures one immutable, lock-free SPICE
+  generation before group scheduling; ``run_od`` shares it across IOD and
+  refinement. SPICE kernel-pool resolution also stays serial when invoked from a
+  Rayon worker to protect non-OD callers that hold a non-reentrant lock across a
+  query. Snapshot-active backend mutation assumes registered kernel files remain
+  reopenable and unchanged; external removal or replacement is unsupported, and
+  an infallible ``unload`` leaves the current generation unchanged if a remaining
+  path cannot be reopened.
 - Python OD code is a typed declaration, resource-binding, Arrow-marshalling,
   and result-assembly boundary. Numerical expert functions live under
   ``adam_core.orbit_determination.algorithms``; propagators contribute only

@@ -11,7 +11,7 @@ use std::collections::{HashMap, VecDeque};
 use std::fs::File;
 use std::io::{self, Read};
 use std::path::Path;
-use std::sync::{Mutex, OnceLock};
+use std::sync::{Arc, Mutex, OnceLock};
 
 use adam_core_rs_coords::types::{
     CoordinateBatch, Epoch, Frame, OriginArray, OriginId, SchemaError, SchemaResult, TimeArray,
@@ -38,6 +38,8 @@ pub use spicekit::spk_writer::{
 };
 pub use spicekit::{NaifFrame, PckError, PckFile, SpkError, SpkFile};
 
+// `resolve_chunked` is this crate's only kernel-pool Rayon entry point. Keep
+// nested-pool detection there so SPK/PCK batch evaluation has one policy.
 use rayon::prelude::*;
 
 const ITRF93_FRAME_CODE: i32 = 3000;
@@ -107,6 +109,7 @@ impl SpiceBackendError {
     }
 }
 
+#[derive(Clone)]
 enum Kernel {
     /// An SPK or a binary PCK. Its reader lives in the backend's pool.
     Binary { path: String },
@@ -131,11 +134,42 @@ impl Kernel {
 /// CSPICE `furnsh` priority. Text-kernel body bindings are replayed in load
 /// order so the most recent binding wins.
 pub struct AdamCoreSpiceBackend {
-    kernels: Vec<Kernel>,
-    pool: KernelPool,
-    custom_names: HashMap<String, i32>,
-    obscodes: HashMap<String, GroundObserverSite>,
+    kernels: Arc<Vec<Kernel>>,
+    pool: Arc<KernelPool>,
+    custom_names: Arc<HashMap<String, i32>>,
+    obscodes: Arc<HashMap<String, GroundObserverSite>>,
     spkez_state_cache: SpkezStateCache,
+}
+
+/// Immutable, lock-free view of one exact global SPICE backend generation.
+///
+/// Canonical OD acquires one snapshot on its calling thread before scheduling
+/// groups. Loaded kernel readers, name bindings, and observatory definitions
+/// remain fixed for that invocation even if the process-global backend changes.
+///
+/// This is a doc-hidden cross-crate implementation seam for `adam_core`; it is
+/// not a supported consumer-facing alternative to [`global_backend`].
+#[doc(hidden)]
+pub struct AdamCoreSpiceSnapshot {
+    backend: AdamCoreSpiceBackend,
+}
+
+impl OriginTranslationProvider for AdamCoreSpiceSnapshot {
+    fn origin_translation_vectors(
+        &self,
+        origins: &OriginArray,
+        target_origin: &OriginId,
+        frame: Frame,
+        times: &TimeArray,
+    ) -> SchemaResult<Vec<[f64; 6]>> {
+        OriginTranslationProvider::origin_translation_vectors(
+            &self.backend,
+            origins,
+            target_origin,
+            frame,
+            times,
+        )
+    }
 }
 
 /// Key of the fused perturber-state epoch cache: the Rust mirror of the
@@ -299,11 +333,29 @@ pub struct TransformOutput {
 impl AdamCoreSpiceBackend {
     pub fn new() -> Self {
         Self {
-            kernels: Vec::new(),
-            pool: KernelPool::new(),
-            custom_names: HashMap::new(),
-            obscodes: HashMap::new(),
+            kernels: Arc::new(Vec::new()),
+            pool: Arc::new(KernelPool::new()),
+            custom_names: Arc::new(HashMap::new()),
+            obscodes: Arc::new(HashMap::new()),
             spkez_state_cache: SpkezStateCache::default(),
+        }
+    }
+
+    /// Capture the currently loaded readers and lookup maps without rereading
+    /// kernel files. Mutations detach the global backend generation lazily.
+    ///
+    /// This doc-hidden method exists only for the cross-crate canonical OD
+    /// implementation and is not a supported consumer-facing backend API.
+    #[doc(hidden)]
+    pub fn snapshot(&self) -> AdamCoreSpiceSnapshot {
+        AdamCoreSpiceSnapshot {
+            backend: Self {
+                kernels: Arc::clone(&self.kernels),
+                pool: Arc::clone(&self.pool),
+                custom_names: Arc::clone(&self.custom_names),
+                obscodes: Arc::clone(&self.obscodes),
+                spkez_state_cache: SpkezStateCache::default(),
+            },
         }
     }
 
@@ -447,7 +499,7 @@ impl AdamCoreSpiceBackend {
     /// `Observers.from_codes` fast path and the coordinate-transform
     /// orchestrator resolve observatory origins from one shared source.
     pub fn load_mpc_obscodes(&mut self, json: &str) -> Result<usize, SpiceBackendError> {
-        self.obscodes = parse_mpc_obscodes(json)?;
+        self.obscodes = Arc::new(parse_mpc_obscodes(json)?);
         Ok(self.obscodes.len())
     }
 
@@ -544,10 +596,10 @@ impl AdamCoreSpiceBackend {
     /// isolation (a Rust-level reset of the process-global backend) and any
     /// caller that needs a clean kernel pool.
     pub fn clear(&mut self) {
-        self.kernels.clear();
-        self.pool.clear();
-        self.custom_names.clear();
-        self.obscodes.clear();
+        self.kernels = Arc::new(Vec::new());
+        self.pool = Arc::new(KernelPool::new());
+        self.custom_names = Arc::new(HashMap::new());
+        self.obscodes = Arc::new(HashMap::new());
     }
 
     /// Native `transform_coordinates`: the full composition -- representation
@@ -796,6 +848,32 @@ impl AdamCoreSpiceBackend {
         Ok(())
     }
 
+    fn rebuild_binary_pool<'a>(
+        kernels: impl IntoIterator<Item = &'a Kernel>,
+    ) -> Result<KernelPool, SpiceBackendError> {
+        let mut pool = KernelPool::new();
+        for kernel in kernels {
+            let Kernel::Binary { path } = kernel else {
+                continue;
+            };
+            pool.furnish(path)
+                .map_err(|source| furnish_error(path.clone(), source))?;
+        }
+        Ok(pool)
+    }
+
+    fn mutable_pool(&mut self) -> Result<&mut KernelPool, SpiceBackendError> {
+        if Arc::get_mut(&mut self.pool).is_none() {
+            self.pool = Arc::new(Self::rebuild_binary_pool(self.kernels.iter())?);
+        }
+        Ok(Arc::get_mut(&mut self.pool).expect("detached kernel pool is uniquely owned"))
+    }
+
+    /// Furnish one kernel path.
+    ///
+    /// When a snapshot is alive, detaching the binary pool reopens registered
+    /// paths. External removal or replacement of those files is unsupported;
+    /// a reopen failure may therefore identify an older registered path.
     pub fn furnsh<P: AsRef<Path>>(&mut self, path: P) -> Result<(), SpiceBackendError> {
         let path = path.as_ref();
         let path_s = path.display().to_string();
@@ -805,10 +883,10 @@ impl AdamCoreSpiceBackend {
 
         match peek_daf_idword(path)? {
             Some(idword) if idword.starts_with(b"DAF/SPK") || idword.starts_with(b"DAF/PCK") => {
-                self.pool
+                self.mutable_pool()?
                     .furnish(path)
                     .map_err(|source| furnish_error(path_s.clone(), source))?;
-                self.kernels.push(Kernel::Binary { path: path_s });
+                Arc::make_mut(&mut self.kernels).push(Kernel::Binary { path: path_s });
             }
             _ => {
                 let content =
@@ -820,7 +898,7 @@ impl AdamCoreSpiceBackend {
                     return Err(SpiceBackendError::UnsupportedTextKernel { path: path_s });
                 }
                 let has_bindings = !content.bindings.is_empty();
-                self.kernels.push(Kernel::Text {
+                Arc::make_mut(&mut self.kernels).push(Kernel::Text {
                     path: path_s,
                     content,
                 });
@@ -832,15 +910,40 @@ impl AdamCoreSpiceBackend {
         Ok(())
     }
 
+    /// Unload one registered kernel path.
+    ///
+    /// When a snapshot is alive, detaching the binary pool reopens every
+    /// remaining registered path. External removal or replacement of those
+    /// files is unsupported. Because this established API is infallible, a
+    /// failed reopen leaves the current global generation unchanged rather
+    /// than partially applying the unload.
     pub fn unload<P: AsRef<Path>>(&mut self, path: P) {
-        let path_s = path.as_ref().display().to_string();
-        self.pool.unload(path.as_ref());
+        let path = path.as_ref();
+        let path_s = path.display().to_string();
+        let had_binary = self
+            .kernels
+            .iter()
+            .any(|kernel| matches!(kernel, Kernel::Binary { path } if path == &path_s));
+        if had_binary {
+            if let Some(pool) = Arc::get_mut(&mut self.pool) {
+                pool.unload(path);
+            } else {
+                let Ok(pool) = Self::rebuild_binary_pool(
+                    self.kernels.iter().filter(|kernel| kernel.path() != path_s),
+                ) else {
+                    // Keep the old generation internally consistent if an
+                    // externally removed remaining kernel cannot be reopened.
+                    return;
+                };
+                self.pool = Arc::new(pool);
+            }
+        }
         let mut had_text = false;
-        self.kernels.retain(|k| {
-            if k.path() != path_s {
+        Arc::make_mut(&mut self.kernels).retain(|kernel| {
+            if kernel.path() != path_s {
                 return true;
             }
-            had_text |= matches!(k, Kernel::Text { .. });
+            had_text |= matches!(kernel, Kernel::Text { .. });
             false
         });
         if had_text {
@@ -1324,15 +1427,15 @@ impl AdamCoreSpiceBackend {
     }
 
     fn rebuild_name_index(&mut self) {
-        self.custom_names.clear();
-        for k in &self.kernels {
+        let mut custom_names = HashMap::new();
+        for k in self.kernels.iter() {
             if let Kernel::Text { content, .. } = k {
                 for binding in &content.bindings {
-                    self.custom_names
-                        .insert(normalize_name(&binding.name), binding.code);
+                    custom_names.insert(normalize_name(&binding.name), binding.code);
                 }
             }
         }
+        self.custom_names = Arc::new(custom_names);
     }
 
     /// Most recently loaded structured `KPL/LSK` leapseconds-kernel content,
@@ -1451,14 +1554,19 @@ impl AdamCoreSpiceBackend {
     }
 }
 
-/// Run `evaluate` over `ets`, serially below the spawn-tax threshold and in
-/// chunks on Rayon above it.
+/// Run `evaluate` over `ets`, serially below the spawn-tax threshold or when
+/// already inside Rayon, and in chunks on Rayon only for a top-level call.
+///
+/// A caller may hold a non-reentrant lock across this query. Entering nested
+/// Rayon could then execute unrelated work that needs that caller-owned lock.
+/// Keeping the nested slice serial avoids that re-entry while retaining chunks
+/// for ordinary top-level batch queries.
 fn resolve_chunked<T, F>(ets: &[f64], evaluate: F) -> Result<Vec<T>, PoolError>
 where
     T: Send,
     F: Fn(&[f64]) -> Result<Vec<T>, PoolError> + Sync,
 {
-    if ets.len() < RAYON_SERIAL_THRESHOLD_EPOCHS {
+    if ets.len() < RAYON_SERIAL_THRESHOLD_EPOCHS || rayon::current_thread_index().is_some() {
         return evaluate(ets);
     }
     let chunks: Vec<Vec<T>> = ets
@@ -1885,11 +1993,79 @@ fn add_state(state: &mut [f64; 6], delta: &[f64; 6]) {
 #[cfg(test)]
 mod tests {
     use std::io::Write;
+    use std::sync::Mutex;
 
     use adam_core_rs_coords::types::{CoordinateValues, Epoch};
     use tempfile::{tempdir, NamedTempFile};
 
     use super::*;
+
+    #[test]
+    fn resolve_chunked_stays_serial_when_nested_and_chunks_top_level_calls() {
+        let epochs = (0..RAYON_SERIAL_THRESHOLD_EPOCHS)
+            .map(|epoch| epoch as f64)
+            .collect::<Vec<_>>();
+
+        let nested_calls = Mutex::new(Vec::new());
+        let nested = rayon::ThreadPoolBuilder::new()
+            .num_threads(4)
+            .build()
+            .expect("nested test pool")
+            .install(|| {
+                assert!(rayon::current_thread_index().is_some());
+                resolve_chunked(&epochs, |chunk| {
+                    nested_calls
+                        .lock()
+                        .expect("nested call log")
+                        .push((rayon::current_thread_index(), chunk.len()));
+                    Ok(chunk.to_vec())
+                })
+            })
+            .expect("nested resolution");
+        assert_eq!(
+            nested
+                .iter()
+                .map(|value| value.to_bits())
+                .collect::<Vec<_>>(),
+            epochs
+                .iter()
+                .map(|value| value.to_bits())
+                .collect::<Vec<_>>(),
+        );
+        let nested_calls = nested_calls.into_inner().expect("nested call log");
+        assert_eq!(nested_calls.len(), 1);
+        assert!(nested_calls[0].0.is_some());
+        assert_eq!(nested_calls[0].1, RAYON_SERIAL_THRESHOLD_EPOCHS);
+
+        let top_level_epochs = epochs.clone();
+        let (top_level, mut chunk_lengths) = std::thread::spawn(move || {
+            assert!(rayon::current_thread_index().is_none());
+            let calls = Mutex::new(Vec::new());
+            let resolved = resolve_chunked(&top_level_epochs, |chunk| {
+                calls.lock().expect("top-level call log").push(chunk.len());
+                Ok(chunk.to_vec())
+            })
+            .expect("top-level resolution");
+            (resolved, calls.into_inner().expect("top-level call log"))
+        })
+        .join()
+        .expect("top-level caller");
+        chunk_lengths.sort_unstable();
+        assert_eq!(
+            top_level
+                .iter()
+                .map(|value| value.to_bits())
+                .collect::<Vec<_>>(),
+            epochs
+                .iter()
+                .map(|value| value.to_bits())
+                .collect::<Vec<_>>(),
+        );
+        assert_eq!(
+            chunk_lengths,
+            vec![RESOLVE_CHUNK_EPOCHS; RAYON_SERIAL_THRESHOLD_EPOCHS / RESOLVE_CHUNK_EPOCHS]
+        );
+    }
 
     #[test]
     fn builtin_body_lookup_works() {
@@ -2307,10 +2483,11 @@ mod tests {
     fn origin_translation_vectors_group_sources_and_preserve_row_order() {
         let (_dir, path) = write_test_spk();
         let mut backend = AdamCoreSpiceBackend::new();
-        backend.furnsh(path).unwrap();
+        backend.furnsh(&path).unwrap();
         let times = tdb_times();
         let origins = OriginArray::new(vec![OriginId::SolarSystemBarycenter, OriginId::Naif(42)]);
 
+        let snapshot = backend.snapshot();
         let vectors = backend
             .origin_translation_vectors(
                 &origins,
@@ -2319,9 +2496,97 @@ mod tests {
                 &times,
             )
             .unwrap();
+        let snapshot_vectors = OriginTranslationProvider::origin_translation_vectors(
+            &snapshot,
+            &origins,
+            &OriginId::SolarSystemBarycenter,
+            Frame::Equatorial,
+            &times,
+        )
+        .unwrap();
 
         assert_eq!(vectors[0], [0.0; 6]);
         assert_eq!(vectors[1], [2.0, 4.0, 6.0, 2.0, 4.0, 6.0]);
+        assert_eq!(
+            vectors
+                .iter()
+                .flatten()
+                .map(|value| value.to_bits())
+                .collect::<Vec<_>>(),
+            snapshot_vectors
+                .iter()
+                .flatten()
+                .map(|value| value.to_bits())
+                .collect::<Vec<_>>(),
+        );
+
+        let long_times = TimeArray::from_parts(
+            TimeScale::Tdb,
+            vec![51_544; RAYON_SERIAL_THRESHOLD_EPOCHS],
+            (0..RAYON_SERIAL_THRESHOLD_EPOCHS)
+                .map(|row| 43_200_000_000_000 + row as i64 * 90_000_000)
+                .collect(),
+        )
+        .expect("long snapshot epochs");
+        let long_origins = OriginArray::repeat(OriginId::Naif(42), RAYON_SERIAL_THRESHOLD_EPOCHS);
+        let global_long = backend
+            .origin_translation_vectors(
+                &long_origins,
+                &OriginId::SolarSystemBarycenter,
+                Frame::Equatorial,
+                &long_times,
+            )
+            .expect("global long translation");
+        let snapshot_long = OriginTranslationProvider::origin_translation_vectors(
+            &snapshot,
+            &long_origins,
+            &OriginId::SolarSystemBarycenter,
+            Frame::Equatorial,
+            &long_times,
+        )
+        .expect("snapshot long translation");
+        assert_eq!(
+            global_long
+                .iter()
+                .flatten()
+                .map(|value| value.to_bits())
+                .collect::<Vec<_>>(),
+            snapshot_long
+                .iter()
+                .flatten()
+                .map(|value| value.to_bits())
+                .collect::<Vec<_>>(),
+        );
+
+        backend.unload(&path);
+        assert!(backend
+            .origin_translation_vectors(
+                &origins,
+                &OriginId::SolarSystemBarycenter,
+                Frame::Equatorial,
+                &times,
+            )
+            .is_err());
+        let retained = OriginTranslationProvider::origin_translation_vectors(
+            &snapshot,
+            &origins,
+            &OriginId::SolarSystemBarycenter,
+            Frame::Equatorial,
+            &times,
+        )
+        .expect("snapshot retains its immutable kernel generation");
+        assert_eq!(
+            retained
+                .iter()
+                .flatten()
+                .map(|value| value.to_bits())
+                .collect::<Vec<_>>(),
+            snapshot_vectors
+                .iter()
+                .flatten()
+                .map(|value| value.to_bits())
+                .collect::<Vec<_>>(),
+        );
     }
 
     #[test]

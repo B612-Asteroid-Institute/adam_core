@@ -2,7 +2,14 @@
 //!
 //! This module owns grouping, preparation, scientific-failure continuation,
 //! output disposition, fingerprints, and provenance for both standalone Rust
-//! callers and the Python bindings.  Predictor-level numerical kernels remain
+//! callers and the Python bindings. Independent groups execute concurrently on
+//! Rayon's shared pool while indexed collection preserves canonical group and
+//! failure order. An invocation-fatal group lowers a stage-local cancellation
+//! bound: already-running work settles, lower indices remain eligible to replace
+//! the bound, and unstarted later work is skipped. Each non-empty canonical call
+//! snapshots SPICE once before group scheduling;
+//! `run_od` shares that immutable generation across IOD and refinement.
+//! Predictor-level numerical kernels remain
 //! available under [`crate::od::algorithms`], but are not alternate batch APIs.
 //!
 //! # Example
@@ -48,11 +55,13 @@ use adam_core_rs_coords::{
     CovarianceUnits, DataFrame, ObjectId, ObserverBatch, OrbitBatch, OrbitId, OriginArray,
     OriginId, SchemaError, SourceCatalogBatch, TimeArray, TimeScale, Validity,
 };
-use adam_core_rs_spice::global_backend;
+use adam_core_rs_spice::{global_backend, AdamCoreSpiceSnapshot};
+use rayon::prelude::*;
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use std::collections::HashSet;
 use std::fmt;
+use std::sync::atomic::{AtomicUsize, Ordering as AtomicOrdering};
 use std::sync::LazyLock;
 
 /// Predictor-level numerical building blocks used by the canonical workflows.
@@ -118,8 +127,8 @@ pub mod algorithms {
         }
     }
 
-    /// Canonical process-global SPICE origin translation shared by Core and
-    /// PyO3 routes.
+    /// Process-global SPICE origin translation for PyO3 expert drivers and
+    /// predictor-level callers. Canonical batch OD uses an invocation snapshot.
     #[derive(Debug, Clone, Copy, Default)]
     pub struct GlobalSpiceTranslation;
 
@@ -178,9 +187,7 @@ pub mod algorithms {
     }
 }
 
-use algorithms::{
-    canonical_stage_settings, two_body_provider_metadata, ErfaTimeProvider, GlobalSpiceTranslation,
-};
+use algorithms::{canonical_stage_settings, two_body_provider_metadata, ErfaTimeProvider};
 
 /// Immutable complete OD profiles and their resource declarations.
 pub mod profiles {
@@ -516,14 +523,145 @@ impl OdPropagatorSource for OdPropagator<'_> {
     }
 }
 
+// Every canonical backend is safe to share: `Propagator` requires `Sync`, and
+// ABI-v2 construction rejects external callbacks without THREAD_SAFE.
+#[derive(Clone, Copy)]
+enum PredictionBackend<'a> {
+    TwoBody(&'a TwoBodyPropagator),
+    External(&'a ExternalPropagator),
+}
+
 struct PredictionService<'a> {
-    predictor: &'a dyn SphericalPredictor,
+    backend: PredictionBackend<'a>,
+    options: &'a EphemerisOptions,
     metadata: ProviderMetadata,
+}
+
+impl PredictionService<'_> {
+    fn with_predictor<R>(
+        &self,
+        context: &OdExecutionContext<'_>,
+        operation: impl FnOnce(&dyn SphericalPredictor) -> R,
+    ) -> R {
+        match self.backend {
+            PredictionBackend::TwoBody(propagator) => {
+                let predictor = PropagatorPredictor {
+                    propagator,
+                    options: self.options,
+                    provider: context.time_provider,
+                    translation_provider: context.translation_provider,
+                };
+                operation(&predictor)
+            }
+            PredictionBackend::External(propagator) => {
+                let predictor = PropagatorPredictor {
+                    propagator,
+                    options: self.options,
+                    provider: context.time_provider,
+                    translation_provider: context.translation_provider,
+                };
+                operation(&predictor)
+            }
+        }
+    }
 }
 
 struct OdExecutionContext<'a> {
     time_provider: &'a ErfaTimeProvider,
-    translation_provider: &'a GlobalSpiceTranslation,
+    translation_provider: &'a AdamCoreSpiceSnapshot,
+}
+
+fn global_translation_snapshot() -> Result<AdamCoreSpiceSnapshot, OdBatchError> {
+    global_backend()
+        .lock()
+        .map(|backend| backend.snapshot())
+        .map_err(|_| OdBatchError::new(OdBatchErrorCode::Runtime, "SPICE backend lock is poisoned"))
+}
+
+/// Stage-local best-effort invocation-fatal cancellation bound.
+///
+/// A fatal result lowers the greatest index that may start. Work that already
+/// passed the bound is allowed to settle, and lower indices remain eligible to
+/// replace the bound so serial first-fatal precedence stays exact.
+struct StageCancellation {
+    lowest_fatal: AtomicUsize,
+}
+
+impl StageCancellation {
+    fn new() -> Self {
+        Self {
+            lowest_fatal: AtomicUsize::new(usize::MAX),
+        }
+    }
+
+    fn start(&self, index: usize) -> Option<StagePermit<'_>> {
+        if index > self.lowest_fatal.load(AtomicOrdering::Acquire) {
+            return None;
+        }
+        Some(StagePermit {
+            cancellation: self,
+            index,
+            completed: false,
+        })
+    }
+}
+
+/// One started group. Dropping without `complete` records an invocation-fatal
+/// exit, including an early `?`, while completed scientific outcomes do not.
+struct StagePermit<'a> {
+    cancellation: &'a StageCancellation,
+    index: usize,
+    completed: bool,
+}
+
+impl StagePermit<'_> {
+    fn complete<T>(mut self, value: T) -> Result<Option<T>, OdBatchError> {
+        self.completed = true;
+        Ok(Some(value))
+    }
+}
+
+impl Drop for StagePermit<'_> {
+    fn drop(&mut self) {
+        if !self.completed {
+            self.cancellation
+                .lowest_fatal
+                .fetch_min(self.index, AtomicOrdering::AcqRel);
+        }
+    }
+}
+
+/// Collect one complete stage in index order. `None` marks cancelled work;
+/// collection remains a barrier before an error or product can be returned.
+fn collect_ordered_parallel<T: Send>(
+    results: impl IndexedParallelIterator<Item = Result<Option<T>, OdBatchError>>,
+) -> Result<Vec<T>, OdBatchError> {
+    Ok(results
+        .collect::<Vec<_>>()
+        .into_iter()
+        .collect::<Result<Vec<_>, _>>()?
+        .into_iter()
+        .flatten()
+        .collect())
+}
+
+#[cfg(test)]
+fn run_test_parallel_stage<I, T, F>(items: Vec<I>, operation: F) -> Result<Vec<T>, OdBatchError>
+where
+    I: Send,
+    T: Send,
+    F: Fn(usize, I) -> Result<T, OdBatchError> + Send + Sync,
+{
+    let cancellation = StageCancellation::new();
+    collect_ordered_parallel(items.into_par_iter().enumerate().map(|(index, item)| {
+        let Some(permit) = cancellation.start(index) else {
+            return Ok(None);
+        };
+        match operation(index, item) {
+            Ok(value) => permit.complete(value),
+            Err(error) => Err(error),
+        }
+    }))
 }
 
 fn with_stage_predictor<R>(
@@ -533,34 +671,24 @@ fn with_stage_predictor<R>(
 ) -> Result<R, OdBatchError> {
     let settings = canonical_stage_settings(config)?;
     let time = ErfaTimeProvider;
-    let translation = GlobalSpiceTranslation;
+    let translation = global_translation_snapshot()?;
     let context = OdExecutionContext {
         time_provider: &time,
         translation_provider: &translation,
     };
     match &provider.backend {
         OdPropagatorBackend::TwoBody => {
-            let predictor = PropagatorPredictor {
-                propagator: &settings.two_body,
-                options: &settings.options,
-                provider: &time,
-                translation_provider: &translation,
-            };
             let service = PredictionService {
-                predictor: &predictor,
+                backend: PredictionBackend::TwoBody(&settings.two_body),
+                options: &settings.options,
                 metadata: two_body_provider_metadata(&settings.two_body),
             };
             driver(&service, &context)
         }
         OdPropagatorBackend::External(propagator) => {
-            let predictor = PropagatorPredictor {
-                propagator: *propagator,
-                options: &settings.options,
-                provider: &time,
-                translation_provider: &translation,
-            };
             let service = PredictionService {
-                predictor: &predictor,
+                backend: PredictionBackend::External(propagator),
+                options: &settings.options,
                 metadata: provider.external_metadata()?,
             };
             driver(&service, &context)
@@ -581,55 +709,35 @@ fn with_stage_predictors<R>(
     let iod = canonical_stage_settings(iod_config)?;
     let refinement = canonical_stage_settings(refinement_config)?;
     let time = ErfaTimeProvider;
-    let translation = GlobalSpiceTranslation;
+    let translation = global_translation_snapshot()?;
     let context = OdExecutionContext {
         time_provider: &time,
         translation_provider: &translation,
     };
     match &provider.backend {
         OdPropagatorBackend::TwoBody => {
-            let iod_predictor = PropagatorPredictor {
-                propagator: &iod.two_body,
-                options: &iod.options,
-                provider: &time,
-                translation_provider: &translation,
-            };
-            let refinement_predictor = PropagatorPredictor {
-                propagator: &refinement.two_body,
-                options: &refinement.options,
-                provider: &time,
-                translation_provider: &translation,
-            };
             let iod_service = PredictionService {
-                predictor: &iod_predictor,
+                backend: PredictionBackend::TwoBody(&iod.two_body),
+                options: &iod.options,
                 metadata: two_body_provider_metadata(&iod.two_body),
             };
             let refinement_service = PredictionService {
-                predictor: &refinement_predictor,
+                backend: PredictionBackend::TwoBody(&refinement.two_body),
+                options: &refinement.options,
                 metadata: two_body_provider_metadata(&refinement.two_body),
             };
             driver(&iod_service, &refinement_service, &context)
         }
         OdPropagatorBackend::External(propagator) => {
-            let iod_predictor = PropagatorPredictor {
-                propagator: *propagator,
-                options: &iod.options,
-                provider: &time,
-                translation_provider: &translation,
-            };
-            let refinement_predictor = PropagatorPredictor {
-                propagator: *propagator,
-                options: &refinement.options,
-                provider: &time,
-                translation_provider: &translation,
-            };
             let metadata = provider.external_metadata()?;
             let iod_service = PredictionService {
-                predictor: &iod_predictor,
+                backend: PredictionBackend::External(propagator),
+                options: &iod.options,
                 metadata: metadata.clone(),
             };
             let refinement_service = PredictionService {
-                predictor: &refinement_predictor,
+                backend: PredictionBackend::External(propagator),
+                options: &refinement.options,
                 metadata,
             };
             driver(&iod_service, &refinement_service, &context)
@@ -2903,8 +3011,9 @@ fn run_iod_with_source<S: OdPropagatorSource + ?Sized>(
 ///
 /// # Ordering and products
 ///
-/// Association groups follow first appearance, successful members follow
-/// source-row order, and a detection may belong to multiple groups. The result
+/// Association groups execute concurrently on Rayon's shared pool, then return
+/// in first appearance order; successful members follow source-row order, and a
+/// detection may belong to multiple groups. The result
 /// owns exactly three primary products: [`OdBatchResult::fitted_orbits`],
 /// [`OdBatchResult::fitted_orbit_members`], and
 /// [`OdBatchResult::failures`]. The immutable slices preserve that order;
@@ -2967,105 +3076,120 @@ fn run_iod_prepared(
             ..OdStageProviders::default()
         },
     };
-    for (group, (prepared, observers)) in groups.into_iter().zip(prepared_groups) {
-        let input_fingerprint = group_input_fingerprint(
-            &group.group_id,
-            &input.observations.source,
-            &input.observations.observers,
-            &group.source_indices,
-            &prepared.original,
-            &prepared.used,
-            None,
-            None,
-        );
-        let orbit_id = default_orbit_id(&group.group_id, &config_sha, &input_fingerprint);
-        let result = run_iod_with_predictor(
-            service.predictor,
-            &prepared,
-            &observers,
-            config.stage(),
-            context.time_provider,
-            context.translation_provider,
-        );
-        match result {
-            Ok(iod) => {
-                let failure = iod_failure(&group.group_id, &iod, group.source_indices.len());
-                let state_fingerprint = output_state_fingerprint(Some(&iod), None, None)?;
-                let provenance = make_provenance(
-                    OdRoute::RunIod,
-                    input_fingerprint,
-                    configuration.clone(),
-                    Some(service.metadata.clone()),
-                    None,
-                    None,
-                    Some(&iod),
-                    None,
-                    None,
-                    state_fingerprint,
-                );
-                let orbit = if iod.accepted.is_some() {
-                    Some(FittedOrbitRecord {
-                        orbit: materialized_iod_orbit(&iod, &group.group_id, &orbit_id)?,
-                        group_id: group.group_id.clone(),
+    let cancellation = StageCancellation::new();
+    let group_results = groups
+        .into_par_iter()
+        .zip(prepared_groups.into_par_iter())
+        .enumerate()
+        .map(|(index, (group, (prepared, observers)))| {
+            let Some(permit) = cancellation.start(index) else {
+                return Ok(None);
+            };
+            let input_fingerprint = group_input_fingerprint(
+                &group.group_id,
+                &input.observations.source,
+                &input.observations.observers,
+                &group.source_indices,
+                &prepared.original,
+                &prepared.used,
+                None,
+                None,
+            );
+            let orbit_id = default_orbit_id(&group.group_id, &config_sha, &input_fingerprint);
+            let result = service.with_predictor(context, |predictor| {
+                run_iod_with_predictor(
+                    predictor,
+                    &prepared,
+                    &observers,
+                    config.stage(),
+                    context.time_provider,
+                    context.translation_provider,
+                )
+            });
+            let group_result = match result {
+                Ok(iod) => {
+                    let failure = iod_failure(&group.group_id, &iod, group.source_indices.len());
+                    let state_fingerprint = output_state_fingerprint(Some(&iod), None, None)?;
+                    let provenance = make_provenance(
+                        OdRoute::RunIod,
+                        input_fingerprint,
+                        configuration.clone(),
+                        Some(service.metadata.clone()),
+                        None,
+                        None,
+                        Some(&iod),
+                        None,
+                        None,
+                        state_fingerprint,
+                    );
+                    let orbit = if iod.accepted.is_some() {
+                        Some(FittedOrbitRecord {
+                            orbit: materialized_iod_orbit(&iod, &group.group_id, &orbit_id)?,
+                            group_id: group.group_id.clone(),
+                            input_orbit_index: None,
+                            iod: Some(iod.clone()),
+                            refined: None,
+                            evaluation: None,
+                            provenance,
+                        })
+                    } else {
+                        None
+                    };
+                    let members = orbit.as_ref().map_or_else(Vec::new, |_| {
+                        let outlier = iod.to_output(group.source_indices.len()).outlier;
+                        member_records(
+                            &group.group_id,
+                            &orbit_id,
+                            &group.source_indices,
+                            &[],
+                            &prepared,
+                            &input.observations,
+                            &outlier,
+                        )
+                    });
+                    Ok(WorkingGroupResult {
+                        group_id: group.group_id,
+                        orbit_id,
+                        row_indices: group.source_indices,
                         input_orbit_index: None,
-                        iod: Some(iod.clone()),
-                        refined: None,
-                        evaluation: None,
-                        provenance,
+                        member_indices: Vec::new(),
+                        prepared,
+                        orbit,
+                        members,
+                        failure,
+                        iod: Some(iod),
                     })
-                } else {
-                    None
-                };
-                let members = orbit.as_ref().map_or_else(Vec::new, |_| {
-                    let outlier = iod.to_output(group.source_indices.len()).outlier;
-                    member_records(
+                }
+                Err(error) if group_scientific_code(&error).is_some() => {
+                    let failure = scientific_failure(
                         &group.group_id,
-                        &orbit_id,
-                        &group.source_indices,
-                        &[],
-                        &prepared,
-                        &input.observations,
-                        &outlier,
-                    )
-                });
-                output.groups.push(WorkingGroupResult {
-                    group_id: group.group_id,
-                    orbit_id,
-                    row_indices: group.source_indices,
-                    input_orbit_index: None,
-                    member_indices: Vec::new(),
-                    prepared,
-                    orbit,
-                    members,
-                    failure,
-                    iod: Some(iod),
-                });
+                        None,
+                        None,
+                        OdStage::Iod,
+                        &error,
+                        group.source_indices.len(),
+                    );
+                    Ok(WorkingGroupResult {
+                        group_id: group.group_id,
+                        orbit_id,
+                        row_indices: group.source_indices,
+                        input_orbit_index: None,
+                        member_indices: Vec::new(),
+                        prepared,
+                        orbit: None,
+                        members: Vec::new(),
+                        failure: Some(failure),
+                        iod: None,
+                    })
+                }
+                Err(error) => Err(error.into()),
+            };
+            match group_result {
+                Ok(value) => permit.complete(value),
+                Err(error) => Err(error),
             }
-            Err(error) if group_scientific_code(&error).is_some() => {
-                let failure = scientific_failure(
-                    &group.group_id,
-                    None,
-                    None,
-                    OdStage::Iod,
-                    &error,
-                    group.source_indices.len(),
-                );
-                output.groups.push(WorkingGroupResult {
-                    group_id: group.group_id,
-                    orbit_id,
-                    row_indices: group.source_indices,
-                    input_orbit_index: None,
-                    member_indices: Vec::new(),
-                    prepared,
-                    orbit: None,
-                    members: Vec::new(),
-                    failure: Some(failure),
-                    iod: None,
-                });
-            }
-            Err(error) => return Err(error.into()),
-        }
-    }
+        });
+    output.groups = collect_ordered_parallel(group_results)?;
     Ok(output)
 }
 
@@ -3142,7 +3266,8 @@ fn run_od_with_source<S: OdPropagatorSource + ?Sized>(
 /// relational labels; immutable association identity remains in orbit/group
 /// object identity and member fingerprints.
 ///
-/// Groups follow first association appearance; members follow source order;
+/// Groups execute concurrently on Rayon's shared pool and are collected in
+/// first-association-appearance order; members follow source order and
 /// overlapping hypotheses are retained. The result exposes immutable fitted
 /// orbit, fitted-member, and typed-failure slices, or all three owned vectors
 /// through [`OdBatchResult::into_products`]. Empty input produces three empty
@@ -3213,96 +3338,118 @@ fn run_od_prepared(
     )?;
     output.providers.refinement = Some(refinement_service.metadata.clone());
 
-    for (group, observers) in output.groups.iter_mut().zip(refinement_observers) {
-        if group.orbit.is_none() {
-            continue;
-        }
-        let iod = group
-            .iod
-            .as_ref()
-            .expect("successful IOD group retains diagnostics")
-            .clone();
-        let seed = iod
-            .seed_orbit()?
-            .expect("accepted IOD result has a seed orbit");
-        match refine_with_predictor(
-            refinement_service.predictor,
-            &seed,
-            &group.prepared,
-            &observers,
-            &config.for_refinement(),
-            context.time_provider,
-            context.translation_provider,
-        ) {
-            Ok(refined) => {
-                let failure = refinement_failure(
-                    &group.group_id,
-                    &group.orbit_id,
-                    Some(&group.orbit_id),
-                    &refined,
-                );
-                let input_fingerprint = group
-                    .orbit
+    let cancellation = StageCancellation::new();
+    let group_results = output
+        .groups
+        .into_par_iter()
+        .zip(refinement_observers.into_par_iter())
+        .enumerate()
+        .map(
+            |(index, (mut group, observers))| -> Result<Option<WorkingGroupResult>, OdBatchError> {
+                let Some(permit) = cancellation.start(index) else {
+                    return Ok(None);
+                };
+                if group.orbit.is_none() {
+                    return permit.complete(group);
+                }
+                let iod = group
+                    .iod
                     .as_ref()
-                    .expect("successful IOD group retains an orbit")
-                    .provenance
-                    .input_fingerprint
+                    .expect("successful IOD group retains diagnostics")
                     .clone();
-                let state_fingerprint = output_state_fingerprint(Some(&iod), Some(&refined), None)?;
-                let provenance = make_provenance(
-                    OdRoute::RunOd,
-                    input_fingerprint,
-                    configuration.clone(),
-                    Some(iod_service.metadata.clone()),
-                    Some(refinement_service.metadata.clone()),
-                    None,
-                    Some(&iod),
-                    Some(&refined),
-                    None,
-                    state_fingerprint,
-                );
-                let outlier = refined.fit.evaluation.outlier.clone();
-                group.members = member_records(
-                    &group.group_id,
-                    &group.orbit_id,
-                    &group.row_indices,
-                    &[],
-                    &group.prepared,
-                    &input.observations,
-                    &outlier,
-                );
-                group.orbit = Some(FittedOrbitRecord {
-                    orbit: materialized_fit_orbit(
-                        seed.clone(),
-                        &group.group_id,
-                        &group.orbit_id,
-                        refined.fit.state,
-                        refined.fit.covariance,
-                    )?,
-                    group_id: group.group_id.clone(),
-                    input_orbit_index: None,
-                    iod: Some(iod),
-                    refined: Some(refined),
-                    evaluation: None,
-                    provenance,
+                let seed = iod
+                    .seed_orbit()?
+                    .expect("accepted IOD result has a seed orbit");
+                let refined = refinement_service.with_predictor(context, |predictor| {
+                    refine_with_predictor(
+                        predictor,
+                        &seed,
+                        &group.prepared,
+                        &observers,
+                        &config.for_refinement(),
+                        context.time_provider,
+                        context.translation_provider,
+                    )
                 });
-                group.failure = failure;
-            }
-            Err(error) if group_scientific_code(&error).is_some() => {
-                group.failure = Some(scientific_failure(
-                    &group.group_id,
-                    None,
-                    Some(&group.orbit_id),
-                    OdStage::Refinement,
-                    &error,
-                    group.row_indices.len(),
-                ));
-                group.orbit = None;
-                group.members.clear();
-            }
-            Err(error) => return Err(error.into()),
-        }
-    }
+                let group_result = match refined {
+                    Ok(refined) => {
+                        let failure = refinement_failure(
+                            &group.group_id,
+                            &group.orbit_id,
+                            Some(&group.orbit_id),
+                            &refined,
+                        );
+                        let input_fingerprint = group
+                            .orbit
+                            .as_ref()
+                            .expect("successful IOD group retains an orbit")
+                            .provenance
+                            .input_fingerprint
+                            .clone();
+                        let state_fingerprint =
+                            output_state_fingerprint(Some(&iod), Some(&refined), None)?;
+                        let provenance = make_provenance(
+                            OdRoute::RunOd,
+                            input_fingerprint,
+                            configuration.clone(),
+                            Some(iod_service.metadata.clone()),
+                            Some(refinement_service.metadata.clone()),
+                            None,
+                            Some(&iod),
+                            Some(&refined),
+                            None,
+                            state_fingerprint,
+                        );
+                        let outlier = refined.fit.evaluation.outlier.clone();
+                        group.members = member_records(
+                            &group.group_id,
+                            &group.orbit_id,
+                            &group.row_indices,
+                            &[],
+                            &group.prepared,
+                            &input.observations,
+                            &outlier,
+                        );
+                        group.orbit = Some(FittedOrbitRecord {
+                            orbit: materialized_fit_orbit(
+                                seed,
+                                &group.group_id,
+                                &group.orbit_id,
+                                refined.fit.state,
+                                refined.fit.covariance,
+                            )?,
+                            group_id: group.group_id.clone(),
+                            input_orbit_index: None,
+                            iod: Some(iod),
+                            refined: Some(refined),
+                            evaluation: None,
+                            provenance,
+                        });
+                        group.failure = failure;
+                        Ok(group)
+                    }
+                    Err(error) if group_scientific_code(&error).is_some() => {
+                        group.failure = Some(scientific_failure(
+                            &group.group_id,
+                            None,
+                            Some(&group.orbit_id),
+                            OdStage::Refinement,
+                            &error,
+                            group.row_indices.len(),
+                        ));
+                        group.orbit = None;
+                        group.members.clear();
+                        Ok(group)
+                    }
+                    Err(error) => Err(error.into()),
+                };
+                match group_result {
+                    Ok(value) => permit.complete(value),
+                    Err(error) => Err(error),
+                }
+            },
+        );
+    output.groups = collect_ordered_parallel(group_results)?;
     Ok(output.finish())
 }
 
@@ -3822,8 +3969,9 @@ fn refine_with_source<S: OdPropagatorSource + ?Sized>(
 /// self-contained [`RefinementRunConfig`]. `provider` supplies propagation only.
 /// The observation pipeline is not reapplied.
 ///
-/// Groups follow the first appearance of each orbit label in the member table;
-/// rows inside a group return to source-observation order. Empty input returns
+/// Groups execute concurrently on Rayon's shared pool and are collected by the
+/// first appearance of each orbit label in the member table; rows inside a
+/// group return to source-observation order. Empty input returns
 /// three empty products without provider resolution. Isolated fit failures
 /// continue and appear in [`OdBatchResult::failures`]; `input_orbit_id` identifies
 /// a seed when no output state exists. Invalid or incomplete memberships,
@@ -3886,137 +4034,165 @@ fn refine_prepared(
             ..OdStageProviders::default()
         },
     };
-    for (group, (prepared, observers)) in groups.into_iter().zip(prepared_groups) {
-        let group_id = orbit_group_id(&input.orbits, group.orbit_index).to_string();
-        let seed = input.orbits.take(&[group.orbit_index])?;
-        let seed_provenance = input.provenance[group.orbit_index]
-            .as_ref()
-            .expect("validated provenance");
-        let refined = refine_with(
-            service.predictor,
-            &seed,
-            &prepared.observations,
-            &observers,
-            &refinement,
-            context.time_provider,
-            context.translation_provider,
-        );
-        match refined {
-            Ok(refined) => {
-                let failure =
-                    refinement_failure(&group_id, &group.orbit_id, Some(&group.orbit_id), &refined);
-                let effective_route = if seed_provenance.route == OdRoute::RunIod {
-                    OdRoute::RunOd
-                } else {
-                    OdRoute::Refine
+    let cancellation = StageCancellation::new();
+    let group_results = groups
+        .into_par_iter()
+        .zip(prepared_groups.into_par_iter())
+        .enumerate()
+        .map(
+            |(index, (group, (prepared, observers)))| -> Result<
+                Option<WorkingGroupResult>,
+                OdBatchError,
+            > {
+                let Some(permit) = cancellation.start(index) else {
+                    return Ok(None);
                 };
-                let effective_configuration = if effective_route == OdRoute::RunOd {
-                    CanonicalConfiguration::compose_od(&seed_provenance.configuration, config)?
-                } else {
-                    configuration.clone()
-                };
-                let input_fingerprint = if effective_route == OdRoute::RunOd {
-                    seed_provenance.input_fingerprint.clone()
-                } else {
-                    group_input_fingerprint(
-                        &group_id,
-                        &input.observations.source,
-                        &input.observations.observers,
-                        &group.source_indices,
-                        &prepared.original,
-                        &prepared.used,
-                        Some((&input.orbits, group.orbit_index)),
-                        None,
+                let group_id = orbit_group_id(&input.orbits, group.orbit_index).to_string();
+                let seed = input.orbits.take(&[group.orbit_index])?;
+                let seed_provenance = input.provenance[group.orbit_index]
+                    .as_ref()
+                    .expect("validated provenance");
+                let refined = service.with_predictor(context, |predictor| {
+                    refine_with(
+                        predictor,
+                        &seed,
+                        &prepared.observations,
+                        &observers,
+                        &refinement,
+                        context.time_provider,
+                        context.translation_provider,
                     )
-                };
-                let iod_provider = (effective_route == OdRoute::RunOd)
-                    .then(|| seed_provenance.iod_provider.clone())
-                    .flatten();
-                let state_fingerprint = output_state_fingerprint(
-                    None,
-                    Some(&refined),
-                    Some((&input.orbits, group.orbit_index)),
-                )?;
-                let mut provenance = make_provenance(
-                    effective_route,
-                    input_fingerprint,
-                    effective_configuration,
-                    iod_provider,
-                    Some(service.metadata.clone()),
-                    None,
-                    None,
-                    Some(&refined),
-                    None,
-                    state_fingerprint,
-                );
-                if effective_route == OdRoute::RunOd {
-                    provenance.iod_diagnostics = seed_provenance.iod_diagnostics.clone();
-                    provenance.iod_ambiguous = seed_provenance.iod_ambiguous;
-                    provenance.iod_alternatives = seed_provenance.iod_alternatives;
-                    provenance.provenance_fingerprint = provenance_consistency_digest(&provenance);
-                }
-                let outlier = refined.fit.evaluation.outlier.clone();
-                let members = member_records(
-                    &group_id,
-                    &group.orbit_id,
-                    &group.source_indices,
-                    &group.member_indices,
-                    &prepared,
-                    &input.observations,
-                    &outlier,
-                );
-                output.groups.push(WorkingGroupResult {
-                    group_id: group_id.clone(),
-                    orbit_id: group.orbit_id.clone(),
-                    row_indices: group.source_indices,
-                    input_orbit_index: Some(group.orbit_index),
-                    member_indices: group.member_indices,
-                    prepared,
-                    orbit: Some(FittedOrbitRecord {
-                        orbit: materialized_fit_orbit(
-                            seed,
+                });
+                let group_result = match refined {
+                    Ok(refined) => {
+                        let failure = refinement_failure(
                             &group_id,
                             &group.orbit_id,
-                            refined.fit.state,
-                            refined.fit.covariance,
-                        )?,
-                        group_id,
-                        input_orbit_index: Some(group.orbit_index),
-                        iod: None,
-                        refined: Some(refined.clone()),
-                        evaluation: None,
-                        provenance,
-                    }),
-                    members,
-                    failure,
-                    iod: None,
-                });
-            }
-            Err(error) if group_scientific_code(&error).is_some() => {
-                let failure = scientific_failure(
-                    &group_id,
-                    None,
-                    Some(&group.orbit_id),
-                    OdStage::Refinement,
-                    &error,
-                    group.source_indices.len(),
-                );
-                output.groups.push(WorkingGroupResult {
-                    group_id,
-                    orbit_id: group.orbit_id,
-                    row_indices: group.source_indices,
-                    input_orbit_index: Some(group.orbit_index),
-                    member_indices: group.member_indices,
-                    prepared,
-                    orbit: None,
-                    members: Vec::new(),
-                    failure: Some(failure),
-                    iod: None,
-                });
-            }
-            Err(error) => return Err(error.into()),
-        }
-    }
+                            Some(&group.orbit_id),
+                            &refined,
+                        );
+                        let effective_route = if seed_provenance.route == OdRoute::RunIod {
+                            OdRoute::RunOd
+                        } else {
+                            OdRoute::Refine
+                        };
+                        let effective_configuration = if effective_route == OdRoute::RunOd {
+                            CanonicalConfiguration::compose_od(
+                                &seed_provenance.configuration,
+                                config,
+                            )?
+                        } else {
+                            configuration.clone()
+                        };
+                        let input_fingerprint = if effective_route == OdRoute::RunOd {
+                            seed_provenance.input_fingerprint.clone()
+                        } else {
+                            group_input_fingerprint(
+                                &group_id,
+                                &input.observations.source,
+                                &input.observations.observers,
+                                &group.source_indices,
+                                &prepared.original,
+                                &prepared.used,
+                                Some((&input.orbits, group.orbit_index)),
+                                None,
+                            )
+                        };
+                        let iod_provider = (effective_route == OdRoute::RunOd)
+                            .then(|| seed_provenance.iod_provider.clone())
+                            .flatten();
+                        let state_fingerprint = output_state_fingerprint(
+                            None,
+                            Some(&refined),
+                            Some((&input.orbits, group.orbit_index)),
+                        )?;
+                        let mut provenance = make_provenance(
+                            effective_route,
+                            input_fingerprint,
+                            effective_configuration,
+                            iod_provider,
+                            Some(service.metadata.clone()),
+                            None,
+                            None,
+                            Some(&refined),
+                            None,
+                            state_fingerprint,
+                        );
+                        if effective_route == OdRoute::RunOd {
+                            provenance.iod_diagnostics = seed_provenance.iod_diagnostics.clone();
+                            provenance.iod_ambiguous = seed_provenance.iod_ambiguous;
+                            provenance.iod_alternatives = seed_provenance.iod_alternatives;
+                            provenance.provenance_fingerprint =
+                                provenance_consistency_digest(&provenance);
+                        }
+                        let outlier = refined.fit.evaluation.outlier.clone();
+                        let members = member_records(
+                            &group_id,
+                            &group.orbit_id,
+                            &group.source_indices,
+                            &group.member_indices,
+                            &prepared,
+                            &input.observations,
+                            &outlier,
+                        );
+                        Ok(WorkingGroupResult {
+                            group_id: group_id.clone(),
+                            orbit_id: group.orbit_id.clone(),
+                            row_indices: group.source_indices,
+                            input_orbit_index: Some(group.orbit_index),
+                            member_indices: group.member_indices,
+                            prepared,
+                            orbit: Some(FittedOrbitRecord {
+                                orbit: materialized_fit_orbit(
+                                    seed,
+                                    &group_id,
+                                    &group.orbit_id,
+                                    refined.fit.state,
+                                    refined.fit.covariance,
+                                )?,
+                                group_id,
+                                input_orbit_index: Some(group.orbit_index),
+                                iod: None,
+                                refined: Some(refined.clone()),
+                                evaluation: None,
+                                provenance,
+                            }),
+                            members,
+                            failure,
+                            iod: None,
+                        })
+                    }
+                    Err(error) if group_scientific_code(&error).is_some() => {
+                        let failure = scientific_failure(
+                            &group_id,
+                            None,
+                            Some(&group.orbit_id),
+                            OdStage::Refinement,
+                            &error,
+                            group.source_indices.len(),
+                        );
+                        Ok(WorkingGroupResult {
+                            group_id,
+                            orbit_id: group.orbit_id,
+                            row_indices: group.source_indices,
+                            input_orbit_index: Some(group.orbit_index),
+                            member_indices: group.member_indices,
+                            prepared,
+                            orbit: None,
+                            members: Vec::new(),
+                            failure: Some(failure),
+                            iod: None,
+                        })
+                    }
+                    Err(error) => Err(error.into()),
+                };
+                match group_result {
+                    Ok(value) => permit.complete(value),
+                    Err(error) => Err(error),
+                }
+            },
+        );
+    output.groups = collect_ordered_parallel(group_results)?;
     Ok(output.finish())
 }
 
@@ -4048,8 +4224,8 @@ impl PreparedEvaluation<'_> {
     /// Execute using stage settings and identity derived from `provider`.
     fn execute(self, provider: &OdPropagator<'_>) -> Result<OdBatchResult, OdBatchError> {
         let fit = *self.config.prediction_fit();
-        with_stage_predictor(provider, fit, |service, _context| {
-            evaluate_prepared(self.inner, &self.config, service)
+        with_stage_predictor(provider, fit, |service, context| {
+            evaluate_prepared(self.inner, &self.config, service, context)
         })
     }
 }
@@ -4075,8 +4251,9 @@ fn evaluate_orbits_with_source<S: OdPropagatorSource + ?Sized>(
 /// prediction-fit settings. It is intentionally not an `OdConfig`. `provider`
 /// supplies propagation only.
 ///
-/// Groups follow first member appearance and rows follow source order. Empty
-/// input returns three empty products without provider resolution. Scientific
+/// Groups execute concurrently on Rayon's shared pool and are collected by
+/// first member appearance; rows follow source order. Empty input returns three
+/// empty products without provider resolution. Scientific
 /// evaluation failures continue per orbit. Invalid covariance, memberships,
 /// source/state/fingerprint/provenance identity, or fatal provider/protocol
 /// behavior returns an invocation-wide [`OdBatchError`] and no partial result.
@@ -4114,6 +4291,7 @@ fn evaluate_prepared(
     prepared: PreparedMemberBatch<'_>,
     config: &EvaluationConfig,
     service: &PredictionService<'_>,
+    context: &OdExecutionContext<'_>,
 ) -> Result<OdBatchResult, OdBatchError> {
     let PreparedMemberBatch {
         input,
@@ -4130,112 +4308,133 @@ fn evaluate_prepared(
             ..OdStageProviders::default()
         },
     };
-    for (group, (prepared, observers)) in groups.into_iter().zip(prepared_groups) {
-        let group_id = orbit_group_id(&input.orbits, group.orbit_index).to_string();
-        let orbit = input.orbits.take(&[group.orbit_index])?;
-        let state = orbit
-            .coordinates
-            .values
-            .cartesian()
-            .expect("validated orbit coordinates are Cartesian")[0];
-        let ignore = group
-            .member_indices
-            .iter()
-            .map(|&row| input.members.outlier[row].unwrap_or(false))
-            .collect::<Vec<_>>();
-        match evaluate_orbit(
-            service.predictor,
-            state,
-            &orbit,
-            &prepared.observations,
-            &observers,
-            &ignore,
-            parameters,
-        ) {
-            Ok(evaluation) => {
-                let input_fingerprint = group_input_fingerprint(
-                    &group_id,
-                    &input.observations.source,
-                    &input.observations.observers,
-                    &group.source_indices,
-                    &prepared.original,
-                    &prepared.used,
-                    Some((&input.orbits, group.orbit_index)),
-                    Some(&ignore),
-                );
-                let state_fingerprint = Some(orbit_state_fingerprint(
-                    &input.orbits,
-                    group.orbit_index,
-                    None,
-                    None,
-                ));
-                let provenance = make_provenance(
-                    OdRoute::EvaluateOrbits,
-                    input_fingerprint,
-                    configuration.clone(),
-                    None,
-                    None,
-                    Some(service.metadata.clone()),
-                    None,
-                    None,
-                    Some(&evaluation),
-                    state_fingerprint,
-                );
-                let members = member_records(
-                    &group_id,
-                    &group.orbit_id,
-                    &group.source_indices,
-                    &group.member_indices,
-                    &prepared,
-                    &input.observations,
-                    &ignore,
-                );
-                output.groups.push(WorkingGroupResult {
-                    group_id: group_id.clone(),
-                    orbit_id: group.orbit_id.clone(),
-                    row_indices: group.source_indices,
-                    input_orbit_index: Some(group.orbit_index),
-                    member_indices: group.member_indices,
-                    prepared,
-                    orbit: Some(FittedOrbitRecord {
-                        orbit,
-                        group_id,
-                        input_orbit_index: Some(group.orbit_index),
-                        iod: None,
-                        refined: None,
-                        evaluation: Some(evaluation),
-                        provenance,
-                    }),
-                    members,
-                    failure: None,
-                    iod: None,
+    let cancellation = StageCancellation::new();
+    let group_results = groups
+        .into_par_iter()
+        .zip(prepared_groups.into_par_iter())
+        .enumerate()
+        .map(
+            |(index, (group, (prepared, observers)))| -> Result<
+                Option<WorkingGroupResult>,
+                OdBatchError,
+            > {
+                let Some(permit) = cancellation.start(index) else {
+                    return Ok(None);
+                };
+                let group_id = orbit_group_id(&input.orbits, group.orbit_index).to_string();
+                let orbit = input.orbits.take(&[group.orbit_index])?;
+                let state = orbit
+                    .coordinates
+                    .values
+                    .cartesian()
+                    .expect("validated orbit coordinates are Cartesian")[0];
+                let ignore = group
+                    .member_indices
+                    .iter()
+                    .map(|&row| input.members.outlier[row].unwrap_or(false))
+                    .collect::<Vec<_>>();
+                let evaluated = service.with_predictor(context, |predictor| {
+                    evaluate_orbit(
+                        predictor,
+                        state,
+                        &orbit,
+                        &prepared.observations,
+                        &observers,
+                        &ignore,
+                        parameters,
+                    )
                 });
-            }
-            Err(error) if group_scientific_code(&error).is_some() => {
-                let failure = scientific_failure(
-                    &group_id,
-                    None,
-                    Some(&group.orbit_id),
-                    OdStage::Evaluation,
-                    &error,
-                    group.source_indices.len(),
-                );
-                output.groups.push(WorkingGroupResult {
-                    group_id,
-                    orbit_id: group.orbit_id,
-                    row_indices: group.source_indices,
-                    input_orbit_index: Some(group.orbit_index),
-                    member_indices: group.member_indices,
-                    prepared,
-                    orbit: None,
-                    members: Vec::new(),
-                    failure: Some(failure),
-                    iod: None,
-                });
-            }
-            Err(error) => return Err(error.into()),
-        }
-    }
+                let group_result = match evaluated {
+                    Ok(evaluation) => {
+                        let input_fingerprint = group_input_fingerprint(
+                            &group_id,
+                            &input.observations.source,
+                            &input.observations.observers,
+                            &group.source_indices,
+                            &prepared.original,
+                            &prepared.used,
+                            Some((&input.orbits, group.orbit_index)),
+                            Some(&ignore),
+                        );
+                        let state_fingerprint = Some(orbit_state_fingerprint(
+                            &input.orbits,
+                            group.orbit_index,
+                            None,
+                            None,
+                        ));
+                        let provenance = make_provenance(
+                            OdRoute::EvaluateOrbits,
+                            input_fingerprint,
+                            configuration.clone(),
+                            None,
+                            None,
+                            Some(service.metadata.clone()),
+                            None,
+                            None,
+                            Some(&evaluation),
+                            state_fingerprint,
+                        );
+                        let members = member_records(
+                            &group_id,
+                            &group.orbit_id,
+                            &group.source_indices,
+                            &group.member_indices,
+                            &prepared,
+                            &input.observations,
+                            &ignore,
+                        );
+                        Ok(WorkingGroupResult {
+                            group_id: group_id.clone(),
+                            orbit_id: group.orbit_id.clone(),
+                            row_indices: group.source_indices,
+                            input_orbit_index: Some(group.orbit_index),
+                            member_indices: group.member_indices,
+                            prepared,
+                            orbit: Some(FittedOrbitRecord {
+                                orbit,
+                                group_id,
+                                input_orbit_index: Some(group.orbit_index),
+                                iod: None,
+                                refined: None,
+                                evaluation: Some(evaluation),
+                                provenance,
+                            }),
+                            members,
+                            failure: None,
+                            iod: None,
+                        })
+                    }
+                    Err(error) if group_scientific_code(&error).is_some() => {
+                        let failure = scientific_failure(
+                            &group_id,
+                            None,
+                            Some(&group.orbit_id),
+                            OdStage::Evaluation,
+                            &error,
+                            group.source_indices.len(),
+                        );
+                        Ok(WorkingGroupResult {
+                            group_id,
+                            orbit_id: group.orbit_id,
+                            row_indices: group.source_indices,
+                            input_orbit_index: Some(group.orbit_index),
+                            member_indices: group.member_indices,
+                            prepared,
+                            orbit: None,
+                            members: Vec::new(),
+                            failure: Some(failure),
+                            iod: None,
+                        })
+                    }
+                    Err(error) => Err(error.into()),
+                };
+                match group_result {
+                    Ok(value) => permit.complete(value),
+                    Err(error) => Err(error),
+                }
+            },
+        );
+    output.groups = collect_ordered_parallel(group_results)?;
     Ok(output.finish())
 }
 
@@ -4307,12 +4506,17 @@ pub mod python_bindings {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use adam_core_rs_coords::propagation::generate_ephemeris_barycentric;
+    use adam_core_rs_coords::propagation::{
+        generate_ephemeris_barycentric, OwnedExternalPropagator, PropagationRequest,
+        PropagationResult, PropagationResultValue, StmRow,
+    };
     use adam_core_rs_coords::{Epoch, ObservatoryCode, TimeColumn};
     use adam_core_rs_spice::{SpkWriter, Type9Segment};
     use std::path::PathBuf;
-    use std::sync::atomic::{AtomicUsize, Ordering};
-    use std::sync::Mutex;
+    use std::process::{Command, Stdio};
+    use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+    use std::sync::{mpsc, Arc, Mutex};
+    use std::time::{Duration, Instant};
 
     static SPICE_FIXTURE_LOCK: Mutex<()> = Mutex::new(());
 
@@ -4353,6 +4557,160 @@ mod tests {
             }
             let _ = std::fs::remove_file(&self.0);
         }
+    }
+
+    const PROBE_BASE_MJD: f64 = 60_002.3;
+    const PROBE_STEP_DAYS: f64 = 0.25;
+    const PROBE_ROWS_PER_GROUP: usize = 12;
+    const PROBE_WINDOWS: usize = 8;
+
+    fn probe_window(first_mjd: f64) -> usize {
+        let row = ((first_mjd - PROBE_BASE_MJD) / PROBE_STEP_DAYS)
+            .round()
+            .max(0.0) as usize;
+        (row / PROBE_ROWS_PER_GROUP).min(PROBE_WINDOWS - 1)
+    }
+
+    #[derive(Default)]
+    struct ProbeConfig {
+        fatal_windows: Vec<usize>,
+        gate_window: Option<usize>,
+        release_on_fatal_of: Option<usize>,
+    }
+
+    struct ProbeState {
+        config: ProbeConfig,
+        calls: Vec<AtomicUsize>,
+        gate_calls_after_release: AtomicUsize,
+        release: AtomicBool,
+        gate_observed: AtomicBool,
+        fatal_order: Mutex<Vec<usize>>,
+    }
+
+    impl ProbeState {
+        fn new(config: ProbeConfig) -> Arc<Self> {
+            Arc::new(Self {
+                config,
+                calls: (0..PROBE_WINDOWS).map(|_| AtomicUsize::new(0)).collect(),
+                gate_calls_after_release: AtomicUsize::new(0),
+                release: AtomicBool::new(false),
+                gate_observed: AtomicBool::new(false),
+                fatal_order: Mutex::new(Vec::new()),
+            })
+        }
+
+        fn counts(&self) -> Vec<usize> {
+            self.calls
+                .iter()
+                .map(|count| count.load(Ordering::SeqCst))
+                .collect()
+        }
+    }
+
+    struct ProbePropagator {
+        inner: TwoBodyPropagator,
+        state: Arc<ProbeState>,
+    }
+
+    impl ProbePropagator {
+        fn check(&self, first_mjd: f64) -> PropagationResultValue<()> {
+            let state = &self.state;
+            let window = probe_window(first_mjd);
+            state.calls[window].fetch_add(1, Ordering::SeqCst);
+            if state.config.gate_window == Some(window) {
+                if state.release.load(Ordering::SeqCst) {
+                    state
+                        .gate_calls_after_release
+                        .fetch_add(1, Ordering::SeqCst);
+                } else {
+                    let deadline = Instant::now() + Duration::from_secs(10);
+                    while !state.release.load(Ordering::SeqCst) && Instant::now() < deadline {
+                        std::thread::sleep(Duration::from_millis(1));
+                    }
+                    state
+                        .gate_observed
+                        .store(state.release.load(Ordering::SeqCst), Ordering::SeqCst);
+                }
+            }
+            if state.config.fatal_windows.contains(&window) {
+                state.fatal_order.lock().expect("fatal order").push(window);
+                if state.config.release_on_fatal_of == Some(window) {
+                    state.release.store(true, Ordering::SeqCst);
+                }
+                return Err(PropagationError::Backend(format!("fatal-window-{window}")));
+            }
+            Ok(())
+        }
+    }
+
+    impl Propagator for ProbePropagator {
+        type Shard = <TwoBodyPropagator as Propagator>::Shard;
+
+        fn supports_stm(&self) -> bool {
+            self.inner.supports_stm()
+        }
+
+        fn propagate_stm(
+            &self,
+            state: [f64; 6],
+            non_gravitational_parameters: Option<
+                adam_core_rs_coords::NonGravitationalParametersRow,
+            >,
+            epoch_tdb: Epoch,
+            times_tdb: &[Epoch],
+        ) -> PropagationResultValue<Vec<StmRow>> {
+            let first = times_tdb
+                .iter()
+                .map(|epoch| epoch.mjd())
+                .fold(f64::INFINITY, f64::min);
+            self.check(first)?;
+            self.inner
+                .propagate_stm(state, non_gravitational_parameters, epoch_tdb, times_tdb)
+        }
+
+        fn backend(&self) -> adam_core_rs_coords::propagation::BackendIdentity {
+            self.inner.backend()
+        }
+
+        fn integration_time_scale(&self) -> TimeScale {
+            self.inner.integration_time_scale()
+        }
+
+        fn supports(&self, mode: CovariancePropagation) -> bool {
+            self.inner.supports(mode)
+        }
+
+        fn create_shard(&self) -> Self::Shard {
+            self.inner.create_shard()
+        }
+
+        fn propagate(
+            &self,
+            request: &PropagationRequest<'_>,
+            provider: &dyn TimeScaleProvider,
+        ) -> PropagationResultValue<PropagationResult> {
+            let first = request
+                .times
+                .epochs
+                .iter()
+                .map(|epoch| epoch.mjd())
+                .fold(f64::INFINITY, f64::min);
+            self.check(first)?;
+            self.inner.propagate(request, provider)
+        }
+    }
+
+    fn owned_probe(state: &Arc<ProbeState>) -> OwnedExternalPropagator<ProbePropagator> {
+        OwnedExternalPropagator::new_with_fingerprints(
+            ProbePropagator {
+                inner: TwoBodyPropagator::default(),
+                state: Arc::clone(state),
+            },
+            "test.cancellation-probe",
+            "1.0.0",
+            &"a".repeat(64),
+            &"b".repeat(64),
+        )
     }
 
     fn explicit_config() -> OdConfig {
@@ -4657,6 +5015,148 @@ mod tests {
         }
     }
 
+    fn scaled_scientific_observation_batch(rows: usize, step_days: f64) -> OdObservationBatch {
+        const NANOS_PER_DAY: f64 = 86_400_000_000_000.0;
+        let offsets = (0..rows)
+            .map(|row| 0.3 + step_days * row as f64)
+            .collect::<Vec<_>>();
+        let times = TimeArray::new(
+            TimeScale::Tdb,
+            offsets
+                .iter()
+                .map(|offset| {
+                    let whole = offset.floor();
+                    Epoch::new(
+                        60_002 + whole as i64,
+                        ((offset - whole) * NANOS_PER_DAY) as i64,
+                    )
+                })
+                .collect(),
+        )
+        .expect("long scientific epochs");
+        let observers = ObserverBatch::new(
+            (0..rows)
+                .map(|row| ObservatoryCode(format!("L{row:05}")))
+                .collect(),
+            CoordinateBatch::cartesian(
+                offsets
+                    .iter()
+                    .map(|offset| {
+                        let theta = 0.35 + 0.01725 * offset;
+                        [
+                            theta.cos(),
+                            theta.sin(),
+                            0.0,
+                            -0.01725 * theta.sin(),
+                            0.01725 * theta.cos(),
+                            0.0,
+                        ]
+                    })
+                    .collect(),
+                DataFrame::Ecliptic,
+                OriginArray::repeat(OriginId::from_code("SUN"), rows),
+                Some(times),
+                None,
+            )
+            .expect("long observer coordinates"),
+        )
+        .expect("long observers");
+        let mut truth = one_row_orbit("long-truth", Some("long-truth-group"));
+        truth.coordinates.values =
+            CoordinateValues::Cartesian(vec![[1.2, 0.1, 0.05, -0.002, 0.016, 0.001]]);
+        truth.coordinates.times =
+            Some(TimeArray::new(TimeScale::Tdb, vec![Epoch::new(60_000, 0)]).expect("truth epoch"));
+        let predicted = generate_ephemeris_barycentric(
+            &TwoBodyPropagator::default(),
+            &truth,
+            &observers,
+            &EphemerisOptions {
+                propagation: PropagationOptions {
+                    chunk_size: None,
+                    thread_limit: None,
+                    epoch_policy: EpochPolicy::CrossProduct,
+                    covariance: CovariancePropagation::None,
+                },
+                output_time_scale: TimeScale::Tdb,
+                ..EphemerisOptions::default()
+            },
+            &IdentityTimeProvider,
+            &ZeroTranslationProvider,
+        )
+        .expect("long scientific observations")
+        .ephemeris
+        .coordinates;
+        let mut values = predicted.values.raw_values().to_vec();
+        for value in &mut values {
+            value[0] = f64::NAN;
+            value[3] = f64::NAN;
+            value[4] = f64::NAN;
+            value[5] = f64::NAN;
+        }
+        let sigma = 0.5 / 3600.0;
+        let mut covariance = vec![f64::NAN; rows * 36];
+        for row in 0..rows {
+            covariance[row * 36 + 7] = sigma * sigma;
+            covariance[row * 36 + 14] = sigma * sigma;
+        }
+        let observed = CoordinateBatch::new(
+            CoordinateValues::Spherical(values.clone()),
+            predicted.frame,
+            predicted.origins,
+            predicted.times.clone(),
+            Some(
+                CovarianceBatch::new(
+                    rows,
+                    6,
+                    covariance,
+                    CovarianceUnits::Coordinate(CoordinateRepresentation::Spherical),
+                )
+                .expect("long scientific covariance"),
+            ),
+        )
+        .expect("long observed coordinates");
+        let epochs = predicted.times.expect("predicted times").epochs;
+        let time = TimeColumn {
+            scale: TimeScale::Tdb,
+            days: epochs.iter().map(|epoch| epoch.days).collect(),
+            nanos: epochs.iter().map(|epoch| epoch.nanos).collect(),
+            validity: None,
+        };
+        OdObservationBatch {
+            source: SourceCatalogBatch {
+                id: (0..rows).map(|row| format!("long-{row}")).collect(),
+                exposure_id: vec![None; rows],
+                time: time.clone(),
+                ra: values.iter().map(|value| value[1]).collect(),
+                dec: values.iter().map(|value| value[2]).collect(),
+                ra_sigma: vec![Some(sigma); rows],
+                dec_sigma: vec![Some(sigma); rows],
+                radec_corr: vec![Some(0.0); rows],
+                mag: vec![None; rows],
+                mag_sigma: vec![None; rows],
+                fwhm: vec![None; rows],
+                a: vec![None; rows],
+                a_sigma: vec![None; rows],
+                b: vec![None; rows],
+                b_sigma: vec![None; rows],
+                pa: vec![None; rows],
+                pa_sigma: vec![None; rows],
+                observatory_code: observers.code.iter().map(|code| code.0.clone()).collect(),
+                filter: vec![None; rows],
+                exposure_start_time: time,
+                exposure_duration: vec![None; rows],
+                exposure_seeing: vec![None; rows],
+                exposure_depth_5sigma: vec![None; rows],
+                object_id: vec![None; rows],
+                catalog_id: vec!["test".to_string(); rows],
+                astcat: vec![None; rows],
+                photcat: vec![None; rows],
+            },
+            observed,
+            observers,
+        }
+    }
+
     fn empty_membered_orbits() -> MemberedOrbits {
         MemberedOrbits {
             orbits: OrbitBatch::new(
@@ -4785,6 +5285,254 @@ mod tests {
             .expect("one-row Cartesian coordinates"),
         )
         .expect("one-row orbit")
+    }
+
+    #[test]
+    fn parallel_collection_preserves_order_and_deterministic_fatal_precedence() {
+        let pool = rayon::ThreadPoolBuilder::new()
+            .num_threads(4)
+            .build()
+            .expect("test thread pool");
+        let active = AtomicUsize::new(0);
+        let max_active = AtomicUsize::new(0);
+        let ordered = pool
+            .install(|| {
+                run_test_parallel_stage((0..8).collect(), |_, index| {
+                    let now = active.fetch_add(1, Ordering::SeqCst) + 1;
+                    max_active.fetch_max(now, Ordering::SeqCst);
+                    std::thread::sleep(Duration::from_millis(5));
+                    active.fetch_sub(1, Ordering::SeqCst);
+                    Ok(index)
+                })
+            })
+            .expect("parallel collection");
+        assert_eq!(ordered, (0..8).collect::<Vec<_>>());
+        assert!(max_active.load(Ordering::SeqCst) > 1);
+
+        let error = pool
+            .install(|| {
+                run_test_parallel_stage((0..4).collect(), |_, index| {
+                    if index == 1 {
+                        std::thread::sleep(Duration::from_millis(10));
+                        Err(OdBatchError::new(
+                            OdBatchErrorCode::Propagation,
+                            "first indexed fatal error",
+                        ))
+                    } else if index == 3 {
+                        Err(OdBatchError::new(
+                            OdBatchErrorCode::Propagation,
+                            "later indexed fatal error",
+                        ))
+                    } else {
+                        Ok(index)
+                    }
+                })
+            })
+            .expect_err("fatal error");
+        assert_eq!(error.message, "first indexed fatal error");
+
+        let cancelled_calls = AtomicUsize::new(0);
+        let cancellation_pool = rayon::ThreadPoolBuilder::new()
+            .num_threads(1)
+            .build()
+            .expect("cancellation test pool");
+        let error = cancellation_pool
+            .install(|| {
+                run_test_parallel_stage((0..128).collect(), |_, index| {
+                    cancelled_calls.fetch_add(1, Ordering::SeqCst);
+                    if index == 1 {
+                        Err(OdBatchError::new(
+                            OdBatchErrorCode::Propagation,
+                            "stage fatal error",
+                        ))
+                    } else {
+                        Ok(index)
+                    }
+                })
+            })
+            .expect_err("stage fatal error");
+        assert_eq!(error.message, "stage fatal error");
+        assert_eq!(
+            cancelled_calls.load(Ordering::SeqCst),
+            2,
+            "higher-index provider calls were not cancelled"
+        );
+
+        let higher_fatal_seen = AtomicBool::new(false);
+        let gated_pool = rayon::ThreadPoolBuilder::new()
+            .num_threads(2)
+            .build()
+            .expect("gated test pool");
+        let error = gated_pool
+            .install(|| {
+                run_test_parallel_stage((0..65).collect(), |_, index| {
+                    if index == 0 {
+                        let deadline = Instant::now() + Duration::from_secs(5);
+                        while !higher_fatal_seen.load(Ordering::SeqCst) {
+                            assert!(Instant::now() < deadline, "higher fatal never started");
+                            std::thread::yield_now();
+                        }
+                        return Err(OdBatchError::new(
+                            OdBatchErrorCode::Propagation,
+                            "lower indexed fatal error",
+                        ));
+                    }
+                    if index == 64 {
+                        higher_fatal_seen.store(true, Ordering::SeqCst);
+                        return Err(OdBatchError::new(
+                            OdBatchErrorCode::Propagation,
+                            "higher indexed fatal error",
+                        ));
+                    }
+                    std::thread::sleep(Duration::from_millis(1));
+                    Ok(index)
+                })
+            })
+            .expect_err("gated fatal error");
+        assert_eq!(error.message, "lower indexed fatal error");
+        assert!(higher_fatal_seen.load(Ordering::SeqCst));
+    }
+
+    #[test]
+    fn canonical_workflows_cancel_unstarted_higher_provider_groups() {
+        let _fixture_lock = SPICE_FIXTURE_LOCK
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        let _kernel = FurnishedKernel(zero_sun_spk());
+        let input = partitioned_groups(
+            scaled_scientific_observation_batch(
+                PROBE_WINDOWS * PROBE_ROWS_PER_GROUP,
+                PROBE_STEP_DAYS,
+            ),
+            PROBE_ROWS_PER_GROUP,
+        );
+        let config = explicit_config();
+
+        for workflow in ["run_iod", "run_od", "refine", "evaluate"] {
+            let membered = if matches!(workflow, "refine" | "evaluate") {
+                let seed = run_iod(&input, &config.for_iod(), &OdPropagator::two_body())
+                    .expect("seed IOD");
+                Some(
+                    seed.to_membered_orbits(&input.observations)
+                        .expect("seed handoff")
+                        .expect("seed orbits"),
+                )
+            } else {
+                None
+            };
+            let state = ProbeState::new(ProbeConfig {
+                fatal_windows: vec![2],
+                ..ProbeConfig::default()
+            });
+            let owned = owned_probe(&state);
+            // SAFETY: the owned ABI table and its context outlive this workflow.
+            let external = unsafe { ExternalPropagator::from_raw(owned.table()) }
+                .expect("probe external provider");
+            let provider = OdPropagator::external(&external);
+            let error = rayon::ThreadPoolBuilder::new()
+                .num_threads(1)
+                .build()
+                .expect("one-thread cancellation pool")
+                .install(|| match workflow {
+                    "run_iod" => run_iod(&input, &config.for_iod(), &provider),
+                    "run_od" => run_od(&input, &config, &provider),
+                    "refine" => refine(
+                        membered.as_ref().expect("refine input"),
+                        &config.for_refinement(),
+                        &provider,
+                    ),
+                    _ => evaluate_orbits(
+                        membered.as_ref().expect("evaluation input"),
+                        &EvaluationConfig::core_v1(),
+                        &provider,
+                    ),
+                })
+                .expect_err("fatal provider group");
+            assert!(
+                error.message.contains("fatal-window-2"),
+                "{workflow}: wrong fatal error: {error:?}"
+            );
+            let counts = state.counts();
+            assert!(
+                counts[..2].iter().all(|&count| count > 0),
+                "{workflow}: lower groups did not run: {counts:?}"
+            );
+            assert!(counts[2] > 0, "{workflow}: fatal group did not run");
+            assert!(
+                counts[3..].iter().all(|&count| count == 0),
+                "{workflow}: cancelled higher groups called provider: {counts:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn canonical_iod_and_od_run_lower_unstarted_fatal_after_higher_fatal() {
+        let _fixture_lock = SPICE_FIXTURE_LOCK
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        let _kernel = FurnishedKernel(zero_sun_spk());
+        let input = partitioned_groups(
+            scaled_scientific_observation_batch(
+                PROBE_WINDOWS * PROBE_ROWS_PER_GROUP,
+                PROBE_STEP_DAYS,
+            ),
+            PROBE_ROWS_PER_GROUP,
+        );
+        let config = explicit_config();
+
+        for workflow in ["run_iod", "run_od"] {
+            for iteration in 0..5 {
+                let state = ProbeState::new(ProbeConfig {
+                    fatal_windows: vec![2, 7],
+                    gate_window: Some(0),
+                    release_on_fatal_of: Some(7),
+                });
+                let owned = owned_probe(&state);
+                // SAFETY: the owned ABI table and its context outlive this workflow.
+                let external = unsafe { ExternalPropagator::from_raw(owned.table()) }
+                    .expect("probe external provider");
+                let provider = OdPropagator::external(&external);
+                let error = rayon::ThreadPoolBuilder::new()
+                    .num_threads(2)
+                    .build()
+                    .expect("two-thread gated cancellation pool")
+                    .install(|| {
+                        if workflow == "run_od" {
+                            run_od(&input, &config, &provider)
+                        } else {
+                            run_iod(&input, &config.for_iod(), &provider)
+                        }
+                    })
+                    .expect_err("fatal provider group");
+                let counts = state.counts();
+                let fatal_order = state.fatal_order.lock().expect("fatal order").clone();
+                assert!(
+                    error.message.contains("fatal-window-2"),
+                    "{workflow} iteration {iteration}: wrong fatal: {error:?}"
+                );
+                assert_eq!(
+                    fatal_order.first(),
+                    Some(&7),
+                    "{workflow} iteration {iteration}: higher fatal did not open gate"
+                );
+                assert!(
+                    fatal_order.contains(&2),
+                    "{workflow} iteration {iteration}: lower fatal was skipped"
+                );
+                assert_eq!(
+                    counts[3], 0,
+                    "{workflow} iteration {iteration}: group above lower fatal was not cancelled"
+                );
+                assert!(
+                    state.gate_observed.load(Ordering::SeqCst),
+                    "{workflow} iteration {iteration}: in-flight lower group missed release"
+                );
+                assert!(
+                    state.gate_calls_after_release.load(Ordering::SeqCst) > 0,
+                    "{workflow} iteration {iteration}: in-flight group did not settle"
+                );
+            }
+        }
     }
 
     #[test]
@@ -4938,9 +5686,413 @@ mod tests {
         }
     }
 
+    fn push_evaluation_bits(bits: &mut Vec<u64>, evaluation: &FitEvaluation) {
+        bits.extend(evaluation.residuals.iter().map(|value| value.to_bits()));
+        bits.extend(evaluation.chi2.iter().map(|value| value.to_bits()));
+        bits.extend(evaluation.probability.iter().map(|value| value.to_bits()));
+        bits.extend([
+            evaluation.orbit_chi2.to_bits(),
+            evaluation.reduced_chi2.to_bits(),
+            evaluation.arc_length.to_bits(),
+        ]);
+    }
+
+    fn public_float_bits(result: &OdBatchResult) -> Vec<u64> {
+        let mut bits = Vec::new();
+        for record in result.fitted_orbits() {
+            for row in record.orbit.coordinates.values.raw_values() {
+                bits.extend(row.iter().map(|value| value.to_bits()));
+            }
+            if let Some(covariance) = &record.orbit.coordinates.covariance {
+                bits.extend(
+                    covariance
+                        .values_row_major
+                        .iter()
+                        .map(|value| value.to_bits()),
+                );
+            }
+            if let Some(physical) = &record.orbit.physical_parameters {
+                for column in [
+                    &physical.h_v,
+                    &physical.h_v_sigma,
+                    &physical.g,
+                    &physical.g_sigma,
+                    &physical.sigma_eff,
+                    &physical.chi2_red,
+                ] {
+                    bits.extend(column.iter().flatten().map(|value| value.to_bits()));
+                }
+            }
+            if let Some(non_gravitational) = &record.orbit.non_gravitational_parameters {
+                for column in [
+                    &non_gravitational.a1,
+                    &non_gravitational.a2,
+                    &non_gravitational.a3,
+                    &non_gravitational.aln,
+                    &non_gravitational.nk,
+                    &non_gravitational.nm,
+                    &non_gravitational.nn,
+                    &non_gravitational.r0,
+                ] {
+                    bits.extend(column.iter().flatten().map(|value| value.to_bits()));
+                }
+            }
+            if let Some(iod) = &record.iod {
+                for candidate in &iod.candidates {
+                    bits.extend(candidate.state.iter().map(|value| value.to_bits()));
+                    bits.extend([
+                        candidate.prefit_chi2.to_bits(),
+                        candidate.prefit_reduced_chi2.to_bits(),
+                        candidate.chi2_total.to_bits(),
+                        candidate.reduced_chi2.to_bits(),
+                        candidate.arc_length.to_bits(),
+                    ]);
+                    bits.extend(
+                        candidate
+                            .postfit_reduced_chi2
+                            .iter()
+                            .chain(candidate.whole_arc_score.iter())
+                            .map(|value| value.to_bits()),
+                    );
+                    bits.extend(
+                        candidate
+                            .corrected_state
+                            .iter()
+                            .flatten()
+                            .map(|value| value.to_bits()),
+                    );
+                    bits.extend(
+                        candidate
+                            .corrected_covariance
+                            .iter()
+                            .flatten()
+                            .map(|value| value.to_bits()),
+                    );
+                    if let Some(evaluation) = &candidate.evaluation {
+                        push_evaluation_bits(&mut bits, evaluation);
+                    }
+                }
+                if let Some(ranging) = &iod.ranging {
+                    bits.extend([
+                        ranging.attributable.ra_deg.to_bits(),
+                        ranging.attributable.dec_deg.to_bits(),
+                        ranging.attributable.ra_rate_deg_per_day.to_bits(),
+                        ranging.attributable.dec_rate_deg_per_day.to_bits(),
+                        ranging.attributable.arc_days.to_bits(),
+                    ]);
+                    bits.extend(
+                        ranging
+                            .attributable
+                            .observer
+                            .iter()
+                            .map(|value| value.to_bits()),
+                    );
+                    for sample in &ranging.samples {
+                        bits.extend(sample.state.iter().map(|value| value.to_bits()));
+                        bits.extend([
+                            sample.rho_au.to_bits(),
+                            sample.rho_dot_au_per_day.to_bits(),
+                            sample.chi2.to_bits(),
+                            sample.weight.to_bits(),
+                        ]);
+                    }
+                }
+            }
+            if let Some(refined) = &record.refined {
+                bits.extend(refined.fit.state.iter().map(|value| value.to_bits()));
+                bits.extend(refined.fit.covariance.iter().map(|value| value.to_bits()));
+                bits.extend([refined.fit.cost.to_bits(), refined.fit.fit_chi2.to_bits()]);
+                bits.extend(refined.fit.weights.iter().map(|value| value.to_bits()));
+                bits.extend(
+                    refined
+                        .fit
+                        .residuals_whitened
+                        .iter()
+                        .map(|value| value.to_bits()),
+                );
+                push_evaluation_bits(&mut bits, &refined.fit.evaluation);
+            }
+            if let Some(evaluation) = &record.evaluation {
+                push_evaluation_bits(&mut bits, evaluation);
+            }
+            bits.extend(
+                record
+                    .provenance
+                    .rejected_fraction
+                    .iter()
+                    .map(|value| value.to_bits()),
+            );
+            if let Some(evaluation) = &record.provenance.evaluation_diagnostics {
+                bits.extend([
+                    evaluation.arc_length.to_bits(),
+                    evaluation.chi2.to_bits(),
+                    evaluation.reduced_chi2.to_bits(),
+                ]);
+            }
+        }
+        for member in result.fitted_orbit_members() {
+            bits.extend([
+                member.original.lon.to_bits(),
+                member.original.lat.to_bits(),
+                member.original.sigma_lon.to_bits(),
+                member.original.sigma_lat.to_bits(),
+                member.original.variance_lon.to_bits(),
+                member.original.variance_lat.to_bits(),
+                member.original.cov_lonlat.to_bits(),
+                member.used.lon.to_bits(),
+                member.used.lat.to_bits(),
+                member.used.sigma_lon.to_bits(),
+                member.used.sigma_lat.to_bits(),
+                member.used.variance_lon.to_bits(),
+                member.used.variance_lat.to_bits(),
+                member.used.cov_lonlat.to_bits(),
+            ]);
+        }
+        bits.extend(
+            result
+                .failures()
+                .iter()
+                .filter_map(|failure| failure.arc_length)
+                .map(f64::to_bits),
+        );
+        bits
+    }
+
+    fn associated_groups(
+        observations: OdObservationBatch,
+        group_count: usize,
+    ) -> AssociatedObservations {
+        let group_ids = (0..group_count)
+            .map(|index| format!("parallel-{index:03}"))
+            .collect::<Vec<_>>();
+        let associations = AssociationBatch {
+            detection_id: group_ids
+                .iter()
+                .flat_map(|_| observations.source.id.iter().cloned())
+                .collect(),
+            object_id: group_ids
+                .iter()
+                .flat_map(|group_id| {
+                    std::iter::repeat_n(Some(group_id.clone()), observations.source.len())
+                })
+                .collect(),
+        };
+        AssociatedObservations {
+            observations,
+            associations,
+        }
+    }
+
+    fn partitioned_groups(
+        observations: OdObservationBatch,
+        rows_per_group: usize,
+    ) -> AssociatedObservations {
+        let rows = observations.source.len();
+        AssociatedObservations {
+            associations: AssociationBatch {
+                detection_id: observations.source.id.clone(),
+                object_id: (0..rows)
+                    .map(|row| Some(format!("partition-{:03}", row / rows_per_group)))
+                    .collect(),
+            },
+            observations,
+        }
+    }
+
+    fn run_child_test(test_name: &str, environment: &str, timeout: Duration) {
+        let mut child = Command::new(std::env::current_exe().expect("current test executable"))
+            .args(["--exact", test_name, "--nocapture"])
+            .env(environment, "1")
+            .stdin(Stdio::null())
+            .stdout(Stdio::inherit())
+            .stderr(Stdio::inherit())
+            .spawn()
+            .expect("spawn watchdog child");
+        let deadline = Instant::now() + timeout;
+        loop {
+            if let Some(status) = child.try_wait().expect("query watchdog child") {
+                assert!(status.success(), "watchdog child failed with {status}");
+                return;
+            }
+            if Instant::now() >= deadline {
+                let _ = child.kill();
+                let _ = child.wait();
+                panic!("watchdog killed hung child test {test_name}");
+            }
+            std::thread::sleep(Duration::from_millis(20));
+        }
+    }
+
+    fn run_all_workflows(
+        threads: usize,
+        input: &AssociatedObservations,
+        config: &OdConfig,
+        provider: &OdPropagator<'_>,
+    ) -> Vec<OdBatchResult> {
+        rayon::ThreadPoolBuilder::new()
+            .num_threads(threads)
+            .build()
+            .expect("OD test pool")
+            .install(|| {
+                let iod = run_iod(input, &config.for_iod(), provider).expect("IOD");
+                let od = run_od(input, config, provider).expect("OD");
+                let iod_input = iod
+                    .to_membered_orbits(&input.observations)
+                    .expect("IOD handoff")
+                    .expect("IOD orbits");
+                let refined =
+                    refine(&iod_input, &config.for_refinement(), provider).expect("refinement");
+                let od_input = od
+                    .to_membered_orbits(&input.observations)
+                    .expect("OD handoff")
+                    .expect("OD orbits");
+                let evaluated = evaluate_orbits(&od_input, &EvaluationConfig::core_v1(), provider)
+                    .expect("evaluation");
+                vec![iod, od, refined, evaluated]
+            })
+    }
+
+    #[test]
+    fn canonical_workflows_are_bitwise_equal_across_thread_counts_and_providers() {
+        let _fixture_lock = SPICE_FIXTURE_LOCK
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        let _kernel = FurnishedKernel(zero_sun_spk());
+        let observations = scientific_observation_batch();
+        let groups = [
+            "parallel-one",
+            "parallel-two",
+            "parallel-three",
+            "parallel-four",
+        ];
+        let input = AssociatedObservations {
+            associations: AssociationBatch {
+                detection_id: groups
+                    .iter()
+                    .flat_map(|_| observations.source.id.iter().cloned())
+                    .collect(),
+                object_id: groups
+                    .iter()
+                    .flat_map(|group| {
+                        std::iter::repeat_n(Some((*group).to_string()), observations.source.len())
+                    })
+                    .collect(),
+            },
+            observations,
+        };
+        let config = explicit_config();
+        let external_table = two_body_reference::new(TwoBodyPropagator::default());
+        // SAFETY: the reference table and its owned context outlive these calls.
+        let external = unsafe { ExternalPropagator::from_raw(external_table.table()) }
+            .expect("external two-body provider");
+        for provider in [OdPropagator::two_body(), OdPropagator::external(&external)] {
+            let serial = run_all_workflows(1, &input, &config, &provider);
+            for threads in [2, 4, 8] {
+                let parallel = run_all_workflows(threads, &input, &config, &provider);
+                for (serial_result, parallel_result) in serial.iter().zip(&parallel) {
+                    assert_eq!(format!("{serial_result:?}"), format!("{parallel_result:?}"));
+                    assert_eq!(
+                        public_float_bits(serial_result),
+                        public_float_bits(parallel_result),
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn public_long_arc_workflows_complete_without_nested_spice_deadlock() {
+        const CHILD_ENV: &str = "ADAM_CORE_OD_LONG_ARC_CHILD";
+        if std::env::var_os(CHILD_ENV).is_none() {
+            run_child_test(
+                "od::tests::public_long_arc_workflows_complete_without_nested_spice_deadlock",
+                CHILD_ENV,
+                Duration::from_secs(120),
+            );
+            return;
+        }
+
+        let _fixture_lock = SPICE_FIXTURE_LOCK
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        let _kernel = FurnishedKernel(zero_sun_spk());
+        let input = associated_groups(scaled_scientific_observation_batch(1_100, 0.005), 32);
+        let results = run_all_workflows(8, &input, &explicit_config(), &OdPropagator::two_body());
+        assert_eq!(results.len(), 4);
+        assert!(results
+            .iter()
+            .all(|result| result.group_views().count() == 32));
+    }
+
+    #[test]
+    fn public_od_avoids_cross_thread_spice_rayon_lock_inversion() {
+        const CHILD_ENV: &str = "ADAM_CORE_OD_CROSS_THREAD_CHILD";
+        if std::env::var_os(CHILD_ENV).is_none() {
+            run_child_test(
+                "od::tests::public_od_avoids_cross_thread_spice_rayon_lock_inversion",
+                CHILD_ENV,
+                Duration::from_secs(60),
+            );
+            return;
+        }
+
+        let _fixture_lock = SPICE_FIXTURE_LOCK
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        let _kernel = FurnishedKernel(zero_sun_spk());
+        let stop = Arc::new(AtomicBool::new(false));
+        let peer_stop = Arc::clone(&stop);
+        let (ready_tx, ready_rx) = mpsc::sync_channel(1);
+        let peer = std::thread::spawn(move || {
+            let times = TimeArray::new(
+                TimeScale::Tdb,
+                (0..1_024)
+                    .map(|index| Epoch::new(60_002, index as i64))
+                    .collect(),
+            )
+            .expect("peer epochs");
+            let origins = OriginArray::repeat(OriginId::from_code("SUN"), times.len());
+            let mut first = true;
+            while !peer_stop.load(Ordering::Acquire) {
+                let backend = global_backend()
+                    .lock()
+                    .unwrap_or_else(|error| error.into_inner());
+                if first {
+                    ready_tx.send(()).expect("signal held SPICE lock");
+                    first = false;
+                    // Give the competing plain thread time to reach OD group
+                    // scheduling while this thread still owns the global lock.
+                    std::thread::sleep(Duration::from_millis(250));
+                }
+                let vectors = OriginTranslationProvider::origin_translation_vectors(
+                    &*backend,
+                    &origins,
+                    &OriginId::SolarSystemBarycenter,
+                    DataFrame::Ecliptic,
+                    &times,
+                )
+                .expect("peer SPICE translation");
+                assert_eq!(vectors.len(), times.len());
+                drop(backend);
+                std::thread::sleep(Duration::from_millis(1));
+            }
+        });
+        ready_rx.recv().expect("peer acquired SPICE lock");
+
+        let group_count = rayon::current_num_threads().saturating_mul(2).max(16);
+        let input = associated_groups(scientific_observation_batch(), group_count);
+        let result = run_od(&input, &explicit_config(), &OdPropagator::two_body())
+            .expect("cross-thread canonical OD");
+        stop.store(true, Ordering::Release);
+        peer.join().expect("SPICE peer");
+        assert_eq!(result.group_views().count(), group_count);
+    }
+
     #[test]
     fn direct_multi_orbit_label_edits_preserve_science_and_fail_closed() {
-        let _fixture_lock = SPICE_FIXTURE_LOCK.lock().expect("SPICE fixture lock");
+        let _fixture_lock = SPICE_FIXTURE_LOCK
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
         let _kernel = FurnishedKernel(zero_sun_spk());
         let observations = scientific_observation_batch();
         let associations = AssociationBatch {
