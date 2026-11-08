@@ -1,0 +1,7 @@
+adam\_core.orbits.orbits module
+===============================
+
+.. automodule:: adam_core.orbits.orbits
+   :members:
+   :show-inheritance:
+   :undoc-members:
