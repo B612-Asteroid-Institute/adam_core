@@ -20,7 +20,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 from importlib.resources import files
-from typing import Final, Iterable, Literal
+from typing import Final, Iterable, Literal, TypeAlias
 
 import numpy as np
 import numpy.typing as npt
@@ -40,6 +40,11 @@ _BANDPASS_CURVES_FILE: Final[str] = "bandpass_curves.parquet"
 _OBS_BAND_MAP_FILE: Final[str] = "observatory_band_map.parquet"
 _TEMPLATES_FILE: Final[str] = "asteroid_templates.parquet"
 _INTEGRALS_FILE: Final[str] = "template_bandpass_integrals.parquet"
+
+# Shared public contract for every synthetic bandpass conversion. A string is a
+# built-in or registered custom reflectance-template ID; the tuple is a linear
+# (C, S) template mix.
+BandpassComposition: TypeAlias = str | tuple[float, float]
 
 
 def _data_dir_str() -> str:
@@ -202,7 +207,7 @@ def compute_mix_integrals(
 
 
 def _composition_args(
-    composition: str | tuple[float, float],
+    composition: BandpassComposition,
 ) -> tuple[str | None, tuple[float, float] | None]:
     if isinstance(composition, str):
         return str(composition), None
@@ -211,7 +216,7 @@ def _composition_args(
 
 
 def bandpass_delta_mag(
-    composition: str | tuple[float, float],
+    composition: BandpassComposition,
     source_filter_id: str,
     target_filter_id: str,
 ) -> float:
@@ -240,7 +245,7 @@ def bandpass_delta_mag(
 
 
 def bandpass_color_terms(
-    composition: str | tuple[float, float],
+    composition: BandpassComposition,
     *,
     source_filter_id: str = "V",
     target_filter_ids: Iterable[str] | None = None,

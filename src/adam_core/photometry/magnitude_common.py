@@ -1,22 +1,19 @@
 from __future__ import annotations
 
 from functools import lru_cache
-from typing import TypeAlias, Union
 
 import numpy as np
 import numpy.typing as npt
 import pyarrow as pa
 
 from .bandpasses.api import assert_filter_ids_have_curves  # noqa: F401
-from .bandpasses.api import _composition_args, _data_dir_str
+from .bandpasses.api import BandpassComposition, _composition_args, _data_dir_str
 from .bandpasses.api import compute_mix_integrals as _compute_bandpass_mix_integrals
 from .bandpasses.api import get_integrals as _get_bandpass_integrals
 
 # Compatibility name retained without importing JAX; current callers execute
 # the Rust/NumPy path and receive NumPy arrays.
 JAX_CHUNK_SIZE = 8192
-
-BandpassComposition: TypeAlias = Union[str, tuple[float, float]]
 
 # IAU two-parameter (H, G) phase-function coefficients (Bowell et al. 1989).  Defined
 # once here so the NumPy and JAX implementations below cannot drift apart.

@@ -12,6 +12,7 @@ precomputed integrals for higher-fidelity conversions, without changing behavior
 """
 
 from .api import (
+    BandpassComposition,
     assert_filter_ids_have_curves,
     bandpass_color_terms,
     bandpass_delta_mag,
@@ -32,6 +33,8 @@ from .tables import (
 )
 
 __all__ = [
+    # Types
+    "BandpassComposition",
     # Tables
     "BandpassCurves",
     "ObservatoryBandMap",

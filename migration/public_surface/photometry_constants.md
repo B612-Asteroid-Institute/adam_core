@@ -26,6 +26,50 @@ Only plotting/display may remain Python. Generic quivr/dataclass behavior and st
 
 The raw six photometry kernel lanes remain independently timed. A complete-facade adapter additionally times prediction, single fit, and grouped fit with Rust-owned observer generation and Arrow assembly inside each `Instant` sample and PyO3 conversion outside it.
 
+## Rust-native color-estimation contract (PR #202 integration)
+
+`estimate_colors` remains a one-row-per-object API over native `SourceCatalog` and `Orbits`. The corrected Python implementation is a temporary legacy-behavior reference only; the final production facade performs schema validation/marshalling, makes exactly one fused native call, verifies that the raw `RecordBatch` schema exactly equals `ColorFit.schema`, and wraps it with quivr metadata. Rust owns canonical filter resolution, geometry/propagation integration, validity classification, optional projection and composition conversion, fitting, clipping, rank/null-space identifiability, covariance, pair colors, statuses/counts, and Arrow assembly.
+
+### Filter resolution and eligibility
+
+Strict and non-strict modes share the magnitude resolver's precedence: canonical filter ID, exact `(observatory_code, reported_band)` mapping, then optional generic SDSS/PS1 fallback. Color estimation differs at the failure boundary: null, unresolved, and strict-disabled fallback filters are skipped into `num_unsupported_filter` rather than raising for the batch.
+
+Native mode is the default and fits every finite-valid observation in each resolved canonical filter as a separate intercept. It intentionally replaces the Python reference's same-letter `g/i/r/u` pooling and allow-list. The retention denominator is exactly the valid, mapped native rows. If that set is empty, status is `no_usable_photometry`.
+
+Projection mode receives an explicit canonical source-to-target map and a required `BandpassComposition`. Only sources in that map are eligible; Rust performs the composition conversion and pools rows after projection. Unprojected source filters count as unsupported, and the retention denominator is exactly the projected eligible rows. There is no implicit uncorrected pooling. LSST `u/g/r/i` is an optional explicit projection executed in the same fused native call, never a kernel assumption or Python transformation.
+
+For every object that reaches row classification, invalid magnitude/uncertainty takes precedence over unsupported filter, and the aggregate partition remains exact:
+
+`num_obs = num_invalid + num_unsupported_filter + num_clipped + num_used`.
+
+### Native `ColorFit` list schema and numeric policy
+
+The following top-level columns are nullable Arrow `large_list` fields whose item field uses the stated exact primitive type:
+
+- `filter_ids: large_list<item: large_string not null>`;
+- `absolute_magnitudes`, `absolute_magnitude_sigmas`, and `magnitude_covariance: large_list<item: float64 not null>`;
+- `num_used_by_filter: large_list<item: int64 not null>`;
+- `color_lhs_filter_ids`, `color_rhs_filter_ids: large_list<item: large_string not null>`;
+- `colors`, `color_sigmas: large_list<item: float64 not null>`.
+
+List elements themselves are never Arrow null. String and integer elements are present; floating-point non-identifiability is represented by NaN. Top-level null lists encode status as specified below. The raw Rust `RecordBatch` must match the complete final `ColorFit.schema` field order, primitive/list types, and top-level/item nullability before quivr wrapping.
+
+`filter_ids` contains only final active filters with at least one used row; fully clipped filters are absent. IDs are sorted by deterministic byte-wise/code-point lexical canonical-ID order. Magnitudes, magnitude sigmas, and used counts align element-for-element with those IDs, and `sum(num_used_by_filter) == num_used`. An individually non-fitable H and its sigma are NaN.
+
+For `N = len(filter_ids)`, `magnitude_covariance` is the row-major flattened `N x N` H sub-block. Rust masks the full row and column of every individually non-fitable H to NaN in this exposed sub-block. When `dof <= 0`, the entire exposed covariance and every magnitude/phase/color sigma are NaN.
+
+Rust enumerates every pair `(i, j)` with `i < j` in the canonical-ID order. The lhs ID, rhs ID, color, and color-sigma lists all have length `N*(N-1)/2` and align element-for-element. IDs—not conventional band names—define the sign: `color = raw H_lhs - raw H_rhs`. Each contrast has its own null-space fitability test and uses the raw solution plus unmasked full-parameter covariance, so a finite color and sigma may be emitted even when both exposed individual H values are NaN. A non-fitable contrast is represented by NaN floating elements, not null list elements.
+
+### Status/list contract
+
+- `ok`: filter/count/H/covariance lists and all pair lists are non-null. With one active filter, all four pair lists are non-null empty lists. `force_g_bounds=False` always follows ordinary `ok` behavior even when the fitted phase parameter is outside nominal bounds.
+- `phase_param_out_of_bounds` with forced bounds: retain non-null `filter_ids` and `num_used_by_filter` diagnostics, but set magnitude, magnitude-sigma, covariance, and every pair list field to top-level null.
+- `no_usable_photometry`, `too_many_outliers`, `no_orbit`, `multiple_orbits`, and `failed`: every native-product list field is top-level null.
+
+Scalar status/error, phase and fit diagnostics, convergence, and aggregate counts remain on the object row. The fixed `g/i/r/u` magnitude, sigma, filter, color, and per-band count columns in the Python reference are temporary only and must all be removed in the final Rust-port commit. Native and optional projected outputs use the same generic list schema.
+
+Python-reference tests preserve legacy numerical behavior during migration. Rust tests—not added Python computation—establish native-mode parity where applicable and enforce the new native/projection ordering, null/NaN, covariance, contrast-fitability, status, retention, and count invariants.
+
 ## Rotation-period surface
 
 The rotation integration added 31 public symbols and 12 public constants, bringing the pre-`9b756803` manifest to 576 symbols / 66 constants. The Obs80/Scout/Trajectory integration then reached 595 symbols / 67 constants; after the current upstream reconciliation, the authoritative complete manifest is 629 symbols / 78 constants. `estimate_rotation_period` now makes one native crossing: Rust owns time-scale/light-time conversion, distance reduction, frequency-grid construction, clipped Fourier fits, order selection, F-distribution thresholds, alias clustering, session-offset selection, confidence classification, and result diagnostics. `exact_evaluation_backend="numpy"` and `"jax"` remain accepted compatibility selectors but both use the default-artifact Rust engine; JAX is not imported.

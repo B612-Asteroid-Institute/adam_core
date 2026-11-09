@@ -16,8 +16,8 @@ from ..coordinates.cartesian import CartesianCoordinates
 from ..coordinates.origin import OriginCodes
 from ..observations.exposures import Exposures
 from ..observers.observers import Observers
+from .bandpasses import BandpassComposition
 from .bandpasses.api import _composition_args, _data_dir_str
-from .magnitude_common import BandpassComposition
 
 _DEFAULT_EXPOSURES_OBSERVERS = Exposures.observers
 

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Literal
+from typing import Literal, get_type_hints
 
 import numpy as np
 import pyarrow as pa
@@ -15,6 +15,7 @@ from adam_core.orbits import Orbits
 from adam_core.time import Timestamp
 
 from .. import color_determination
+from ..bandpasses import BandpassComposition
 from ..bandpasses.api import bandpass_delta_mag
 from ..color_determination import (
     _CHANNEL_FILTERS,
@@ -22,6 +23,7 @@ from ..color_determination import (
     _TARGET_FILTERS,
     ColorFit,
     _apply_color_terms,
+    _color_fit_from_native_batch,
     _g_bounds_violation,
     _resolve_channels,
     _UnreliableFitError,
@@ -534,8 +536,102 @@ def test_g_bounds_are_model_specific(phi_type: str, G: float, valid: bool) -> No
 
 
 # ---------------------------------------------------------------------------
-# Inter-system color-term correction (opt-in color_term_composition)
+# Filter mapping and inter-system color-term correction
 # ---------------------------------------------------------------------------
+
+
+def test_color_uses_shared_bandpass_composition_contract() -> None:
+    """Color and magnitude conversion expose one composition input type."""
+    hints = get_type_hints(estimate_colors)
+    assert hints["color_term_composition"] == BandpassComposition | None
+
+
+def test_color_fit_declares_fused_native_filter_contract() -> None:
+    """The Rust handoff is one object row with aligned native-filter lists."""
+
+    def non_null_items(value_type: pa.DataType) -> pa.LargeListType:
+        return pa.large_list(pa.field("item", value_type, nullable=False))
+
+    expected_types = {
+        "filter_ids": non_null_items(pa.large_string()),
+        "absolute_magnitudes": non_null_items(pa.float64()),
+        "absolute_magnitude_sigmas": non_null_items(pa.float64()),
+        "num_used_by_filter": non_null_items(pa.int64()),
+        "magnitude_covariance": non_null_items(pa.float64()),
+        "color_lhs_filter_ids": non_null_items(pa.large_string()),
+        "color_rhs_filter_ids": non_null_items(pa.large_string()),
+        "colors": non_null_items(pa.float64()),
+        "color_sigmas": non_null_items(pa.float64()),
+    }
+    for name, expected_type in expected_types.items():
+        field = ColorFit.schema.field(name)
+        assert field.type == expected_type
+        assert field.nullable
+        assert not field.type.value_field.nullable
+
+
+def test_native_batch_schema_is_exact_before_quivr_wrapping() -> None:
+    """The one-crossing facade rejects any raw Arrow schema drift."""
+    arrays = [pa.array([], type=field.type) for field in ColorFit.schema]
+    exact = pa.RecordBatch.from_arrays(arrays, schema=ColorFit.schema)
+    assert len(_color_fit_from_native_batch(exact)) == 0
+
+    missing_last = pa.RecordBatch.from_arrays(
+        arrays[:-1], schema=pa.schema(list(ColorFit.schema)[:-1])
+    )
+    with pytest.raises(ValueError, match="does not exactly match ColorFit.schema"):
+        _color_fit_from_native_batch(missing_last)
+
+
+def test_strict_band_mapping_only_disables_generic_fallbacks() -> None:
+    """Strict mode keeps exact mappings and canonical IDs but skips fallback rows."""
+    stations = np.array(["XXX", "W84", "XXX"], dtype=object)
+    bands = np.array(["g", "g", "LSST_r"], dtype=object)
+
+    loose_channels, loose_filters = _resolve_channels(stations, bands)
+    strict_channels, strict_filters = _resolve_channels(
+        stations, bands, strict_band_mapping=True
+    )
+
+    assert loose_filters.tolist() == ["SDSS_g", "DECam_g", "LSST_r"]
+    assert loose_channels.tolist() == ["g", "g", "r"]
+    assert strict_filters.tolist() == [None, "DECam_g", "LSST_r"]
+    assert strict_channels.tolist() == [None, "g", "r"]
+
+
+def test_estimate_colors_strict_mapping_accounts_for_fallback_row() -> None:
+    """Strict end-to-end fitting skips a fallback row and preserves the partition."""
+    observations, orbits = _load_clean_fixture(_CLEAN_FIXTURES[0])
+    stations = observations.observatory_code.to_pylist()
+    bands = observations.filter.to_pylist()
+    # MPC 500 is a valid observer, but 500|g has no exact band-map entry: loose
+    # mode uses the generic SDSS_g fallback while strict mode skips this row.
+    stations[0] = "500"
+    bands[0] = "g"
+    observations = observations.set_column(
+        "observatory_code", pa.array(stations, type=observations.observatory_code.type)
+    ).set_column("filter", pa.array(bands, type=observations.filter.type))
+
+    loose = estimate_colors(
+        observations, orbits, "HG12star", force_g_bounds=False
+    ).table.to_pylist()[0]
+    strict = estimate_colors(
+        observations,
+        orbits,
+        "HG12star",
+        force_g_bounds=False,
+        strict_band_mapping=True,
+    ).table.to_pylist()[0]
+
+    assert loose["status"] == strict["status"] == "ok"
+    assert loose["num_unsupported_filter"] == 0
+    assert strict["num_unsupported_filter"] == 1
+    assert strict["num_obs"] == (
+        strict["num_invalid"]
+        + strict["num_unsupported_filter"]
+        + strict["num_clipped"]
+        + strict["num_used"]
+    )
 
 
 @pytest.mark.parametrize("composition", ["C", "S", "NEO", "MBA"])

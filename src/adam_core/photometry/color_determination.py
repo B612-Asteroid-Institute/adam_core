@@ -7,6 +7,7 @@ from collections.abc import Callable
 from typing import Any, Literal
 
 import numpy as np
+import pyarrow as pa
 import pyarrow.compute as pc
 import quivr as qv
 import scipy.optimize
@@ -15,6 +16,7 @@ from ..dynamics.propagation import propagate_2body
 from ..observations import SourceCatalog
 from ..observers.observers import Observers
 from ..orbits import Orbits
+from .bandpasses import BandpassComposition
 from .bandpasses.api import bandpass_delta_mag, map_to_canonical_filter_bands
 from .hg12star import (
     _G12STAR_BOUNDS,
@@ -136,12 +138,73 @@ def _mark_failed(row: dict[str, object], status: str, error: str) -> None:
 
 
 class ColorFit(qv.Table):
+    """One per-object color-fit outcome and its aligned native-filter products.
+
+    The final Rust producer returns this exact Arrow schema in one fused call.
+    Successful native products use deterministic byte-wise/code-point lexical
+    canonical-filter order. List elements are never Arrow null: integer/string
+    elements are present and floating-point non-identifiability is represented
+    by NaN. Top-level list nulls encode the status rules documented in
+    ``migration/public_surface/photometry_constants.md``.
+    """
+
     object_id = qv.LargeStringColumn()
     # Outcome of this object's fit: "ok" or the reason it produced no usable
     # result (one of `_STATUSES`; see `estimate_colors`), with a human-readable
     # explanation in `error` whenever the status is not "ok".
     status = qv.LargeStringColumn()
     error = qv.LargeStringColumn(nullable=True)
+    # Final Rust-native variable-filter contract. The current Python reference
+    # path leaves these nullable columns empty; the fused Rust port fills them
+    # without Python-side derivation. `filter_ids` includes only final active
+    # filters with at least one used row, so fully clipped filters disappear and
+    # sum(num_used_by_filter) == num_used. IDs use byte-wise/code-point lexical
+    # order and align with H, sigma, and count lists. Individually non-fitable H
+    # and sigma elements are NaN. `magnitude_covariance` is the H sub-block,
+    # flattened row-major, with the row and column of every non-fitable H masked
+    # to NaN; when dof <= 0 it and every sigma are all NaN.
+    #
+    # Pair lists enumerate every (lhs, rhs) index pair with lhs < rhs in the same
+    # canonical-ID order. Rust computes colors as raw H_lhs - H_rhs from the raw
+    # solution and unmasked full-parameter covariance after independently testing
+    # contrast null-space fitability. A color can therefore be finite when both
+    # emitted H values are NaN. Canonical IDs, not conventional color names,
+    # define the sign.
+    filter_ids = qv.LargeListColumn(
+        pa.field("item", pa.large_string(), nullable=False), nullable=True
+    )
+    absolute_magnitudes = qv.LargeListColumn(
+        pa.field("item", pa.float64(), nullable=False), nullable=True
+    )
+    absolute_magnitude_sigmas = qv.LargeListColumn(
+        pa.field("item", pa.float64(), nullable=False), nullable=True
+    )
+    num_used_by_filter = qv.LargeListColumn(
+        pa.field("item", pa.int64(), nullable=False), nullable=True
+    )
+    magnitude_covariance = qv.LargeListColumn(
+        pa.field("item", pa.float64(), nullable=False), nullable=True
+    )
+    color_lhs_filter_ids = qv.LargeListColumn(
+        pa.field("item", pa.large_string(), nullable=False), nullable=True
+    )
+    color_rhs_filter_ids = qv.LargeListColumn(
+        pa.field("item", pa.large_string(), nullable=False), nullable=True
+    )
+    colors = qv.LargeListColumn(
+        pa.field("item", pa.float64(), nullable=False), nullable=True
+    )
+    color_sigmas = qv.LargeListColumn(
+        pa.field("item", pa.float64(), nullable=False), nullable=True
+    )
+    # Status nullability: ok has every list non-null (pair lists are empty for
+    # one filter); forced phase_param_out_of_bounds keeps only filter_ids and
+    # num_used_by_filter; every other failure status nulls every list. Disabling
+    # forced bounds keeps an out-of-range solution as ordinary ok.
+    # TEMPORARY REFERENCE ONLY: fixed g/i/r/u fields keep the corrected Python
+    # implementation executable during the port. The final Rust-port commit must
+    # remove every fixed magnitude/sigma/filter/color/count field below; native
+    # and optional LSST-projected results both use only the generic lists above.
     g_mag = qv.Float64Column(nullable=True)
     i_mag = qv.Float64Column(nullable=True)
     r_mag = qv.Float64Column(nullable=True)
@@ -211,11 +274,30 @@ class ColorFit(qv.Table):
     num_used_u = qv.Int64Column(nullable=True)
 
 
+def _color_fit_from_native_batch(record_batch: pa.RecordBatch) -> ColorFit:
+    """Validate the raw native schema exactly before adding quivr metadata."""
+    if not record_batch.schema.equals(ColorFit.schema, check_metadata=True):
+        raise ValueError(
+            "Rust color-fit RecordBatch schema does not exactly match ColorFit.schema: "
+            f"expected {ColorFit.schema}, got {record_batch.schema}"
+        )
+    from .._rust.arrow import table_from_record_batch
+
+    return table_from_record_batch(ColorFit, record_batch)
+
+
 def _resolve_channels(
-    stn: np.ndarray, bands: np.ndarray
+    stn: np.ndarray,
+    bands: np.ndarray,
+    *,
+    strict_band_mapping: bool = False,
 ) -> tuple[np.ndarray, np.ndarray]:
     """
     Map raw (observatory_code, reported_band) pairs to g/i/r/u color channels.
+
+    This is the legacy Python-reference channel policy only; final Rust native
+    mode fits every valid resolved canonical filter separately and applies no
+    same-letter allow-list.
 
     Rather than matching MPC band strings literally, this routes each observation
     through the shared `map_to_canonical_filter_bands` utility, which resolves
@@ -233,14 +315,18 @@ def _resolve_channels(
     ``None``) and is kept so callers can apply inter-system color-term corrections
     (see `_apply_color_terms`).
     """
-    # Only reported bands (non-null) bands go through the mapping. on_unknown="skip"
-    # leaves unresolvable rows as None instead of raising, so unfiltered reports
-    # and unmapped bands are simply dropped from the fit.
+    # Only reported (non-null) bands go through mapping. Strictness shares the
+    # magnitude resolver's precedence, but color estimation deliberately uses
+    # on_unknown="skip": unresolved or strict-disabled fallbacks stay attributable
+    # to the object and are counted as unsupported instead of raising.
     has_band = np.array([b is not None for b in bands], dtype=bool)
     filter_ids = np.full(len(bands), None, dtype=object)
     if np.any(has_band):
         filter_ids[has_band] = map_to_canonical_filter_bands(
-            stn[has_band], bands[has_band], on_unknown="skip"
+            stn[has_band],
+            bands[has_band],
+            allow_fallback_filters=not strict_band_mapping,
+            on_unknown="skip",
         )
     channels = np.empty(len(filter_ids), dtype=object)
     for i, fid in enumerate(filter_ids.tolist()):
@@ -264,7 +350,7 @@ def _apply_color_terms(
     m_red: np.ndarray,
     filter_ids: np.ndarray,
     channels: np.ndarray,
-    composition: str | tuple[float, float],
+    composition: BandpassComposition,
 ) -> np.ndarray:
     """
     Normalize reduced magnitudes onto the channel's target filter (`_TARGET_FILTERS`).
@@ -302,6 +388,8 @@ def _apply_color_terms(
 def _prepare_geometry(
     obs: SourceCatalog,
     object_coords,
+    *,
+    strict_band_mapping: bool = False,
 ) -> tuple[
     np.ndarray,
     np.ndarray,
@@ -330,7 +418,9 @@ def _prepare_geometry(
     rmsmag = obs.mag_sigma.to_numpy(zero_copy_only=False).astype(np.float64)
     # Kept as an object array so a null filter stays None rather than "None".
     bands = np.asarray(obs.filter.to_numpy(zero_copy_only=False), dtype=object)
-    channels, filter_ids = _resolve_channels(stn, bands)
+    channels, filter_ids = _resolve_channels(
+        stn, bands, strict_band_mapping=strict_band_mapping
+    )
 
     r, delta, alpha_deg = observing_geometry(object_coords, observers)
     valid = np.isfinite(mag) & np.isfinite(rmsmag) & (rmsmag > 0)
@@ -702,7 +792,8 @@ def estimate_colors(
     orbits: Orbits,
     phi_type: Literal["HG12star", "HG", "c1c2"],
     force_g_bounds: bool = True,
-    color_term_composition: str | tuple[float, float] | None = None,
+    color_term_composition: BandpassComposition | None = None,
+    strict_band_mapping: bool = False,
 ) -> ColorFit:
     """
     Estimate per-band absolute magnitudes and colors for each object.
@@ -748,6 +839,13 @@ def estimate_colors(
         is applied: each band is fit in the filter(s) it was observed through, and
         the allowed filters of a channel are pooled directly (their color terms
         onto LSST are within 0.03 mag; see `_CHANNEL_FILTERS`).
+    strict_band_mapping
+        If True, disable the generic SDSS/PS1 fallbacks used when a reported
+        band has neither a canonical filter ID nor an observatory-specific
+        mapping. This shares only the magnitude resolver's precedence: color
+        estimation always skips unresolved/strict-disabled rows into
+        ``num_unsupported_filter`` rather than raising. Canonical IDs and exact
+        observatory mappings remain accepted. Defaults to False.
 
     Returns
     -------
@@ -807,6 +905,15 @@ def estimate_colors(
             "object_id": obj_id,
             "status": "ok",
             "error": None,
+            "filter_ids": None,
+            "absolute_magnitudes": None,
+            "absolute_magnitude_sigmas": None,
+            "num_used_by_filter": None,
+            "magnitude_covariance": None,
+            "color_lhs_filter_ids": None,
+            "color_rhs_filter_ids": None,
+            "colors": None,
+            "color_sigmas": None,
             "g_mag": None,
             "i_mag": None,
             "r_mag": None,
@@ -863,7 +970,11 @@ def estimate_colors(
             object_coords = propagated.coordinates
 
             mag, rmsmag, channels, filter_ids, r, delta, alpha_deg, valid = (
-                _prepare_geometry(obs, object_coords)
+                _prepare_geometry(
+                    obs,
+                    object_coords,
+                    strict_band_mapping=strict_band_mapping,
+                )
             )
             n_invalid = len(obs) - int(np.sum(valid))
             row.update(num_invalid=n_invalid)
@@ -969,6 +1080,15 @@ def estimate_colors(
         object_id=_col("object_id"),
         status=_col("status"),
         error=_col("error"),
+        filter_ids=_col("filter_ids"),
+        absolute_magnitudes=_col("absolute_magnitudes"),
+        absolute_magnitude_sigmas=_col("absolute_magnitude_sigmas"),
+        num_used_by_filter=_col("num_used_by_filter"),
+        magnitude_covariance=_col("magnitude_covariance"),
+        color_lhs_filter_ids=_col("color_lhs_filter_ids"),
+        color_rhs_filter_ids=_col("color_rhs_filter_ids"),
+        colors=_col("colors"),
+        color_sigmas=_col("color_sigmas"),
         g_mag=_col("g_mag"),
         i_mag=_col("i_mag"),
         r_mag=_col("r_mag"),
