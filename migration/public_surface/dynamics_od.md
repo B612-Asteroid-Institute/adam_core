@@ -29,8 +29,10 @@ the 44-row parity registry is only a benchmark subset.
 
 The September 2026 executable-model/plugin design is retired. Core Rust now
 owns a closed ordered `ObservationPipeline`, complete stage configuration,
-resource validation/parsing, fitting, rejection, covariance, and predictor-level
-configured composition. Python exposes immutable declarations, binds explicit
+resource validation/parsing, fitting, rejection, covariance, and canonical
+batch composition. Focused prepared-observation kernels remain available to
+custom native Rust predictors without duplicating full workflow policy. Python
+exposes immutable declarations, binds explicit
 local paths by semantic slot, marshals tables, and assembles result tables.
 
 | Surface group | Disposition | Evidence |
@@ -40,6 +42,30 @@ local paths by semantic slot, marshals tables, and assembles result tables.
 | `OdConfig`, stage configs, `CORE_OD_V1`, `ASTEROID_INSTITUTE_OD_V1` | immutable Rust definitions mirrored in Python; profiles never select propagators | strict native round-trip, profile/explicit parity, fingerprint tests |
 | `fit_least_squares`, `iterative_fit`, `cmc2003_fit_detailed` | Core-owned Rust numerical algorithms; propagation providers expose only the negotiated capsule | native solver/covariance/rejection tests |
 | canonical batch `run_iod`, `run_od`, `refine`, `evaluate_orbits` | Rust-owned deterministic Associations/FittedOrbitMembers grouping and typed failures; Python only marshals and assembles the three direct result tables | native planner/workflow, public-surface, and migration contract tests |
+
+## Rust 0.8 OD API migration
+
+The additional public-surface cleanup below targets 0.8.0. It corrects a stale
+compatibility implication in the unreleased development documentation; it does
+not rewrite the published 0.7.0 release or artifact history. The exact advanced
+surface is `prepare_observations`, `solve_prepared_iod`,
+`refine_prepared_orbit`, and `PreparedObservations` under
+`adam_core::od::algorithms`. Direct
+`adam_core_rs_coords::od::algorithms` users receive the same two focused-kernel
+renames and the removal of `run_od_with_predictors` and
+`ConfiguredRunOdOutput`; the six Core-only stage-support removals below never
+existed on that direct path.
+
+| Removed 0.7.0 algorithms export | 0.8.0 replacement |
+|---|---|
+| `run_iod_with_predictor` | `solve_prepared_iod`; still a focused one-group numerical kernel |
+| `refine_with_predictor` | `refine_prepared_orbit`; reuse the same `PreparedObservations` explicitly |
+| `run_od_with_predictors`, `ConfiguredRunOdOutput` | canonical `adam_core::run_od`; no second public full-workflow composition/result type |
+| `external_provider_metadata` | `ProviderMetadata::from_external_propagator`; validates adopted ABI-v2 identity/provenance before a run without executing an OD workflow or performing its preflight |
+| `ErfaTimeProvider` | implement `adam_core::coords::TimeScaleProvider`; delegating `rescale` to `TimeArray::rescale` selects Core's ERFA-backed conversion |
+| `GlobalSpiceTranslation` | after initialization, hold `adam_core::spice::global_backend().read()` and pass `&*guard` directly as the translation provider; kernel mutation is excluded while the guard is held |
+| `CanonicalStageSettings`, `canonical_stage_settings` | canonical callers pass typed stage configuration to `run_iod`, `run_od`, `refine`, or `evaluate_orbits`; advanced callers construct their own predictor/options |
+| `two_body_provider_metadata` | canonical workflows derive it internally; read the actual identities from `OdBatchResult::providers()` instead of synthesizing provenance |
 
 ## Impacts and associations
 

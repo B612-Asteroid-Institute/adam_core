@@ -35,7 +35,7 @@
 //! ```
 
 use adam_core_rs_coords::od::algorithms::{
-    prepare_observations, refine_with_predictor, run_iod_with_predictor, PreparedObservations,
+    prepare_observations, refine_prepared_orbit, solve_prepared_iod, PreparedObservations,
 };
 use adam_core_rs_coords::propagation::adapter::{
     refine_with, PropagatorPredictor, SphericalPredictor,
@@ -64,14 +64,32 @@ use std::fmt;
 use std::sync::atomic::{AtomicUsize, Ordering as AtomicOrdering};
 use std::sync::LazyLock;
 
-/// Predictor-level numerical building blocks used by the canonical workflows.
+/// Advanced one-group numerical kernels used by canonical orbit determination.
+///
+/// [`prepare_observations`], [`solve_prepared_iod`], and
+/// [`refine_prepared_orbit`] support custom native Rust predictors and focused
+/// numerical research. They do not perform canonical grouping, resource or
+/// provider preflight, provenance construction, typed cross-group continuation,
+/// failure-envelope assembly, or output disposition. Applications needing the
+/// complete contract should call [`crate::run_iod`], [`crate::run_od`],
+/// [`crate::refine`], or [`crate::evaluate_orbits`].
+///
+/// Advanced callers supply their own [`crate::coords::TimeScaleProvider`] and
+/// [`crate::coords::OriginTranslationProvider`]. To match Core's time behavior,
+/// a provider can delegate to [`crate::coords::TimeArray::rescale`]. For shared
+/// SPICE translation, initialize kernels first, hold
+/// [`crate::spice::global_backend`]'s read guard, and pass the guarded backend
+/// directly; do not mutate kernels while the guard is held. External ABI-v2
+/// identity can be checked separately with
+/// [`crate::od::ProviderMetadata::from_external_propagator`].
 pub mod algorithms {
-    use super::*;
-
     pub use adam_core_rs_coords::od::algorithms::{
-        prepare_observations, refine_with_predictor, run_iod_with_predictor,
-        run_od_with_predictors, ConfiguredRunOdOutput, PreparedObservations,
+        prepare_observations, refine_prepared_orbit, solve_prepared_iod, PreparedObservations,
     };
+}
+
+mod stage_support {
+    use super::*;
 
     /// Canonical ephemeris options and actual two-body backend derived from one
     /// authoritative typed fit configuration.
@@ -127,9 +145,11 @@ pub mod algorithms {
         }
     }
 
-    /// Process-global SPICE origin translation for PyO3 expert drivers and
-    /// predictor-level callers. Canonical batch OD holds one direct backend
-    /// guard for the invocation instead of locking once per prediction.
+    /// Binding-only process-global SPICE translation adapter for PyO3 drivers.
+    ///
+    /// Public Rust callers should acquire `adam_core::spice::global_backend()`'s
+    /// read guard and pass `&AdamCoreSpiceBackend` directly. Canonical batch OD
+    /// holds one such guard for the invocation instead of relocking per request.
     #[derive(Debug, Clone, Copy, Default)]
     pub struct GlobalSpiceTranslation;
 
@@ -179,16 +199,11 @@ pub mod algorithms {
             data_fingerprint: two_body_reference::DATA_FINGERPRINT.to_string(),
         }
     }
-
-    /// Derive and validate provenance metadata from an actual ABI-v2 backend.
-    pub fn external_provider_metadata(
-        propagator: &ExternalPropagator,
-    ) -> Result<ProviderMetadata, OdBatchError> {
-        OdPropagator::external(propagator).external_metadata()
-    }
 }
 
-use algorithms::{canonical_stage_settings, two_body_provider_metadata, ErfaTimeProvider};
+#[cfg(test)]
+use stage_support::GlobalSpiceTranslation;
+use stage_support::{canonical_stage_settings, two_body_provider_metadata, ErfaTimeProvider};
 
 /// Immutable complete OD profiles and their resource declarations.
 pub mod profiles {
@@ -366,6 +381,45 @@ pub struct ProviderMetadata {
 }
 
 impl ProviderMetadata {
+    /// Read and validate ABI-v2 identity and provenance metadata without running OD.
+    ///
+    /// This inspects an already-adopted external propagator's identity,
+    /// capabilities, integration scale, and content fingerprints. Consumers may
+    /// call it before a run to reject invalid metadata independently. It does not
+    /// call propagation, execute OD, or perform input/resource/provider preflight
+    /// for a canonical workflow.
+    pub fn from_external_propagator(propagator: &ExternalPropagator) -> Result<Self, OdBatchError> {
+        if propagator.configuration_fingerprint().is_none()
+            || propagator.data_fingerprint().is_none()
+        {
+            return Err(OdBatchError::new(
+                OdBatchErrorCode::InvalidProviderIdentity,
+                "native OD requires the ABI v2 provenance metadata suffix (configuration_fingerprint and data_fingerprint); this provider is propagation-compatible but not provenance-complete",
+            ));
+        }
+        let identity = propagator.identity();
+        let metadata = Self {
+            name: identity.name.clone(),
+            version: identity.version.clone(),
+            abi_version: propagator.abi_version(),
+            identity_validated_by_capsule: true,
+            capabilities: propagator.capabilities(),
+            known_capabilities: propagator.known_capabilities(),
+            integration_time_scale: propagator.integration_scale().as_str().to_string(),
+            two_body_dynamics: identity.two_body_dynamics,
+            configuration_fingerprint: propagator
+                .configuration_fingerprint()
+                .expect("metadata presence checked above")
+                .to_string(),
+            data_fingerprint: propagator
+                .data_fingerprint()
+                .expect("metadata presence checked above")
+                .to_string(),
+        };
+        metadata.validate()?;
+        Ok(metadata)
+    }
+
     /// Validate the complete provider identity before any group is executed.
     pub fn validate(&self) -> Result<(), OdBatchError> {
         for (field, value) in [
@@ -461,44 +515,6 @@ impl<'a> OdPropagator<'a> {
         Self {
             backend: OdPropagatorBackend::External(propagator),
         }
-    }
-
-    fn external_metadata(&self) -> Result<ProviderMetadata, OdBatchError> {
-        let OdPropagatorBackend::External(propagator) = self.backend else {
-            return Err(OdBatchError::new(
-                OdBatchErrorCode::InvalidProviderIdentity,
-                "external provider metadata requested for the two-body backend",
-            ));
-        };
-        if propagator.configuration_fingerprint().is_none()
-            || propagator.data_fingerprint().is_none()
-        {
-            return Err(OdBatchError::new(
-                OdBatchErrorCode::InvalidProviderIdentity,
-                "native OD requires the ABI v2 provenance metadata suffix (configuration_fingerprint and data_fingerprint); this provider is propagation-compatible but not provenance-complete",
-            ));
-        }
-        let identity = propagator.identity();
-        let metadata = ProviderMetadata {
-            name: identity.name.clone(),
-            version: identity.version.clone(),
-            abi_version: propagator.abi_version(),
-            identity_validated_by_capsule: true,
-            capabilities: propagator.capabilities(),
-            known_capabilities: propagator.known_capabilities(),
-            integration_time_scale: propagator.integration_scale().as_str().to_string(),
-            two_body_dynamics: identity.two_body_dynamics,
-            configuration_fingerprint: propagator
-                .configuration_fingerprint()
-                .expect("metadata presence checked above")
-                .to_string(),
-            data_fingerprint: propagator
-                .data_fingerprint()
-                .expect("metadata presence checked above")
-                .to_string(),
-        };
-        metadata.validate()?;
-        Ok(metadata)
     }
 }
 
@@ -657,7 +673,7 @@ fn with_stage_predictor<R>(
             };
             let service = PredictionService {
                 predictor: &predictor,
-                metadata: provider.external_metadata()?,
+                metadata: ProviderMetadata::from_external_propagator(propagator)?,
             };
             driver(&service, &context)
         }
@@ -721,7 +737,7 @@ fn with_stage_predictors<R>(
                 provider: &time,
                 translation_provider: &*translation,
             };
-            let metadata = provider.external_metadata()?;
+            let metadata = ProviderMetadata::from_external_propagator(propagator)?;
             let iod_service = PredictionService {
                 predictor: &iod_predictor,
                 metadata: metadata.clone(),
@@ -3086,7 +3102,7 @@ fn run_iod_prepared(
                 None,
             );
             let orbit_id = default_orbit_id(&group.group_id, &config_sha, &input_fingerprint);
-            let result = run_iod_with_predictor(
+            let result = solve_prepared_iod(
                 service.predictor,
                 &prepared,
                 &observers,
@@ -3348,7 +3364,7 @@ fn run_od_prepared(
                 let seed = iod
                     .seed_orbit()?
                     .expect("accepted IOD result has a seed orbit");
-                let refined = refine_with_predictor(
+                let refined = refine_prepared_orbit(
                     refinement_service.predictor,
                     &seed,
                     &group.prepared,
@@ -4419,15 +4435,21 @@ fn evaluate_prepared(
     Ok(output.finish())
 }
 
-/// Feature-gated deferred acquisition bridge used only by `adam_core_py`.
+/// Feature-gated implementation bridge used only by `adam_core_py`.
 ///
-/// It is excluded from the ordinary Rust API and delegates every scientific
-/// operation to the same private preparation/execution implementation as the
-/// four primary workflows.
+/// It is excluded from the ordinary Rust API. Deferred provider acquisition
+/// delegates every scientific operation to the private canonical workflow
+/// implementation; the additional exports share exact stage support with the
+/// binding crate without widening [`algorithms`].
 #[cfg(feature = "python-bindings")]
 #[doc(hidden)]
 pub mod python_bindings {
     use super::*;
+
+    pub use super::stage_support::{
+        canonical_stage_settings, two_body_provider_metadata, CanonicalStageSettings,
+        ErfaTimeProvider, GlobalSpiceTranslation,
+    };
 
     pub trait ProviderSource {
         fn with_propagator<R>(
@@ -4703,7 +4725,7 @@ mod tests {
         fn read_core_spice(&self, times: &TimeArray) -> PropagationResultValue<()> {
             let origins = OriginArray::repeat(OriginId::SolarSystemBarycenter, times.len());
             OriginTranslationProvider::origin_translation_vectors(
-                &algorithms::GlobalSpiceTranslation,
+                &GlobalSpiceTranslation,
                 &origins,
                 &OriginId::SolarSystemBarycenter,
                 DataFrame::Ecliptic,
@@ -6088,7 +6110,7 @@ mod tests {
                     rayon::scope(|scope| {
                         scope.spawn(|_| {
                             let vectors = OriginTranslationProvider::origin_translation_vectors(
-                                &algorithms::GlobalSpiceTranslation,
+                                &GlobalSpiceTranslation,
                                 &origins,
                                 &OriginId::SolarSystemBarycenter,
                                 DataFrame::Ecliptic,

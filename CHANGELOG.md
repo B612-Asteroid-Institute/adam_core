@@ -15,11 +15,12 @@ This file contains notable changes in adam-core
   uncertainty, EFCC18 catalog-bias correction, station/band residual covariance
   adjustment, and nightly batch deweighting. Resource content identity, size,
   schema, and structure are validated before a bound pipeline can execute.
-- Predictor-level Rust composition under ``adam_core_rs_coords::od::algorithms``:
-  ``prepare_observations``, ``run_iod_with_predictor``,
-  ``refine_with_predictor``, and ``run_od_with_predictors``. The configured
-  composition prepares one coordinate batch and gives that same batch to IOD
-  and refinement.
+- Advanced one-group Rust numerical kernels under
+  ``adam_core::od::algorithms``: ``prepare_observations``,
+  ``solve_prepared_iod``, and ``refine_prepared_orbit``. They support custom
+  native predictors and focused research while the four canonical workflows
+  remain the only public batching, provenance, continuation, and failure-policy
+  routes.
 - Rust-owned bounded deterministic IOD/search/correction/ranging, whitened and
   robust differential correction, covariance validation, worst-residual and
   CMC2003 rejection, and propagation-only native provider ABI v2.
@@ -113,6 +114,26 @@ This file contains notable changes in adam-core
   identity and capability metadata, stable per-row failure codes, optional
   dynamics-consistent STMs, and complete physical/non-gravitational parameter
   transport. The provisional v1 layout is rejected.
+- **Breaking Rust API targeted for 0.8.0:** ``adam_core::od::algorithms`` is
+  limited to ``prepare_observations``, ``solve_prepared_iod``,
+  ``refine_prepared_orbit``, and ``PreparedObservations``. This additional
+  cleanup corrects a stale compatibility implication without changing the
+  published 0.7.0 release or artifact history:
+  - ``run_iod_with_predictor`` becomes ``solve_prepared_iod`` and
+    ``refine_with_predictor`` becomes ``refine_prepared_orbit``;
+  - ``run_od_with_predictors`` and ``ConfiguredRunOdOutput`` are removed in
+    favor of canonical ``run_od``;
+  - ``external_provider_metadata`` becomes
+    ``ProviderMetadata::from_external_propagator`` for metadata-only ABI-v2
+    identity/provenance validation;
+  - the public ``ErfaTimeProvider`` helper is replaced by a caller-owned
+    ``TimeScaleProvider`` that may delegate to ``TimeArray::rescale``;
+  - the public ``GlobalSpiceTranslation`` wrapper is replaced by a direct
+    ``global_backend().read()`` guard passed as the translation provider; and
+  - ``CanonicalStageSettings``, ``canonical_stage_settings``, and
+    ``two_body_provider_metadata`` are internal. Canonical callers use typed
+    workflow configuration and ``OdBatchResult::providers()``; advanced callers
+    own their predictor options and provider services.
 - **Breaking Rust API:** ``PropagationError`` adds ``RowFailure`` and
   ``CmcCovarianceUnavailable``. Exhaustive downstream matches must handle
   candidate-local numerical failures and fail-closed CMC covariance refusal.
