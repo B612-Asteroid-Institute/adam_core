@@ -155,7 +155,10 @@ fn prepared_from_python(
     )
 }
 
-fn prepared_to_dict(py: Python<'_>, prepared: &PreparedObservations) -> PyResult<PyObject> {
+fn prepared_to_dict<'py>(
+    py: Python<'py>,
+    prepared: &PreparedObservations,
+) -> PyResult<Bound<'py, PyAny>> {
     let output = PyDict::new(py);
     output.set_item(
         "time_days",
@@ -192,7 +195,7 @@ fn prepared_to_dict(py: Python<'_>, prepared: &PreparedObservations) -> PyResult
     output.set_item("r_au", &prepared.input.r_au)?;
     output.set_item("delta_au", &prepared.input.delta_au)?;
     output.set_item("phase_angle_deg", &prepared.input.phase_angle_deg)?;
-    Ok(output.into_any().unbind())
+    Ok(output.into_any())
 }
 
 #[pyfunction]
@@ -202,8 +205,8 @@ fn prepared_to_dict(py: Python<'_>, prepared: &PreparedObservations) -> PyResult
     object_positions, object_days, object_nanos, object_time_scale, object_frame
 ))]
 #[allow(clippy::too_many_arguments)]
-fn rotation_period_observations_from_detections(
-    py: Python<'_>,
+fn rotation_period_observations_from_detections<'py>(
+    py: Python<'py>,
     detection_exposure_ids: Vec<Option<String>>,
     magnitude: PyReadonlyArray1<'_, f64>,
     magnitude_sigma: PyReadonlyArray1<'_, f64>,
@@ -219,7 +222,7 @@ fn rotation_period_observations_from_detections(
     object_nanos: Vec<i64>,
     object_time_scale: &str,
     object_frame: &str,
-) -> PyResult<PyObject> {
+) -> PyResult<Bound<'py, PyAny>> {
     let prepared = prepared_from_python(
         detection_exposure_ids,
         magnitude,
@@ -281,7 +284,7 @@ fn rotation_period_estimate_from_detections<'py>(
     auto_session_min_observations_per_group: usize,
     auto_session_bic_improvement: f64,
     claim_doubled_fold: bool,
-) -> PyResult<PyObject> {
+) -> PyResult<Bound<'py, PyAny>> {
     let prepared = prepared_from_python(
         detection_exposure_ids,
         magnitude,
@@ -315,20 +318,18 @@ fn rotation_period_estimate_from_detections<'py>(
     );
     if let Some(object_ids) = object_ids {
         let estimates = py
-            .allow_threads(|| {
-                estimate_rotation_period_grouped(&prepared.input, &object_ids, &config)
-            })
+            .detach(|| estimate_rotation_period_grouped(&prepared.input, &object_ids, &config))
             .map_err(PyValueError::new_err)?;
         let output = PyList::empty(py);
         for (object_id, estimate) in estimates {
             output.append((object_id, estimate_to_dict(py, estimate)?))?;
         }
-        Ok(output.into_any().unbind())
+        Ok(output.into_any())
     } else {
         let estimate = py
-            .allow_threads(|| estimate_rotation_period(&prepared.input, &config))
+            .detach(|| estimate_rotation_period(&prepared.input, &config))
             .map_err(PyValueError::new_err)?;
-        Ok(estimate_to_dict(py, estimate)?.into_any().unbind())
+        Ok(estimate_to_dict(py, estimate)?.into_any())
     }
 }
 

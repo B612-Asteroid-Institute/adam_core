@@ -5,36 +5,45 @@ Artifact policy
 ---------------
 
 Release artifacts are built once and tested as artifacts. The release-candidate
-workflow builds one wheel for each supported Python/platform pair, installs
-those exact files in isolated binary-only environments, runs ``pip check``,
-proves offline installed-package kernel discovery without duplicate cache
-files, and exercises public SBDB, observer, ephemeris, and
-propagation-provider workflows.
+workflow builds one Core wheel for each supported Python/platform pair and
+installs those exact files in isolated binary-only environments. CPython
+3.11-3.13 cells pair an exact compatible Assist revision, run ``pip check``,
+prove offline installed-package kernel discovery without duplicate cache
+files, and exercise public SBDB, observer, ephemeris, and
+propagation-provider workflows. CPython 3.14 cells instead run Core-only import,
+identity, dependency, timestamp, and native numerical checks until Assist's
+separately tracked 3.14 migration is complete.
 Publication jobs download those accepted artifacts by workflow run ID; they do
 not rebuild wheels or crates.
 
-The supported matrix is CPython 3.11-3.13 on manylinux 2.17 x86-64 and AArch64
-and macOS Apple silicon and Intel (12 wheels per distribution). The workflow
-checks runner architecture, exact wheel count, runtime/distribution version
+The supported Core matrix is CPython 3.11-3.14 on manylinux 2.17 x86-64 and
+AArch64 and macOS Apple silicon and Intel (16 Core wheels). The compatible
+Assist candidate is paired only on CPython 3.11-3.13 (12 paired cells). The
+workflow checks runner architecture, exact wheel count, runtime/distribution version
 equality, native members, and platform tags. Windows and musllinux are not
 current release targets.
 
 Stable release line
 -------------------
 
-The current published baseline is ``adam-core==0.6.1``. The next source
-candidate is the breaking ``adam-core==0.7.0`` release for Python and ``0.7.0``
-for all six public Rust crates. Released ``0.6.1`` does not implement the
-propagation-only v2 provider contract and is not compatible with this source
-line. Release ``0.6.1`` remains the immutable Rust 1.87 packaging repair that
-replaced the yanked pre-9 ``zip`` line with ``rawzip`` plus ``flate2``. Neither
-``v0.6.0`` nor ``v0.6.1`` may be moved or reused; ``v0.7.0`` is created only at
-the separately approved stable-publication boundary.
+The current published baseline is ``adam-core==0.7.0``, released on
+2026-11-06 as 12 CPython 3.11-3.13 PyPI wheels and six public Rust crates built
+against Arrow 54. Those files, crate versions, and the ``v0.7.0`` tag are
+immutable. This CPython 3.14/native-stack candidate cannot be published as
+``0.7.0``; it requires a separately authorized post-0.7 Python version. The
+intended aligned release boundary is ``0.8.0``, but this candidate does not
+perform or authorize that version change.
 
-All internal public Rust dependencies use exact ``=0.7.0`` requirements.
-``adam_core_py`` is also versioned ``0.7.0`` but remains an unpublished wheel
-implementation crate. Rust 1.87 is the authoritative MSRV; latest stable is
-compatibility-only. The Python wheel contains the Python veneer and compiled
+``adam_core_rs_coords`` directly exposes Arrow types, and the ``adam_core``
+umbrella crate re-exports that API. Moving those public types from Arrow 54 to
+Arrow 58 is semver-breaking. The project's exact internal requirements and
+aligned public-crate version policy therefore require all six public Rust
+crates to advance together to ``0.8.0`` before any crates.io publication. The
+source manifests and unpublished ``adam_core_py`` wheel implementation crate
+intentionally remain at ``0.7.0`` pending separate version-bump, review, and
+publication authorization; they are not publishable from this candidate. Rust
+1.87 is the authoritative MSRV; latest stable is compatibility-only. The
+Python wheel contains the Python veneer and compiled
 ``adam_core._rust_native`` extension, so Python consumers do not install the
 component crates directly.
 
@@ -73,9 +82,15 @@ order:
    operational input ``adam_assist_ref`` and requires a full commit SHA; that
    revision is evidence for the Core candidate, not a Core dependency or
    publication candidate;
-#. accept the exact Core ``0.7.0`` six-crate set and 12-wheel matrix, including
-   the separately built provider compatibility lane;
-#. publish and verify the six Core crates in dependency order;
+#. after separate version-bump authorization, align the Python distribution,
+   unpublished ``adam_core_py`` implementation crate, and six public Rust
+   crates on the intended ``0.8.0`` boundary without rewriting published
+   ``0.7.0`` history;
+#. accept the exact 16-wheel Core Python matrix for that authorized post-0.7
+   version, including paired provider compatibility on CPython 3.11-3.13 and
+   explicit Core-only CPython 3.14 acceptance;
+#. accept and publish the aligned six-crate Rust ``0.8.0`` set in dependency
+   order;
 #. publish and verify the exact Core Python wheel set; and
 #. run clean no-lock Cargo 1.87/latest-stable and clean pip/current-uv smoke
    tests from registry-only environments.

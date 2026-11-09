@@ -62,7 +62,7 @@ fn bindings(paths: BTreeMap<String, String>) -> PyResult<ResourceBindings> {
     Ok(result)
 }
 
-#[pyclass(name = "OdConfig", frozen)]
+#[pyclass(name = "OdConfig", frozen, skip_from_py_object)]
 #[derive(Clone)]
 pub(crate) struct PyOdConfig {
     pub(crate) inner: Arc<OdConfig>,
@@ -129,7 +129,7 @@ impl PyOdConfig {
     }
 }
 
-#[pyclass(name = "IodStageConfig", frozen)]
+#[pyclass(name = "IodStageConfig", frozen, skip_from_py_object)]
 #[derive(Clone)]
 pub(crate) struct PyIodStageConfig {
     pub(crate) inner: IodStageConfig,
@@ -154,7 +154,7 @@ impl PyIodStageConfig {
     }
 }
 
-#[pyclass(name = "IodRunConfig", frozen)]
+#[pyclass(name = "IodRunConfig", frozen, skip_from_py_object)]
 #[derive(Clone)]
 pub(crate) struct PyIodRunConfig {
     pub(crate) inner: IodRunConfig,
@@ -184,7 +184,7 @@ impl PyIodRunConfig {
     }
 }
 
-#[pyclass(name = "RefinementRunConfig", frozen)]
+#[pyclass(name = "RefinementRunConfig", frozen, skip_from_py_object)]
 #[derive(Clone)]
 pub(crate) struct PyRefinementRunConfig {
     pub(crate) inner: RefinementRunConfig,
@@ -209,7 +209,7 @@ impl PyRefinementRunConfig {
     }
 }
 
-#[pyclass(name = "EvaluationConfig", frozen)]
+#[pyclass(name = "EvaluationConfig", frozen, skip_from_py_object)]
 #[derive(Clone, Copy)]
 pub(crate) struct PyEvaluationConfig {
     pub(crate) inner: EvaluationConfig,

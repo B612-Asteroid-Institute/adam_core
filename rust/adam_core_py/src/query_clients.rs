@@ -844,8 +844,8 @@ fn query_neocc_arrow<'py>(
     orbit_epoch: &str,
     recorded_responses: Option<Vec<String>>,
     include_nongrav: bool,
-) -> PyResult<(PyObject, Vec<String>)> {
-    let (output, warnings) = py.allow_threads(|| {
+) -> PyResult<(Bound<'py, PyAny>, Vec<String>)> {
+    let (output, warnings) = py.detach(|| {
         neocc_orbits(
             &object_ids,
             orbit_type,
@@ -1055,8 +1055,8 @@ fn query_scout_observations_arrow<'py>(
     timeout_s: f64,
     max_attempts: usize,
     retry_delay_s: f64,
-) -> PyResult<PyObject> {
-    let batch = py.allow_threads(|| {
+) -> PyResult<Bound<'py, PyAny>> {
+    let batch = py.detach(|| {
         scout_observations_batch(
             &object_ids,
             timeout_s,
@@ -1078,7 +1078,7 @@ fn get_scout_objects_arrow<'py>(
     timeout_s: f64,
     max_attempts: usize,
     retry_delay_s: f64,
-) -> PyResult<PyObject> {
+) -> PyResult<Bound<'py, PyAny>> {
     let payload = match recorded_response {
         Some(payload) => payload,
         None => {
@@ -1130,7 +1130,7 @@ fn scout_orbits_to_variants_arrow<'py>(
     py: Python<'py>,
     object_id: &str,
     scout_batch: &Bound<'py, PyAny>,
-) -> PyResult<PyObject> {
+) -> PyResult<Bound<'py, PyAny>> {
     let batch = RecordBatch::from_pyarrow_bound(scout_batch)
         .map_err(|err| value_error(format!("invalid ScoutOrbit batch: {err}")))?;
     let names: Vec<String> = batch
@@ -1177,8 +1177,8 @@ fn query_scout_arrow<'py>(
     timeout_s: f64,
     max_attempts: usize,
     retry_delay_s: f64,
-) -> PyResult<PyObject> {
-    let output = py.allow_threads(|| {
+) -> PyResult<Bound<'py, PyAny>> {
+    let output = py.detach(|| {
         scout_variants(
             &object_ids,
             timeout_s,
@@ -1454,8 +1454,8 @@ fn query_sbdb_arrow<'py>(
     allow_missing: bool,
     orbit_id_from_input: bool,
     recorded_responses: Option<Vec<String>>,
-) -> PyResult<(PyObject, Vec<String>)> {
-    let (output, warnings) = py.allow_threads(|| {
+) -> PyResult<(Bound<'py, PyAny>, Vec<String>)> {
+    let (output, warnings) = py.detach(|| {
         sbdb_orbits(
             &ids,
             physical_parameters,

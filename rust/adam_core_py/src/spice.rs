@@ -412,7 +412,7 @@ impl PyAdamCoreSpiceBackend {
         py: Python<'py>,
         batch: &Bound<'py, PyAny>,
         time_scale: &str,
-    ) -> PyResult<PyObject> {
+    ) -> PyResult<Bound<'py, PyAny>> {
         let record_batch = RecordBatch::from_pyarrow_bound(batch)
             .map_err(|err| PyValueError::new_err(format!("invalid pyarrow RecordBatch: {err}")))?;
         let scale =
@@ -481,7 +481,7 @@ impl PyAdamCoreSpiceBackend {
         time_scale: &str,
         frame: &str,
         origin_code: &str,
-    ) -> PyResult<PyObject> {
+    ) -> PyResult<Bound<'py, PyAny>> {
         let record_batch = RecordBatch::from_pyarrow_bound(batch)
             .map_err(|err| PyValueError::new_err(format!("invalid pyarrow RecordBatch: {err}")))?;
         let scale =
@@ -569,7 +569,7 @@ impl PyAdamCoreSpiceBackend {
         origin_code: &str,
         frame: &str,
         cache_maxsize: usize,
-    ) -> PyResult<PyObject> {
+    ) -> PyResult<Bound<'py, PyAny>> {
         let record_batch = RecordBatch::from_pyarrow_bound(batch)
             .map_err(|err| PyValueError::new_err(format!("invalid pyarrow RecordBatch: {err}")))?;
         let (days, nanos) = read_days_nanos(&record_batch)?;
@@ -674,7 +674,7 @@ impl PyAdamCoreSpiceBackend {
         body_id: i32,
         origin_code: &str,
         frame: &str,
-    ) -> PyResult<PyObject> {
+    ) -> PyResult<Bound<'py, PyAny>> {
         let record_batch = RecordBatch::from_pyarrow_bound(batch)
             .map_err(|err| PyValueError::new_err(format!("invalid pyarrow RecordBatch: {err}")))?;
         let (days, nanos) = read_days_nanos(&record_batch)?;
@@ -1474,7 +1474,7 @@ fn prepare_major_body_orbits_arrow<'py>(
     target_id: i32,
     origin_id: i32,
     origin_code: &str,
-) -> PyResult<PyObject> {
+) -> PyResult<Bound<'py, PyAny>> {
     let backend = global_backend()
         .read()
         .map_err(|_| PyRuntimeError::new_err("SPICE backend lock is poisoned"))?;
