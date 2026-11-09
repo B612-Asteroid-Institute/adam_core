@@ -17,18 +17,17 @@ use crate::od_config::{
     PyEvaluationConfig, PyIodRunConfig, PyIodStageConfig, PyOdConfig, PyRefinementRunConfig,
 };
 use crate::od_support::od_error;
-use adam_core::od::algorithms::{
-    canonical_stage_settings, external_provider_metadata, two_body_provider_metadata,
-    ErfaTimeProvider, GlobalSpiceTranslation as LockingSpiceTranslation,
+use adam_core::od::python_bindings::{
+    self as canonical_bindings, canonical_stage_settings, two_body_provider_metadata,
+    ErfaTimeProvider, GlobalSpiceTranslation as LockingSpiceTranslation, ProviderSource,
 };
-use adam_core::od::python_bindings::{self as canonical_bindings, ProviderSource};
 use adam_core::od::{
     AssociatedObservations, AstrometryColumns, FittedOrbitMembersBatch, MemberedOrbits,
     OdBatchError, OdBatchResult, OdObservationBatch, OdPropagator, OdProvenance, OdRoute,
     ProviderMetadata, PythonGroupView,
 };
 use adam_core_rs_coords::od::algorithms::{
-    prepare_observations, refine_with_predictor, run_od_with_predictors, PreparedObservations,
+    prepare_observations, refine_prepared_orbit, solve_prepared_iod, PreparedObservations,
 };
 use adam_core_rs_coords::propagation::adapter::{
     cmc2003_fit_with, fit_orbit_whitened_with, iterative_fit_with, refine_with, run_iod_with,
@@ -419,7 +418,9 @@ fn native_provider_metadata<'py>(
     let settings = parse_fit_settings(fit_settings)?;
     let source = propagator.map(PySource::new).transpose()?;
     let metadata = match &source {
-        Some(source) => external_provider_metadata(&source.propagator).map_err(batch_error)?,
+        Some(source) => {
+            ProviderMetadata::from_external_propagator(&source.propagator).map_err(batch_error)?
+        }
         None => two_body_provider_metadata(&settings.propagator),
     };
     provider_metadata_dict(py, &metadata)
@@ -465,7 +466,9 @@ fn run_with_predictor<R: Send, E: DriverError>(
 ) -> PyResult<(R, ProviderMetadata)> {
     let source = propagator.map(PySource::new).transpose()?;
     let metadata = match &source {
-        Some(source) => external_provider_metadata(&source.propagator).map_err(batch_error)?,
+        Some(source) => {
+            ProviderMetadata::from_external_propagator(&source.propagator).map_err(batch_error)?
+        }
         None => two_body_provider_metadata(&settings.propagator),
     };
     let output = py
@@ -2080,7 +2083,7 @@ fn run_native_od_benchmark_once(
 ) -> PropagationResultValue<NativeOdBenchmarkResult> {
     match operation {
         NativeOdBenchmarkOperation::Refine => {
-            let refined = refine_with_predictor(
+            let refined = refine_prepared_orbit(
                 predictor,
                 orbit,
                 prepared,
@@ -2100,26 +2103,41 @@ fn run_native_od_benchmark_once(
             })
         }
         NativeOdBenchmarkOperation::RunOd => {
-            let output = run_od_with_predictors(
-                predictor,
-                predictor,
+            // This benchmark deliberately times the same focused kernels used by
+            // canonical run_od without exporting a second full-workflow API.
+            let prepared = prepare_observations(
                 &problem.observed,
-                &problem.observers,
                 obs_code,
                 band,
                 astcat,
-                config,
+                config.observation_pipeline(),
+                &ErfaTimeProvider,
+            )?;
+            let iod = solve_prepared_iod(
+                predictor,
+                &prepared,
+                &problem.observers,
+                config.iod_stage(),
                 &ErfaTimeProvider,
                 &LockingSpiceTranslation,
             )?;
-            let iod_found = output.iod.found();
-            let triplets_tried = output.iod.triplets_tried;
-            let candidates_evaluated = output.iod.candidates_evaluated;
-            let refined = output.refined.ok_or_else(|| {
+            let iod_found = iod.found();
+            let triplets_tried = iod.triplets_tried;
+            let candidates_evaluated = iod.candidates_evaluated;
+            let seed = iod.seed_orbit()?.ok_or_else(|| {
                 adam_core_rs_coords::propagation::PropagationError::InvalidRequest(
-                    "benchmark run_od workload did not produce a refined orbit".to_string(),
+                    "benchmark run_od workload did not produce an IOD seed".to_string(),
                 )
             })?;
+            let refined = refine_prepared_orbit(
+                predictor,
+                &seed,
+                &prepared,
+                &problem.observers,
+                &config.for_refinement(),
+                &ErfaTimeProvider,
+                &LockingSpiceTranslation,
+            )?;
             Ok(NativeOdBenchmarkResult {
                 fit: refined.fit,
                 iod_found: Some(iod_found),

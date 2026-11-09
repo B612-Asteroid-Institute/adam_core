@@ -70,10 +70,10 @@ pub use od_refine::{
 };
 pub use pipeline::{OrbitRow, PropagationResult};
 
-/// Predictor-level focused OD kernels over the narrow [`od::SphericalPredictor`]
-/// interface. Canonical configured composition lives under
-/// `crate::od::algorithms`; these focused kernels are not alternate public
-/// batch orchestration.
+/// Low-level predictor adapters over the narrow [`od::SphericalPredictor`]
+/// interface. The deliberate advanced prepared-observation API lives under
+/// `crate::od::algorithms`; complete canonical workflows live in `adam_core`.
+/// These adapter kernels are not alternate batch orchestration.
 pub mod adapter {
     pub use super::od::{run_iod, PropagatorPredictor, SphericalPredictor};
     pub use super::od_ranging::systematic_ranging_with;

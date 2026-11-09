@@ -11,7 +11,7 @@ use std::collections::{HashMap, VecDeque};
 use std::fs::File;
 use std::io::{self, Read};
 use std::path::Path;
-use std::sync::{Mutex, OnceLock};
+use std::sync::{Mutex, OnceLock, RwLock, TryLockError};
 
 use adam_core_rs_coords::types::{
     CoordinateBatch, Epoch, Frame, OriginArray, OriginId, SchemaError, SchemaResult, TimeArray,
@@ -38,6 +38,8 @@ pub use spicekit::spk_writer::{
 };
 pub use spicekit::{NaifFrame, PckError, PckFile, SpkError, SpkFile};
 
+// `resolve_chunked` is this crate's only kernel-pool Rayon entry point. Keep
+// nested-pool detection there so SPK/PCK batch evaluation has one policy.
 use rayon::prelude::*;
 
 const ITRF93_FRAME_CODE: i32 = 3000;
@@ -107,6 +109,20 @@ impl SpiceBackendError {
     }
 }
 
+/// Failure from fail-fast initialization of the process-global kernel set.
+#[doc(hidden)]
+#[derive(Debug, Error)]
+pub enum GlobalKernelInitializationError {
+    #[error(
+        "adam-core SPICE backend is busy; kernel mutation is allowed only during initialization"
+    )]
+    Busy,
+    #[error("adam-core SPICE backend lock is poisoned")]
+    Poisoned,
+    #[error(transparent)]
+    Backend(#[from] SpiceBackendError),
+}
+
 enum Kernel {
     /// An SPK or a binary PCK. Its reader lives in the backend's pool.
     Binary { path: String },
@@ -135,7 +151,9 @@ pub struct AdamCoreSpiceBackend {
     pool: KernelPool,
     custom_names: HashMap<String, i32>,
     obscodes: HashMap<String, GroundObserverSite>,
-    spkez_state_cache: SpkezStateCache,
+    spkez_state_cache: Mutex<SpkezStateCache>,
+    #[cfg(test)]
+    probe_spkez_cache_lock_scope: bool,
 }
 
 /// Key of the fused perturber-state epoch cache: the Rust mirror of the
@@ -198,14 +216,67 @@ impl SpkezStateCache {
 /// `spice_backend.py` / `PyAdamCoreSpiceBackend` and every Rust-native
 /// consumer (coordinate transforms, ephemeris, observers, OD) share this one
 /// backend, so kernel-load bookkeeping can never desync from what is actually
-/// loaded (the root cause behind personal-cmy.23). The backend holds only
-/// memory-mapped/parsed readers, which are inherited read-only across a Ray
-/// fork, so no per-PID rebuild is required.
-static GLOBAL_BACKEND: OnceLock<Mutex<AdamCoreSpiceBackend>> = OnceLock::new();
+/// loaded (the root cause behind personal-cmy.23). Furnish the process kernel
+/// set during initialization before concurrent computation. Scientific callers
+/// take shared read guards; canonical OD holds one read guard per non-empty
+/// invocation and shares direct immutable access with its workers. Kernel-set
+/// mutation requires an exclusive write guard and is unsupported concurrently
+/// with scientific work. The backend holds only memory-mapped/parsed readers,
+/// which are inherited read-only across a Ray fork, so no per-PID rebuild is
+/// required.
+static GLOBAL_BACKEND: OnceLock<RwLock<AdamCoreSpiceBackend>> = OnceLock::new();
 
 /// Return the process-global SPICE backend, initializing it empty on first use.
-pub fn global_backend() -> &'static Mutex<AdamCoreSpiceBackend> {
-    GLOBAL_BACKEND.get_or_init(|| Mutex::new(AdamCoreSpiceBackend::new()))
+///
+/// This intentionally exposes reader/writer ownership: use [`RwLock::read`] for
+/// scientific queries and [`RwLock::write`] only during initialization, before
+/// concurrent work starts. Blocking on [`RwLock::write`] during in-flight or
+/// re-entrant scientific work is unsupported and may deadlock. Runtime kernel
+/// mutation attempts must use [`RwLock::try_write`] and fail rather than queue
+/// behind readers.
+pub fn global_backend() -> &'static RwLock<AdamCoreSpiceBackend> {
+    GLOBAL_BACKEND.get_or_init(|| RwLock::new(AdamCoreSpiceBackend::new()))
+}
+
+fn all_kernel_paths_registered<P: AsRef<Path>>(
+    backend: &AdamCoreSpiceBackend,
+    paths: &[P],
+) -> bool {
+    paths
+        .iter()
+        .all(|path| backend.is_registered(&path.as_ref().display().to_string()))
+}
+
+/// Initialize exact paths in the process-global backend without blocking an
+/// active scientific reader.
+///
+/// If every exact path is already registered, this is a shared-read no-op.
+/// A genuinely missing path proceeds through `try_write`; another initializer
+/// may win that transition, so the complete set is checked again under the
+/// exclusive guard before parsing or mutation.
+#[doc(hidden)]
+pub fn try_initialize_global_kernels<P: AsRef<Path>>(
+    paths: &[P],
+) -> Result<(), GlobalKernelInitializationError> {
+    {
+        let backend = global_backend()
+            .read()
+            .map_err(|_| GlobalKernelInitializationError::Poisoned)?;
+        if all_kernel_paths_registered(&backend, paths) {
+            return Ok(());
+        }
+    }
+
+    let mut backend = match global_backend().try_write() {
+        Ok(backend) => backend,
+        Err(TryLockError::WouldBlock) => return Err(GlobalKernelInitializationError::Busy),
+        Err(TryLockError::Poisoned(_)) => return Err(GlobalKernelInitializationError::Poisoned),
+    };
+    if all_kernel_paths_registered(&backend, paths) {
+        return Ok(());
+    }
+    backend.initialize_kernels(paths)?;
+    Ok(())
 }
 
 /// Earth-fixed observer described by MPC observatory parallax coefficients.
@@ -303,21 +374,30 @@ impl AdamCoreSpiceBackend {
             pool: KernelPool::new(),
             custom_names: HashMap::new(),
             obscodes: HashMap::new(),
-            spkez_state_cache: SpkezStateCache::default(),
+            spkez_state_cache: Mutex::new(SpkezStateCache::default()),
+            #[cfg(test)]
+            probe_spkez_cache_lock_scope: false,
         }
     }
 
     /// Clear the fused perturber-state epoch cache (semantic result cache;
     /// cleared by `adam_core.utils.spice.clear_spkez_cache` and before every
     /// native benchmark sample per the cache policy).
-    pub fn clear_spkez_state_cache(&mut self) {
-        self.spkez_state_cache.clear();
+    pub fn clear_spkez_state_cache(&self) {
+        self.spkez_state_cache
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .clear();
     }
 
     /// Number of entries in the fused perturber-state epoch cache
     /// (diagnostics/tests).
     pub fn spkez_state_cache_len(&self) -> usize {
-        self.spkez_state_cache.map.len()
+        self.spkez_state_cache
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .map
+            .len()
     }
 
     /// Fused legacy `get_perturber_state` core: dedup rows by integer TDB
@@ -329,7 +409,7 @@ impl AdamCoreSpiceBackend {
     /// forward and negated reverse cache entries, and gather to input row
     /// order. Returns flat `N * 6` states.
     pub fn perturber_states_cached(
-        &mut self,
+        &self,
         target: i32,
         observer: i32,
         frame: &str,
@@ -350,6 +430,13 @@ impl AdamCoreSpiceBackend {
             inverse.push(slot);
         }
 
+        // Cache mutation is isolated from the immutable kernel registry and
+        // pool. Concurrent scientific readers therefore share the outer
+        // backend RwLock and serialize only this small semantic cache.
+        let mut cache = self
+            .spkez_state_cache
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
         let mut states: Vec<[f64; 6]> = vec![[0.0; 6]; unique.len()];
         let mut missing: Vec<usize> = Vec::new();
         for (slot, &(epoch_days, epoch_nanos)) in unique.iter().enumerate() {
@@ -360,7 +447,7 @@ impl AdamCoreSpiceBackend {
                 days: epoch_days,
                 nanos: epoch_nanos,
             };
-            if let Some(state) = self.spkez_state_cache.get(&forward) {
+            if let Some(state) = cache.get(&forward) {
                 states[slot] = state;
                 continue;
             }
@@ -371,18 +458,33 @@ impl AdamCoreSpiceBackend {
                 days: epoch_days,
                 nanos: epoch_nanos,
             };
-            if let Some(state) = self.spkez_state_cache.get(&reverse) {
+            if let Some(state) = cache.get(&reverse) {
                 let negated = [
                     -state[0], -state[1], -state[2], -state[3], -state[4], -state[5],
                 ];
                 states[slot] = negated;
-                self.spkez_state_cache.put(forward, negated, cache_maxsize);
+                cache.put(forward, negated, cache_maxsize);
                 continue;
             }
             missing.push(slot);
         }
+        drop(cache);
 
         if !missing.is_empty() {
+            // This immediate, non-blocking test probe guards the lock boundary:
+            // no cache guard may cross into SPK resolution, whose large batches
+            // enter Rayon below.
+            #[cfg(test)]
+            if self.probe_spkez_cache_lock_scope {
+                match self.spkez_state_cache.try_lock() {
+                    Ok(probe) => drop(probe),
+                    Err(std::sync::TryLockError::Poisoned(error)) => drop(error.into_inner()),
+                    Err(std::sync::TryLockError::WouldBlock) => {
+                        panic!("SPKEZ cache mutex is held across SPK batch resolution")
+                    }
+                }
+            }
+
             let miss_times = TimeArray::from_parts(
                 TimeScale::Tdb,
                 missing.iter().map(|&slot| unique[slot].0).collect(),
@@ -390,6 +492,10 @@ impl AdamCoreSpiceBackend {
             )?;
             let ets = miss_times.tdb_et_seconds()?;
             let flat = self.spkez_batch(target, observer, frame, &ets)?;
+            let mut cache = self
+                .spkez_state_cache
+                .lock()
+                .unwrap_or_else(|error| error.into_inner());
             // Legacy `batched / scale` conversion vector.
             let unit = [
                 KM_PER_AU,
@@ -406,7 +512,7 @@ impl AdamCoreSpiceBackend {
                 }
                 states[slot] = state;
                 let (epoch_days, epoch_nanos) = unique[slot];
-                self.spkez_state_cache.put(
+                cache.put(
                     SpkezStateKey {
                         target,
                         observer,
@@ -417,7 +523,7 @@ impl AdamCoreSpiceBackend {
                     state,
                     cache_maxsize,
                 );
-                self.spkez_state_cache.put(
+                cache.put(
                     SpkezStateKey {
                         target: observer,
                         observer: target,
@@ -1451,14 +1557,19 @@ impl AdamCoreSpiceBackend {
     }
 }
 
-/// Run `evaluate` over `ets`, serially below the spawn-tax threshold and in
-/// chunks on Rayon above it.
+/// Run `evaluate` over `ets`, serially below the spawn-tax threshold or when
+/// already inside Rayon, and in chunks on Rayon only for a top-level call.
+///
+/// A caller may hold a non-reentrant lock across this query. Entering nested
+/// Rayon could then execute unrelated work that needs that caller-owned lock.
+/// Keeping the nested slice serial avoids that re-entry while retaining chunks
+/// for ordinary top-level batch queries.
 fn resolve_chunked<T, F>(ets: &[f64], evaluate: F) -> Result<Vec<T>, PoolError>
 where
     T: Send,
     F: Fn(&[f64]) -> Result<Vec<T>, PoolError> + Sync,
 {
-    if ets.len() < RAYON_SERIAL_THRESHOLD_EPOCHS {
+    if ets.len() < RAYON_SERIAL_THRESHOLD_EPOCHS || rayon::current_thread_index().is_some() {
         return evaluate(ets);
     }
     let chunks: Vec<Vec<T>> = ets
@@ -1885,11 +1996,79 @@ fn add_state(state: &mut [f64; 6], delta: &[f64; 6]) {
 #[cfg(test)]
 mod tests {
     use std::io::Write;
+    use std::sync::Mutex;
 
     use adam_core_rs_coords::types::{CoordinateValues, Epoch};
     use tempfile::{tempdir, NamedTempFile};
 
     use super::*;
+
+    #[test]
+    fn resolve_chunked_stays_serial_when_nested_and_chunks_top_level_calls() {
+        let epochs = (0..RAYON_SERIAL_THRESHOLD_EPOCHS)
+            .map(|epoch| epoch as f64)
+            .collect::<Vec<_>>();
+
+        let nested_calls = Mutex::new(Vec::new());
+        let nested = rayon::ThreadPoolBuilder::new()
+            .num_threads(4)
+            .build()
+            .expect("nested test pool")
+            .install(|| {
+                assert!(rayon::current_thread_index().is_some());
+                resolve_chunked(&epochs, |chunk| {
+                    nested_calls
+                        .lock()
+                        .expect("nested call log")
+                        .push((rayon::current_thread_index(), chunk.len()));
+                    Ok(chunk.to_vec())
+                })
+            })
+            .expect("nested resolution");
+        assert_eq!(
+            nested
+                .iter()
+                .map(|value| value.to_bits())
+                .collect::<Vec<_>>(),
+            epochs
+                .iter()
+                .map(|value| value.to_bits())
+                .collect::<Vec<_>>(),
+        );
+        let nested_calls = nested_calls.into_inner().expect("nested call log");
+        assert_eq!(nested_calls.len(), 1);
+        assert!(nested_calls[0].0.is_some());
+        assert_eq!(nested_calls[0].1, RAYON_SERIAL_THRESHOLD_EPOCHS);
+
+        let top_level_epochs = epochs.clone();
+        let (top_level, mut chunk_lengths) = std::thread::spawn(move || {
+            assert!(rayon::current_thread_index().is_none());
+            let calls = Mutex::new(Vec::new());
+            let resolved = resolve_chunked(&top_level_epochs, |chunk| {
+                calls.lock().expect("top-level call log").push(chunk.len());
+                Ok(chunk.to_vec())
+            })
+            .expect("top-level resolution");
+            (resolved, calls.into_inner().expect("top-level call log"))
+        })
+        .join()
+        .expect("top-level caller");
+        chunk_lengths.sort_unstable();
+        assert_eq!(
+            top_level
+                .iter()
+                .map(|value| value.to_bits())
+                .collect::<Vec<_>>(),
+            epochs
+                .iter()
+                .map(|value| value.to_bits())
+                .collect::<Vec<_>>(),
+        );
+        assert_eq!(
+            chunk_lengths,
+            vec![RESOLVE_CHUNK_EPOCHS; RAYON_SERIAL_THRESHOLD_EPOCHS / RESOLVE_CHUNK_EPOCHS]
+        );
+    }
 
     #[test]
     fn builtin_body_lookup_works() {
@@ -2149,6 +2328,38 @@ mod tests {
     }
 
     #[test]
+    fn global_initializer_is_idempotent_while_read_guard_is_held() {
+        let mut lsk_file = NamedTempFile::new().unwrap();
+        write!(lsk_file, "{SAMPLE_LSK}").unwrap();
+        lsk_file.flush().unwrap();
+        let path = lsk_file.path().display().to_string();
+        let mut missing_lsk = NamedTempFile::new().unwrap();
+        write!(missing_lsk, "{SAMPLE_LSK}").unwrap();
+        missing_lsk.flush().unwrap();
+        let missing_path = missing_lsk.path().display().to_string();
+
+        try_initialize_global_kernels(std::slice::from_ref(&path)).unwrap();
+
+        let read_guard = global_backend().read().expect("canonical read guard");
+        try_initialize_global_kernels(std::slice::from_ref(&path))
+            .expect("idempotent batch initialization under a reader");
+        try_initialize_global_kernels(std::slice::from_ref(&path))
+            .expect("idempotent single-path furnishing under a reader");
+        assert!(read_guard.is_registered(&path));
+
+        let error = try_initialize_global_kernels(std::slice::from_ref(&missing_path))
+            .expect_err("a real mutation must fail fast while the reader is held");
+        assert!(matches!(error, GlobalKernelInitializationError::Busy));
+        assert!(!read_guard.is_registered(&missing_path));
+        drop(read_guard);
+
+        global_backend()
+            .write()
+            .expect("cleanup write guard")
+            .unload(&path);
+    }
+
+    #[test]
     fn initialize_kernels_owns_batch_deduplication() {
         let mut lsk_file = NamedTempFile::new().unwrap();
         write!(lsk_file, "{SAMPLE_LSK}").unwrap();
@@ -2272,6 +2483,31 @@ mod tests {
             .unwrap();
         assert_eq!(sx[0][0][0], 1.0);
         assert_eq!(sx[0][3][3], 1.0);
+    }
+
+    #[test]
+    fn perturber_cache_releases_mutex_before_parallel_spkez_batch() {
+        let (_dir, path) = write_test_spk();
+        let mut backend = AdamCoreSpiceBackend::new();
+        backend.furnsh(path).unwrap();
+        backend.probe_spkez_cache_lock_scope = true;
+
+        // Exactly the top-level parallel threshold, with unique in-coverage
+        // epochs, forces the cache-miss path into resolve_chunked's Rayon
+        // branch. The non-blocking probe immediately before spkez_batch above
+        // fails instead of hanging if the cache mutex is still held.
+        assert!(rayon::current_thread_index().is_none());
+        let rows = RAYON_SERIAL_THRESHOLD_EPOCHS;
+        let days = vec![51_544; rows];
+        let nanos = (0..rows)
+            .map(|row| 43_200_000_000_000 + row as i64 * 1_000_000)
+            .collect::<Vec<_>>();
+        let states = backend
+            .perturber_states_cached(42, 0, "J2000", &days, &nanos, rows * 2)
+            .expect("parallel cache-miss resolution");
+
+        assert_eq!(states.len(), rows * 6);
+        assert_eq!(backend.spkez_state_cache_len(), rows * 2);
     }
 
     #[test]

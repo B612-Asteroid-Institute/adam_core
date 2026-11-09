@@ -472,7 +472,7 @@ fn time_array(days: &[i64], nanos: &[i64], scale: &str) -> PyResult<TimeArray> {
 fn session_ids(codes: &[String], utc: &TimeArray) -> PyResult<Vec<String>> {
     let (longitude, cos_phi, sin_phi) = {
         let backend = global_backend()
-            .lock()
+            .read()
             .map_err(|_| PyRuntimeError::new_err("adam-core SPICE backend lock is poisoned"))?;
         let mut longitude = Vec::with_capacity(codes.len());
         let mut cos_phi = Vec::with_capacity(codes.len());

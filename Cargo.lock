@@ -11,6 +11,7 @@ dependencies = [
  "adam_core_rs_kernel_data",
  "adam_core_rs_orbit_determination",
  "adam_core_rs_spice",
+ "rayon",
  "serde_json",
  "sha2",
 ]

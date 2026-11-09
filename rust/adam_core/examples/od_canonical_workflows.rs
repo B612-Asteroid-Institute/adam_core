@@ -55,8 +55,8 @@ impl FurnishedKernel {
             .expect("valid zero-Sun segment");
         writer.write(&path).expect("write temporary SPK");
         global_backend()
-            .lock()
-            .expect("SPICE backend lock")
+            .write()
+            .expect("SPICE backend write lock")
             .furnsh(&path)
             .expect("furnish temporary SPK");
         Self(path)
@@ -65,7 +65,7 @@ impl FurnishedKernel {
 
 impl Drop for FurnishedKernel {
     fn drop(&mut self) {
-        if let Ok(mut backend) = global_backend().lock() {
+        if let Ok(mut backend) = global_backend().write() {
             backend.unload(&self.0);
         }
         let _ = std::fs::remove_file(&self.0);

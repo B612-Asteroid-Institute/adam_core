@@ -178,15 +178,29 @@ Current Migrated APIs
     pipeline, and owns numerical loops. There are no model callback/native-spec
     dictionaries.
   - Rust configuration types live under ``adam_core_rs_coords::od``; profiles
-    live under ``od::profiles``. Implemented focused Rust composition functions
-    under ``od::algorithms`` are ``prepare_observations``,
-    ``run_iod_with_predictor``, ``refine_with_predictor``, and
-    ``run_od_with_predictors``. The last applies the pipeline once and gives
-    both stages the same prepared coordinates.
+    live under ``od::profiles``. The advanced one-group numerical API under
+    ``adam_core::od::algorithms`` contains ``prepare_observations``,
+    ``solve_prepared_iod``, and ``refine_prepared_orbit``. These functions are
+    intended for custom native Rust predictors and focused numerical research.
+    They do not perform association/member grouping, resource binding or
+    preflight, provider identity/provenance, cross-group continuation, typed
+    failure-envelope assembly, or canonical output disposition. There is no
+    predictor-level full-OD composition: use canonical ``run_od`` whenever
+    those workflow guarantees are required. Advanced callers provide a
+    ``TimeScaleProvider`` and ``OriginTranslationProvider``: delegating time
+    rescaling to ``TimeArray::rescale`` matches Core's ERFA conversion, while
+    shared SPICE translation uses an initialized
+    ``adam_core::spice::global_backend().read()`` guard passed directly as the
+    provider. Kernel mutation is excluded while that guard is held.
+  - ``ProviderMetadata::from_external_propagator`` validates an already-adopted
+    ABI-v2 backend's identity, capabilities and provenance fingerprints without
+    calling propagation, executing an OD workflow, or performing that workflow's
+    preflight. Canonical
+    results expose identities actually used through ``OdBatchResult::providers()``.
   - External native propagators expose the propagation-only
     ``adam_core.propagator.v2`` capsule. Capsule adoption validates its ABI,
-    identity fields, and capabilities. The current predictor-level composition
-    accepts an already-adopted predictor and does not itself sequence global
+    identity fields, and capabilities. The advanced numerical kernels accept an
+    already-adopted predictor and do not themselves sequence global
     provider/resource/ID preflight. Providers never select transforms, profiles,
     grouping, fitting, rejection, covariance, or OD algorithms.
   - The canonical batch layer rejects invalid IDs/member mappings and

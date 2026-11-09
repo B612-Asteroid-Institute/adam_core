@@ -18,6 +18,21 @@ fn canonical_workflow_signatures_do_not_drift() {
     let _: fn(&MemberedOrbits, &EvaluationConfig, &OdPropagator<'_>) -> Batch =
         adam_core::od::evaluate_orbits;
     let _ = OdPropagator::two_body();
+    let _: fn(
+        &adam_core::coords::propagation::ExternalPropagator,
+    ) -> Result<ProviderMetadata, OdBatchError> = ProviderMetadata::from_external_propagator;
+}
+
+#[allow(dead_code)]
+fn advanced_algorithm_exports_are_deliberate() {
+    use adam_core::od::algorithms::{
+        prepare_observations, refine_prepared_orbit, solve_prepared_iod, PreparedObservations,
+    };
+
+    let _ = prepare_observations;
+    let _ = solve_prepared_iod::<adam_core::spice::AdamCoreSpiceBackend>;
+    let _ = refine_prepared_orbit::<adam_core::spice::AdamCoreSpiceBackend>;
+    let _: Option<PreparedObservations> = None;
 }
 
 #[allow(dead_code)]
@@ -107,6 +122,103 @@ fn canonical_workflows_keep_meaningful_rustdoc_and_examples() {
             );
         }
     }
+}
+
+#[test]
+fn advanced_algorithms_are_focused_and_have_no_full_workflow_export() {
+    let core = include_str!("../src/od.rs");
+    let coords = include_str!("../../adam_core_rs_coords/src/lib.rs");
+    let algorithms = include_str!("../../adam_core_rs_coords/src/od_algorithms.rs");
+    let core_algorithms = core
+        .split("pub mod algorithms {")
+        .nth(1)
+        .expect("public algorithms module")
+        .split("mod stage_support {")
+        .next()
+        .expect("advanced algorithms boundary");
+
+    for required in [
+        "prepare_observations",
+        "solve_prepared_iod",
+        "refine_prepared_orbit",
+        "PreparedObservations",
+    ] {
+        assert!(
+            core_algorithms.contains(required),
+            "missing advanced API export: {required}"
+        );
+    }
+    for required in [
+        "custom native Rust predictors",
+        "do not perform canonical grouping",
+    ] {
+        assert!(
+            core.contains(required),
+            "missing advanced API contract: {required}"
+        );
+    }
+    assert_eq!(core_algorithms.matches("pub use ").count(), 1);
+    assert_eq!(algorithms.matches("\npub fn ").count(), 3);
+    assert_eq!(algorithms.matches("\npub type ").count(), 1);
+    for internal in [
+        "canonical_stage_settings",
+        "ErfaTimeProvider",
+        "GlobalSpiceTranslation",
+        "two_body_provider_metadata",
+        "from_external_propagator",
+    ] {
+        assert!(
+            !core_algorithms.contains(internal),
+            "internal stage support remains in public algorithms: {internal}"
+        );
+    }
+    for removed in [
+        "run_iod_with_predictor",
+        "refine_with_predictor",
+        "run_od_with_predictors",
+        "ConfiguredRunOdOutput",
+        "external_provider_metadata",
+    ] {
+        assert!(
+            !core.contains(removed),
+            "obsolete Core OD export remains: {removed}"
+        );
+        assert!(
+            !coords.contains(removed),
+            "obsolete coords OD export remains: {removed}"
+        );
+        assert!(
+            !algorithms.contains(removed),
+            "obsolete algorithm item remains: {removed}"
+        );
+    }
+}
+
+#[test]
+fn external_provider_metadata_is_type_owned_and_metadata_only() {
+    let core = include_str!("../src/od.rs");
+    let signature = "pub fn from_external_propagator(";
+    let end = core.find(signature).expect("public metadata constructor");
+    let start = core[..end]
+        .rfind("/// Read and validate ABI-v2 identity")
+        .expect("metadata constructor Rustdoc");
+    let docs = &core[start..end];
+    for required in [
+        "without running OD",
+        "does not",
+        "call propagation",
+        "preflight",
+    ] {
+        assert!(
+            docs.contains(required),
+            "external metadata contract lacks {required}"
+        );
+    }
+    assert_eq!(
+        core.matches("pub fn from_external_propagator(").count(),
+        1,
+        "external metadata validation must have one public implementation"
+    );
 }
 
 #[test]

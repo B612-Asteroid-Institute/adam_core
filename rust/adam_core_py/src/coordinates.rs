@@ -1,4 +1,4 @@
-use adam_core::od::algorithms::ErfaTimeProvider;
+use adam_core::od::python_bindings::ErfaTimeProvider;
 use adam_core_rs_coords::local_frames::{
     local_frame_covariances, local_frame_jacobians, LocalFrame,
 };
@@ -2146,7 +2146,7 @@ fn generate_ephemeris_record_batch(
     let propagator = TwoBodyPropagator::new(TwoBodyPropagatorConfig { max_iter, tol })
         .map_err(|err| format!("invalid propagator config: {err}"))?;
     let backend = global_backend()
-        .lock()
+        .read()
         .map_err(|_| "SPICE backend lock is poisoned".to_string())?;
     let result = generate_ephemeris_barycentric(
         &propagator,
@@ -5043,7 +5043,7 @@ fn transform_coordinates_record_batch(
         .map(|covariance| covariance.values_row_major.as_slice());
 
     let backend = global_backend()
-        .lock()
+        .read()
         .map_err(|_| PyRuntimeError::new_err("SPICE backend lock is poisoned"))?;
     let output = backend
         .transform_coordinates(
@@ -5309,7 +5309,7 @@ fn departure_spherical_coordinates(
     let frame_in = parse_data_frame(frame)?;
     let frame_out = DataFrame::Equatorial;
     let backend = global_backend()
-        .lock()
+        .read()
         .map_err(|_| PyRuntimeError::new_err("SPICE backend lock is poisoned"))?;
     let output = backend
         .transform_coordinates(
@@ -5885,7 +5885,7 @@ fn perturber_moids_record_batch(
         .collect();
 
     let backend = global_backend()
-        .lock()
+        .read()
         .map_err(|_| "SPICE backend lock is poisoned".to_string())?;
     let (moids, dt_mins) = backend
         .calculate_perturber_moids(
@@ -6608,7 +6608,7 @@ fn calculate_perturber_moids_native<'py>(
         .map_err(|err| PyValueError::new_err(format!("invalid times: {err}")))?;
 
     let backend = global_backend()
-        .lock()
+        .read()
         .map_err(|_| PyRuntimeError::new_err("SPICE backend lock is poisoned"))?;
     let (moids, dt_mins) = backend
         .calculate_perturber_moids(

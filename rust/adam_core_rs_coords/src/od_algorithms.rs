@@ -1,9 +1,19 @@
-//! Focused Rust OD workflow composition over the closed [`crate::od`] config.
+//! Advanced, one-group numerical kernels used by canonical orbit determination.
 //!
-//! These predictor-level functions are building blocks for the forthcoming
-//! canonical batch surface. They are not a grouping or failure-envelope API.
+//! These functions support custom native Rust predictors and focused numerical
+//! research. They deliberately do **not** provide canonical workflow policy:
+//! no association/member grouping, resource binding or preflight, provider
+//! identity/provenance, typed cross-group continuation, failure envelopes, or
+//! batch output disposition. Applications that need those guarantees should
+//! call `adam_core::{run_iod, run_od, refine, evaluate_orbits}`.
+//!
+//! Time conversion and origin translation remain explicit caller-owned
+//! services. Delegating [`TimeScaleProvider::rescale`] to [`crate::TimeArray::rescale`]
+//! uses the built-in ERFA conversion. A shared SPICE implementation should be
+//! passed directly under its read guard rather than hidden behind another
+//! process-global locking adapter.
 
-use crate::od_config::{IodStageConfig, ObservationPipeline, OdConfig, RefinementRunConfig};
+use crate::od_config::{IodStageConfig, ObservationPipeline, RefinementRunConfig};
 use crate::propagation::adapter::{refine_with, run_iod_with, SphericalPredictor};
 use crate::propagation::{
     apply_configured_observation_pipeline, AppliedObservationModels, IodResult, RefinedOutput,
@@ -16,7 +26,13 @@ use crate::{CoordinateBatch, ObserverBatch, OrbitBatch, PropagationResultValue};
 /// the exact coordinate batch consumed by all subsequent stages.
 pub type PreparedObservations = AppliedObservationModels;
 
-/// Validate six-dimensional covariance, then apply the bound pipeline exactly once.
+/// Prepare one observation group for the focused IOD/refinement kernels.
+///
+/// This validates six-dimensional covariance and applies an already-bound
+/// [`ObservationPipeline`] exactly once, retaining both supplied and used
+/// astrometry. The caller owns resource binding, group construction, provider
+/// identity, provenance, and failure policy. Canonical batch callers should use
+/// `adam_core::run_iod` or `adam_core::run_od` instead.
 #[allow(clippy::too_many_arguments)]
 pub fn prepare_observations(
     observed: &CoordinateBatch,
@@ -33,8 +49,14 @@ pub fn prepare_observations(
     apply_configured_observation_pipeline(observed, obs_code, band, astcat, pipeline, provider)
 }
 
-/// Run one prepared group through IOD with an explicit predictor and stage config.
-pub fn run_iod_with_predictor<T: OriginTranslationProvider>(
+/// Solve IOD for one already-prepared observation group.
+///
+/// This is a focused numerical extension point for a custom native
+/// [`SphericalPredictor`]. It returns the complete [`IodResult`] for this one
+/// group, but does not perform canonical grouping, resource/provider preflight,
+/// provenance construction, typed continuation, or batch failure disposition.
+/// Use `adam_core::run_iod` for the canonical workflow.
+pub fn solve_prepared_iod<T: OriginTranslationProvider>(
     predictor: &dyn SphericalPredictor,
     prepared: &PreparedObservations,
     observers: &ObserverBatch,
@@ -53,8 +75,14 @@ pub fn run_iod_with_predictor<T: OriginTranslationProvider>(
     )
 }
 
-/// Refine one seed against the same persisted prepared observations.
-pub fn refine_with_predictor<T: OriginTranslationProvider>(
+/// Refine one seed against one already-prepared observation group.
+///
+/// This is the focused numerical counterpart to [`solve_prepared_iod`]. It
+/// consumes the same [`PreparedObservations`] without reapplying the observation
+/// pipeline and returns a [`RefinedOutput`] for the supplied seed. The caller
+/// owns canonical grouping, provider/resource preflight, provenance, and failure
+/// envelopes. Use `adam_core::refine` for the canonical workflow.
+pub fn refine_prepared_orbit<T: OriginTranslationProvider>(
     predictor: &dyn SphericalPredictor,
     seed: &OrbitBatch,
     prepared: &PreparedObservations,
@@ -74,72 +102,11 @@ pub fn refine_with_predictor<T: OriginTranslationProvider>(
     )
 }
 
-/// Predictor-level exact composition output retaining preparation and both stages.
-#[derive(Debug, Clone)]
-pub struct ConfiguredRunOdOutput {
-    /// Original/used astrometry and the exact coordinate batch consumed by both stages.
-    pub prepared: PreparedObservations,
-    /// Complete preliminary-orbit decision and diagnostics.
-    pub iod: IodResult,
-    /// Refinement output when IOD emitted an accepted seed.
-    pub refined: Option<RefinedOutput>,
-}
-
-/// Exact configured composition: prepare once, IOD, then refine the accepted
-/// IOD seed against the same prepared coordinates.
-#[allow(clippy::too_many_arguments)]
-pub fn run_od_with_predictors<T: OriginTranslationProvider>(
-    iod_predictor: &dyn SphericalPredictor,
-    refinement_predictor: &dyn SphericalPredictor,
-    observed: &CoordinateBatch,
-    observers: &ObserverBatch,
-    obs_code: &[String],
-    band: &[Option<String>],
-    astcat: &[Option<String>],
-    config: &OdConfig,
-    provider: &dyn TimeScaleProvider,
-    translation_provider: &T,
-) -> PropagationResultValue<ConfiguredRunOdOutput> {
-    let prepared = prepare_observations(
-        observed,
-        obs_code,
-        band,
-        astcat,
-        config.observation_pipeline(),
-        provider,
-    )?;
-    let iod = run_iod_with_predictor(
-        iod_predictor,
-        &prepared,
-        observers,
-        config.iod_stage(),
-        provider,
-        translation_provider,
-    )?;
-    let refined = match iod.seed_orbit()? {
-        Some(seed) => Some(refine_with_predictor(
-            refinement_predictor,
-            &seed,
-            &prepared,
-            observers,
-            &config.for_refinement(),
-            provider,
-            translation_provider,
-        )?),
-        None => None,
-    };
-    Ok(ConfiguredRunOdOutput {
-        prepared,
-        iod,
-        refined,
-    })
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::od_config::{
-        IodStageConfig, ObservationPipeline, ObservationTransform, RefinementRunConfig,
+        IodStageConfig, ObservationPipeline, ObservationTransform, OdConfig, RefinementRunConfig,
         ResourceBindings,
     };
     use crate::propagation::adapter::PropagatorPredictor;
@@ -365,54 +332,11 @@ mod tests {
         }
     }
 
-    fn assert_coordinate_value_bits(left: &CoordinateValues, right: &CoordinateValues) {
-        assert_eq!(left.raw_values().len(), right.raw_values().len());
-        for (left, right) in left.raw_values().iter().zip(right.raw_values()) {
-            assert_float_bits(left, right);
-        }
-    }
-
-    fn assert_prepared_bits(left: &PreparedObservations, right: &PreparedObservations) {
-        assert_coordinate_value_bits(&left.observations.values, &right.observations.values);
-        assert_float_bits(
-            &left
-                .observations
-                .covariance
-                .as_ref()
-                .unwrap()
-                .values_row_major,
-            &right
-                .observations
-                .covariance
-                .as_ref()
-                .unwrap()
-                .values_row_major,
-        );
-        assert_float_bits(&left.original.lon, &right.original.lon);
-        assert_float_bits(&left.original.lat, &right.original.lat);
-        assert_float_bits(&left.original.sigma_lon, &right.original.sigma_lon);
-        assert_float_bits(&left.original.sigma_lat, &right.original.sigma_lat);
-        assert_float_bits(&left.original.cov_lonlat, &right.original.cov_lonlat);
-        assert_float_bits(&left.used.lon, &right.used.lon);
-        assert_float_bits(&left.used.lat, &right.used.lat);
-        assert_float_bits(&left.used.sigma_lon, &right.used.sigma_lon);
-        assert_float_bits(&left.used.sigma_lat, &right.used.sigma_lat);
-        assert_float_bits(&left.used.cov_lonlat, &right.used.cov_lonlat);
-        assert_eq!(left.models_changed, right.models_changed);
-    }
-
     struct StageCountingPredictor<'a> {
         stage: &'static str,
         inner: &'a dyn SphericalPredictor,
         calls: std::cell::Cell<usize>,
         states: std::cell::Cell<usize>,
-    }
-
-    impl StageCountingPredictor<'_> {
-        fn reset(&self) {
-            self.calls.set(0);
-            self.states.set(0);
-        }
     }
 
     impl SphericalPredictor for StageCountingPredictor<'_> {
@@ -450,18 +374,9 @@ mod tests {
     }
 
     #[test]
-    fn complete_od_rejects_covariance_dimension_before_pipeline_interpretation() {
+    fn preparation_rejects_covariance_dimension_before_pipeline_interpretation() {
         let observed = unsupported_covariance_observations();
-        let observers = dense_observers();
         let (obs_code, band, astcat) = metadata();
-        let propagator = TwoBodyPropagator::default();
-        let options = ephemeris_options();
-        let predictor = PropagatorPredictor {
-            propagator: &propagator,
-            options: &options,
-            provider: &IdentityTimeProvider,
-            translation_provider: &ZeroTranslationProvider,
-        };
         let expected = PropagationError::InvalidRequest(
             "orbit determination observation covariance must have dimension 6, got 9".to_string(),
         );
@@ -479,21 +394,6 @@ mod tests {
             )
             .expect_err("preparation must reject 9D observation covariance");
             assert_eq!(prepare_error, expected);
-
-            let run_error = run_od_with_predictors(
-                &predictor,
-                &predictor,
-                &observed,
-                &observers,
-                &obs_code,
-                &band,
-                &astcat,
-                &config,
-                &IdentityTimeProvider,
-                &ZeroTranslationProvider,
-            )
-            .expect_err("complete OD must reject 9D observation covariance");
-            assert_eq!(run_error, expected);
         }
     }
 
@@ -566,7 +466,7 @@ mod tests {
     }
 
     #[test]
-    fn run_od_prepares_once_and_exactly_composes_isolated_stage_predictors() {
+    fn advanced_kernels_reuse_preparation_and_isolate_stage_predictors() {
         let observed = synthetic_observations();
         let observers = dense_observers();
         let (obs_code, band, astcat) = metadata();
@@ -601,7 +501,7 @@ mod tests {
             &IdentityTimeProvider,
         )
         .unwrap();
-        let iod = run_iod_with_predictor(
+        let iod = solve_prepared_iod(
             &iod_predictor,
             &prepared,
             &observers,
@@ -617,7 +517,7 @@ mod tests {
             .unwrap()
             .expect("configured IOD found a seed");
         let iod_evidence = (iod_predictor.calls.get(), iod_predictor.states.get());
-        let refined = refine_with_predictor(
+        let refined = refine_prepared_orbit(
             &refinement_predictor,
             &seed,
             &prepared,
@@ -639,41 +539,7 @@ mod tests {
         assert_eq!(iod_predictor.backend().name, "test.stage.iod");
         assert_eq!(refinement_predictor.backend().name, "test.stage.refinement");
 
-        iod_predictor.reset();
-        refinement_predictor.reset();
-        let composed = run_od_with_predictors(
-            &iod_predictor,
-            &refinement_predictor,
-            &observed,
-            &observers,
-            &obs_code,
-            &band,
-            &astcat,
-            &config,
-            &IdentityTimeProvider,
-            &ZeroTranslationProvider,
-        )
-        .unwrap();
-        let composed_refined = composed.refined.as_ref().expect("refinement ran");
-
-        assert!(composed_refined.fit.converged);
-        assert_prepared_bits(&composed.prepared, &prepared);
-        assert_eq!(composed.iod.accepted, iod.accepted);
-        assert_eq!(composed.iod.triplets_tried, iod.triplets_tried);
-        assert_eq!(composed.iod.candidates.len(), iod.candidates.len());
-        assert_eq!(
-            composed.iod.accepted_candidate().unwrap().corrected_state,
-            iod.accepted_candidate().unwrap().corrected_state
-        );
-        assert_float_bits(&composed_refined.fit.state, &refined.fit.state);
-        assert_float_bits(&composed_refined.fit.covariance, &refined.fit.covariance);
-        assert_float_bits(&composed_refined.fit.weights, &refined.fit.weights);
-        assert_eq!(
-            composed_refined.fit.evaluation.outlier,
-            refined.fit.evaluation.outlier
-        );
-        assert_eq!(composed_refined.n_rejected, refined.n_rejected);
-        assert_eq!(composed_refined.n_recovered, refined.n_recovered);
+        assert!(refined.fit.converged);
         assert_eq!(
             (iod_predictor.calls.get(), iod_predictor.states.get()),
             iod_evidence

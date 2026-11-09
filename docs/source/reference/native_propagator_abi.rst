@@ -256,7 +256,13 @@ Migration from backend-owned OD methods
 Provider packages should delete or deprecate Python and PyO3 methods such as
 ``fit_least_squares``, ``fit_least_squares_evaluated``, ``od_fit``,
 ``initial_orbit_determination``, ``run_iod_linkages`` and ``run_od_fit``.
-Core 0.7 accepts explicit typed configuration in its canonical batch and
-predictor-level algorithms and passes the provider only as the stage
-propagator. Providers must not publish backend-owned OD compatibility routes;
-there is no bridge package.
+Core accepts explicit typed configuration in its canonical batch workflows and
+focused ``od::algorithms`` numerical kernels, and passes the provider only as
+an input predictor/propagator. The focused kernels do not replace canonical
+batch grouping, preflight, provenance, continuation, or failure policy.
+Rust consumers that need pre-run metadata inspection use
+``ProviderMetadata::from_external_propagator``; it validates the adopted
+ABI-v2 identity, capabilities, and provenance fingerprints without calling
+propagation, executing an OD workflow, or performing that workflow's preflight.
+Providers must not
+publish backend-owned OD compatibility routes; there is no bridge package.
