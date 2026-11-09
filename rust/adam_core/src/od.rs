@@ -1563,6 +1563,8 @@ pub enum OdGroupFailureCode {
     NoSolution,
     /// A fit terminated without convergence.
     NotConverged,
+    /// CMC2003 could not obtain a validated fit covariance for this group.
+    CmcCovarianceUnavailable,
     /// More specific scientific fitting failure.
     Scientific(GroupScientificFailureCode),
 }
@@ -1573,6 +1575,7 @@ impl OdGroupFailureCode {
         match self {
             Self::NoSolution => "no_solution",
             Self::NotConverged => "not_converged",
+            Self::CmcCovarianceUnavailable => "cmc_covariance_unavailable",
             Self::Scientific(code) => code.as_str(),
         }
     }
@@ -1591,6 +1594,7 @@ impl std::str::FromStr for OdGroupFailureCode {
         match value {
             "no_solution" => Ok(Self::NoSolution),
             "not_converged" => Ok(Self::NotConverged),
+            "cmc_covariance_unavailable" => Ok(Self::CmcCovarianceUnavailable),
             "rank_deficient" => Ok(Self::Scientific(GroupScientificFailureCode::RankDeficient)),
             "no_included_observations" => Ok(Self::Scientific(
                 GroupScientificFailureCode::NoIncludedObservations,
@@ -2683,9 +2687,14 @@ fn provenance_consistency_digest(provenance: &OdProvenance) -> String {
     format!("{:x}", digest.finalize())
 }
 
-fn group_scientific_code(error: &PropagationError) -> Option<GroupScientificFailureCode> {
+fn group_failure_code(error: &PropagationError) -> Option<OdGroupFailureCode> {
     match error {
-        PropagationError::GroupScientific { code, .. } => Some(*code),
+        PropagationError::CmcCovarianceUnavailable(_) => {
+            Some(OdGroupFailureCode::CmcCovarianceUnavailable)
+        }
+        PropagationError::GroupScientific { code, .. } => {
+            Some(OdGroupFailureCode::Scientific(*code))
+        }
         _ => None,
     }
 }
@@ -2715,7 +2724,7 @@ fn iod_failure(group_id: &str, result: &IodResult, n: usize) -> Option<OrbitDete
     })
 }
 
-fn scientific_failure(
+fn group_local_failure(
     group_id: &str,
     orbit_id: Option<&str>,
     input_orbit_id: Option<&str>,
@@ -2728,9 +2737,7 @@ fn scientific_failure(
         orbit_id: orbit_id.map(str::to_string),
         input_orbit_id: input_orbit_id.map(str::to_string),
         stage,
-        code: OdGroupFailureCode::Scientific(
-            group_scientific_code(error).expect("scientific failure was classified"),
-        ),
+        code: group_failure_code(error).expect("group-local failure was classified"),
         message: error.to_string(),
         num_obs: n,
         arc_length: None,
@@ -3052,8 +3059,9 @@ fn run_iod_with_source<S: OdPropagatorSource + ?Sized>(
 /// [`OdBatchResult::into_products`] moves all three out together.
 ///
 /// Empty input returns an empty `OdBatchResult` without resolving an external
-/// provider. Safely isolated no-solution outcomes become typed failure records
-/// and later groups continue. Invalid IDs/memberships, configuration/resources,
+/// provider. Safely isolated no-solution outcomes and an exact internal
+/// CMC2003 covariance-unavailable outcome become typed failure records, and
+/// later groups continue. Invalid IDs/memberships, configuration/resources,
 /// provenance, or provider/protocol behavior are invocation-fatal
 /// [`OdBatchError`] values and produce no partial result. Static preparation
 /// completes before provider acquisition.
@@ -3192,8 +3200,8 @@ fn run_iod_prepared(
                         iod: Some(iod),
                     })
                 }
-                Err(error) if group_scientific_code(&error).is_some() => {
-                    let failure = scientific_failure(
+                Err(error) if group_failure_code(&error).is_some() => {
+                    let failure = group_local_failure(
                         &group.group_id,
                         None,
                         None,
@@ -3310,7 +3318,8 @@ fn run_od_with_source<S: OdPropagatorSource + ?Sized>(
 /// Invalid static contracts (configuration, resources, IDs, mappings, or
 /// covariance dimension) and invocation-fatal provider/protocol failures return
 /// [`OdBatchError`] without partial products. Isolated IOD/refinement scientific
-/// failures continue by group. A failed refinement emits a state only when Rust
+/// failures, including exact internal CMC2003 covariance unavailability,
+/// continue by group. A failed refinement emits a state only when Rust
 /// retained an actual native best state. Complete configuration/input/state/
 /// provider/diagnostic provenance is attached to each emitted orbit.
 ///
@@ -3460,8 +3469,8 @@ fn run_od_prepared(
                         group.failure = failure;
                         Ok(group)
                     }
-                    Err(error) if group_scientific_code(&error).is_some() => {
-                        group.failure = Some(scientific_failure(
+                    Err(error) if group_failure_code(&error).is_some() => {
+                        group.failure = Some(group_local_failure(
                             &group.group_id,
                             None,
                             Some(&group.orbit_id),
@@ -4004,9 +4013,10 @@ fn refine_with_source<S: OdPropagatorSource + ?Sized>(
 /// Groups execute concurrently on Rayon's shared pool and are collected by the
 /// first appearance of each orbit label in the member table; rows inside a
 /// group return to source-observation order. Empty input returns
-/// three empty products without provider resolution. Isolated fit failures
-/// continue and appear in [`OdBatchResult::failures`]; `input_orbit_id` identifies
-/// a seed when no output state exists. Invalid or incomplete memberships,
+/// three empty products without provider resolution. Isolated fit failures,
+/// including exact internal CMC2003 covariance unavailability, continue and
+/// appear in [`OdBatchResult::failures`]; `input_orbit_id` identifies a seed
+/// when no output state exists. Invalid or incomplete memberships,
 /// changed source/astrometry, missing or inconsistent provenance, covariance
 /// errors, and fatal provider/protocol failures return an invocation-wide
 /// [`OdBatchError`] with no partial result. Static membership, source-identity,
@@ -4194,8 +4204,8 @@ fn refine_prepared(
                             iod: None,
                         })
                     }
-                    Err(error) if group_scientific_code(&error).is_some() => {
-                        let failure = scientific_failure(
+                    Err(error) if group_failure_code(&error).is_some() => {
+                        let failure = group_local_failure(
                             &group_id,
                             None,
                             Some(&group.orbit_id),
@@ -4287,8 +4297,9 @@ fn evaluate_orbits_with_source<S: OdPropagatorSource + ?Sized>(
 ///
 /// Groups execute concurrently on Rayon's shared pool and are collected by
 /// first member appearance; rows follow source order. Empty input returns three
-/// empty products without provider resolution. Scientific
-/// evaluation failures continue per orbit. Invalid covariance, memberships,
+/// empty products without provider resolution. Scientific evaluation failures,
+/// including exact internal CMC2003 covariance unavailability, continue per
+/// orbit. Invalid covariance, memberships,
 /// source/state/fingerprint/provenance identity, or fatal provider/protocol
 /// behavior returns an invocation-wide [`OdBatchError`] and no partial result.
 ///
@@ -4437,8 +4448,8 @@ fn evaluate_prepared(
                             iod: None,
                         })
                     }
-                    Err(error) if group_scientific_code(&error).is_some() => {
-                        let failure = scientific_failure(
+                    Err(error) if group_failure_code(&error).is_some() => {
+                        let failure = group_local_failure(
                             &group_id,
                             None,
                             Some(&group.orbit_id),
@@ -4616,6 +4627,7 @@ mod tests {
     #[derive(Default)]
     struct ProbeConfig {
         fatal_windows: Vec<usize>,
+        cmc_windows: Vec<usize>,
         gate_window: Option<usize>,
         release_on_fatal_of: Option<usize>,
     }
@@ -4680,6 +4692,11 @@ mod tests {
                     state.release.store(true, Ordering::SeqCst);
                 }
                 return Err(PropagationError::Backend(format!("fatal-window-{window}")));
+            }
+            if state.config.cmc_windows.contains(&window) {
+                return Err(PropagationError::CmcCovarianceUnavailable(format!(
+                    "external-cmc-window-{window}"
+                )));
             }
             Ok(())
         }
@@ -4753,6 +4770,86 @@ mod tests {
             &"a".repeat(64),
             &"b".repeat(64),
         )
+    }
+
+    struct InjectedCmcPredictor<'a> {
+        inner: &'a (dyn SphericalPredictor + Sync),
+        fail_window: usize,
+    }
+
+    impl InjectedCmcPredictor<'_> {
+        fn check_times(&self, times: Option<&TimeArray>) -> PropagationResultValue<()> {
+            let Some(first_mjd) = times.and_then(|value| {
+                value
+                    .epochs
+                    .iter()
+                    .map(|epoch| epoch.mjd())
+                    .min_by(f64::total_cmp)
+            }) else {
+                return Ok(());
+            };
+            if probe_window(first_mjd) == self.fail_window {
+                return Err(PropagationError::CmcCovarianceUnavailable(format!(
+                    "injected retained covariance diagnostic for window {}",
+                    self.fail_window
+                )));
+            }
+            Ok(())
+        }
+    }
+
+    impl SphericalPredictor for InjectedCmcPredictor<'_> {
+        fn predict_spherical(
+            &self,
+            states: &[[f64; 6]],
+            geometry: &adam_core_rs_coords::OrbitGeometry,
+            observers: &ObserverBatch,
+        ) -> PropagationResultValue<Result<Vec<f64>, String>> {
+            self.check_times(observers.coordinates.times.as_ref())?;
+            self.inner.predict_spherical(states, geometry, observers)
+        }
+
+        fn civil_times_mjd(&self, observed: &CoordinateBatch) -> PropagationResultValue<Vec<f64>> {
+            self.check_times(observed.times.as_ref())?;
+            self.inner.civil_times_mjd(observed)
+        }
+
+        fn dynamical_times_mjd(
+            &self,
+            observed: &CoordinateBatch,
+        ) -> PropagationResultValue<Vec<f64>> {
+            self.check_times(observed.times.as_ref())?;
+            self.inner.dynamical_times_mjd(observed)
+        }
+
+        fn dynamical_epoch_in_scale(
+            &self,
+            mjd_tdb: f64,
+            scale: TimeScale,
+        ) -> PropagationResultValue<Epoch> {
+            self.inner.dynamical_epoch_in_scale(mjd_tdb, scale)
+        }
+
+        fn supports_stm(&self) -> bool {
+            self.inner.supports_stm()
+        }
+
+        fn propagate_stm(
+            &self,
+            state: [f64; 6],
+            non_gravitational_parameters: Option<
+                adam_core_rs_coords::NonGravitationalParametersRow,
+            >,
+            epoch_tdb: Epoch,
+            times_tdb: &[Epoch],
+        ) -> PropagationResultValue<Vec<StmRow>> {
+            self.inner
+                .propagate_stm(state, non_gravitational_parameters, epoch_tdb, times_tdb)
+        }
+
+        fn backend(&self) -> adam_core_rs_coords::propagation::BackendIdentity {
+            self.inner.backend()
+        }
     }
 
     struct ReentrantSpicePropagator {
@@ -5620,6 +5717,7 @@ mod tests {
             for iteration in 0..5 {
                 let state = ProbeState::new(ProbeConfig {
                     fatal_windows: vec![2, 7],
+                    cmc_windows: Vec::new(),
                     gate_window: Some(0),
                     release_on_fatal_of: Some(7),
                 });
@@ -6035,6 +6133,146 @@ mod tests {
         }
     }
 
+    #[derive(Clone, Copy)]
+    enum InjectedRunOdStage {
+        Iod,
+        Refinement,
+    }
+
+    fn run_iod_with_internal_cmc(
+        input: &AssociatedObservations,
+        config: &IodRunConfig,
+        fail_window: usize,
+    ) -> Result<OdBatchResult, OdBatchError> {
+        let BatchPreparation::Ready(PreparedIod { inner }) = prepare_iod(input, config)? else {
+            return Ok(OdBatchResult::default());
+        };
+        let fit = *config.stage().correction_fit();
+        with_stage_predictor(&OdPropagator::two_body(), fit, |service, context| {
+            let injected = InjectedCmcPredictor {
+                inner: service.predictor,
+                fail_window,
+            };
+            let injected_service = PredictionService {
+                predictor: &injected,
+                metadata: service.metadata.clone(),
+            };
+            let PreparedAssociatedBatch {
+                input,
+                config,
+                groups,
+                prepared_groups,
+            } = inner;
+            run_iod_prepared(
+                input,
+                &config,
+                &injected_service,
+                context,
+                groups,
+                prepared_groups,
+            )
+            .map(WorkingBatchResult::finish)
+        })
+    }
+
+    fn run_od_with_internal_cmc(
+        input: &AssociatedObservations,
+        config: &OdConfig,
+        fail_window: usize,
+        stage: InjectedRunOdStage,
+    ) -> Result<OdBatchResult, OdBatchError> {
+        let BatchPreparation::Ready(PreparedOd { inner }) = prepare_od(input, config)? else {
+            return Ok(OdBatchResult::default());
+        };
+        let iod_fit = *config.for_iod().stage().correction_fit();
+        let refinement = *config.for_refinement().refinement();
+        let refinement_fit = match refinement {
+            adam_core_rs_coords::RefinementConfig::WorstResidual(value) => value.fit,
+            adam_core_rs_coords::RefinementConfig::Cmc2003(value) => value.fit,
+        };
+        with_stage_predictors(
+            &OdPropagator::two_body(),
+            iod_fit,
+            refinement_fit,
+            |iod_service, refinement_service, context| match stage {
+                InjectedRunOdStage::Iod => {
+                    let injected = InjectedCmcPredictor {
+                        inner: iod_service.predictor,
+                        fail_window,
+                    };
+                    let injected_service = PredictionService {
+                        predictor: &injected,
+                        metadata: iod_service.metadata.clone(),
+                    };
+                    run_od_prepared(inner, &injected_service, refinement_service, context)
+                }
+                InjectedRunOdStage::Refinement => {
+                    let injected = InjectedCmcPredictor {
+                        inner: refinement_service.predictor,
+                        fail_window,
+                    };
+                    let injected_service = PredictionService {
+                        predictor: &injected,
+                        metadata: refinement_service.metadata.clone(),
+                    };
+                    run_od_prepared(inner, iod_service, &injected_service, context)
+                }
+            },
+        )
+    }
+
+    fn refine_with_internal_cmc(
+        input: &MemberedOrbits,
+        config: &RefinementRunConfig,
+        fail_window: usize,
+    ) -> Result<OdBatchResult, OdBatchError> {
+        let BatchPreparation::Ready(PreparedRefinement { inner, config }) =
+            prepare_refinement(input, config)?
+        else {
+            return Ok(OdBatchResult::default());
+        };
+        let refinement = *config.refinement();
+        let fit = match refinement {
+            adam_core_rs_coords::RefinementConfig::WorstResidual(value) => value.fit,
+            adam_core_rs_coords::RefinementConfig::Cmc2003(value) => value.fit,
+        };
+        with_stage_predictor(&OdPropagator::two_body(), fit, |service, context| {
+            let injected = InjectedCmcPredictor {
+                inner: service.predictor,
+                fail_window,
+            };
+            let injected_service = PredictionService {
+                predictor: &injected,
+                metadata: service.metadata.clone(),
+            };
+            refine_prepared(inner, &config, &injected_service, context)
+        })
+    }
+
+    fn evaluate_with_internal_cmc(
+        input: &MemberedOrbits,
+        config: &EvaluationConfig,
+        fail_window: usize,
+    ) -> Result<OdBatchResult, OdBatchError> {
+        let BatchPreparation::Ready(PreparedEvaluation { inner, config }) =
+            prepare_evaluation(input, config)?
+        else {
+            return Ok(OdBatchResult::default());
+        };
+        let fit = *config.prediction_fit();
+        with_stage_predictor(&OdPropagator::two_body(), fit, |service, _context| {
+            let injected = InjectedCmcPredictor {
+                inner: service.predictor,
+                fail_window,
+            };
+            let injected_service = PredictionService {
+                predictor: &injected,
+                metadata: service.metadata.clone(),
+            };
+            evaluate_prepared(inner, &config, &injected_service)
+        })
+    }
+
     fn run_child_test(test_name: &str, environment: &str, timeout: Duration) {
         let mut child = Command::new(std::env::current_exe().expect("current test executable"))
             .args(["--exact", test_name, "--nocapture"])
@@ -6086,6 +6324,335 @@ mod tests {
                     .expect("evaluation");
                 vec![iod, od, refined, evaluated]
             })
+    }
+
+    fn assert_localized_cmc_failure(result: &OdBatchResult, stage: OdStage, has_input_orbit: bool) {
+        let groups = result.group_views().collect::<Vec<_>>();
+        assert_eq!(
+            groups
+                .iter()
+                .map(|group| group.group.group_id.as_str())
+                .collect::<Vec<_>>(),
+            ["partition-000", "partition-001", "partition-002"]
+        );
+        assert!(groups[0].orbit.is_some());
+        assert!(groups[0].failure.is_none());
+        assert!(groups[2].orbit.is_some());
+        assert!(groups[2].failure.is_none());
+        assert!(groups[1].orbit.is_none());
+        assert!(groups[1].members.is_empty());
+
+        let failure = groups[1].failure.expect("target group failure");
+        assert_eq!(failure.group_id, "partition-001");
+        assert_eq!(failure.orbit_id, None);
+        assert_eq!(failure.stage, stage);
+        assert_eq!(failure.code, OdGroupFailureCode::CmcCovarianceUnavailable);
+        assert_eq!(failure.num_obs, PROBE_ROWS_PER_GROUP);
+        assert!(!failure.best_state_retained);
+        assert!(failure.message.contains(
+            "CMC2003 expected covariance unavailable: injected retained covariance diagnostic for window 1"
+        ));
+        if has_input_orbit {
+            assert_eq!(
+                failure.input_orbit_id.as_deref(),
+                Some(groups[1].group.orbit_id.as_str())
+            );
+        } else {
+            assert_eq!(failure.input_orbit_id, None);
+        }
+        assert_eq!(result.failures().len(), 1);
+        assert_eq!(result.fitted_orbits().len(), 2);
+        assert_eq!(
+            result
+                .fitted_orbits()
+                .iter()
+                .map(|orbit| orbit.group_id.as_str())
+                .collect::<Vec<_>>(),
+            ["partition-000", "partition-002"]
+        );
+    }
+
+    fn assert_member_science_matches(
+        fused: &[FittedOrbitMemberRecord],
+        composed: &[FittedOrbitMemberRecord],
+    ) {
+        assert_eq!(fused.len(), composed.len());
+        for (fused, composed) in fused.iter().zip(composed) {
+            assert_eq!(
+                (
+                    fused.orbit_id.as_str(),
+                    fused.observation_id.as_str(),
+                    fused.source_index,
+                    fused.input_fingerprint.as_str(),
+                    fused.membership_fingerprint.as_str(),
+                    fused.outlier,
+                ),
+                (
+                    composed.orbit_id.as_str(),
+                    composed.observation_id.as_str(),
+                    composed.source_index,
+                    composed.input_fingerprint.as_str(),
+                    composed.membership_fingerprint.as_str(),
+                    composed.outlier,
+                )
+            );
+            let bits = |member: &FittedOrbitMemberRecord| {
+                [
+                    member.original.lon.to_bits(),
+                    member.original.lat.to_bits(),
+                    member.original.sigma_lon.to_bits(),
+                    member.original.sigma_lat.to_bits(),
+                    member.original.variance_lon.to_bits(),
+                    member.original.variance_lat.to_bits(),
+                    member.original.cov_lonlat.to_bits(),
+                    member.used.lon.to_bits(),
+                    member.used.lat.to_bits(),
+                    member.used.sigma_lon.to_bits(),
+                    member.used.sigma_lat.to_bits(),
+                    member.used.variance_lon.to_bits(),
+                    member.used.variance_lat.to_bits(),
+                    member.used.cov_lonlat.to_bits(),
+                ]
+            };
+            assert_eq!(bits(fused), bits(composed));
+        }
+    }
+
+    fn assert_composed_refinement_matches(fused: &OdBatchResult, composed: &OdBatchResult) {
+        for fused_group in fused.group_views() {
+            let composed_group = composed
+                .group_views()
+                .find(|group| group.group.group_id == fused_group.group.group_id)
+                .expect("composed group");
+            assert_eq!(
+                fused_group.orbit.map(|record| &record.orbit),
+                composed_group.orbit.map(|record| &record.orbit)
+            );
+            assert_member_science_matches(fused_group.members, composed_group.members);
+            assert_eq!(
+                fused_group
+                    .orbit
+                    .map(|record| record.provenance.provenance_fingerprint.as_str()),
+                composed_group
+                    .orbit
+                    .map(|record| record.provenance.provenance_fingerprint.as_str())
+            );
+            assert_eq!(
+                fused_group.failure.map(|failure| (
+                    &failure.code,
+                    failure.stage,
+                    failure.group_id.as_str(),
+                    failure.orbit_id.as_deref(),
+                    failure.input_orbit_id.as_deref(),
+                    failure.num_obs,
+                    failure.message.as_str(),
+                )),
+                composed_group.failure.map(|failure| (
+                    &failure.code,
+                    failure.stage,
+                    failure.group_id.as_str(),
+                    failure.orbit_id.as_deref(),
+                    failure.input_orbit_id.as_deref(),
+                    failure.num_obs,
+                    failure.message.as_str(),
+                ))
+            );
+        }
+    }
+
+    #[test]
+    fn exact_cmc_covariance_failures_continue_groups_across_canonical_workflows() {
+        let _fixture_lock = SPICE_FIXTURE_LOCK
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        let _kernel = FurnishedKernel(zero_sun_spk());
+        let input = partitioned_groups(
+            scaled_scientific_observation_batch(3 * PROBE_ROWS_PER_GROUP, PROBE_STEP_DAYS),
+            PROBE_ROWS_PER_GROUP,
+        );
+        let config = explicit_config();
+        let normal_iod =
+            run_iod(&input, &config.for_iod(), &OdPropagator::two_body()).expect("baseline IOD");
+        assert_eq!(normal_iod.fitted_orbits().len(), 3);
+        let iod_input = normal_iod
+            .to_membered_orbits(&input.observations)
+            .expect("baseline IOD handoff")
+            .expect("baseline IOD states");
+        let normal_od = run_od(&input, &config, &OdPropagator::two_body()).expect("baseline OD");
+        assert_eq!(normal_od.fitted_orbits().len(), 3);
+        let evaluation_input = normal_od
+            .to_membered_orbits(&input.observations)
+            .expect("baseline OD handoff")
+            .expect("baseline OD states");
+
+        let run = |threads| {
+            rayon::ThreadPoolBuilder::new()
+                .num_threads(threads)
+                .build()
+                .expect("CMC localization pool")
+                .install(|| {
+                    let iod = run_iod_with_internal_cmc(&input, &config.for_iod(), 1)
+                        .expect("localized IOD CMC failure");
+                    let od = run_od_with_internal_cmc(
+                        &input,
+                        &config,
+                        1,
+                        InjectedRunOdStage::Refinement,
+                    )
+                    .expect("localized OD refinement CMC failure");
+                    let refined = refine_with_internal_cmc(&iod_input, &config.for_refinement(), 1)
+                        .expect("localized standalone refinement CMC failure");
+                    let evaluated = evaluate_with_internal_cmc(
+                        &evaluation_input,
+                        &EvaluationConfig::core_v1(),
+                        1,
+                    )
+                    .expect("localized evaluation CMC failure");
+                    let od_iod =
+                        run_od_with_internal_cmc(&input, &config, 1, InjectedRunOdStage::Iod)
+                            .expect("localized OD IOD-stage CMC failure");
+                    vec![iod, od, refined, evaluated, od_iod]
+                })
+        };
+
+        let serial = run(1);
+        let parallel = run(4);
+        for results in [&serial, &parallel] {
+            assert_localized_cmc_failure(&results[0], OdStage::Iod, false);
+            assert_localized_cmc_failure(&results[1], OdStage::Refinement, true);
+            assert_localized_cmc_failure(&results[2], OdStage::Refinement, true);
+            assert_localized_cmc_failure(&results[3], OdStage::Evaluation, true);
+            assert_localized_cmc_failure(&results[4], OdStage::Iod, false);
+            assert_composed_refinement_matches(&results[1], &results[2]);
+
+            let iod_handoff = results[0]
+                .to_membered_orbits(&input.observations)
+                .expect("localized IOD handoff")
+                .expect("successful IOD siblings");
+            let composed = refine(
+                &iod_handoff,
+                &config.for_refinement(),
+                &OdPropagator::two_body(),
+            )
+            .expect("refine successful IOD siblings");
+            let fused_successes = results[4]
+                .group_views()
+                .filter(|group| group.orbit.is_some())
+                .collect::<Vec<_>>();
+            assert_eq!(fused_successes.len(), composed.group_views().len());
+            for fused_group in fused_successes {
+                let composed_group = composed
+                    .group_views()
+                    .find(|group| group.group.group_id == fused_group.group.group_id)
+                    .expect("composed successful sibling");
+                assert_eq!(
+                    fused_group.orbit.map(|record| &record.orbit),
+                    composed_group.orbit.map(|record| &record.orbit)
+                );
+                assert_member_science_matches(fused_group.members, composed_group.members);
+                assert_eq!(
+                    fused_group
+                        .orbit
+                        .map(|record| record.provenance.provenance_fingerprint.as_str()),
+                    composed_group
+                        .orbit
+                        .map(|record| record.provenance.provenance_fingerprint.as_str())
+                );
+            }
+            assert_eq!(
+                results[4].failures()[0].message,
+                results[0].failures()[0].message
+            );
+        }
+        for (serial_result, parallel_result) in serial.iter().zip(&parallel) {
+            assert_eq!(format!("{serial_result:?}"), format!("{parallel_result:?}"));
+            assert_eq!(
+                public_float_bits(serial_result),
+                public_float_bits(parallel_result)
+            );
+        }
+    }
+
+    #[test]
+    fn only_exact_internal_cmc_covariance_error_is_group_local() {
+        let diagnostic = "CMC2003 expected covariance unavailable: retained covariance";
+        assert_eq!(
+            group_failure_code(&PropagationError::CmcCovarianceUnavailable(
+                "retained covariance".to_string()
+            )),
+            Some(OdGroupFailureCode::CmcCovarianceUnavailable)
+        );
+        assert_eq!(
+            group_failure_code(&PropagationError::GroupScientific {
+                code: GroupScientificFailureCode::RankDeficient,
+                message: "rank".to_string(),
+            }),
+            Some(OdGroupFailureCode::Scientific(
+                GroupScientificFailureCode::RankDeficient
+            ))
+        );
+        for fatal in [
+            PropagationError::Backend(diagnostic.to_string()),
+            PropagationError::BackendProtocol(diagnostic.to_string()),
+            PropagationError::RowFailure(diagnostic.to_string()),
+            PropagationError::InvalidRequest(diagnostic.to_string()),
+            PropagationError::ThreadPool(diagnostic.to_string()),
+        ] {
+            assert_eq!(
+                group_failure_code(&fatal),
+                None,
+                "wrongly localized {fatal}"
+            );
+        }
+    }
+
+    #[test]
+    fn external_cmc_callback_error_remains_invocation_fatal() {
+        let _fixture_lock = SPICE_FIXTURE_LOCK
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        let _kernel = FurnishedKernel(zero_sun_spk());
+        let input = partitioned_groups(
+            scaled_scientific_observation_batch(3 * PROBE_ROWS_PER_GROUP, PROBE_STEP_DAYS),
+            PROBE_ROWS_PER_GROUP,
+        );
+        let config = explicit_config();
+        let seed = run_iod(&input, &config.for_iod(), &OdPropagator::two_body())
+            .expect("negative-control seed");
+        let membered = seed
+            .to_membered_orbits(&input.observations)
+            .expect("negative-control handoff")
+            .expect("negative-control states");
+
+        for workflow in ["run_iod", "run_od", "refine", "evaluate"] {
+            let state = ProbeState::new(ProbeConfig {
+                cmc_windows: vec![1],
+                ..ProbeConfig::default()
+            });
+            let owned = owned_probe(&state);
+            // SAFETY: the owned ABI table and context outlive this workflow.
+            let external = unsafe { ExternalPropagator::from_raw(owned.table()) }
+                .expect("CMC negative-control provider");
+            let provider = OdPropagator::external(&external);
+            let error = match workflow {
+                "run_iod" => run_iod(&input, &config.for_iod(), &provider),
+                "run_od" => run_od(&input, &config, &provider),
+                "refine" => refine(&membered, &config.for_refinement(), &provider),
+                _ => evaluate_orbits(&membered, &EvaluationConfig::core_v1(), &provider),
+            }
+            .expect_err("external callback error must remain fatal");
+            assert_eq!(error.code, OdBatchErrorCode::Backend, "{workflow}");
+            assert!(
+                error.message.contains("external-cmc-window-1"),
+                "{workflow}: {error:?}"
+            );
+            assert!(
+                error
+                    .message
+                    .contains("CMC2003 expected covariance unavailable"),
+                "{workflow}: {error:?}"
+            );
+        }
     }
 
     #[test]
@@ -6753,6 +7320,7 @@ mod tests {
         for code in [
             OdGroupFailureCode::NoSolution,
             OdGroupFailureCode::NotConverged,
+            OdGroupFailureCode::CmcCovarianceUnavailable,
             OdGroupFailureCode::Scientific(GroupScientificFailureCode::RankDeficient),
             OdGroupFailureCode::Scientific(GroupScientificFailureCode::NoIncludedObservations),
             OdGroupFailureCode::Scientific(GroupScientificFailureCode::NoFitPass),
