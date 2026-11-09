@@ -4999,11 +4999,26 @@ mod tests {
     }
 
     fn scientific_observation_batch() -> OdObservationBatch {
+        scientific_observation_batch_from_offsets(
+            |row| 0.3 + 3.0 * (row / 3) as f64 + 0.2 * (row % 3) as f64,
+            "science",
+        )
+    }
+
+    fn duplicate_epoch_scientific_observation_batch() -> OdObservationBatch {
+        scientific_observation_batch_from_offsets(
+            |row| 0.3 + 3.0 * (row / 3) as f64 + 0.2 * (row % 3).min(1) as f64,
+            "dup",
+        )
+    }
+
+    fn scientific_observation_batch_from_offsets(
+        offset_for_row: impl Fn(usize) -> f64,
+        id_prefix: &str,
+    ) -> OdObservationBatch {
         const ROWS: usize = 12;
         const NANOS_PER_DAY: f64 = 86_400_000_000_000.0;
-        let offsets = (0..ROWS)
-            .map(|row| 0.3 + 3.0 * (row / 3) as f64 + 0.2 * (row % 3) as f64)
-            .collect::<Vec<_>>();
+        let offsets = (0..ROWS).map(offset_for_row).collect::<Vec<_>>();
         let times = TimeArray::new(
             TimeScale::Tdb,
             offsets
@@ -5103,7 +5118,7 @@ mod tests {
         };
         OdObservationBatch {
             source: SourceCatalogBatch {
-                id: (0..ROWS).map(|row| format!("science-{row}")).collect(),
+                id: (0..ROWS).map(|row| format!("{id_prefix}-{row}")).collect(),
                 exposure_id: vec![None; ROWS],
                 time: time.clone(),
                 ra: values.iter().map(|value| value[1]).collect(),
@@ -6115,6 +6130,104 @@ mod tests {
                     assert_eq!(
                         public_float_bits(serial_result),
                         public_float_bits(parallel_result),
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn duplicate_epoch_workflows_are_bitwise_equal_across_thread_counts_and_providers() {
+        let _fixture_lock = SPICE_FIXTURE_LOCK
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        let _kernel = FurnishedKernel(zero_sun_spk());
+        let observations = duplicate_epoch_scientific_observation_batch();
+        let duplicate_pairs = (1..observations.source.len())
+            .filter(|&row| {
+                observations.source.time.days[row] == observations.source.time.days[row - 1]
+                    && observations.source.time.nanos[row]
+                        == observations.source.time.nanos[row - 1]
+            })
+            .count();
+        assert_eq!(duplicate_pairs, 4, "fixture must contain duplicate epochs");
+        let groups = ["dup-one", "dup-two", "dup-three", "dup-four"];
+        let observation_ids = observations.source.id.clone();
+        let input = AssociatedObservations {
+            associations: AssociationBatch {
+                detection_id: groups
+                    .iter()
+                    .flat_map(|_| observation_ids.iter().cloned())
+                    .collect(),
+                object_id: groups
+                    .iter()
+                    .flat_map(|group| {
+                        std::iter::repeat_n(Some((*group).to_string()), observation_ids.len())
+                    })
+                    .collect(),
+            },
+            observations,
+        };
+        let config = explicit_config();
+        let external_table = two_body_reference::new(TwoBodyPropagator::default());
+        // SAFETY: the reference table and its owned context outlive these calls.
+        let external = unsafe { ExternalPropagator::from_raw(external_table.table()) }
+            .expect("external two-body provider");
+
+        for (provider_name, provider) in [
+            ("two_body", OdPropagator::two_body()),
+            ("external", OdPropagator::external(&external)),
+        ] {
+            let serial = run_all_workflows(1, &input, &config, &provider);
+            for (stage, result) in serial.iter().enumerate() {
+                assert_eq!(
+                    result.fitted_orbits().len(),
+                    groups.len(),
+                    "{provider_name}/stage={stage} fitted product count",
+                );
+                assert_eq!(
+                    result.fitted_orbit_members().len(),
+                    groups.len() * observation_ids.len(),
+                    "{provider_name}/stage={stage} membership count",
+                );
+                assert!(
+                    result.failures().is_empty(),
+                    "{provider_name}/stage={stage} must have no failures",
+                );
+                for (group_index, group) in result.group_views().enumerate() {
+                    assert_eq!(group.group.group_id, groups[group_index]);
+                    assert_eq!(
+                        group.group.row_indices,
+                        (0..observation_ids.len()).collect::<Vec<_>>(),
+                    );
+                    assert!(group.failure.is_none());
+                    let orbit = group.orbit.expect("duplicate-epoch fitted orbit");
+                    let orbit_id = &orbit.orbit.orbit_id[0].0;
+                    assert_eq!(group.members.len(), observation_ids.len());
+                    for (source_index, (member, observation_id)) in
+                        group.members.iter().zip(&observation_ids).enumerate()
+                    {
+                        assert_eq!(&member.orbit_id, orbit_id);
+                        assert_eq!(&member.observation_id, observation_id);
+                        assert_eq!(member.source_index, source_index);
+                    }
+                }
+            }
+
+            for threads in [2, 4, 8] {
+                let parallel = run_all_workflows(threads, &input, &config, &provider);
+                for (stage, (serial_result, parallel_result)) in
+                    serial.iter().zip(&parallel).enumerate()
+                {
+                    assert_eq!(
+                        format!("{serial_result:?}"),
+                        format!("{parallel_result:?}"),
+                        "{provider_name}/threads={threads}/stage={stage} products differ",
+                    );
+                    assert_eq!(
+                        public_float_bits(serial_result),
+                        public_float_bits(parallel_result),
+                        "{provider_name}/threads={threads}/stage={stage} bits differ",
                     );
                 }
             }

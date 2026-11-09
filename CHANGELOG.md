@@ -163,6 +163,9 @@ This file contains notable changes in adam-core
 
 ### Fixed
 
+- Repeated-state two-body ephemeris calls select the grouped light-time and
+  spherical kernel from input data alone, preserving serial-reference bits for
+  duplicate epochs across Rayon pool sizes.
 - MOID uses the pure-Rust global Baluev-Mikryukov/DISTLINK critical-point
   solver through every scalar, batch, and SPICE-backed path, with deterministic
   witnesses and row-specific typed failures.
