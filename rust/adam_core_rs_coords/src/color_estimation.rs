@@ -14,6 +14,7 @@ use arrow_array::{
 };
 use arrow_buffer::{NullBuffer, OffsetBuffer, ScalarBuffer};
 use arrow_schema::{DataType, Field, Schema};
+use faer::Mat;
 use nalgebra::{DMatrix, DVector};
 
 use crate::bandpasses::BandpassData;
@@ -290,7 +291,7 @@ pub fn estimate_color_object(
 
     let mut invalid_count = 0usize;
     let mut unsupported_count = 0usize;
-    let mut eligible = Vec::new();
+    let mut classified = Vec::new();
     let mut conversion_cache: BTreeMap<(String, String), f64> = BTreeMap::new();
 
     for (index, row) in observations.iter().enumerate() {
@@ -336,28 +337,39 @@ pub fn estimate_color_object(
             }
         };
 
+        classified.push((index, target_filter, delta_mag));
+    }
+
+    let classified_count = classified.len();
+    let classified_failure = |message: &str| {
+        let mut failed = ColorFitRow::terminal(object_id, observations.len(), "failed", message);
+        // `num_used` means rows admitted to the attempted scientific fit. Even
+        // when geometry prevents a result, this preserves the exhaustive row
+        // partition without relabeling valid supported photometry as clipped.
+        failed.classify_counts(invalid_count, unsupported_count, 0, classified_count);
+        failed
+    };
+    let mut eligible = Vec::with_capacity(classified.len());
+    for (index, target_filter, delta_mag) in classified {
+        let row = &observations[index];
         let Some((r, delta, alpha_deg)) =
             observing_geometry(row.object_position, row.observer_position)
         else {
-            return ColorFitRow::terminal(
-                object_id,
-                observations.len(),
-                "failed",
+            return classified_failure(
                 "invalid photometry geometry: non-finite or non-positive distance",
             );
         };
-        let reduced = row.magnitude.unwrap() - 5.0 * (r * delta).log10() + delta_mag;
+        let reduced = row.magnitude.expect("photometry classified as valid")
+            - 5.0 * (r * delta).log10()
+            + delta_mag;
         if !reduced.is_finite() || !alpha_deg.is_finite() {
-            return ColorFitRow::terminal(
-                object_id,
-                observations.len(),
-                "failed",
-                "invalid reduced magnitude or phase angle",
-            );
+            return classified_failure("invalid reduced magnitude or phase angle");
         }
         eligible.push(EligibleRow {
             reduced_magnitude: reduced,
-            sigma: row.magnitude_sigma.unwrap(),
+            sigma: row
+                .magnitude_sigma
+                .expect("photometric uncertainty classified as valid"),
             alpha_deg,
             filter_id: target_filter,
         });
@@ -620,7 +632,12 @@ fn fit_eligible_rows(
         if phase_model != ColorPhaseModel::C1C2 {
             slope_guess = once.values[0];
         }
-        let analysis = analyze_matrix(&once.weighted_jacobian);
+        let decomposition = robust_svd(&once.weighted_jacobian)?;
+        let analysis = analyze_matrix(
+            &decomposition,
+            once.weighted_jacobian.nrows(),
+            once.weighted_jacobian.ncols(),
+        );
         let chi2 = rows
             .iter()
             .zip(&included)
@@ -650,16 +667,15 @@ fn fit_eligible_rows(
             }
         }
         if removed {
-            let retained = included.iter().filter(|&&value| value).count();
-            if (retained as f64) < MIN_RETAINED_FRACTION * rows.len() as f64 {
-                return Err(FitFailure::TooManyOutliers { included });
-            }
             continue;
+        }
+        let retained = included.iter().filter(|&&value| value).count();
+        if (retained as f64) < MIN_RETAINED_FRACTION * rows.len() as f64 {
+            return Err(FitFailure::TooManyOutliers { included });
         }
 
         let reduced_chi2 = if dof > 0 { chi2 / dof as f64 } else { f64::NAN };
-        let covariance =
-            covariance_from_jtj_pseudoinverse(&once.weighted_jacobian, reduced_chi2, dof);
+        let covariance = covariance_from_jtj_pseudoinverse(&decomposition, reduced_chi2, dof);
         return Ok(ColorFitNumerics {
             active_filters: once.active_filters,
             n_phase: once.n_phase,
@@ -726,11 +742,9 @@ fn fit_once(
             matrix[(output, n_phase + filter_index[row.filter_id.as_str()])] = weight;
             response[output] = row.reduced_magnitude * weight;
         }
-        let svd = matrix.clone().svd(true, true);
-        let cutoff = svd_cutoff(&svd.singular_values, matrix.nrows(), matrix.ncols());
-        let values = svd
-            .solve(&response, cutoff)
-            .map_err(|error| FitFailure::Other(format!("linear color fit failed: {error}")))?;
+        let decomposition = robust_svd(&matrix)?;
+        let values =
+            minimum_norm_solution(&decomposition, &response, matrix.nrows(), matrix.ncols());
         let model = rows
             .iter()
             .map(|row| {
@@ -764,7 +778,16 @@ fn fit_once(
         values[n_phase + band_index] = sum / count as f64;
     }
 
-    let mut lambda = 1.0e-3;
+    // Unbounded trust-region reflective least squares, matching SciPy's default
+    // relative termination policy and evaluation budget. The exact SVD step is
+    // stable for rank-deficient layouts and avoids normal-equation squaring.
+    const FTOL: f64 = 1.0e-8;
+    const XTOL: f64 = 1.0e-8;
+    const GTOL: f64 = 1.0e-8;
+    let max_nfev = 100 * width;
+    let mut nfev = 1usize;
+    let mut radius = 0.0_f64;
+    let mut alpha = 0.0_f64;
     let mut converged = false;
     let mut current = nonlinear_residual_jacobian(
         rows,
@@ -774,53 +797,110 @@ fn fit_once(
         phase_model,
         &values,
     )?;
-    for _ in 0..150 {
+    'iterations: while nfev < max_nfev {
         let (residual, jacobian) = (&current.0, &current.1);
         let gradient = jacobian.transpose() * residual;
-        if gradient.amax() <= 1.0e-12 {
+        if gradient.amax() <= GTOL {
             converged = true;
             break;
         }
-        let mut normal = jacobian.transpose() * jacobian;
-        for index in 0..width {
-            let scale = normal[(index, index)].abs().max(1.0);
-            normal[(index, index)] += lambda * scale;
+        if radius == 0.0 {
+            radius = values.norm().max(1.0);
         }
-        let rhs = -gradient;
-        let Some(step) = normal.lu().solve(&rhs) else {
-            lambda *= 10.0;
-            if lambda > 1.0e18 {
+        let decomposition = robust_svd(jacobian)?;
+        let mut eigenvalues = vec![0.0; width];
+        for (index, &singular) in decomposition.singular_values.iter().enumerate() {
+            eigenvalues[index] = singular * singular;
+        }
+        let q = (0..width)
+            .map(|component| {
+                (0..width)
+                    .map(|column| decomposition.v_t[(component, column)] * gradient[column])
+                    .sum::<f64>()
+            })
+            .collect::<Vec<_>>();
+        let state_norm = values.norm();
+        let mut accepted = false;
+        for _ in 0..crate::trust_region::MAX_STEP_ATTEMPTS {
+            if nfev >= max_nfev {
+                break 'iterations;
+            }
+            let (step_eigen, alpha_used) =
+                crate::trust_region::trust_region_step(&eigenvalues, &q, radius, alpha);
+            alpha = alpha_used;
+            let step_scaled = DVector::from_iterator(
+                width,
+                (0..width).map(|column| {
+                    (0..width)
+                        .map(|component| {
+                            decomposition.v_t[(component, column)] * step_eigen[component]
+                        })
+                        .sum::<f64>()
+                }),
+            );
+            let step_scaled_norm = step_scaled.norm();
+            let step = step_scaled;
+            let step_norm = step.norm();
+            if !step.iter().all(|value| value.is_finite()) || step_scaled_norm == 0.0 {
+                break 'iterations;
+            }
+            let candidate_values = &values + &step;
+            let candidate = nonlinear_residual_jacobian(
+                rows,
+                &included_indices,
+                &filters,
+                &filter_index,
+                phase_model,
+                &candidate_values,
+            )?;
+            nfev += 1;
+            let old_cost = residual.norm_squared();
+            let new_cost = candidate.0.norm_squared();
+            if !new_cost.is_finite() {
+                radius = 0.25 * step_scaled_norm;
+                continue;
+            }
+            let actual_reduction = 0.5 * (old_cost - new_cost);
+            let predicted_reduction = -(0..width)
+                .map(|index| {
+                    q[index] * step_eigen[index]
+                        + 0.5 * eigenvalues[index] * step_eigen[index].powi(2)
+                })
+                .sum::<f64>();
+            let ratio = if predicted_reduction > 0.0 {
+                actual_reduction / predicted_reduction
+            } else {
+                0.0
+            };
+            let new_radius = if ratio < 0.25 {
+                0.25 * step_scaled_norm
+            } else if ratio > 0.75 && step_scaled_norm > 0.95 * radius {
+                2.0 * radius
+            } else {
+                radius
+            };
+            if new_radius > 0.0 {
+                alpha *= radius / new_radius;
+            }
+            radius = new_radius;
+            let xtol_met = step_norm < XTOL * (XTOL + state_norm);
+            if actual_reduction > 0.0 {
+                let ftol_met = (old_cost - new_cost) < FTOL * old_cost && ratio > 0.25;
+                values = candidate_values;
+                current = candidate;
+                accepted = true;
+                if ftol_met || xtol_met {
+                    converged = true;
+                }
                 break;
             }
-            continue;
-        };
-        if !step.iter().all(|value| value.is_finite()) {
-            break;
-        }
-        let candidate_values = &values + &step;
-        let candidate = nonlinear_residual_jacobian(
-            rows,
-            &included_indices,
-            &filters,
-            &filter_index,
-            phase_model,
-            &candidate_values,
-        )?;
-        let old_cost = residual.norm_squared();
-        let new_cost = candidate.0.norm_squared();
-        if new_cost < old_cost || (new_cost - old_cost).abs() <= f64::EPSILON * old_cost.max(1.0) {
-            values = candidate_values;
-            current = candidate;
-            lambda = (lambda / 3.0).max(1.0e-15);
-            if step.norm() <= 1.0e-10 * (1.0 + values.norm()) {
+            if xtol_met {
                 converged = true;
-                break;
+                break 'iterations;
             }
-        } else {
-            lambda *= 10.0;
-            if lambda > 1.0e18 {
-                break;
-            }
+        }
+        if converged || !accepted {
+            break;
         }
     }
 
@@ -1021,66 +1101,122 @@ fn hg12star_correction(alpha_deg: f64, slope: f64) -> Result<(f64, f64), FitFail
     Ok((correction, derivative))
 }
 
-fn svd_cutoff(singular: &DVector<f64>, rows: usize, columns: usize) -> f64 {
-    let largest = singular.iter().copied().fold(0.0_f64, f64::max);
-    largest * rows.max(columns) as f64 * f64::EPSILON
+#[derive(Debug)]
+struct RobustSvd {
+    singular_values: Vec<f64>,
+    u: DMatrix<f64>,
+    v_t: DMatrix<f64>,
 }
 
-fn analyze_matrix(matrix: &DMatrix<f64>) -> MatrixAnalysis {
-    let svd = matrix.clone().svd(false, false);
-    let cutoff = svd_cutoff(&svd.singular_values, matrix.nrows(), matrix.ncols());
-    let rank = svd
+fn robust_svd(matrix: &DMatrix<f64>) -> Result<RobustSvd, FitFailure> {
+    let mut input = Mat::<f64>::zeros(matrix.nrows(), matrix.ncols());
+    for row in 0..matrix.nrows() {
+        for column in 0..matrix.ncols() {
+            input[(row, column)] = matrix[(row, column)];
+        }
+    }
+    // The common overdetermined case needs thin U but already receives a
+    // complete square V. Only underdetermined fits request the full factors so
+    // their explicit right-null basis is retained without an O(rows^2) U for
+    // ordinary large objects.
+    let decomposition = if matrix.nrows() >= matrix.ncols() {
+        input.thin_svd()
+    } else {
+        input.svd()
+    }
+    .map_err(|error| FitFailure::Other(format!("color-fit SVD failed: {error:?}")))?;
+    let singular_values = (0..matrix.nrows().min(matrix.ncols()))
+        .map(|index| decomposition.S()[index])
+        .collect::<Vec<_>>();
+    let mut u = DMatrix::zeros(matrix.nrows(), singular_values.len());
+    for row in 0..matrix.nrows() {
+        for column in 0..singular_values.len() {
+            u[(row, column)] = decomposition.U()[(row, column)];
+        }
+    }
+    let mut v_t = DMatrix::zeros(matrix.ncols(), matrix.ncols());
+    for row in 0..matrix.ncols() {
+        for column in 0..matrix.ncols() {
+            v_t[(row, column)] = decomposition.V()[(column, row)];
+        }
+    }
+    Ok(RobustSvd {
+        singular_values,
+        u,
+        v_t,
+    })
+}
+
+fn svd_cutoff(singular: &[f64], rows: usize, columns: usize) -> f64 {
+    singular.first().copied().unwrap_or(0.0) * rows.max(columns) as f64 * f64::EPSILON
+}
+
+fn minimum_norm_solution(
+    decomposition: &RobustSvd,
+    response: &DVector<f64>,
+    rows: usize,
+    columns: usize,
+) -> DVector<f64> {
+    let cutoff = svd_cutoff(&decomposition.singular_values, rows, columns);
+    let mut values = DVector::zeros(columns);
+    for component in 0..decomposition.singular_values.len() {
+        let singular = decomposition.singular_values[component];
+        if singular <= cutoff {
+            continue;
+        }
+        let coefficient = (0..rows)
+            .map(|row| decomposition.u[(row, component)] * response[row])
+            .sum::<f64>()
+            / singular;
+        for column in 0..columns {
+            values[column] += decomposition.v_t[(component, column)] * coefficient;
+        }
+    }
+    values
+}
+
+fn analyze_matrix(decomposition: &RobustSvd, rows: usize, columns: usize) -> MatrixAnalysis {
+    let cutoff = svd_cutoff(&decomposition.singular_values, rows, columns);
+    let rank = decomposition
         .singular_values
         .iter()
         .filter(|&&value| value > cutoff)
         .count();
-
-    // nalgebra exposes a thin V^T for rectangular SVDs. Fitability requires the
-    // complete right null space when rows < parameters, so diagonalize J^T J
-    // and retain every right-eigenvector, ordered from largest to smallest.
-    let eigen = (matrix.transpose() * matrix).symmetric_eigen();
-    let mut order = (0..matrix.ncols()).collect::<Vec<_>>();
-    order.sort_by(|&left, &right| eigen.eigenvalues[right].total_cmp(&eigen.eigenvalues[left]));
-    let mut v_t = DMatrix::zeros(matrix.ncols(), matrix.ncols());
-    for (output_row, &eigen_column) in order.iter().enumerate() {
-        for column in 0..matrix.ncols() {
-            v_t[(output_row, column)] = eigen.eigenvectors[(column, eigen_column)];
-        }
+    MatrixAnalysis {
+        rank,
+        v_t: decomposition.v_t.clone(),
     }
-    MatrixAnalysis { rank, v_t }
 }
 
 fn covariance_from_jtj_pseudoinverse(
-    matrix: &DMatrix<f64>,
+    decomposition: &RobustSvd,
     reduced_chi2: f64,
     dof: isize,
 ) -> DMatrix<f64> {
-    let width = matrix.ncols();
+    let width = decomposition.v_t.ncols();
     if dof <= 0 {
         return DMatrix::from_element(width, width, f64::NAN);
     }
-    let svd = matrix.clone().svd(false, true);
-    let v_t = svd.v_t.expect("requested V^T from nalgebra SVD");
-    let largest_squared = svd
+    let largest_squared = decomposition
         .singular_values
-        .iter()
-        .next()
+        .first()
         .map_or(0.0, |value| value * value);
     // NumPy's pinv(J.T @ J) default rcond is 1e-15. Apply that cutoff to
     // the eigenvalues s^2 of J.T @ J, independently of the matrix-rank
     // threshold used for diagnostics and null-space fitability.
     let cutoff = 1.0e-15 * largest_squared;
     let mut covariance = DMatrix::zeros(width, width);
-    for component in 0..svd.singular_values.len() {
-        let eigenvalue = svd.singular_values[component].powi(2);
+    for component in 0..decomposition.singular_values.len() {
+        let eigenvalue = decomposition.singular_values[component].powi(2);
         if eigenvalue <= cutoff {
             continue;
         }
         let scale = reduced_chi2 / eigenvalue;
         for row in 0..width {
             for column in 0..width {
-                covariance[(row, column)] +=
-                    scale * v_t[(component, row)] * v_t[(component, column)];
+                covariance[(row, column)] += scale
+                    * decomposition.v_t[(component, row)]
+                    * decomposition.v_t[(component, column)];
             }
         }
     }
@@ -1381,8 +1517,12 @@ mod tests {
             assert_eq!(fit.colors.as_ref().unwrap().len(), 3);
             assert_eq!(fit.num_obs, Some(12));
             assert_eq!(fit.num_used, Some(12));
-            for value in fit.absolute_magnitudes.as_ref().unwrap() {
-                assert!(value.is_finite());
+            let magnitudes = fit.absolute_magnitudes.as_ref().unwrap();
+            for (value, expected) in magnitudes.iter().zip([18.4, 18.0, 18.1]) {
+                assert!(
+                    (value - expected).abs() < 1.0e-6,
+                    "{model:?}: {value} != {expected}"
+                );
             }
         }
     }
@@ -1407,6 +1547,27 @@ mod tests {
         assert_eq!(fit.num_unsupported_filter, Some(2));
         assert_eq!(fit.num_clipped, Some(0));
         assert_eq!(fit.num_used, Some(0));
+        assert_eq!(fit.num_obs, Some(3));
+    }
+
+    #[test]
+    fn classified_geometry_failure_retains_exact_count_partition() {
+        let data = data();
+        let mut rows = vec![
+            observation("SDSS_g", 10.0, 18.0, 0.1),
+            observation("unknown", 10.0, 18.0, 0.1),
+            observation("unknown", 10.0, 18.0, 0.1),
+        ];
+        rows[0].object_position[0] = f64::NAN;
+        rows[2].magnitude = None;
+        let mut cfg = config(ColorPhaseModel::C1C2);
+        cfg.strict_band_mapping = true;
+        let fit = estimate_color_object(&data, "x", &rows, &cfg);
+        assert_eq!(fit.status, "failed");
+        assert_eq!(fit.num_invalid, Some(1));
+        assert_eq!(fit.num_unsupported_filter, Some(1));
+        assert_eq!(fit.num_clipped, Some(0));
+        assert_eq!(fit.num_used, Some(1));
         assert_eq!(fit.num_obs, Some(3));
     }
 
@@ -1454,6 +1615,78 @@ mod tests {
         assert!(fit.color_sigmas.as_ref().unwrap()[0].is_finite());
         let cov = fit.magnitude_covariance.as_ref().unwrap();
         assert!(cov.iter().all(|x| x.is_nan()));
+    }
+
+    #[test]
+    fn c1c2_rank_deficiency_preserves_exact_weighted_mean_contrast() {
+        let data = data();
+        let sigma = 0.05;
+        let g = [18.00, 18.01, 17.99, 18.02, 17.98, 18.00];
+        let r = [17.60, 17.59, 17.61, 17.58, 17.62, 17.60];
+        let rows = g
+            .into_iter()
+            .map(|magnitude| observation("SDSS_g", 20.0, magnitude, sigma))
+            .chain(
+                r.into_iter()
+                    .map(|magnitude| observation("SDSS_r", 20.0, magnitude, sigma)),
+            )
+            .collect::<Vec<_>>();
+        let fit = estimate_color_object(&data, "x", &rows, &config(ColorPhaseModel::C1C2));
+        assert_eq!(fit.status, "ok", "{fit:?}");
+        assert_eq!(fit.rank, Some(2));
+        assert!(fit
+            .absolute_magnitudes
+            .as_ref()
+            .unwrap()
+            .iter()
+            .all(|value| value.is_nan()));
+        let mean_g = g.iter().sum::<f64>() / g.len() as f64;
+        let mean_r = r.iter().sum::<f64>() / r.len() as f64;
+        let expected_color = mean_g - mean_r;
+        let expected_chi2 = g
+            .iter()
+            .map(|value| ((value - mean_g) / sigma).powi(2))
+            .chain(r.iter().map(|value| ((value - mean_r) / sigma).powi(2)))
+            .sum::<f64>();
+        assert!((fit.colors.as_ref().unwrap()[0] - expected_color).abs() < 1.0e-12);
+        assert!((fit.chi2.unwrap() - expected_chi2).abs() < 1.0e-10);
+        let expected_variance = expected_chi2 / 10.0
+            * (sigma * sigma / g.len() as f64 + sigma * sigma / r.len() as f64);
+        assert!(
+            (fit.color_sigmas.as_ref().unwrap()[0].powi(2) - expected_variance).abs() < 1.0e-12
+        );
+    }
+
+    #[test]
+    fn c1c2_per_filter_single_angles_marks_the_color_non_fitable() {
+        let data = data();
+        let rows = [18.0, 18.1, 17.9]
+            .map(|magnitude| observation("SDSS_g", 10.0, magnitude, 0.05))
+            .into_iter()
+            .chain([17.5, 17.6, 17.4].map(|magnitude| observation("SDSS_r", 30.0, magnitude, 0.05)))
+            .collect::<Vec<_>>();
+        let fit = estimate_color_object(&data, "x", &rows, &config(ColorPhaseModel::C1C2));
+        assert_eq!(fit.status, "ok", "{fit:?}");
+        assert!(fit.colors.as_ref().unwrap()[0].is_nan());
+        assert!(fit.color_sigmas.as_ref().unwrap()[0].is_nan());
+    }
+
+    #[test]
+    fn c1c2_mixed_phase_coverage_identifies_sparse_filter_contrast() {
+        let data = data();
+        let correction = |alpha: f64| {
+            let radians = alpha.to_radians();
+            0.4 * radians - 0.2 * radians * radians
+        };
+        let mut rows = [5.0, 20.0, 45.0]
+            .map(|alpha| observation("SDSS_g", alpha, 18.2 + correction(alpha), 0.05))
+            .to_vec();
+        rows.push(observation("SDSS_r", 30.0, 17.7 + correction(30.0), 0.05));
+        let fit = estimate_color_object(&data, "x", &rows, &config(ColorPhaseModel::C1C2));
+        assert_eq!(fit.status, "ok", "{fit:?}");
+        assert_eq!(fit.rank, Some(4));
+        assert!((fit.colors.as_ref().unwrap()[0] - 0.5).abs() < 1.0e-10);
+        assert!(fit.color_sigmas.as_ref().unwrap()[0].is_nan());
     }
 
     #[test]
@@ -1559,7 +1792,81 @@ mod tests {
                 + fit.num_clipped.unwrap()
                 + fit.num_used.unwrap()
         );
-        assert!(fit.num_clipped.unwrap() > 15);
+        assert_eq!(fit.num_used, Some(10));
+        assert_eq!(fit.num_clipped, Some(20));
+    }
+
+    #[test]
+    fn nonlinear_narrow_phase_range_uses_scipy_relative_convergence_policy() {
+        let data = data();
+        for model in [ColorPhaseModel::Hg, ColorPhaseModel::Hg12Star] {
+            let mut rows = Vec::new();
+            for (filter, h, offset) in [("SDSS_g", 18.2, 0.0), ("SDSS_r", 17.7, 0.003)] {
+                for index in 0..8 {
+                    let alpha = 10.0 + 0.001 * index as f64;
+                    let correction = match model {
+                        ColorPhaseModel::Hg => hg_correction(alpha, 0.25).0,
+                        ColorPhaseModel::Hg12Star => hg12star_correction(alpha, 0.25).unwrap().0,
+                        ColorPhaseModel::C1C2 => unreachable!(),
+                    };
+                    rows.push(observation(filter, alpha, h + correction + offset, 0.05));
+                }
+            }
+            let fit = estimate_color_object(&data, "x", &rows, &config(model));
+            assert_eq!(fit.status, "ok", "{model:?}: {fit:?}");
+            assert_eq!(fit.converged, Some(true), "{model:?}: {fit:?}");
+            assert!((fit.colors.as_ref().unwrap()[0] - 0.497).abs() < 1.0e-5);
+        }
+    }
+
+    #[test]
+    fn c1c2_near_rank_cutoff_matches_numpy_matrix_rank_semantics() {
+        let make_rows = |spacing_deg: f64| {
+            (0..8)
+                .map(|index| {
+                    let alpha_deg = 20.0 + spacing_deg * index as f64;
+                    let alpha = alpha_deg.to_radians();
+                    let filter_id = if index < 4 { "SDSS_g" } else { "SDSS_r" };
+                    let intercept = if index < 4 { 18.0 } else { 17.6 };
+                    EligibleRow {
+                        reduced_magnitude: intercept + 0.4 * alpha - 0.2 * alpha * alpha
+                            + 0.001 * (index as f64 - 3.5),
+                        sigma: 0.05,
+                        alpha_deg,
+                        filter_id: filter_id.to_string(),
+                    }
+                })
+                .collect::<Vec<_>>()
+        };
+
+        // Frozen NumPy 2.4 matrix_rank cases around
+        // s_max * max(rows, columns) * eps: the third singular direction is
+        // retained at 1e-13 degrees and discarded at 1e-14 degrees.
+        let above = fit_eligible_rows(&make_rows(1.0e-13), ColorPhaseModel::C1C2).unwrap();
+        let below = fit_eligible_rows(&make_rows(1.0e-14), ColorPhaseModel::C1C2).unwrap();
+        assert_eq!(above.analysis.rank, 3);
+        assert_eq!(below.analysis.rank, 2);
+    }
+
+    #[test]
+    fn hg_runaway_matches_scipy_evaluation_budget_and_nonconvergence() {
+        let rows = [1.0, 3.0, 5.0, 10.0, 20.0, 30.0, 50.0, 80.0].map(|alpha_deg| EligibleRow {
+            reduced_magnitude: 18.0 - 0.1 * alpha_deg,
+            sigma: 0.05,
+            alpha_deg,
+            filter_id: "SDSS_g".to_string(),
+        });
+        let fit = fit_eligible_rows(&rows, ColorPhaseModel::Hg).unwrap();
+
+        // scipy.optimize.least_squares (SciPy 1.17.1) exhausts its default
+        // 100 * n evaluation budget for this runaway solution. Its frozen
+        // reference is G=598754.2221, H=28.65634, chi2=23457.55049.
+        assert!(!fit.converged);
+        assert_eq!(fit.included.iter().filter(|&&keep| keep).count(), 8);
+        assert_eq!(fit.analysis.rank, 2);
+        assert!((fit.values[0] - 598_754.222_1).abs() < 1.0);
+        assert!((fit.values[1] - 28.656_340).abs() < 1.0e-4);
+        assert!((fit.chi2 - 23_457.550_49).abs() < 0.1);
     }
 
     #[test]

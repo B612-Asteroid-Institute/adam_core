@@ -9,14 +9,18 @@ import pyarrow.compute as pc
 import pytest
 import quivr as qv
 
+from adam_core import _rust_native
 from adam_core.coordinates import CometaryCoordinates, Origin
 from adam_core.observations import SourceCatalog
-from adam_core.orbits import Orbits
+from adam_core.observations.arrow_bridge import observations_to_ipc
+from adam_core.orbits import NonGravitationalParameters, Orbits
+from adam_core.orbits.arrow_bridge import orbits_to_ipc
 from adam_core.time import Timestamp
+from adam_core.utils.spice import DEFAULT_KERNELS
 
 from .. import color_determination
 from ..bandpasses import BandpassComposition
-from ..bandpasses.api import bandpass_delta_mag
+from ..bandpasses.api import _data_dir_str, bandpass_delta_mag
 from ..color_determination import (
     _CHANNEL_FILTERS,
     _FILTER_CHANNEL,
@@ -165,6 +169,93 @@ def test_estimate_colors_from_fixture(
     assert len(result) >= 1
 
     _assert_colors_close(result, object_id, _paper_colors(fx), tolerance)
+
+
+@pytest.mark.parametrize("phi_type", ["HG12star", "HG", "c1c2"])
+def test_fused_native_crossing_initializes_spice_and_matches_frozen_reference(
+    phi_type: Literal["HG12star", "HG", "c1c2"],
+) -> None:
+    from mpc_obscodes import mpc_obscodes
+
+    fx = np.load(DATA_DIR / "color_fixture_2025_MN25.npz", allow_pickle=True)
+    observations = _load_fixture_observations(fx)
+    orbits = _load_fixture_orbits(fx)
+    source_ipc = observations_to_ipc(observations)
+    orbit_ipc = orbits_to_ipc(orbits)
+    obscodes_json = Path(mpc_obscodes).read_text()
+
+    with pytest.raises(ValueError, match="default SPICE kernel paths"):
+        _rust_native.estimate_colors_fused_ipc(
+            source_ipc,
+            orbit_ipc,
+            _data_dir_str(),
+            [],
+            obscodes_json,
+            phi_type,
+            force_g_bounds=False,
+        )
+
+    raw = _rust_native.estimate_colors_fused_ipc(
+        source_ipc,
+        orbit_ipc,
+        _data_dir_str(),
+        [str(path) for path in DEFAULT_KERNELS],
+        obscodes_json,
+        phi_type,
+        force_g_bounds=False,
+    )
+    with pa.ipc.open_stream(pa.py_buffer(raw)) as reader:
+        native = reader.read_all().combine_chunks()
+    assert native.column("status").to_pylist() == ["ok"]
+    row = native.to_pylist()[0]
+    assert row["num_obs"] == (
+        row["num_invalid"]
+        + row["num_unsupported_filter"]
+        + row["num_clipped"]
+        + row["num_used"]
+    )
+    native_colors = {
+        (lhs, rhs): color
+        for lhs, rhs, color in zip(
+            row["color_lhs_filter_ids"],
+            row["color_rhs_filter_ids"],
+            row["colors"],
+            strict=True,
+        )
+    }
+    reference = estimate_colors(observations, orbits, phi_type, force_g_bounds=False)
+    assert native_colors[("LSST_g", "LSST_r")] == pytest.approx(
+        reference.g_r[0].as_py(), abs=1.0e-6
+    )
+    assert native_colors[("LSST_g", "LSST_i")] == pytest.approx(
+        reference.g_i[0].as_py(), abs=1.0e-6
+    )
+    assert native_colors[("LSST_i", "LSST_r")] == pytest.approx(
+        -reference.r_i[0].as_py(), abs=1.0e-6
+    )
+
+    if phi_type == "c1c2":
+        nongrav_orbit = Orbits.from_kwargs(
+            orbit_id=orbits.orbit_id,
+            object_id=orbits.object_id,
+            coordinates=orbits.coordinates,
+            non_gravitational_parameters=NonGravitationalParameters.from_kwargs(
+                A1=[1.0e-12]
+            ),
+        )
+        raw = _rust_native.estimate_colors_fused_ipc(
+            source_ipc,
+            orbits_to_ipc(nongrav_orbit),
+            _data_dir_str(),
+            [str(path) for path in DEFAULT_KERNELS],
+            obscodes_json,
+            phi_type,
+            force_g_bounds=False,
+        )
+        with pa.ipc.open_stream(pa.py_buffer(raw)) as reader:
+            row = reader.read_all().to_pylist()[0]
+        assert row["status"] == "failed"
+        assert "non-gravitational" in row["error"]
 
 
 _BAND_MAG_FIELD = {"g": "g_mag", "i": "i_mag", "r": "r_mag", "u": "u_mag"}

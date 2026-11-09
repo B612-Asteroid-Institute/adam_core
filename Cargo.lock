@@ -57,6 +57,7 @@ dependencies = [
  "arrow-schema",
  "bytes",
  "erfars",
+ "faer",
  "nalgebra",
  "num-complex",
  "parquet",

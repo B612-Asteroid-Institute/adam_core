@@ -1,5 +1,5 @@
 use crate::coordinate_ops::bench_result;
-use crate::spice::observer_positions_from_exposures;
+use crate::spice::{ensure_spice_backend_from_inputs, observer_positions_from_exposures};
 use adam_core_rs_coords::{
     bandpass_data, color_fit_record_batch, estimate_color_object, fit_absolute_magnitude_grouped,
     fit_absolute_magnitude_rows, origin_mu_au3_day2, propagate_2body_along_arc,
@@ -1358,15 +1358,19 @@ fn benchmark_fit_absolute_magnitude_grouped_numpy(
 /// One fused native crossing for canonical-filter-generic color estimation.
 ///
 /// Inputs are the canonical nested Arrow IPC encodings of `SourceCatalog` and
-/// `Orbits`. Rust owns grouping, orbit matching and propagation, observer-state
-/// preparation, geometry, filter resolution/projection, fitting and Arrow
-/// assembly. The returned IPC stream contains exactly one final `ColorFit`
-/// record batch.
+/// `Orbits`, installed default SPICE kernel paths, and MPC-obscode JSON. This
+/// same crossing idempotently initializes the process-global observer backend;
+/// missing environment data is a call-level error, never one failure per object.
+/// Rust owns grouping, orbit matching and propagation, observer-state preparation,
+/// geometry, filter resolution/projection, fitting and Arrow assembly. The
+/// returned IPC stream contains exactly one final `ColorFit` record batch.
 #[pyfunction]
 #[pyo3(signature = (
     source_catalog_ipc,
     orbits_ipc,
     data_dir,
+    spice_kernel_paths,
+    mpc_obscodes_json,
     phi_type,
     force_g_bounds=true,
     strict_band_mapping=false,
@@ -1380,6 +1384,8 @@ fn estimate_colors_fused_ipc<'py>(
     source_catalog_ipc: &Bound<'py, PyBytes>,
     orbits_ipc: &Bound<'py, PyBytes>,
     data_dir: &str,
+    spice_kernel_paths: Vec<String>,
+    mpc_obscodes_json: &str,
     phi_type: &str,
     force_g_bounds: bool,
     strict_band_mapping: bool,
@@ -1431,6 +1437,7 @@ fn estimate_colors_fused_ipc<'py>(
     };
     let bandpasses = bandpass_data(Path::new(data_dir)).map_err(bandpass_error)?;
     validate_color_config(bandpasses.as_ref(), &config).map_err(bandpass_error)?;
+    ensure_spice_backend_from_inputs(&spice_kernel_paths, mpc_obscodes_json)?;
 
     // Unique non-null source object IDs in first-observation order.
     let mut object_order = Vec::new();
@@ -1467,6 +1474,27 @@ fn estimate_colors_fused_ipc<'py>(
         PyValueError::new_err(format!("cannot convert observation times to TDB: {error}"))
     })?;
 
+    if orbits.coordinates.frame != DataFrame::Ecliptic {
+        return Err(PyValueError::new_err(format!(
+            "color estimation requires ecliptic orbit coordinates; got {}",
+            orbits.coordinates.frame.as_str()
+        )));
+    }
+    if orbits.coordinates.values.cartesian().is_none() {
+        return Err(PyValueError::new_err(
+            "color estimation requires Cartesian orbits",
+        ));
+    }
+    let orbit_times = orbits
+        .coordinates
+        .times
+        .as_ref()
+        .ok_or_else(|| PyValueError::new_err("color estimation requires orbit epochs"))?
+        .rescale(TimeScale::Tdb)
+        .map_err(|error| {
+            PyValueError::new_err(format!("cannot convert orbit epochs to TDB: {error}"))
+        })?;
+
     let mut output = Vec::with_capacity(object_order.len());
     for object_id in object_order {
         let rows = &source_groups[&object_id];
@@ -1494,7 +1522,27 @@ fn estimate_colors_fused_ipc<'py>(
         }
 
         let orbit_row = orbit_rows[0];
-        let prepared = prepare_color_observations(&source, &source_times, &orbits, orbit_row, rows);
+        if orbits
+            .non_gravitational_parameters
+            .as_ref()
+            .is_some_and(|parameters| parameters.row(orbit_row).is_active())
+        {
+            output.push(ColorFitRow::terminal(
+                object_id,
+                rows.len(),
+                "failed",
+                "two-body color estimation does not support active non-gravitational parameters",
+            ));
+            continue;
+        }
+        let prepared = prepare_color_observations(
+            &source,
+            &source_times,
+            &orbits,
+            &orbit_times,
+            orbit_row,
+            rows,
+        );
         match prepared {
             Ok(observations) => output.push(estimate_color_object(
                 bandpasses.as_ref(),
@@ -1521,29 +1569,15 @@ fn prepare_color_observations(
     source: &SourceCatalogBatch,
     source_times_tdb: &TimeArray,
     orbits: &OrbitBatch,
+    orbit_times_tdb: &TimeArray,
     orbit_row: usize,
     source_rows: &[usize],
 ) -> PyResult<Vec<ColorObservation>> {
-    if orbits.coordinates.frame != DataFrame::Ecliptic {
-        return Err(PyValueError::new_err(format!(
-            "color estimation requires ecliptic orbit coordinates; got {}",
-            orbits.coordinates.frame.as_str()
-        )));
-    }
     let states = orbits
         .coordinates
         .values
         .cartesian()
-        .ok_or_else(|| PyValueError::new_err("color estimation requires Cartesian orbits"))?;
-    let orbit_times = orbits
-        .coordinates
-        .times
-        .as_ref()
-        .ok_or_else(|| PyValueError::new_err("color estimation requires orbit epochs"))?
-        .rescale(TimeScale::Tdb)
-        .map_err(|error| {
-            PyValueError::new_err(format!("cannot convert orbit epoch to TDB: {error}"))
-        })?;
+        .expect("Cartesian representation validated once per fused call");
     let origin = &orbits.coordinates.origins.origins[orbit_row];
     let heliocentric = matches!(origin, OriginId::Named(code) if code == "SUN")
         || matches!(origin, OriginId::Naif(10));
@@ -1554,7 +1588,7 @@ fn prepare_color_observations(
     }
     let mu = origin_mu_au3_day2(origin)
         .map_err(|error| PyValueError::new_err(format!("invalid orbit origin: {error}")))?;
-    let epoch = orbit_times.epochs[orbit_row];
+    let epoch = orbit_times_tdb.epochs[orbit_row];
     let dts = source_rows
         .iter()
         .map(|&row| {
@@ -1563,7 +1597,7 @@ fn prepare_color_observations(
                 + (target.nanos - epoch.nanos) as f64 / adam_core_rs_coords::NANOS_PER_DAY as f64
         })
         .collect::<Vec<_>>();
-    let propagated = propagate_2body_along_arc(states[orbit_row], &dts, mu, 1000, 1.0e-15);
+    let propagated = propagate_2body_along_arc(states[orbit_row], &dts, mu, 1000, 1.0e-14);
     if propagated
         .iter()
         .flat_map(|state| state.iter())

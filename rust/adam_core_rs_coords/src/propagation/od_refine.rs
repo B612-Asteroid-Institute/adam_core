@@ -812,91 +812,24 @@ const STATUS_FTOL_XTOL: i64 = 4;
 const STATUS_STALLED: i64 = -1;
 const STATUS_NON_FINITE: i64 = -2;
 
-/// Trial steps attempted within one iteration before the solver reports a
-/// stall. With the radius shrinking fourfold per rejection this spans far
-/// more than the dynamic range between the initial radius and the `xtol`
-/// resolution.
-const MAX_STEP_ATTEMPTS: usize = 64;
+use crate::trust_region::MAX_STEP_ATTEMPTS;
 
 fn norm6(v: &[f64; 6]) -> f64 {
     v.iter().map(|x| x * x).sum::<f64>().sqrt()
 }
 
-/// Exact trust-region step of the scaled Gauss-Newton model (scipy's
-/// `solve_lsq_trust_region`, on the eigen-decomposition of the scaled normal
-/// matrix instead of the SVD of the scaled Jacobian): in the eigenbasis
-/// `p(alpha)_i = -q_i / (lambda_i + alpha)`, with `alpha >= 0` the smallest
-/// value giving `||p|| <= radius`, found by Moré–Sorensen's safeguarded
-/// Newton iteration on `||p(alpha)|| - radius`. Returns the step in the
-/// eigenbasis and the `alpha` used (0 for the Gauss-Newton step).
 fn trust_region_step(
     eigenvalues: &[f64; 6],
     q: &[f64; 6],
     radius: f64,
     initial_alpha: f64,
 ) -> ([f64; 6], f64) {
-    let radius = radius.max(f64::MIN_POSITIVE);
-    let q_norm = norm6(q);
-    if q_norm == 0.0 {
-        return ([0.0; 6], 0.0);
-    }
-    let lambda_max = eigenvalues.iter().copied().fold(0.0_f64, f64::max);
-    let lambda_min = eigenvalues.iter().copied().fold(f64::INFINITY, f64::min);
-    let full_rank = lambda_max > 0.0 && lambda_min > f64::EPSILON * f64::EPSILON * lambda_max;
-    let p_of =
-        |alpha: f64| -> [f64; 6] { std::array::from_fn(|i| -q[i] / (eigenvalues[i] + alpha)) };
-    if full_rank {
-        let p = p_of(0.0);
-        if norm6(&p) <= radius {
-            return (p, 0.0);
-        }
-    }
-    let phi_and_derivative = |alpha: f64| -> (f64, f64) {
-        let p_norm = norm6(&p_of(alpha));
-        let phi = p_norm - radius;
-        let phi_prime = -(0..6)
-            .map(|i| q[i] * q[i] / (eigenvalues[i] + alpha).powi(3))
-            .sum::<f64>()
-            / p_norm;
-        (phi, phi_prime)
-    };
-    let mut alpha_upper = q_norm / radius;
-    let mut alpha_lower = if full_rank {
-        let (phi, phi_prime) = phi_and_derivative(0.0);
-        -phi / phi_prime
-    } else {
-        0.0
-    };
-    let fallback = |lower: f64, upper: f64| (0.001 * upper).max((lower * upper).sqrt());
-    let mut alpha = initial_alpha;
-    if alpha.is_nan() || alpha <= 0.0 || alpha < alpha_lower || alpha > alpha_upper {
-        alpha = fallback(alpha_lower, alpha_upper);
-    }
-    for _ in 0..10 {
-        if alpha < alpha_lower || alpha > alpha_upper {
-            alpha = fallback(alpha_lower, alpha_upper);
-        }
-        let (phi, phi_prime) = phi_and_derivative(alpha);
-        if phi < 0.0 {
-            alpha_upper = alpha;
-        }
-        let ratio = phi / phi_prime;
-        alpha_lower = alpha_lower.max(alpha - ratio);
-        alpha -= (phi + radius) * ratio / radius;
-        if phi.abs() < 0.01 * radius {
-            break;
-        }
-    }
-    let mut p = p_of(alpha);
-    let p_norm = norm6(&p);
-    if p_norm > 0.0 {
-        // The iteration stops within 1 % of the radius; land exactly on it.
-        let factor = radius / p_norm;
-        for value in p.iter_mut() {
-            *value *= factor;
-        }
-    }
-    (p, alpha)
+    let (step, alpha) =
+        crate::trust_region::trust_region_step(eigenvalues, q, radius, initial_alpha);
+    (
+        step.try_into().expect("six-dimensional trust-region step"),
+        alpha,
+    )
 }
 
 fn remaining_fit_config(

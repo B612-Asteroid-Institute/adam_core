@@ -205,6 +205,8 @@ pub use translation::{
 pub mod abs_mag;
 pub use abs_mag::{fit_absolute_magnitude_grouped, fit_absolute_magnitude_rows, AbsMagFit};
 
+pub(crate) mod trust_region;
+
 pub mod color_estimation;
 pub use color_estimation::{
     color_fit_record_batch, color_fit_schema, estimate_color_object, validate_color_config,
