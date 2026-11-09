@@ -2,11 +2,6 @@ name: Release candidate wheel matrix
 
 on:
   workflow_dispatch:
-    inputs:
-      adam_assist_ref:
-        description: Exact compatible adam-assist revision to test
-        required: true
-        type: string
 
 permissions:
   contents: read
@@ -16,7 +11,6 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  ADAM_ASSIST_REF: ${{ inputs.adam_assist_ref }}
   PIP_ONLY_BINARY: ":all:"
   PYTHON_PREVIEW_VERSION: "0.7.0"
   ADAM_CORE_RELEASE_BUILD: "1"
@@ -59,23 +53,6 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Checkout adam-assist candidate
-        if: matrix.python-version != '3.14'
-        uses: actions/checkout@v4
-        with:
-          repository: B612-Asteroid-Institute/adam-assist
-          ref: ${{ env.ADAM_ASSIST_REF }}
-          path: adam-assist
-          fetch-depth: 0
-
-      - name: Verify exact ASSIST revision
-        if: matrix.python-version != '3.14'
-        shell: bash
-        run: |
-          set -euo pipefail
-          [[ "$ADAM_ASSIST_REF" =~ ^[0-9a-f]{40}$ ]]
-          test "$(git -C adam-assist rev-parse HEAD)" = "$ADAM_ASSIST_REF"
-
       - name: Set up CPython
         uses: actions/setup-python@v5
         with:
@@ -85,12 +62,6 @@ jobs:
         uses: dtolnay/rust-toolchain@1.87.0
         with:
           components: rustfmt, clippy
-
-      - name: Prepare compatible ASSIST lock for Core candidate
-        if: matrix.python-version != '3.14'
-        env:
-          ADAM_ASSIST_RUST_REPO: ${{ github.workspace }}/adam-assist
-        run: python migration/scripts/develop_downstream_adam_assist.py --prepare-only
 
       - name: Verify runner architecture
         shell: bash
@@ -115,50 +86,16 @@ jobs:
           --zig --target ${{ matrix.platform.target }} --manylinux 2_17
           -i python${{ matrix.python-version }}
 
-      - name: Build adam-assist manylinux wheel
-        if: matrix.python-version != '3.14' && matrix.platform.family == 'manylinux'
-        uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1
-        with:
-          command: build
-          target: ${{ matrix.platform.target }}
-          manylinux: "2_17"
-          rust-toolchain: 1.87.0
-          working-directory: adam-assist
-          args: --release --locked -i python${{ matrix.python-version }} --out ../wheelhouse
-
       - name: Build adam-core native wheel (attested wrapper)
         if: matrix.platform.family == 'native'
         run: >-
           python migration/scripts/build_release_wheel.py --out wheelhouse --
           -i python${{ matrix.python-version }}
 
-      - name: Build adam-assist native wheel
-        if: matrix.python-version != '3.14' && matrix.platform.family == 'native'
-        uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1
-        with:
-          command: build
-          rust-toolchain: 1.87.0
-          working-directory: adam-assist
-          args: --release --locked -i python${{ matrix.python-version }} --out ../wheelhouse
-
-      - name: Run exact clean-room acceptance with prebuilt source-pair wheels
-        if: matrix.python-version != '3.14'
+      - name: Run Core wheel acceptance
         shell: bash
-        run: |
-          set -euo pipefail
-          python migration/scripts/run_clean_room_artifact_acceptance.py \
-            --prebuilt-wheelhouse "$GITHUB_WORKSPACE/wheelhouse" \
-            --adam-core-repo "$GITHUB_WORKSPACE" \
-            --adam-core-ref HEAD \
-            --adam-assist-repo "$GITHUB_WORKSPACE/adam-assist" \
-            --adam-assist-ref HEAD \
-            --workspace "$RUNNER_TEMP/acceptance" \
-            --report "$RUNNER_TEMP/acceptance-report.json" \
-            --python "$(command -v python)"
-
-      - name: Run CPython 3.14 Core-only wheel acceptance
-        if: matrix.python-version == '3.14'
-        shell: bash
+        env:
+          EXPECTED_PYTHON: ${{ matrix.python-version }}
         run: |
           set -euo pipefail
           acceptance="$RUNNER_TEMP/acceptance"
@@ -194,12 +131,17 @@ jobs:
           from adam_core import _rust_native
           from adam_core.dynamics.lambert import calculate_c3
           from adam_core.time import Timestamp
+          from adam_core.utils.spice import DEFAULT_KERNELS
 
           expected_version = os.environ["PYTHON_PREVIEW_VERSION"]
           distribution_version = importlib.metadata.version("adam-core")
           native_version, native_commit = _rust_native.build_identity()
-          if platform.python_version_tuple()[:2] != ("3", "14"):
-              raise AssertionError(f"expected CPython 3.14, got {platform.python_version()}")
+          expected_python = tuple(os.environ["EXPECTED_PYTHON"].split("."))
+          if platform.python_version_tuple()[:2] != expected_python:
+              raise AssertionError(
+                  f"expected CPython {os.environ['EXPECTED_PYTHON']}, "
+                  f"got {platform.python_version()}"
+              )
           if not (
               distribution_version
               == adam_core.__version__
@@ -234,6 +176,15 @@ jobs:
           )
           np.testing.assert_allclose(c3, np.array([3.5]), rtol=0.0, atol=0.0)
 
+          kernel_paths = [Path(path).resolve() for path in DEFAULT_KERNELS]
+          for kernel_path in kernel_paths:
+              if not kernel_path.is_file():
+                  raise AssertionError(f"installed kernel is missing: {kernel_path}")
+              if "site-packages" not in kernel_path.parts:
+                  raise AssertionError(
+                      f"kernel did not resolve from installed packages: {kernel_path}"
+                  )
+
           versions = {"adam-core": distribution_version}
           smoke = {
               "status": "passed",
@@ -249,11 +200,14 @@ jobs:
                       "iso_values": iso_values,
                       "c3_au2_per_day2": c3.tolist(),
                   },
+                  "installed_kernel_discovery": {
+                      "paths": [str(path) for path in kernel_paths],
+                  },
               },
           }
           report = {
               "status": "passed",
-              "acceptance_mode": "core-only-cpython-3.14",
+              "acceptance_mode": "core-wheel",
               "runtime": {"smoke": smoke},
           }
           Path(os.environ["CORE_ACCEPTANCE_REPORT"]).write_text(
@@ -287,14 +241,8 @@ jobs:
 
           wheelhouse = Path(os.environ["RUNNER_TEMP"]) / "acceptance" / "wheelhouse"
           core = list(wheelhouse.glob("adam_core-*.whl"))
-          assist = list(wheelhouse.glob("adam_assist-*.whl"))
-          expect_assist = "${{ matrix.python-version }}" != "3.14"
-          expected_assist_count = 1 if expect_assist else 0
-          if len(core) != 1 or len(assist) != expected_assist_count:
-              raise SystemExit(
-                  "unexpected platform wheel count; "
-                  f"{core=} {assist=} {expect_assist=}"
-              )
+          if len(core) != 1:
+              raise SystemExit(f"expected exactly one Core wheel; got {core=}")
           expected_version = os.environ["PYTHON_PREVIEW_VERSION"]
           with zipfile.ZipFile(core[0]) as archive:
               metadata_paths = [n for n in archive.namelist() if n.endswith(".dist-info/METADATA")]
@@ -305,38 +253,6 @@ jobs:
               raise SystemExit(
                   f"adam-core release metadata mismatch: {metadata['Name']} {metadata['Version']}"
               )
-          if expect_assist:
-              with zipfile.ZipFile(assist[0]) as archive:
-                  metadata_paths = [
-                      n for n in archive.namelist() if n.endswith(".dist-info/METADATA")
-                  ]
-                  if len(metadata_paths) != 1:
-                      raise SystemExit(
-                          f"unexpected ASSIST METADATA files: {metadata_paths}"
-                      )
-                  assist_metadata = email.message_from_bytes(
-                      archive.read(metadata_paths[0])
-                  )
-              from packaging.requirements import Requirement
-              from packaging.version import Version
-
-              core_requirements = [
-                  requirement
-                  for requirement in map(
-                      Requirement, assist_metadata.get_all("Requires-Dist", [])
-                  )
-                  if requirement.name == "adam-core" and requirement.marker is None
-              ]
-              if len(core_requirements) != 1:
-                  raise SystemExit(
-                      "expected one unconditional adam-core requirement: "
-                      f"{core_requirements}"
-                  )
-              if Version(expected_version) not in core_requirements[0].specifier:
-                  raise SystemExit(
-                      "adam-assist does not admit the candidate Core version: "
-                      f"{expected_version} not in {core_requirements[0]}"
-                  )
           report = json.loads(
               (Path(os.environ["RUNNER_TEMP"]) / "acceptance-report.json").read_text()
           )
@@ -353,20 +269,12 @@ jobs:
           pattern = "*${{ matrix.platform.wheel_tag }}.whl"
           invalid = [
               path.name
-              for path in core + assist
+              for path in core
               if not fnmatch.fnmatch(path.name, pattern)
           ]
           if invalid:
               raise SystemExit(f"wheel tag mismatch for {pattern}: {invalid}")
           PY
-
-      - name: Preserve pairing patch evidence
-        if: ${{ always() && matrix.python-version != '3.14' }}
-        shell: bash
-        run: |
-          mkdir -p "$RUNNER_TEMP/acceptance"
-          cp adam-assist/.cargo/config.toml \
-            "$RUNNER_TEMP/acceptance/pairing-cargo-config.toml"
 
       - name: Upload wheel acceptance evidence
         if: always()
@@ -378,7 +286,6 @@ jobs:
             ${{ runner.temp }}/acceptance/invocation/smoke-report.json
             ${{ runner.temp }}/acceptance/wheelhouse/*.whl
             ${{ runner.temp }}/acceptance/logs/*.log
-            ${{ runner.temp }}/acceptance/pairing-cargo-config.toml
           if-no-files-found: error
 
   extended-coverage:

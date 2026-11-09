@@ -69,9 +69,9 @@ mode and installed-package discovery are tested without duplicate files.
 ## Native artifact targets
 
 The supported Core wheel matrix is CPython 3.11-3.14 on manylinux 2.17 x86-64
-and AArch64 and macOS Apple silicon and Intel: 16 Core wheels. Exact Assist
-candidate pairing remains on CPython 3.11-3.13 until its separately tracked
-3.14 migration is complete.
+and AArch64 and macOS Apple silicon and Intel: 16 Core wheels with one uniform
+Core-owned acceptance path. Downstream projects validate their own Core
+compatibility separately.
 Windows is deferred because ``libassist-sys 1.2.1`` uses upstream ASSIST's
 POSIX memory-mapping implementation; musllinux is unsupported. Release
 publication downloads the exact clean-room-tested artifacts and does not

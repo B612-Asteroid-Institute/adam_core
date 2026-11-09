@@ -4,9 +4,8 @@ Set ``ADAM_ASSIST_RUST_REPO`` to an exact candidate checkout; otherwise a
 sibling ``../adam-assist`` checkout is used. The build receives a temporary
 Cargo patch for this checkout's public Core crates and refuses to replace an
 existing downstream Cargo config. Compatible Core source releases temporarily
-refresh the patched package entries already selected downstream and admit only
-dependency versions selected by Core's lock. When the reviewed downstream
-source intentionally has no registry lock yet, a
+refresh those patched package entries and align spicekit to Core's lock. When
+the reviewed downstream source intentionally has no registry lock yet, a
 patched temporary lock is generated instead. A local develop build restores
 the original lock byte-for-byte, including restoring initial absence.
 adam-core retains no GPL crate sources.
@@ -103,27 +102,9 @@ def _locked_versions(packages: list[dict[str, Any]]) -> dict[str, set[str]]:
     return result
 
 
-def _selected_core_crates(packages: list[dict[str, Any]]) -> tuple[str, ...]:
-    package_names = {package.get("name") for package in packages}
-    return tuple(crate for crate in PUBLIC_CORE_CRATES if crate in package_names)
-
-
-def _verify_patched_core_packages(
-    packages: list[dict[str, Any]],
-    version: str,
-    required_crates: Sequence[str] | None = None,
-) -> None:
-    selected_crates = _selected_core_crates(packages)
-    required = (
-        tuple(required_crates) if required_crates is not None else selected_crates
-    )
-    checked_crates = tuple(
-        crate
-        for crate in PUBLIC_CORE_CRATES
-        if crate in required or crate in selected_crates
-    )
+def _verify_patched_core_packages(packages: list[dict[str, Any]], version: str) -> None:
     invalid: dict[str, list[dict[str, Any]]] = {}
-    for crate in checked_crates:
+    for crate in PUBLIC_CORE_CRATES:
         selected = [package for package in packages if package.get("name") == crate]
         if (
             len(selected) != 1
@@ -131,10 +112,10 @@ def _verify_patched_core_packages(
             or "source" in selected[0]
         ):
             invalid[crate] = selected
-    if not required or invalid:
+    if invalid:
         raise SystemExit(
             "temporary downstream lock did not select exactly one local-path "
-            f"Core {version} package for every downstream Core crate: {invalid}"
+            f"Core {version} package per crate: {invalid}"
         )
 
 
@@ -143,24 +124,27 @@ def _reject_unrelated_version_additions(
 ) -> None:
     before_versions = _locked_versions(before)
     after_versions = _locked_versions(after)
-    # A targeted Core update may replace a shared dependency generation (for
-    # example Arrow/Parquet 54 with 58) or add a newly required package. Admit
-    # only exact versions already selected by Core's reviewed lock. This keeps
-    # the refresh future-proof without allowing an unrelated downstream update.
+    retained_non_core = (before_versions.keys() & after_versions.keys()) - set(
+        PUBLIC_CORE_CRATES
+    )
+    # Core #229 requires spicekit's KernelPool (0.2.3). The native-OD ASSIST
+    # candidate predates that lock update; permit only the version already
+    # selected by Core, without allowing unrelated dependency upgrades.
     core_versions = _locked_versions(_locked_packages(PROJECT_ROOT / "Cargo.lock"))
+    allowed_shared_versions = {"spicekit": core_versions["spicekit"]}
     additions = {}
-    for name in after_versions.keys() - set(PUBLIC_CORE_CRATES):
+    for name in retained_non_core:
         unexpected = (
             after_versions[name]
-            - before_versions.get(name, set())
-            - core_versions.get(name, set())
+            - before_versions[name]
+            - allowed_shared_versions.get(name, set())
         )
         if unexpected:
             additions[name] = sorted(unexpected)
     if additions:
         raise SystemExit(
-            "temporary Core lock refresh added package versions absent from "
-            f"Core's lock: {additions}"
+            "temporary Core lock refresh added unrelated package versions: "
+            f"{additions}"
         )
 
 
@@ -176,29 +160,24 @@ def _refresh_core_lock(
 
     version = _current_core_version()
     before = _locked_packages(lock) if lock.is_file() else None
-    selected_core_crates: tuple[str, ...] | None = None
     if before is None:
         command = [cargo, "generate-lockfile", "--manifest-path", str(manifest)]
     else:
-        selected_core_crates = _selected_core_crates(before)
-        if not selected_core_crates:
-            raise SystemExit(
-                f"downstream Cargo lock selects no public Core crates: {lock}"
-            )
         command = [cargo, "update", "--manifest-path", str(manifest)]
-        for crate in selected_core_crates:
+        for crate in PUBLIC_CORE_CRATES:
             command.extend(["--package", crate])
     subprocess.check_call(command, cwd=repo, env=env)
 
     if not lock.is_file():
         raise SystemExit(f"Cargo did not create the temporary downstream lock: {lock}")
     after = _locked_packages(lock)
-    _verify_patched_core_packages(after, version, selected_core_crates)
+    _verify_patched_core_packages(after, version)
 
     if before is not None:
-        # One Cargo transaction unlocks all Core crates selected by ASSIST. It
-        # may remove obsolete versions, but every added non-Core version must be
-        # an exact version already selected in Core's reviewed lock.
+        # One Cargo transaction unlocks all mutually exact-pinned Core crates.
+        # It may remove obsolete dependency versions or introduce new dependency
+        # names required by Core (for example rawzip), but it may not add a version
+        # for any retained non-Core package except Core's locked spicekit version.
         _reject_unrelated_version_additions(before, after)
     print(f"prepared downstream Cargo.lock for Core {version}")
 

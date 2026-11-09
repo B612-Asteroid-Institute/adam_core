@@ -83,14 +83,18 @@ def test_release_matrix_generates_and_inspects_runtime_version() -> None:
     assert workflow.count(builder) == 2
     assert workflow.index(builder) < workflow.index(inspector)
     assert "python migration/scripts/write_maturin_version.py" not in workflow
-    assert "adam_assist_ref:" in workflow
-    assert "ADAM_ASSIST_REF: ${{ inputs.adam_assist_ref }}" in workflow
+    assert "adam_assist_ref:" not in workflow
+    assert "ADAM_ASSIST_REF" not in workflow
+    assert "adam-assist" not in workflow
+    assert "adam_assist" not in workflow
     assert 'PYTHON_PREVIEW_VERSION: "0.7.0"' in workflow
     assert workflow.count('python-version: ["3.11", "3.12", "3.13", "3.14"]') == 1
-    assert "Run CPython 3.14 Core-only wheel acceptance" in workflow
-    assert 'acceptance_mode": "core-only-cpython-3.14' in workflow
-    assert "if: matrix.python-version == '3.14'" in workflow
-    assert workflow.count("if: matrix.python-version != '3.14'") >= 4
+    assert workflow.count("Run Core wheel acceptance") == 1
+    assert "Run CPython 3.14 Core-only wheel acceptance" not in workflow
+    assert "EXPECTED_PYTHON: ${{ matrix.python-version }}" in workflow
+    assert 'acceptance_mode": "core-wheel' in workflow
+    assert "DEFAULT_KERNELS" in workflow
+    assert "installed_kernel_discovery" in workflow
 
     header = workflow.split("\njobs:", 1)[0]
     assert header.count('  ADAM_CORE_RELEASE_BUILD: "1"') == 1
@@ -120,6 +124,193 @@ def test_release_matrix_generates_and_inspects_runtime_version() -> None:
         "pdm run test-live-integrations --",
     ):
         assert extended_coverage.count(check) == 1
+
+
+def _mutated_release_failures(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    original: str,
+    replacement: str,
+) -> list[str]:
+    workflow = (
+        ROOT / ".github/workflows/release-candidate-wheel-matrix.yml"
+    ).read_text()
+    assert workflow.count(original) == 1
+    path = tmp_path / "release-candidate-wheel-matrix.yml"
+    path.write_text(workflow.replace(original, replacement, 1))
+    monkeypatch.setattr(check_pdm_ci_scripts, "RELEASE_WORKFLOW", path)
+    with (ROOT / "pyproject.toml").open("rb") as source:
+        project = tomllib.load(source)
+    return check_pdm_ci_scripts._release_workflow_failures(project)
+
+
+@pytest.mark.parametrize(
+    ("step_name", "condition"),
+    [
+        ("Run Core wheel acceptance", "${{ matrix.python-version != '3.14' }}"),
+        (
+            "Run Core wheel acceptance",
+            "${{ always() && matrix.python-version != '3.14' }}",
+        ),
+        (
+            "Verify platform wheel count and tags",
+            "${{ matrix['python-version'] == '3.14' }}",
+        ),
+    ],
+)
+def test_release_policy_rejects_python_version_step_conditions(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    step_name: str,
+    condition: str,
+) -> None:
+    original = f"      - name: {step_name}\n        shell: bash\n"
+    replacement = (
+        f"      - name: {step_name}\n"
+        f"        if: {condition}\n"
+        "        shell: bash\n"
+    )
+
+    failures = _mutated_release_failures(tmp_path, monkeypatch, original, replacement)
+
+    assert any("must not use matrix.python-version" in failure for failure in failures)
+    if step_name == "Run Core wheel acceptance":
+        assert any(
+            "Core wheel acceptance step must be unconditional" in failure
+            for failure in failures
+        )
+    else:
+        assert any(
+            "platform wheel count/tag step must be unconditional" in failure
+            for failure in failures
+        )
+
+
+@pytest.mark.parametrize(
+    ("original", "replacement", "message"),
+    [
+        (
+            "  workflow_dispatch:\n",
+            "  workflow_dispatch:\n"
+            "    inputs:\n"
+            "      adam_assist_ref:\n"
+            "        required: true\n",
+            "must not own downstream Assist work",
+        ),
+        (
+            '        python-version: ["3.11", "3.12", "3.13", "3.14"]\n',
+            '        python-version: ["3.11", "3.12", "3.13"]\n',
+            "must contain exactly CPython",
+        ),
+        (
+            "        platform:\n",
+            "        exclude:\n"
+            '          - python-version: "3.14"\n'
+            "        platform:\n",
+            "only python-version and platform axes",
+        ),
+        (
+            "        platform:\n",
+            "        include:\n"
+            '          - python-version: "3.14"\n'
+            "        platform:\n",
+            "only python-version and platform axes",
+        ),
+        (
+            "          - name: macos-x86_64\n"
+            "            runner: macos-15-intel\n"
+            "            system: Darwin-x86_64\n"
+            "            family: native\n"
+            "            wheel_tag: macosx*x86_64\n"
+            "    steps:\n",
+            "          - name: macos-x86_64\n"
+            "            runner: macos-15-intel\n"
+            "            system: Darwin-x86_64\n"
+            "            family: native\n"
+            "            wheel_tag: macosx*x86_64\n"
+            "          - name: manylinux-ppc64le\n"
+            "            runner: ubuntu-latest\n"
+            "            system: Linux-ppc64le\n"
+            "            family: manylinux\n"
+            "            target: powerpc64le-unknown-linux-gnu\n"
+            "            wheel_tag: manylinux*ppc64le\n"
+            "    steps:\n",
+            "exactly four supported platforms",
+        ),
+    ],
+)
+def test_release_policy_rejects_nonuniform_matrix_or_downstream_input(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    original: str,
+    replacement: str,
+    message: str,
+) -> None:
+    failures = _mutated_release_failures(tmp_path, monkeypatch, original, replacement)
+
+    assert any(message in failure for failure in failures)
+
+
+@pytest.mark.parametrize(
+    ("original", "replacement", "message"),
+    [
+        (
+            "      - name: Run Core wheel acceptance\n",
+            "      - name: Run version-specific wheel acceptance\n",
+            "exactly one unconditional Core wheel acceptance step",
+        ),
+        (
+            '          "$runtime_python" -m pip check \\\n',
+            '          "$runtime_python" -m pip freeze \\\n',
+            "pip check",
+        ),
+        (
+            "          if platform.python_version_tuple()[:2] != expected_python:\n",
+            "          if platform.python_version_tuple()[:1] != expected_python:\n",
+            "expected runtime CPython",
+        ),
+        (
+            "              == native_version\n",
+            "              != native_version\n",
+            "distribution/Python/native version identity",
+        ),
+        (
+            '          if native_commit != os.environ["GITHUB_SHA"]:\n',
+            "          if not native_commit:\n",
+            "exact native commit",
+        ),
+        (
+            "          kernel_paths = [Path(path).resolve() for path in DEFAULT_KERNELS]\n",
+            "          kernel_paths = []\n",
+            "installed-package kernel discovery",
+        ),
+        (
+            '          test "${#core_wheels[@]}" -eq 1\n',
+            '          test "${#core_wheels[@]}" -ge 1\n',
+            "one built Core wheel",
+        ),
+        (
+            "          if len(core) != 1:\n",
+            "          if len(core) < 1:\n",
+            "exactly one accepted Core wheel",
+        ),
+        (
+            "              if not fnmatch.fnmatch(path.name, pattern)\n",
+            "              if not fnmatch.fnmatchcase(path.name, pattern)\n",
+            "platform wheel tag",
+        ),
+    ],
+)
+def test_release_policy_rejects_weakened_core_acceptance_checks(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    original: str,
+    replacement: str,
+    message: str,
+) -> None:
+    failures = _mutated_release_failures(tmp_path, monkeypatch, original, replacement)
+
+    assert any(message in failure for failure in failures)
 
 
 @pytest.mark.parametrize(
@@ -582,7 +773,7 @@ def test_generated_lock_validation_failure_restores_initial_absence(
     manifest, lock = _write_assist_manifest(tmp_path)
     generated = _core_packages("0.7.0")
     if mutation == "missing":
-        generated.clear()
+        generated.pop()
     elif mutation == "duplicate":
         generated.append(dict(generated[0]))
     elif mutation == "registry-source":
@@ -644,46 +835,9 @@ def test_patched_core_lock_verification_requires_one_local_aligned_package() -> 
     with pytest.raises(SystemExit, match="exactly one local-path Core 0.7.0"):
         develop_downstream_adam_assist._verify_patched_core_packages(duplicate, "0.7.0")
 
-    with pytest.raises(SystemExit, match="exactly one local-path Core 0.7.0"):
-        develop_downstream_adam_assist._verify_patched_core_packages([], "0.7.0")
-
     missing = valid[1:]
     with pytest.raises(SystemExit, match="exactly one local-path Core 0.7.0"):
-        develop_downstream_adam_assist._verify_patched_core_packages(
-            missing,
-            "0.7.0",
-            develop_downstream_adam_assist.PUBLIC_CORE_CRATES,
-        )
-
-
-def test_downstream_lock_refresh_targets_only_selected_core_crates(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    manifest, lock = _write_assist_manifest(tmp_path)
-    selected = _core_packages("0.6.0")[1:]
-    _write_assist_lock(lock, selected)
-    commands: list[list[str]] = []
-
-    def fake_check_call(command: list[str], **_: object) -> None:
-        commands.append(command)
-        _write_assist_lock(lock, _core_packages("0.7.0")[1:])
-
-    monkeypatch.setattr(
-        develop_downstream_adam_assist.shutil, "which", lambda _: "/cargo"
-    )
-    monkeypatch.setattr(
-        develop_downstream_adam_assist.subprocess, "check_call", fake_check_call
-    )
-    monkeypatch.setattr(
-        develop_downstream_adam_assist, "_current_core_version", lambda: "0.7.0"
-    )
-
-    develop_downstream_adam_assist._refresh_core_lock(tmp_path, {})
-
-    expected = ["/cargo", "update", "--manifest-path", str(manifest)]
-    for package in selected:
-        expected.extend(["--package", package["name"]])
-    assert commands == [expected]
+        develop_downstream_adam_assist._verify_patched_core_packages(missing, "0.7.0")
 
 
 def test_unrelated_lock_guard_allows_removals_but_rejects_added_versions() -> None:
@@ -701,38 +855,29 @@ def test_unrelated_lock_guard_allows_removals_but_rejects_added_versions() -> No
     develop_downstream_adam_assist._reject_unrelated_version_additions(before, accepted)
 
     added_version = [*accepted, _package("retained", "3.0.0")]
-    with pytest.raises(SystemExit, match="versions absent from Core's lock"):
+    with pytest.raises(SystemExit, match="added unrelated package versions"):
         develop_downstream_adam_assist._reject_unrelated_version_additions(
             before, added_version
         )
 
 
-def test_lock_guard_admits_only_exact_core_lock_dependency_generations() -> None:
+def test_lock_guard_aligns_spicekit_only_to_the_core_lock() -> None:
     core_versions = develop_downstream_adam_assist._locked_versions(
         develop_downstream_adam_assist._locked_packages(ROOT / "Cargo.lock")
     )
-    (arrow_version,) = core_versions["arrow-array"]
     (spicekit_version,) = core_versions["spicekit"]
-    (uuid_version,) = core_versions["uuid"]
-    before = [
-        _package("arrow-array", "54.3.1"),
-        _package("spicekit", "0.2.2"),
-        _package("retained", "1.0.0"),
-    ]
+    before = [_package("spicekit", "0.2.2"), _package("retained", "1.0.0")]
     aligned = [
-        _package("arrow-array", arrow_version),
         _package("spicekit", spicekit_version),
-        _package("uuid", uuid_version),
         _package("retained", "1.0.0"),
     ]
     develop_downstream_adam_assist._reject_unrelated_version_additions(before, aligned)
 
     for changed in (
-        [_package("arrow-array", "99.0.0"), _package("retained", "1.0.0")],
-        [*aligned, _package("uuid", "99.0.0")],
+        [_package("spicekit", "99.0.0"), _package("retained", "1.0.0")],
         [*aligned, _package("retained", "2.0.0")],
     ):
-        with pytest.raises(SystemExit, match="versions absent from Core's lock"):
+        with pytest.raises(SystemExit, match="added unrelated package versions"):
             develop_downstream_adam_assist._reject_unrelated_version_additions(
                 before, changed
             )
@@ -769,7 +914,7 @@ def test_existing_lock_unrelated_addition_restores_original_bytes(
         develop_downstream_adam_assist, "_current_core_version", lambda: "0.7.0"
     )
 
-    with pytest.raises(SystemExit, match="versions absent from Core's lock"):
+    with pytest.raises(SystemExit, match="added unrelated package versions"):
         develop_downstream_adam_assist._prepare_downstream(tmp_path, {})
 
     expected = ["/cargo", "update", "--manifest-path", str(manifest)]
@@ -991,7 +1136,8 @@ def test_rust_ci_is_reproducible_and_downstream_sources_are_exact() -> None:
     assert "dtolnay/rust-toolchain@1.87.0" in crate_ci
     assert "components: rustfmt, clippy" in crate_ci
     assert "dtolnay/rust-toolchain@1.87.0" in tier1
-    assert "adam_assist_ref:" in release_matrix
+    assert "adam_assist_ref:" not in release_matrix
+    assert "ADAM_ASSIST_REF" not in release_matrix
     tier1_trigger = tier1.split("permissions:", 1)[0]
     assert "workflow_dispatch:" in tier1_trigger
     assert "pull_request:" not in tier1_trigger
@@ -1025,18 +1171,12 @@ def test_rust_ci_is_reproducible_and_downstream_sources_are_exact() -> None:
     assert "adam_assist" not in normal_ci
     assert "adam-assist" not in nightly
     assert "adam_assist" not in nightly
-    assert "Build adam-assist manylinux wheel" in release_matrix
-    assert "Build adam-assist native wheel" in release_matrix
-    assert (
-        "if: matrix.python-version != '3.14' && "
-        "matrix.platform.family == 'manylinux'"
-    ) in release_matrix
-    assert (
-        "if: matrix.python-version != '3.14' && " "matrix.platform.family == 'native'"
-    ) in release_matrix
-    assert "Run CPython 3.14 Core-only wheel acceptance" in release_matrix
-    assert "optional JAX" in release_matrix
-    assert release_matrix.count("rust-toolchain: 1.87.0") == 2
+    assert "adam-assist" not in release_matrix
+    assert "adam_assist" not in release_matrix
+    assert "Run Core wheel acceptance" in release_matrix
+    assert "EXPECTED_PYTHON: ${{ matrix.python-version }}" in release_matrix
+    assert 'acceptance_mode": "core-wheel' in release_matrix
+    assert release_matrix.count("rust-toolchain: 1.87.0") == 0
     assert "python -m pip install --no-deps -e dependent" in tier1
     assert "jpl-small-bodies-de441-n16==2021.3.31.1" in tier1
     builder_name = "Build reference propagator in the Core test environment"
@@ -1094,21 +1234,13 @@ def test_rust_ci_is_reproducible_and_downstream_sources_are_exact() -> None:
     assert "refusing to replace downstream Cargo config" in downstream_builder
     assert '"--prepare-only"' in downstream_builder
     assert '"--precise"' not in downstream_builder
-    assert "for crate in selected_core_crates:" in downstream_builder
     assert 'command.extend(["--package", crate])' in downstream_builder
     assert "original_lock" in downstream_builder
     assert "_restore_downstream(prepared)" in downstream_builder
-    assert "Prepare compatible ASSIST lock for Core candidate" in release_matrix
-    assert release_matrix.count(helper_command) == 1
+    assert "Prepare compatible ASSIST lock for Core candidate" not in release_matrix
+    assert helper_command not in release_matrix
     assert "[patch.crates-io]" not in release_matrix
-    matrix_preparer = release_matrix.index(
-        "Prepare compatible ASSIST lock for Core candidate"
-    )
-    assert release_matrix.index("Set up Rust") < matrix_preparer
-    assert matrix_preparer < release_matrix.index("Build adam-assist manylinux wheel")
-    assert matrix_preparer < release_matrix.index("Build adam-assist native wheel")
     assert 'version("adam-core") == adam_core.__version__ == "0.7.0"' in tier1
-    assert 'version("adam-assist") == assist_version' in tier1
 
     coords_manifest = (ROOT / "rust/adam_core_rs_coords/Cargo.toml").read_text()
     native_module = (ROOT / "rust/adam_core_py/src/lib.rs").read_text()
@@ -1123,6 +1255,11 @@ def test_rust_ci_is_reproducible_and_downstream_sources_are_exact() -> None:
     for documentation in (packaging_notes, release_notes):
         assert "Arrow 58" in documentation
         assert "0.8.0" in documentation
+    release_order = release_notes.split("Release order\n-------------\n", 1)[1]
+    assert "adam_assist_ref" not in release_order
+    first_release_step = release_order.split("#.", 1)[1].lstrip()
+    assert first_release_step.startswith("after separate version-bump authorization")
+    assert 'version("adam-assist") == assist_version' in tier1
 
     for workflow in workflows.glob("*.yml"):
         source = workflow.read_text()

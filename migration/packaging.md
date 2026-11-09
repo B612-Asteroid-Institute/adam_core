@@ -63,11 +63,12 @@ Last updated: 2026-11-09.
   2026-11-03 showed that `main` was unprotected and that no repository rulesets
   applied, so no required `tier1-smoke` context existed at that date. Recheck
   branch protection and rulesets if repository policy changes.
-- The release-candidate wheel matrix remains a separate exact-ref workflow.
-  CPython 3.11-3.13 cells require its explicit Assist SHA and run paired wheel
-  acceptance. All four CPython 3.14 Core wheels build and run Core-only clean
-  acceptance without checking out or claiming support for the still-unmigrated
-  Assist candidate; Assist CPython 3.14 support is tracked separately.
+- The release-candidate wheel matrix remains a separate manually dispatched
+  workflow. It builds and cleanly accepts one Core wheel for every CPython
+  3.11-3.14 and supported-platform cell with identical Core-owned checks.
+  Assist and other downstream projects validate Core compatibility in their
+  own repositories; they are not built or lock-patched by the Core release
+  matrix.
 
 ## Expected Validation Shape
 

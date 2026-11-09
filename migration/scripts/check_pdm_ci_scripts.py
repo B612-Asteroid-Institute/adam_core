@@ -8,6 +8,7 @@ live Rust-vs-legacy benchmark flags/artifacts.
 
 from __future__ import annotations
 
+import json
 import re
 import shlex
 import subprocess
@@ -489,6 +490,88 @@ def _release_matrix_cell(text: str, cell: str) -> tuple[str, ...] | None:
     return tuple(line.strip() for line in block.splitlines() if line.strip())
 
 
+def _release_matrix_contract_failures(artifact_acceptance: str) -> list[str]:
+    failures: list[str] = []
+    matrix_marker = "\n      matrix:\n"
+    steps_marker = "\n    steps:\n"
+    if (
+        artifact_acceptance.count(matrix_marker) != 1
+        or artifact_acceptance.count(steps_marker) != 1
+    ):
+        return ["artifact acceptance must define one matrix and one steps list"]
+
+    matrix = artifact_acceptance.split(matrix_marker, 1)[1].split(steps_marker, 1)[0]
+    axes = re.findall(r"^        ([A-Za-z0-9_-]+):", matrix, flags=re.MULTILINE)
+    if axes != ["python-version", "platform"]:
+        failures.append(
+            "artifact acceptance matrix must contain only python-version and "
+            f"platform axes, found {axes!r}"
+        )
+
+    version_matches = re.findall(
+        r"^        python-version:\s*(\[.*\])\s*$", matrix, flags=re.MULTILINE
+    )
+    versions: object = None
+    if len(version_matches) == 1:
+        try:
+            versions = json.loads(version_matches[0])
+        except json.JSONDecodeError:
+            pass
+    expected_versions = ["3.11", "3.12", "3.13", "3.14"]
+    if versions != expected_versions:
+        failures.append(
+            "artifact acceptance matrix must contain exactly CPython "
+            f"{expected_versions!r}, found {versions!r}"
+        )
+
+    platforms = re.findall(r"^          - name:\s*(\S+)\s*$", matrix, re.MULTILINE)
+    expected_platforms = {
+        "manylinux-x86_64",
+        "manylinux-aarch64",
+        "macos-arm64",
+        "macos-x86_64",
+    }
+    if len(platforms) != 4 or set(platforms) != expected_platforms:
+        failures.append(
+            "artifact acceptance matrix must contain exactly four supported "
+            f"platforms, found {platforms!r}"
+        )
+    return failures
+
+
+def _release_artifact_steps(artifact_acceptance: str) -> list[dict[str, str]]:
+    """Read top-level step fields from the canonical release workflow shape."""
+
+    steps_marker = "\n    steps:\n"
+    if artifact_acceptance.count(steps_marker) != 1:
+        return []
+    steps_source = artifact_acceptance.split(steps_marker, 1)[1]
+    steps: list[dict[str, str]] = []
+    current: dict[str, str] | None = None
+    active_field: str | None = None
+    key_pattern = r"(['\"]?)([A-Za-z0-9_-]+)\1\s*:\s*(.*)$"
+    for line in steps_source.splitlines():
+        step_match = re.match(r"^      - " + key_pattern, line)
+        if step_match:
+            if current is not None:
+                steps.append(current)
+            current = {step_match.group(2): step_match.group(3)}
+            active_field = step_match.group(2)
+            continue
+        if current is None:
+            continue
+        field_match = re.match(r"^        " + key_pattern, line)
+        if field_match:
+            active_field = field_match.group(2)
+            current[active_field] = field_match.group(3)
+            continue
+        if active_field is not None and (line.startswith("          ") or not line):
+            current[active_field] += "\n" + line.strip()
+    if current is not None:
+        steps.append(current)
+    return steps
+
+
 def _release_workflow_failures(project: dict[str, Any]) -> list[str]:
     failures: list[str] = []
     build_tools = project.get("dependency-groups", {}).get("build")
@@ -513,6 +596,19 @@ def _release_workflow_failures(project: dict[str, Any]) -> list[str]:
                 f"{declaration!r} once before jobs"
             )
 
+    for forbidden in (
+        "adam_assist_ref:",
+        "ADAM_ASSIST_REF",
+        "Checkout adam-assist candidate",
+        "Build adam-assist",
+        "Prepare compatible ASSIST lock",
+        "pairing-cargo-config.toml",
+    ):
+        if forbidden in text:
+            failures.append(
+                "Core release acceptance must not own downstream Assist work: "
+                f"found {forbidden!r}"
+            )
     artifact_marker = "\n  artifact-acceptance:\n"
     extended_marker = "\n  extended-coverage:\n"
     if text.count(artifact_marker) != 1 or text.count(extended_marker) != 1:
@@ -524,6 +620,93 @@ def _release_workflow_failures(project: dict[str, Any]) -> list[str]:
         artifact_acceptance = text.split(artifact_marker, 1)[1].split(
             extended_marker, 1
         )[0]
+        failures.extend(_release_matrix_contract_failures(artifact_acceptance))
+        steps = _release_artifact_steps(artifact_acceptance)
+        python_condition = re.compile(
+            r"matrix\s*(?:\.\s*python-version|\[\s*['\"]python-version['\"]\s*\])"
+        )
+        for step in steps:
+            condition = step.get("if", "")
+            if python_condition.search(condition):
+                failures.append(
+                    "artifact acceptance step "
+                    f"{step.get('name', '<unnamed>')!r} must not use "
+                    "matrix.python-version in an if condition"
+                )
+
+        core_steps = [
+            step for step in steps if step.get("name") == "Run Core wheel acceptance"
+        ]
+        if len(core_steps) != 1:
+            failures.append(
+                "artifact acceptance must contain exactly one unconditional "
+                "Core wheel acceptance step"
+            )
+        else:
+            core_step = core_steps[0]
+            if "if" in core_step:
+                failures.append("Core wheel acceptance step must be unconditional")
+            if "EXPECTED_PYTHON: ${{ matrix.python-version }}" not in core_step.get(
+                "env", ""
+            ):
+                failures.append(
+                    "Core wheel acceptance must bind expected runtime CPython "
+                    "from the matrix"
+                )
+            normalized_run = " ".join(core_step.get("run", "").split())
+            core_checks = {
+                'test "${#core_wheels[@]}" -eq 1': "one built Core wheel",
+                '"$runtime_python" -m pip install "${core_wheels[0]}"': (
+                    "clean Core wheel installation"
+                ),
+                '"$runtime_python" -m pip check': "pip check",
+                "platform.python_version_tuple()[:2] != expected_python": (
+                    "expected runtime CPython"
+                ),
+                "distribution_version == adam_core.__version__ == native_version "
+                "== expected_version": "distribution/Python/native version identity",
+                'native_commit != os.environ["GITHUB_SHA"]': "exact native commit",
+                "kernel_paths = [Path(path).resolve() for path in DEFAULT_KERNELS]": (
+                    "installed-package kernel discovery"
+                ),
+                '"acceptance_mode": "core-wheel"': "Core acceptance report mode",
+            }
+            for token, description in core_checks.items():
+                if token not in normalized_run:
+                    failures.append(
+                        f"Core wheel acceptance must retain {description} check"
+                    )
+
+        tag_steps = [
+            step
+            for step in steps
+            if step.get("name") == "Verify platform wheel count and tags"
+        ]
+        if len(tag_steps) != 1:
+            failures.append(
+                "artifact acceptance must contain one platform wheel count/tag step"
+            )
+        else:
+            tag_step = tag_steps[0]
+            if "if" in tag_step:
+                failures.append("platform wheel count/tag step must be unconditional")
+            normalized_run = " ".join(tag_step.get("run", "").split())
+            tag_checks = {
+                'core = list(wheelhouse.glob("adam_core-*.whl"))': (
+                    "Core wheel inventory"
+                ),
+                "if len(core) != 1:": "exactly one accepted Core wheel",
+                'pattern = "*${{ matrix.platform.wheel_tag }}.whl"': (
+                    "matrix platform tag"
+                ),
+                "if not fnmatch.fnmatch(path.name, pattern)": "platform wheel tag",
+            }
+            for token, description in tag_checks.items():
+                if token not in normalized_run:
+                    failures.append(
+                        f"platform verification must retain {description} check"
+                    )
+
         extended_coverage = text.split(extended_marker, 1)[1]
         extended_header, separator, _ = extended_coverage.partition("\n    steps:\n")
         if not separator:
@@ -757,17 +940,6 @@ def _tier1_exact_ref_failures() -> list[str]:
             "Tier-1 workflow must not claim a frozen Assist version is compatible"
         )
 
-    release = RELEASE_WORKFLOW.read_text(encoding="utf-8")
-    for required in (
-        "adam_assist_ref:",
-        "ADAM_ASSIST_REF: ${{ inputs.adam_assist_ref }}",
-        "ref: ${{ env.ADAM_ASSIST_REF }}",
-        '[[ "$ADAM_ASSIST_REF" =~ ^[0-9a-f]{40}$ ]]',
-    ):
-        if required not in release:
-            failures.append(
-                f"release-candidate exact-ref matrix lost required contract {required!r}"
-            )
     return failures
 
 
