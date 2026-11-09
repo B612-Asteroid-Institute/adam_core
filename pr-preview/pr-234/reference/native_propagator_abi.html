@@ -687,10 +687,16 @@ whole core-owned batch.</p>
 <p>Provider packages should delete or deprecate Python and PyO3 methods such as
 <code class="docutils literal notranslate"><span class="pre">fit_least_squares</span></code>, <code class="docutils literal notranslate"><span class="pre">fit_least_squares_evaluated</span></code>, <code class="docutils literal notranslate"><span class="pre">od_fit</span></code>,
 <code class="docutils literal notranslate"><span class="pre">initial_orbit_determination</span></code>, <code class="docutils literal notranslate"><span class="pre">run_iod_linkages</span></code> and <code class="docutils literal notranslate"><span class="pre">run_od_fit</span></code>.
-Core 0.7 accepts explicit typed configuration in its canonical batch and
-predictor-level algorithms and passes the provider only as the stage
-propagator. Providers must not publish backend-owned OD compatibility routes;
-there is no bridge package.</p>
+Core accepts explicit typed configuration in its canonical batch workflows and
+focused <code class="docutils literal notranslate"><span class="pre">od::algorithms</span></code> numerical kernels, and passes the provider only as
+an input predictor/propagator. The focused kernels do not replace canonical
+batch grouping, preflight, provenance, continuation, or failure policy.
+Rust consumers that need pre-run metadata inspection use
+<code class="docutils literal notranslate"><span class="pre">ProviderMetadata::from_external_propagator</span></code>; it validates the adopted
+ABI-v2 identity, capabilities, and provenance fingerprints without calling
+propagation, executing an OD workflow, or performing that workflow’s preflight.
+Providers must not
+publish backend-owned OD compatibility routes; there is no bridge package.</p>
 </section>
 </section>
 
@@ -729,7 +735,7 @@ there is no bridge package.</p>
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-11-08</div>
+              Last updated on 2026-11-09</div>
           </div>
           <div class="right-details">
             

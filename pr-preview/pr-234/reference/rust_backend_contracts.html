@@ -627,15 +627,29 @@ resource identity, parses tables, executes the ordered observation
 pipeline, and owns numerical loops. There are no model callback/native-spec
 dictionaries.</p></li>
 <li><p>Rust configuration types live under <code class="docutils literal notranslate"><span class="pre">adam_core_rs_coords::od</span></code>; profiles
-live under <code class="docutils literal notranslate"><span class="pre">od::profiles</span></code>. Implemented focused Rust composition functions
-under <code class="docutils literal notranslate"><span class="pre">od::algorithms</span></code> are <code class="docutils literal notranslate"><span class="pre">prepare_observations</span></code>,
-<code class="docutils literal notranslate"><span class="pre">run_iod_with_predictor</span></code>, <code class="docutils literal notranslate"><span class="pre">refine_with_predictor</span></code>, and
-<code class="docutils literal notranslate"><span class="pre">run_od_with_predictors</span></code>. The last applies the pipeline once and gives
-both stages the same prepared coordinates.</p></li>
+live under <code class="docutils literal notranslate"><span class="pre">od::profiles</span></code>. The advanced one-group numerical API under
+<code class="docutils literal notranslate"><span class="pre">adam_core::od::algorithms</span></code> contains <code class="docutils literal notranslate"><span class="pre">prepare_observations</span></code>,
+<code class="docutils literal notranslate"><span class="pre">solve_prepared_iod</span></code>, and <code class="docutils literal notranslate"><span class="pre">refine_prepared_orbit</span></code>. These functions are
+intended for custom native Rust predictors and focused numerical research.
+They do not perform association/member grouping, resource binding or
+preflight, provider identity/provenance, cross-group continuation, typed
+failure-envelope assembly, or canonical output disposition. There is no
+predictor-level full-OD composition: use canonical <code class="docutils literal notranslate"><span class="pre">run_od</span></code> whenever
+those workflow guarantees are required. Advanced callers provide a
+<code class="docutils literal notranslate"><span class="pre">TimeScaleProvider</span></code> and <code class="docutils literal notranslate"><span class="pre">OriginTranslationProvider</span></code>: delegating time
+rescaling to <code class="docutils literal notranslate"><span class="pre">TimeArray::rescale</span></code> matches Core’s ERFA conversion, while
+shared SPICE translation uses an initialized
+<code class="docutils literal notranslate"><span class="pre">adam_core::spice::global_backend().read()</span></code> guard passed directly as the
+provider. Kernel mutation is excluded while that guard is held.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">ProviderMetadata::from_external_propagator</span></code> validates an already-adopted
+ABI-v2 backend’s identity, capabilities and provenance fingerprints without
+calling propagation, executing an OD workflow, or performing that workflow’s
+preflight. Canonical
+results expose identities actually used through <code class="docutils literal notranslate"><span class="pre">OdBatchResult::providers()</span></code>.</p></li>
 <li><p>External native propagators expose the propagation-only
 <code class="docutils literal notranslate"><span class="pre">adam_core.propagator.v2</span></code> capsule. Capsule adoption validates its ABI,
-identity fields, and capabilities. The current predictor-level composition
-accepts an already-adopted predictor and does not itself sequence global
+identity fields, and capabilities. The advanced numerical kernels accept an
+already-adopted predictor and do not themselves sequence global
 provider/resource/ID preflight. Providers never select transforms, profiles,
 grouping, fitting, rejection, covariance, or OD algorithms.</p></li>
 <li><p>The canonical batch layer rejects invalid IDs/member mappings and
@@ -809,7 +823,7 @@ are explicit compatibility/provider boundaries rather than default backends.</p>
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-11-08</div>
+              Last updated on 2026-11-09</div>
           </div>
           <div class="right-details">
             
