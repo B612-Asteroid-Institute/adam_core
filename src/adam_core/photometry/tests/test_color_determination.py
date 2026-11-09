@@ -177,6 +177,9 @@ def test_production_module_has_no_python_scientific_algorithm() -> None:
     assert "propagate_2body" not in source
     assert "least_squares" not in source
     assert "ensure_spice_backend" not in source
+    assert "setup_SPICE" not in source
+    assert "setup_mpc_obscodes" not in source
+    assert "get_backend" not in source
     assert source.count("estimate_colors_fused_ipc(") == 1
 
 
@@ -618,6 +621,7 @@ def test_status_list_and_scalar_nullability() -> None:
 
 def test_fresh_process_facade_initializes_spice_inside_fused_call() -> None:
     code = textwrap.dedent("""
+        from adam_core import _rust_native
         from adam_core.photometry.color_determination import estimate_colors
         from adam_core.photometry.tests.test_color_determination import _fixture
         from adam_core.utils.spice import DEFAULT_KERNELS
@@ -627,8 +631,53 @@ def test_fresh_process_facade_initializes_spice_inside_fused_call() -> None:
         assert backend.registered_kernels() == []
         assert backend.mpc_obscodes_loaded() == 0
         observations, orbits = _fixture()
-        result = estimate_colors(observations, orbits, "c1c2", force_g_bounds=False)
+
+        target = "estimate_colors_fused_ipc"
+        native_calls = []
+        native_originals = {}
+        for name in dir(_rust_native):
+            native = getattr(_rust_native, name)
+            if not callable(native):
+                continue
+            native_originals[name] = native
+
+            def tracked_native(*args, _name=name, _native=native, **kwargs):
+                native_calls.append(_name)
+                if _name != target:
+                    raise AssertionError(f"unexpected chained native call: {_name}")
+                return _native(*args, **kwargs)
+
+            setattr(_rust_native, name, tracked_native)
+
+        backend_calls = []
+        patched_backend_methods = []
+        for name in dir(backend):
+            if name.startswith("_"):
+                continue
+            method = getattr(backend, name)
+            if not callable(method):
+                continue
+            patched_backend_methods.append(name)
+
+            def blocked_backend_call(*args, _name=name, **kwargs):
+                backend_calls.append(_name)
+                raise AssertionError(f"unexpected chained backend call: {_name}")
+
+            setattr(backend, name, blocked_backend_call)
+
+        try:
+            result = estimate_colors(
+                observations, orbits, "c1c2", force_g_bounds=False
+            )
+        finally:
+            for name, native in native_originals.items():
+                setattr(_rust_native, name, native)
+            for name in patched_backend_methods:
+                delattr(backend, name)
+
         assert result.status.to_pylist() == ["ok"]
+        assert native_calls == [target]
+        assert backend_calls == []
         assert len(backend.registered_kernels()) == len(DEFAULT_KERNELS)
         assert backend.mpc_obscodes_loaded() > 0
         """)
