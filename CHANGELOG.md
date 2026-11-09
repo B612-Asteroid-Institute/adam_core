@@ -163,6 +163,10 @@ This file contains notable changes in adam-core
 
 ### Fixed
 
+- Canonical OD workflows report exact internal CMC2003 fit-covariance refusal
+  as ordered, typed ``cmc_covariance_unavailable`` group failures so independent
+  siblings continue; backend, protocol, runtime, and other invocation-level
+  failures remain fatal and atomic.
 - Repeated-state two-body ephemeris calls select the grouped light-time and
   spherical kernel from input data alone, preserving serial-reference bits for
   duplicate epochs across Rayon pool sizes.

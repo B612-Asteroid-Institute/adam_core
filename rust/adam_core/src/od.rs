@@ -4774,7 +4774,8 @@ mod tests {
 
     struct InjectedCmcPredictor<'a> {
         inner: &'a (dyn SphericalPredictor + Sync),
-        fail_window: usize,
+        cmc_windows: &'a [usize],
+        fatal_windows: &'a [usize],
     }
 
     impl InjectedCmcPredictor<'_> {
@@ -4788,10 +4789,15 @@ mod tests {
             }) else {
                 return Ok(());
             };
-            if probe_window(first_mjd) == self.fail_window {
+            let window = probe_window(first_mjd);
+            if self.fatal_windows.contains(&window) {
+                return Err(PropagationError::Backend(format!(
+                    "injected fatal window {window}"
+                )));
+            }
+            if self.cmc_windows.contains(&window) {
                 return Err(PropagationError::CmcCovarianceUnavailable(format!(
-                    "injected retained covariance diagnostic for window {}",
-                    self.fail_window
+                    "injected retained covariance diagnostic for window {window}"
                 )));
             }
             Ok(())
@@ -6139,10 +6145,38 @@ mod tests {
         Refinement,
     }
 
-    fn run_iod_with_internal_cmc(
+    #[derive(Clone, Copy, Debug)]
+    enum InjectedCanonicalWorkflow {
+        RunIod,
+        RunOdIod,
+        RunOdRefinement,
+        Refine,
+        Evaluate,
+    }
+
+    impl InjectedCanonicalWorkflow {
+        const ALL: [Self; 5] = [
+            Self::RunIod,
+            Self::RunOdIod,
+            Self::RunOdRefinement,
+            Self::Refine,
+            Self::Evaluate,
+        ];
+
+        const fn stage(self) -> OdStage {
+            match self {
+                Self::RunIod | Self::RunOdIod => OdStage::Iod,
+                Self::RunOdRefinement | Self::Refine => OdStage::Refinement,
+                Self::Evaluate => OdStage::Evaluation,
+            }
+        }
+    }
+
+    fn run_iod_with_internal_failures(
         input: &AssociatedObservations,
         config: &IodRunConfig,
-        fail_window: usize,
+        cmc_windows: &[usize],
+        fatal_windows: &[usize],
     ) -> Result<OdBatchResult, OdBatchError> {
         let BatchPreparation::Ready(PreparedIod { inner }) = prepare_iod(input, config)? else {
             return Ok(OdBatchResult::default());
@@ -6151,7 +6185,8 @@ mod tests {
         with_stage_predictor(&OdPropagator::two_body(), fit, |service, context| {
             let injected = InjectedCmcPredictor {
                 inner: service.predictor,
-                fail_window,
+                cmc_windows,
+                fatal_windows,
             };
             let injected_service = PredictionService {
                 predictor: &injected,
@@ -6175,10 +6210,19 @@ mod tests {
         })
     }
 
-    fn run_od_with_internal_cmc(
+    fn run_iod_with_internal_cmc(
+        input: &AssociatedObservations,
+        config: &IodRunConfig,
+        fail_window: usize,
+    ) -> Result<OdBatchResult, OdBatchError> {
+        run_iod_with_internal_failures(input, config, &[fail_window], &[])
+    }
+
+    fn run_od_with_internal_failures(
         input: &AssociatedObservations,
         config: &OdConfig,
-        fail_window: usize,
+        cmc_windows: &[usize],
+        fatal_windows: &[usize],
         stage: InjectedRunOdStage,
     ) -> Result<OdBatchResult, OdBatchError> {
         let BatchPreparation::Ready(PreparedOd { inner }) = prepare_od(input, config)? else {
@@ -6198,7 +6242,8 @@ mod tests {
                 InjectedRunOdStage::Iod => {
                     let injected = InjectedCmcPredictor {
                         inner: iod_service.predictor,
-                        fail_window,
+                        cmc_windows,
+                        fatal_windows,
                     };
                     let injected_service = PredictionService {
                         predictor: &injected,
@@ -6209,7 +6254,8 @@ mod tests {
                 InjectedRunOdStage::Refinement => {
                     let injected = InjectedCmcPredictor {
                         inner: refinement_service.predictor,
-                        fail_window,
+                        cmc_windows,
+                        fatal_windows,
                     };
                     let injected_service = PredictionService {
                         predictor: &injected,
@@ -6221,10 +6267,20 @@ mod tests {
         )
     }
 
-    fn refine_with_internal_cmc(
+    fn run_od_with_internal_cmc(
+        input: &AssociatedObservations,
+        config: &OdConfig,
+        fail_window: usize,
+        stage: InjectedRunOdStage,
+    ) -> Result<OdBatchResult, OdBatchError> {
+        run_od_with_internal_failures(input, config, &[fail_window], &[], stage)
+    }
+
+    fn refine_with_internal_failures(
         input: &MemberedOrbits,
         config: &RefinementRunConfig,
-        fail_window: usize,
+        cmc_windows: &[usize],
+        fatal_windows: &[usize],
     ) -> Result<OdBatchResult, OdBatchError> {
         let BatchPreparation::Ready(PreparedRefinement { inner, config }) =
             prepare_refinement(input, config)?
@@ -6239,7 +6295,8 @@ mod tests {
         with_stage_predictor(&OdPropagator::two_body(), fit, |service, context| {
             let injected = InjectedCmcPredictor {
                 inner: service.predictor,
-                fail_window,
+                cmc_windows,
+                fatal_windows,
             };
             let injected_service = PredictionService {
                 predictor: &injected,
@@ -6249,10 +6306,19 @@ mod tests {
         })
     }
 
-    fn evaluate_with_internal_cmc(
+    fn refine_with_internal_cmc(
+        input: &MemberedOrbits,
+        config: &RefinementRunConfig,
+        fail_window: usize,
+    ) -> Result<OdBatchResult, OdBatchError> {
+        refine_with_internal_failures(input, config, &[fail_window], &[])
+    }
+
+    fn evaluate_with_internal_failures(
         input: &MemberedOrbits,
         config: &EvaluationConfig,
-        fail_window: usize,
+        cmc_windows: &[usize],
+        fatal_windows: &[usize],
     ) -> Result<OdBatchResult, OdBatchError> {
         let BatchPreparation::Ready(PreparedEvaluation { inner, config }) =
             prepare_evaluation(input, config)?
@@ -6263,7 +6329,8 @@ mod tests {
         with_stage_predictor(&OdPropagator::two_body(), fit, |service, _context| {
             let injected = InjectedCmcPredictor {
                 inner: service.predictor,
-                fail_window,
+                cmc_windows,
+                fatal_windows,
             };
             let injected_service = PredictionService {
                 predictor: &injected,
@@ -6271,6 +6338,56 @@ mod tests {
             };
             evaluate_prepared(inner, &config, &injected_service)
         })
+    }
+
+    fn evaluate_with_internal_cmc(
+        input: &MemberedOrbits,
+        config: &EvaluationConfig,
+        fail_window: usize,
+    ) -> Result<OdBatchResult, OdBatchError> {
+        evaluate_with_internal_failures(input, config, &[fail_window], &[])
+    }
+
+    fn run_canonical_with_internal_failures(
+        workflow: InjectedCanonicalWorkflow,
+        input: &AssociatedObservations,
+        config: &OdConfig,
+        refinement_input: &MemberedOrbits,
+        evaluation_input: &MemberedOrbits,
+        cmc_windows: &[usize],
+        fatal_windows: &[usize],
+    ) -> Result<OdBatchResult, OdBatchError> {
+        match workflow {
+            InjectedCanonicalWorkflow::RunIod => {
+                run_iod_with_internal_failures(input, &config.for_iod(), cmc_windows, fatal_windows)
+            }
+            InjectedCanonicalWorkflow::RunOdIod => run_od_with_internal_failures(
+                input,
+                config,
+                cmc_windows,
+                fatal_windows,
+                InjectedRunOdStage::Iod,
+            ),
+            InjectedCanonicalWorkflow::RunOdRefinement => run_od_with_internal_failures(
+                input,
+                config,
+                cmc_windows,
+                fatal_windows,
+                InjectedRunOdStage::Refinement,
+            ),
+            InjectedCanonicalWorkflow::Refine => refine_with_internal_failures(
+                refinement_input,
+                &config.for_refinement(),
+                cmc_windows,
+                fatal_windows,
+            ),
+            InjectedCanonicalWorkflow::Evaluate => evaluate_with_internal_failures(
+                evaluation_input,
+                &EvaluationConfig::core_v1(),
+                cmc_windows,
+                fatal_windows,
+            ),
+        }
     }
 
     fn run_child_test(test_name: &str, environment: &str, timeout: Duration) {
@@ -6461,6 +6578,126 @@ mod tests {
     }
 
     #[test]
+    fn mixed_cmc_and_fatal_failures_preserve_atomic_fatal_precedence() {
+        let _fixture_lock = SPICE_FIXTURE_LOCK
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        let _kernel = FurnishedKernel(zero_sun_spk());
+        let input = partitioned_groups(
+            scaled_scientific_observation_batch(4 * PROBE_ROWS_PER_GROUP, PROBE_STEP_DAYS),
+            PROBE_ROWS_PER_GROUP,
+        );
+        let config = explicit_config();
+        let normal_iod =
+            run_iod(&input, &config.for_iod(), &OdPropagator::two_body()).expect("baseline IOD");
+        let refinement_input = normal_iod
+            .to_membered_orbits(&input.observations)
+            .expect("baseline IOD handoff")
+            .expect("baseline IOD states");
+        let normal_od = run_od(&input, &config, &OdPropagator::two_body()).expect("baseline OD");
+        let evaluation_input = normal_od
+            .to_membered_orbits(&input.observations)
+            .expect("baseline OD handoff")
+            .expect("baseline OD states");
+
+        for threads in [1, 4] {
+            rayon::ThreadPoolBuilder::new()
+                .num_threads(threads)
+                .build()
+                .expect("mixed CMC/fatal pool")
+                .install(|| {
+                    for workflow in InjectedCanonicalWorkflow::ALL {
+                        let localized = run_canonical_with_internal_failures(
+                            workflow,
+                            &input,
+                            &config,
+                            &refinement_input,
+                            &evaluation_input,
+                            &[2, 1],
+                            &[],
+                        )
+                        .unwrap_or_else(|error| {
+                            panic!("{workflow:?} localized CMC failures: {error:?}")
+                        });
+                        assert_eq!(
+                            localized
+                                .failures()
+                                .iter()
+                                .map(|failure| failure.group_id.as_str())
+                                .collect::<Vec<_>>(),
+                            ["partition-001", "partition-002"],
+                            "{workflow:?} at {threads} threads"
+                        );
+                        assert_eq!(
+                            localized
+                                .failures()
+                                .iter()
+                                .map(|failure| failure.code.as_str())
+                                .collect::<Vec<_>>(),
+                            ["cmc_covariance_unavailable", "cmc_covariance_unavailable"],
+                            "{workflow:?} at {threads} threads"
+                        );
+                        assert!(
+                            localized
+                                .failures()
+                                .iter()
+                                .all(|failure| failure.stage == workflow.stage()),
+                            "{workflow:?} at {threads} threads"
+                        );
+                        assert!(
+                            localized.failures()[0].message.contains("window 1")
+                                && localized.failures()[1].message.contains("window 2"),
+                            "{workflow:?} at {threads} threads: {:?}",
+                            localized.failures()
+                        );
+                        assert_eq!(
+                            localized
+                                .fitted_orbits()
+                                .iter()
+                                .map(|orbit| orbit.group_id.as_str())
+                                .collect::<Vec<_>>(),
+                            ["partition-000", "partition-003"],
+                            "{workflow:?} at {threads} threads"
+                        );
+
+                        for (cmc_windows, fatal_windows, expected_window) in
+                            [(&[0, 2][..], &[1, 3][..], 1), (&[2, 1][..], &[3][..], 3)]
+                        {
+                            let error = run_canonical_with_internal_failures(
+                                workflow,
+                                &input,
+                                &config,
+                                &refinement_input,
+                                &evaluation_input,
+                                cmc_windows,
+                                fatal_windows,
+                            )
+                            .expect_err("fatal failure must abort without partial products");
+                            assert_eq!(
+                                error.code,
+                                OdBatchErrorCode::Backend,
+                                "{workflow:?} at {threads} threads: {error:?}"
+                            );
+                            let expected = format!("injected fatal window {expected_window}");
+                            assert!(
+                                error.message.contains(&expected),
+                                "{workflow:?} at {threads} threads: {error:?}"
+                            );
+                            assert!(
+                                matches!(
+                                    error.source.as_ref(),
+                                    Some(PropagationError::Backend(message))
+                                        if message == &expected
+                                ),
+                                "{workflow:?} at {threads} threads: {error:?}"
+                            );
+                        }
+                    }
+                });
+        }
+    }
+
+    #[test]
     fn exact_cmc_covariance_failures_continue_groups_across_canonical_workflows() {
         let _fixture_lock = SPICE_FIXTURE_LOCK
             .lock()
@@ -6592,10 +6829,13 @@ mod tests {
             ))
         );
         for fatal in [
+            PropagationError::Schema(SchemaError::InvalidRecordBatch(diagnostic.to_string())),
+            PropagationError::InvalidRequest(diagnostic.to_string()),
+            PropagationError::MissingOrbitTimes,
+            PropagationError::UnsupportedCovarianceMode(CovariancePropagation::None),
+            PropagationError::RowFailure(diagnostic.to_string()),
             PropagationError::Backend(diagnostic.to_string()),
             PropagationError::BackendProtocol(diagnostic.to_string()),
-            PropagationError::RowFailure(diagnostic.to_string()),
-            PropagationError::InvalidRequest(diagnostic.to_string()),
             PropagationError::ThreadPool(diagnostic.to_string()),
         ] {
             assert_eq!(
