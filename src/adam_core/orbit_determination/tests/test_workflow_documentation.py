@@ -242,6 +242,7 @@ _GUIDE_BLOCK_CONTRACT = (
     ("python", "selected_id = fitted_orbits.orbit_id[0].as_py()"),
     ("python", 'new_id = "analyst-label"'),
     ("python", "institute_config = ASTEROID_INSTITUTE_OD_V1.bind(resources)"),
+    ("python", "explicit_config = OdConfig.explicit"),
     ("rust", "fn workflows("),
     ("console", "cargo run -p adam_core --example od_canonical_workflows"),
     ("console", "cargo run -p adam_core --example od_external_provider"),
@@ -328,7 +329,7 @@ def _execute_documented_examples() -> None:
     guide = _ROOT / "docs" / "source" / "use_cases" / "orbit_determination.rst"
     guide_blocks = _code_blocks(guide.read_text())
     _assert_block_contract(guide_blocks, _GUIDE_BLOCK_CONTRACT, str(guide))
-    python_blocks = guide_blocks[:7]
+    python_blocks = guide_blocks[:8]
     assert all(block.language == "python" for block in python_blocks)
     for index, block in enumerate(python_blocks):
         label = f"{guide.name}:python[{index}]"
@@ -343,7 +344,7 @@ def _execute_documented_examples() -> None:
             )
             _execute(block.body, local, label)
             _assert_products(local, ("orbits", "members", "failures"))
-        elif index == 6:
+        elif index in (6, 7):
             with pytest.raises(OdResourceValidationError):
                 _execute(block.body, dict(namespace), label)
         else:

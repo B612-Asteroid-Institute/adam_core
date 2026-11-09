@@ -19,13 +19,12 @@ use adam_core::coords::{
 };
 use adam_core::od::{
     AssociatedObservations, AstrometryColumns, EvaluationConfig, FittedOrbitMembersBatch,
-    IodStageConfig, MemberedOrbits, ObservationPipeline, OdConfig, OdConfigError,
-    OdGroupFailureCode, OdObservationBatch, OdPropagator, RefinementRunConfig, ResourceBindings,
-    ResourceSlot, WhitenedFitConfig,
+    IodStageConfig, MemberedOrbits, ObservationPipeline, OdConfig, OdGroupFailureCode,
+    OdObservationBatch, OdPropagator, RefinementRunConfig, WhitenedFitConfig,
 };
 use adam_core::spice::{global_backend, SpkWriter, Type9Segment};
 use std::error::Error;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 const ROWS: usize = 12;
 
@@ -328,14 +327,6 @@ fn member_subset(input: &MemberedOrbits, indices: &[usize]) -> MemberedOrbits {
             used_astrometry: astrometry_subset(&members.used_astrometry, indices),
         },
     }
-}
-
-/// Public profiles are path-free; standalone Rust binds every semantic slot to
-/// an explicit local path. No package discovery, download, cache, or fallback occurs.
-#[allow(dead_code)]
-fn public_profile_config(bias_dat: &Path) -> Result<OdConfig, OdConfigError> {
-    let resources = ResourceBindings::new().bind(ResourceSlot::Efcc18CatalogBiasTable, bias_dat);
-    adam_core::od::profiles::CORE_OD_V1.bind(&resources)
 }
 
 fn main() -> Result<(), Box<dyn Error>> {

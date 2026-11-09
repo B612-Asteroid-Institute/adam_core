@@ -12,9 +12,14 @@ This file contains notable changes in adam-core
   semantic resource bindings, immutable path-free profiles, and canonical
   configuration fingerprints/provenance.
 - Closed native observation transforms for filling missing astrometric
-  uncertainty, EFCC18 catalog-bias correction, station/band residual covariance
-  adjustment, and nightly batch deweighting. Resource content identity, size,
-  schema, and structure are validated before a bound pipeline can execute.
+  uncertainty; per-axis VFC2017 uncertainty floor (with explicit missing-value
+  behavior) and replacement; EFCC18 catalog-bias correction; station/band
+  residual covariance adjustment; chi2-per-observation performance weighting;
+  measured-bias uncertainty flooring; and nightly batch deweighting. VFC2017
+  floor preserves supplied cross terms, while replacement sets both angular
+  cross entries to +0.0 because its lookup has no correlation. Resource content
+  identity, size, schema, and structure are validated before a bound pipeline
+  can execute.
 - Advanced one-group Rust numerical kernels under
   ``adam_core::od::algorithms``: ``prepare_observations``,
   ``solve_prepared_iod``, and ``refine_prepared_orbit``. They support custom
@@ -44,6 +49,16 @@ This file contains notable changes in adam-core
 
 ### Changed
 
+- Removed the redundant private legacy differential-correction and full-OD
+  implementations and their parity-oracle tests. Independent ``run_iod`` and
+  ``refine`` APIs and prepared-stage kernels remain authoritative; canonical
+  workflow numerical behavior and provider/request contracts are unchanged.
+- Optional observation policies use typed VFC2017, performance-weighted, and
+  measured-bias-floor declarations in an ordered ``ObservationPipeline``;
+  deliberate no-transformation identity uses ``ObservationPipeline::as_supplied()``
+  / ``ObservationPipeline.as_supplied()``. Resource paths remain separate exact
+  ``ResourceBindings`` inputs and are excluded from configuration identity and
+  provenance.
 - MOID APIs now expose only algorithm-owned controls: Python
   ``calculate_perturber_moids`` no longer accepts ignored ``chunk_size`` or
   ``max_processes``, and NumPy/PyO3/Rust/SPICE/benchmark MOID entry points no
@@ -134,6 +149,13 @@ This file contains notable changes in adam-core
     ``two_body_provider_metadata`` are internal. Canonical callers use typed
     workflow configuration and ``OdBatchResult::providers()``; advanced callers
     own their predictor options and provider services.
+- **Breaking Rust API targeted for 0.8.0:** the exhaustive public
+  ``ObservationTransform`` enum adds
+  ``Vfc2017AstrometricUncertaintyFloor``,
+  ``Vfc2017AstrometricUncertaintyReplace``,
+  ``PerformanceWeightedCovarianceScaling``, and
+  ``MeasuredBiasAstrometricUncertaintyFloor``. Downstream exhaustive matches
+  written against 0.7.0 must handle these variants when migrating to 0.8.0.
 - **Breaking Rust API:** ``PropagationError`` adds ``RowFailure`` and
   ``CmcCovarianceUnavailable``. Exhaustive downstream matches must handle
   candidate-local numerical failures and fail-closed CMC covariance refusal.

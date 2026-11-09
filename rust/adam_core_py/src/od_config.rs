@@ -280,9 +280,13 @@ fn bind_od_profile(
 
 fn requirement_for_kind(kind: &str) -> PyResult<ResourceRequirement> {
     match kind {
-        "fill_missing_astrometric_uncertainty" => Ok(V2_SIGMA_FILL_RESOURCE),
+        "fill_missing_astrometric_uncertainty"
+        | "vfc2017_astrometric_uncertainty_floor"
+        | "vfc2017_astrometric_uncertainty_replace" => Ok(V2_SIGMA_FILL_RESOURCE),
         "efcc18_catalog_bias_correction" => Ok(EFCC18_BIAS_RESOURCE),
-        "station_band_residual_covariance_adjustment" => Ok(V2_FULL_RESOURCE),
+        "station_band_residual_covariance_adjustment"
+        | "performance_weighted_covariance_scaling"
+        | "measured_bias_astrometric_uncertainty_floor" => Ok(V2_FULL_RESOURCE),
         _ => Err(value_error(format!(
             "transform {kind:?} does not have a resource"
         ))),
@@ -335,6 +339,23 @@ fn parse_definitions(raw: &str) -> PyResult<Vec<ObservationTransform>> {
                         resource: requirement_for_kind(kind)?,
                     })
                 }
+                "vfc2017_astrometric_uncertainty_floor" => {
+                    require_exact_keys(&value, &["fill_missing", "kind"])?;
+                    let fill_missing = value
+                        .get("fill_missing")
+                        .and_then(Value::as_bool)
+                        .ok_or_else(|| value_error("fill_missing must be a boolean"))?;
+                    Ok(ObservationTransform::Vfc2017AstrometricUncertaintyFloor {
+                        resource: requirement_for_kind(kind)?,
+                        fill_missing,
+                    })
+                }
+                "vfc2017_astrometric_uncertainty_replace" => {
+                    require_exact_keys(&value, &["kind"])?;
+                    Ok(ObservationTransform::Vfc2017AstrometricUncertaintyReplace {
+                        resource: requirement_for_kind(kind)?,
+                    })
+                }
                 "efcc18_catalog_bias_correction" => {
                     require_exact_keys(&value, &["exclude_astcats", "kind"])?;
                     let exclude_astcats = value
@@ -370,6 +391,22 @@ fn parse_definitions(raw: &str) -> PyResult<Vec<ObservationTransform>> {
                         ObservationTransform::StationBandResidualCovarianceAdjustment {
                             resource: requirement_for_kind(kind)?,
                             operation,
+                            minimum_residual_count: usize_field(&value, "minimum_residual_count")?,
+                        },
+                    )
+                }
+                "performance_weighted_covariance_scaling" => {
+                    require_exact_keys(&value, &["kind", "minimum_residual_count"])?;
+                    Ok(ObservationTransform::PerformanceWeightedCovarianceScaling {
+                        resource: requirement_for_kind(kind)?,
+                        minimum_residual_count: usize_field(&value, "minimum_residual_count")?,
+                    })
+                }
+                "measured_bias_astrometric_uncertainty_floor" => {
+                    require_exact_keys(&value, &["kind", "minimum_residual_count"])?;
+                    Ok(
+                        ObservationTransform::MeasuredBiasAstrometricUncertaintyFloor {
+                            resource: requirement_for_kind(kind)?,
                             minimum_residual_count: usize_field(&value, "minimum_residual_count")?,
                         },
                     )

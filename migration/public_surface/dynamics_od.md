@@ -1,7 +1,7 @@
 # Dynamics, missions, OD, IOD, and impacts public-surface disposition
 
 Updated 2026-08-12 against frozen updated-upstream main
-`757c09fca86adf9e3d5899952db3d379e09413f6`. The complete 629-symbol inventory
+`757c09fca86adf9e3d5899952db3d379e09413f6`. The complete 747-symbol inventory
 and all frozen-upstream-only retirement classifications are in `manifest.json`;
 the 44-row parity registry is only a benchmark subset.
 
@@ -37,7 +37,7 @@ local paths by semantic slot, marshals tables, and assembles result tables.
 
 | Surface group | Disposition | Evidence |
 |---|---|---|
-| `FillMissingAstrometricUncertainty`, `Efcc18CatalogBiasCorrection`, `StationBandResidualCovarianceAdjustment`, `NightlyBatchDeweighting` | closed Rust variants; order and repetition preserved; no callbacks or transform plugin ABI | native transform/resource tests and exact resource parity |
+| missing-value fill, VFC2017 per-axis floor/replace, EFCC18 correction, station/band residual covariance, performance-weighted scaling, measured-bias sigma floor, and nightly deweighting | closed typed Rust/Python declarations; floor preserves cross terms, replace sets both cross entries to +0.0, and floor missing behavior/support thresholds are explicit; order and repetition preserved; no callbacks or transform plugin ABI | native transform/resource tests, descriptor round trips, exact resource parity, and frozen scientific-value tests |
 | `station_catalog_uncertainty_table`, `efcc18_catalog_bias_table`, `station_band_residual_covariance_table` | explicit content-pinned semantic slots; no Core package discovery, fallback, or runtime download | aggregate hash/schema/row/structure validation with path-free provenance |
 | `OdConfig`, stage configs, `CORE_OD_V1`, `ASTEROID_INSTITUTE_OD_V1` | immutable Rust definitions mirrored in Python; profiles never select propagators | strict native round-trip, profile/explicit parity, fingerprint tests |
 | `fit_least_squares`, `iterative_fit`, `cmc2003_fit_detailed` | Core-owned Rust numerical algorithms; propagation providers expose only the negotiated capsule | native solver/covariance/rejection tests |
@@ -55,6 +55,13 @@ surface is `prepare_observations`, `solve_prepared_iod`,
 renames and the removal of `run_od_with_predictors` and
 `ConfiguredRunOdOutput`; the six Core-only stage-support removals below never
 existed on that direct path.
+
+The exhaustive public Rust ``ObservationTransform`` enum also gains four
+variants in 0.8.0: ``Vfc2017AstrometricUncertaintyFloor``,
+``Vfc2017AstrometricUncertaintyReplace``,
+``PerformanceWeightedCovarianceScaling``, and
+``MeasuredBiasAstrometricUncertaintyFloor``. Downstream exhaustive matches
+written for 0.7.0 must add arms for those variants when migrating to 0.8.0.
 
 | Removed 0.7.0 algorithms export | 0.8.0 replacement |
 |---|---|

@@ -2438,7 +2438,7 @@ fn cmc2003_fit_with_covariance_failure<T: OriginTranslationProvider>(
 }
 
 // ---------------------------------------------------------------------------
-// Full orbit determination and run_od
+// Independent IOD acceptance and refinement stages
 // ---------------------------------------------------------------------------
 
 /// Which outlier treatment refines the IOD orbit (`NativeOrbitFitter`'s
@@ -2469,26 +2469,8 @@ impl Default for RefinementConfig {
     }
 }
 
-/// Settings of the complete native orbit determination: Gauss IOD followed
-/// by differential correction with outlier treatment.
-#[derive(Debug, Clone, Copy, Default)]
-#[allow(dead_code)]
-pub(crate) struct FullOdConfig {
-    pub iod: super::od::IodConfig,
-    pub refinement: RefinementConfig,
-}
-
-#[allow(dead_code)]
-impl FullOdConfig {
-    pub fn validate(&self) -> Result<(), String> {
-        self.iod.validate()?;
-        self.refinement.validate()?;
-        Ok(())
-    }
-}
-
-/// The refined orbit of a full OD run with the loop diagnostics
-/// (`passes` for the worst-residual loop; `n_iterations`, `n_rejected`,
+/// The refined orbit produced by the authoritative refinement stage, with
+/// loop diagnostics (`passes` for the worst-residual loop; `n_iterations`, `n_rejected`,
 /// `n_recovered` and `flags` for CMC2003, zero / empty otherwise).
 #[derive(Debug, Clone)]
 pub struct RefinedOutput {
@@ -2497,19 +2479,6 @@ pub struct RefinedOutput {
     pub n_rejected: usize,
     pub n_recovered: usize,
     pub flags: Vec<String>,
-}
-
-/// Product of `full_od_barycentric`: the IOD decision (`iod.found` false
-/// when no preliminary orbit was accepted, in which case `refined` is None)
-/// and the refined orbit. Every member array keeps the input observation
-/// order.
-#[derive(Debug, Clone)]
-#[allow(dead_code)]
-pub(crate) struct FullOdOutput {
-    /// The IOD stage: every scored candidate and the accepted one, whose
-    /// exact epoch is the epoch of `refined` too.
-    pub iod: super::od::IodResult,
-    pub refined: Option<RefinedOutput>,
 }
 
 /// The IOD stage under its configured acceptance: [`super::od::run_iod`]
@@ -3448,100 +3417,6 @@ pub fn refine_with<T: OriginTranslationProvider>(
     })
 }
 
-/// One-crossing `OrbitFitter.full_od` for the native fitter: the complete
-/// Gauss IOD decision loop (`run_iod_barycentric` on `iod_propagator`)
-/// followed by the worst-residual or CMC2003 refinement of the accepted
-/// orbit against all observations on `propagator`. The two propagators are
-/// explicit; passing the same one twice is the single-backend case.
-#[allow(clippy::too_many_arguments)]
-#[allow(dead_code)]
-pub(crate) fn full_od_barycentric<I, R, T>(
-    iod_propagator: &I,
-    propagator: &R,
-    observed: &CoordinateBatch,
-    observers: &ObserverBatch,
-    config: &FullOdConfig,
-    options: &EphemerisOptions,
-    provider: &dyn TimeScaleProvider,
-    translation_provider: &T,
-) -> PropagationResultValue<FullOdOutput>
-where
-    I: Propagator,
-    R: Propagator,
-    T: OriginTranslationProvider,
-{
-    let iod_predictor = PropagatorPredictor {
-        propagator: iod_propagator,
-        options,
-        provider,
-        translation_provider,
-    };
-    let predictor = PropagatorPredictor {
-        propagator,
-        options,
-        provider,
-        translation_provider,
-    };
-    full_od_with(
-        &iod_predictor,
-        &predictor,
-        observed,
-        observers,
-        config,
-        provider,
-        translation_provider,
-    )
-}
-
-/// [`full_od_barycentric`] over any pair of [`SphericalPredictor`]s: IOD
-/// scores candidates on `iod_predictor`, refinement runs on `predictor`.
-#[allow(clippy::too_many_arguments)]
-#[allow(dead_code)]
-pub(crate) fn full_od_with<T: OriginTranslationProvider>(
-    iod_predictor: &dyn SphericalPredictor,
-    predictor: &dyn SphericalPredictor,
-    observed: &CoordinateBatch,
-    observers: &ObserverBatch,
-    config: &FullOdConfig,
-    provider: &dyn TimeScaleProvider,
-    translation_provider: &T,
-) -> PropagationResultValue<FullOdOutput> {
-    config
-        .validate()
-        .map_err(PropagationError::InvalidRequest)?;
-    let refinement_fit = match &config.refinement {
-        RefinementConfig::WorstResidual(loop_config) => loop_config.fit,
-        RefinementConfig::Cmc2003(loop_config) => loop_config.fit,
-    };
-    let iod = run_iod_with(
-        iod_predictor,
-        observed,
-        observers,
-        &config.iod,
-        &refinement_fit,
-        provider,
-        translation_provider,
-    )?;
-    // The composition of the two stages: the IOD's typed seed (exact
-    // epoch) refined against every observation.
-    let Some(seed) = iod.seed_orbit()? else {
-        return Ok(FullOdOutput { iod, refined: None });
-    };
-    let refined = refine_with(
-        predictor,
-        &seed,
-        observed,
-        observers,
-        &config.refinement,
-        provider,
-        translation_provider,
-    )?;
-    Ok(FullOdOutput {
-        iod,
-        refined: Some(refined),
-    })
-}
-
 /// `ObservationAstrometry`: position, 1-sigma uncertainty, and exact
 /// covariance entries of every observation. Persisting the diagonal variances
 /// avoids a lossy `sqrt(variance) -> square` handoff between fused and composed
@@ -3797,7 +3672,7 @@ mod tests {
 
     /// Observers every `spacing_days` days: 4 gives the 44-day arc of the
     /// fit and loop tests; 1 gives an 11-day arc on which Gauss IOD seeds
-    /// the refinement accurately (the full-OD tests).
+    /// the refinement accurately (the staged IOD/refinement tests).
     fn observers_spaced(spacing_days: i64) -> ObserverBatch {
         let times = TimeArray::new(
             TimeScale::Tdb,
@@ -5488,42 +5363,6 @@ mod tests {
         assert!(IterativeFitConfig::default().validate().is_ok());
         assert!(Cmc2003FitConfig::default().validate().is_ok());
         assert!(RefinementConfig::default().validate().is_ok());
-
-        // Full OD validates refinement even when IOD cannot produce a seed;
-        // no control-flow branch may defer configuration validation.
-        let observed = synthetic_observations(None);
-        let observer_rows = observers();
-        let (propagator, options) = two_body();
-        let predictor = PropagatorPredictor {
-            propagator: &propagator,
-            options: &options,
-            provider: &NoopProvider,
-            translation_provider: &ZeroTranslationProvider,
-        };
-        let invalid_full = FullOdConfig {
-            iod: super::super::od::IodConfig {
-                min_obs: NUM_OBS + 1,
-                ..corrected_iod_config(50.0)
-            },
-            refinement: RefinementConfig::Cmc2003(Cmc2003FitConfig {
-                max_iterations: 0,
-                ..Cmc2003FitConfig::default()
-            }),
-        };
-        let error = full_od_with(
-            &predictor,
-            &predictor,
-            &observed,
-            &observer_rows,
-            &invalid_full,
-            &NoopProvider,
-            &ZeroTranslationProvider,
-        )
-        .unwrap_err();
-        assert!(
-            error.to_string().contains("cmc2003.max_iterations"),
-            "{error}"
-        );
     }
 
     #[test]
@@ -6832,34 +6671,6 @@ mod tests {
             .contains("ill-conditioned"));
     }
 
-    fn full_od_config(refinement: RefinementConfig) -> FullOdConfig {
-        FullOdConfig {
-            iod: super::super::od::IodConfig {
-                min_obs: 6,
-                min_arc_length: 1.0,
-                contamination_percentage: 20.0,
-                // Gauss on the longest-arc triplets of this synthetic geometry
-                // seeds the refinement coarsely; the threshold only gates it.
-                rchi2_threshold: 1e10,
-                observation_selection_method:
-                    super::super::od::ObservationSelectionMethod::Combinations,
-                light_time: true,
-                mu: crate::types::origin_mu_au3_day2(&OriginId::from_code("SUN")).unwrap(),
-                speed_of_light: 173.144_632_674_240_3,
-                max_triplets: None,
-                max_pair_visits: 20_000,
-                max_raw_pair_visits: 200_000,
-                max_middle_visits: 200_000,
-                velocity_method: super::super::od::VelocityMethod::Gibbs,
-                spans: super::super::od::SpanSearchConfig::default(),
-                acceptance: super::super::od::IodAcceptance::Prefit,
-                correction: super::super::od::CorrectionConfig::default(),
-                ranging: super::super::od_ranging::RangingConfig::default(),
-            },
-            refinement,
-        }
-    }
-
     fn corrected_iod_config(rchi2_threshold: f64) -> super::super::od::IodConfig {
         super::super::od::IodConfig {
             rchi2_threshold,
@@ -7555,10 +7366,10 @@ mod tests {
     }
 
     #[test]
-    fn external_propagators_run_the_od_stages_like_native_ones() {
+    fn external_propagators_run_the_authoritative_stages_like_native_ones() {
         // adam-core's two-body propagator behind the C ABI, as an external
-        // plugin would expose its own dynamics, gives the same IOD and
-        // refinement as the propagator itself, and reports the external identity.
+        // plugin would expose its own dynamics, gives the same independent IOD
+        // and refinement stage results and reports the external identity.
         let table = super::super::two_body_reference::table(TwoBodyPropagator::default());
         let external = unsafe { super::super::ExternalPropagator::from_raw(table) }.unwrap();
         let identity = external.backend();
@@ -7566,45 +7377,71 @@ mod tests {
         assert!(identity.two_body_dynamics);
         let (propagator, options) = two_body();
         let observed = synthetic_observations(Some(3));
-        let config = FullOdConfig {
-            iod: super::super::od::IodConfig {
-                contamination_percentage: 20.0,
-                ..corrected_iod_config(50.0)
-            },
-            refinement: RefinementConfig::default(),
+        let observer_rows = observers();
+        let iod_config = super::super::od::IodConfig {
+            contamination_percentage: 20.0,
+            ..corrected_iod_config(50.0)
         };
-        let run = |iod: &dyn Fn() -> FullOdOutput| iod();
-        let native = run(&|| {
-            full_od_barycentric(
-                &propagator,
-                &propagator,
-                &observed,
-                &observers(),
-                &config,
-                &options,
-                &NoopProvider,
-                &ZeroTranslationProvider,
-            )
-            .unwrap()
-        });
-        let via_abi = run(&|| {
-            full_od_barycentric(
-                &external,
-                &external,
-                &observed,
-                &observers(),
-                &config,
-                &options,
-                &NoopProvider,
-                &ZeroTranslationProvider,
-            )
-            .unwrap()
-        });
-        let (a, b) = (native.refined.unwrap(), via_abi.refined.unwrap());
-        assert!(max_abs_diff(&a.fit.state, &b.fit.state) < 1e-12);
-        assert_eq!(a.fit.evaluation.outlier, b.fit.evaluation.outlier);
-        assert_eq!(native.iod.accepted, via_abi.iod.accepted);
-        // The predictor reports the external backend.
+        let refinement_config = RefinementConfig::default();
+        let fit = match refinement_config {
+            RefinementConfig::Cmc2003(loop_config) => loop_config.fit,
+            RefinementConfig::WorstResidual(loop_config) => loop_config.fit,
+        };
+
+        let native_iod = run_iod_barycentric(
+            &propagator,
+            &observed,
+            &observer_rows,
+            &iod_config,
+            &fit,
+            &options,
+            &NoopProvider,
+            &ZeroTranslationProvider,
+        )
+        .unwrap();
+        let native_seed = native_iod.seed_orbit().unwrap().unwrap();
+        let native_refined = refine_barycentric(
+            &propagator,
+            &native_seed,
+            &observed,
+            &observer_rows,
+            &refinement_config,
+            &options,
+            &NoopProvider,
+            &ZeroTranslationProvider,
+        )
+        .unwrap();
+
+        let external_iod = run_iod_barycentric(
+            &external,
+            &observed,
+            &observer_rows,
+            &iod_config,
+            &fit,
+            &options,
+            &NoopProvider,
+            &ZeroTranslationProvider,
+        )
+        .unwrap();
+        let external_seed = external_iod.seed_orbit().unwrap().unwrap();
+        let external_refined = refine_barycentric(
+            &external,
+            &external_seed,
+            &observed,
+            &observer_rows,
+            &refinement_config,
+            &options,
+            &NoopProvider,
+            &ZeroTranslationProvider,
+        )
+        .unwrap();
+
+        assert!(max_abs_diff(&native_refined.fit.state, &external_refined.fit.state) < 1e-12);
+        assert_eq!(
+            native_refined.fit.evaluation.outlier,
+            external_refined.fit.evaluation.outlier
+        );
+        assert_eq!(native_iod.accepted, external_iod.accepted);
         let predictor = PropagatorPredictor {
             propagator: &external,
             options: &options,
@@ -8099,19 +7936,17 @@ mod tests {
     }
 
     #[test]
-    fn full_od_is_run_iod_then_refine_on_the_typed_seed() {
-        // The review's contract: run_od / full_od is the composition of the
-        // run_iod and refine stages, with the IOD's typed seed (exact epoch).
+    fn run_iod_seed_refines_at_its_exact_typed_epoch() {
+        // The independent authoritative stages compose through the IOD's
+        // typed seed without reconstructing or changing its exact epoch.
         let observed = synthetic_observations(Some(3));
         let (propagator, options) = two_body();
-        let config = FullOdConfig {
-            iod: super::super::od::IodConfig {
-                contamination_percentage: 20.0,
-                ..corrected_iod_config(50.0)
-            },
-            refinement: RefinementConfig::default(),
+        let iod_config = super::super::od::IodConfig {
+            contamination_percentage: 20.0,
+            ..corrected_iod_config(50.0)
         };
-        let fit = match config.refinement {
+        let refinement_config = RefinementConfig::default();
+        let fit = match refinement_config {
             RefinementConfig::Cmc2003(loop_config) => loop_config.fit,
             RefinementConfig::WorstResidual(loop_config) => loop_config.fit,
         };
@@ -8119,14 +7954,13 @@ mod tests {
             &propagator,
             &observed,
             &observers(),
-            &config.iod,
+            &iod_config,
             &fit,
             &options,
             &NoopProvider,
             &ZeroTranslationProvider,
         )
         .unwrap();
-        // The generic stage honours corrected acceptance.
         let accepted = iod.accepted_candidate().unwrap();
         assert!(accepted.converged && accepted.corrected_state.is_some());
         let seed = iod.seed_orbit().unwrap().unwrap();
@@ -8138,27 +7972,14 @@ mod tests {
             &seed,
             &observed,
             &observers(),
-            &config.refinement,
+            &refinement_config,
             &options,
             &NoopProvider,
             &ZeroTranslationProvider,
         )
         .unwrap();
-        let composed = full_od_barycentric(
-            &propagator,
-            &propagator,
-            &observed,
-            &observers(),
-            &config,
-            &options,
-            &NoopProvider,
-            &ZeroTranslationProvider,
-        )
-        .unwrap();
-        let full = composed.refined.unwrap();
-        assert_eq!(full.fit.state, refined.fit.state);
-        assert_eq!(full.fit.evaluation.outlier, refined.fit.evaluation.outlier);
-        assert_eq!(full.n_rejected, refined.n_rejected);
+        assert!(refined.fit.converged);
+        assert!(refined.fit.evaluation.reduced_chi2.is_finite());
     }
 
     struct StageCountingPredictor<'a> {
@@ -8166,13 +7987,6 @@ mod tests {
         inner: &'a dyn SphericalPredictor,
         calls: std::cell::Cell<usize>,
         states: std::cell::Cell<usize>,
-    }
-
-    impl StageCountingPredictor<'_> {
-        fn reset(&self) {
-            self.calls.set(0);
-            self.states.set(0);
-        }
     }
 
     impl SphericalPredictor for StageCountingPredictor<'_> {
@@ -8210,7 +8024,7 @@ mod tests {
     }
 
     #[test]
-    fn iod_refinement_full_od_and_run_od_use_only_their_configured_stage_predictors() {
+    fn iod_and_refinement_use_only_their_configured_stage_predictors() {
         let observed = synthetic_observations_spaced(1, Some(3));
         let observers = observers_spaced(1);
         let (propagator, options) = two_body();
@@ -8232,15 +8046,13 @@ mod tests {
             calls: std::cell::Cell::new(0),
             states: std::cell::Cell::new(0),
         };
-        let config = FullOdConfig {
-            iod: super::super::od::IodConfig {
-                max_triplets: Some(3),
-                contamination_percentage: 20.0,
-                ..corrected_iod_config(50.0)
-            },
-            refinement: RefinementConfig::default(),
+        let iod_config = super::super::od::IodConfig {
+            max_triplets: Some(3),
+            contamination_percentage: 20.0,
+            ..corrected_iod_config(50.0)
         };
-        let fit = match config.refinement {
+        let refinement_config = RefinementConfig::default();
+        let fit = match refinement_config {
             RefinementConfig::Cmc2003(loop_config) => loop_config.fit,
             RefinementConfig::WorstResidual(loop_config) => loop_config.fit,
         };
@@ -8251,7 +8063,7 @@ mod tests {
             &iod_predictor,
             &observed,
             &observers,
-            &config.iod,
+            &iod_config,
             &fit,
             &NoopProvider,
             &ZeroTranslationProvider,
@@ -8271,7 +8083,7 @@ mod tests {
             &seed,
             &observed,
             &observers,
-            &config.refinement,
+            &refinement_config,
             &NoopProvider,
             &ZeroTranslationProvider,
         )
@@ -8287,34 +8099,6 @@ mod tests {
         );
         assert!(refinement_evidence.0 > 0);
         assert_ne!(iod_evidence, refinement_evidence);
-
-        iod_predictor.reset();
-        refinement_predictor.reset();
-        let full = full_od_with(
-            &iod_predictor,
-            &refinement_predictor,
-            &observed,
-            &observers,
-            &config,
-            &NoopProvider,
-            &ZeroTranslationProvider,
-        )
-        .unwrap();
-        assert!(full.refined.is_some());
-        assert_eq!(full.iod.triplets_tried, iod.triplets_tried);
-        assert_eq!(full.iod.candidates.len(), iod.candidates.len());
-        assert_eq!(
-            (iod_predictor.calls.get(), iod_predictor.states.get()),
-            iod_evidence
-        );
-        assert_eq!(
-            (
-                refinement_predictor.calls.get(),
-                refinement_predictor.states.get(),
-            ),
-            refinement_evidence
-        );
-        assert_eq!(full.refined.as_ref().unwrap().fit.state, refined.fit.state);
     }
 
     #[test]
@@ -8417,27 +8201,70 @@ mod tests {
     }
 
     #[test]
-    fn full_od_runs_iod_then_cmc2003_refinement() {
+    fn authoritative_stages_run_iod_then_cmc2003_refinement() {
         let observed = synthetic_observations_spaced(1, Some(3));
-        let output = full_od_barycentric(
-            &TwoBodyPropagator::default(),
-            &TwoBodyPropagator::default(),
+        let observer_rows = observers_spaced(1);
+        let iod_config = super::super::od::IodConfig {
+            min_obs: 6,
+            min_arc_length: 1.0,
+            contamination_percentage: 20.0,
+            // Gauss on the longest-arc triplets of this synthetic geometry
+            // seeds the refinement coarsely; the threshold only gates it.
+            rchi2_threshold: 1e10,
+            observation_selection_method:
+                super::super::od::ObservationSelectionMethod::Combinations,
+            light_time: true,
+            mu: crate::types::origin_mu_au3_day2(&OriginId::from_code("SUN")).unwrap(),
+            speed_of_light: 173.144_632_674_240_3,
+            max_triplets: None,
+            max_pair_visits: 20_000,
+            max_raw_pair_visits: 200_000,
+            max_middle_visits: 200_000,
+            velocity_method: super::super::od::VelocityMethod::Gibbs,
+            spans: super::super::od::SpanSearchConfig::default(),
+            acceptance: super::super::od::IodAcceptance::Prefit,
+            correction: super::super::od::CorrectionConfig::default(),
+            ranging: super::super::od_ranging::RangingConfig::default(),
+        };
+        let refinement_config = RefinementConfig::Cmc2003(Cmc2003FitConfig::default());
+        let fit = match refinement_config {
+            RefinementConfig::Cmc2003(loop_config) => loop_config.fit,
+            RefinementConfig::WorstResidual(loop_config) => loop_config.fit,
+        };
+        let propagator = TwoBodyPropagator::default();
+        let options = ephemeris_options();
+        let iod = run_iod_barycentric(
+            &propagator,
             &observed,
-            &observers_spaced(1),
-            &full_od_config(RefinementConfig::Cmc2003(Cmc2003FitConfig::default())),
-            &ephemeris_options(),
+            &observer_rows,
+            &iod_config,
+            &fit,
+            &options,
             &NoopProvider,
             &ZeroTranslationProvider,
         )
         .unwrap();
-        assert!(output.iod.found());
-        assert_eq!(output.iod.epoch_scale, TimeScale::Tdb);
-        let accepted = output.iod.accepted_candidate().expect("accepted candidate");
-        assert!(accepted.accepted && accepted.evaluation.is_some());
-        assert_eq!(output.iod.candidates.len(), output.iod.candidates_evaluated);
-        let iod_epoch = accepted.epoch;
+        assert!(iod.found());
+        assert_eq!(iod.epoch_scale, TimeScale::Tdb);
+        let iod_epoch = {
+            let accepted = iod.accepted_candidate().expect("accepted candidate");
+            assert!(accepted.accepted && accepted.evaluation.is_some());
+            accepted.epoch
+        };
+        assert_eq!(iod.candidates.len(), iod.candidates_evaluated);
         assert_eq!(iod_epoch, super::super::od::mjd_epoch(iod_epoch.mjd()));
-        let refined = output.refined.expect("refined orbit");
+        let seed = iod.seed_orbit().unwrap().expect("typed IOD seed");
+        let refined = refine_barycentric(
+            &propagator,
+            &seed,
+            &observed,
+            &observer_rows,
+            &refinement_config,
+            &options,
+            &NoopProvider,
+            &ZeroTranslationProvider,
+        )
+        .unwrap();
         assert!(refined.fit.converged);
         assert!(refined.fit.evaluation.outlier[3]);
         assert_eq!(refined.n_rejected, 1);
