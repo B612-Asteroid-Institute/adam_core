@@ -28,7 +28,7 @@ Complete Surface Status
 -----------------------
 
 The authoritative inventory for this source tree is
-``migration/public_surface/manifest.json`` (734 symbols / 101 constants).
+``migration/public_surface/manifest.json`` (747 symbols / 101 constants).
 Its frozen-upstream reconciliation records the independently classified
 retirements. The selected parity registry is a benchmark set, not the
 public-surface count.
@@ -264,7 +264,11 @@ Current Migrated APIs
   - Contract: declaration order and repeated transforms are authoritative.
     Deliberate no-transform behavior is represented only by
     ``ObservationPipeline.as_supplied()`` and is recorded as
-    ``transforms=[]``. Resource paths are excluded from canonical provenance.
+    ``transforms=[]``. VFC2017 fill/floor/replace and station/band empirical,
+    performance-weighted, and measured-bias-floor policies are typed closed
+    declarations. VFC2017 floor preserves supplied cross terms, replacement
+    sets both cross entries to +0.0, and measured-bias flooring preserves them.
+    Resource paths are excluded from canonical provenance.
   - Error behavior: missing resources, byte-identity mismatches, schema errors,
     and structural mismatches are aggregated before propagation or fitting;
     an explicitly selected profile never falls back to another profile.
@@ -304,6 +308,10 @@ Validation Contract
 - The standard Python test suite command ``pytest --benchmark-skip -m 'not profile'`` must run in a Rust-enabled environment for migration validation.
 - Release candidates additionally run every profile-marked scientific fixture and the opt-in live external-service integration gates after wheel acceptance.
 - Validation runs fail during import if the Rust extension is unavailable.
+- Standalone Rust validation includes
+  ``cargo clippy -p adam_core --all-targets --locked -- -D warnings`` with
+  default features, so Python feature unification cannot hide dead standalone
+  metadata.
 - High-level migrated APIs must include a contract test that enforces single-crossing execution (one Python->Rust entry and one Rust->Python return).
 
 Engineering Requirements Contract

@@ -21,12 +21,15 @@ use crate::efcc18::Efcc18BiasTable;
 use crate::observation_uncertainty::{
     BiasTable, BiasTableRow, Efcc18DebiasModel, EmpiricalCovarianceMode, EmpiricalCovarianceModel,
     NightBatchDeweightingModel, ObservationUncertaintyModel, OrbitDeterminationAstrometry,
+    PerformanceWeightedModel, SigmaFloorModel,
 };
 use crate::propagation::{
     CorrectionConfig, IodAcceptance, IodConfig, IterativeFitConfig, JacobianMethod,
     ObservationSelectionMethod, PrefitScope, RangingConfig, SpanSearchConfig, VelocityMethod,
 };
-use crate::veres2017::{SigmaFillModel, VeresSigmaLookup, VeresSigmaRow};
+use crate::veres2017::{
+    SigmaFillModel, VeresFloorModel, VeresReplaceModel, VeresSigmaLookup, VeresSigmaRow,
+};
 use crate::{Cmc2003FitConfig, LossType, RefinementConfig, TwoBodyModelConfig, WhitenedFitConfig};
 
 /// Stable semantic slots used by profiles.  Paths are deployment details and
@@ -351,6 +354,21 @@ pub enum ObservationTransform {
         /// Exact station/catalog uncertainty-table requirement to bind.
         resource: ResourceRequirement,
     },
+    /// Floor supplied per-axis uncertainty at the VFC2017 station/catalog value.
+    /// The supplied angular cross term is preserved.
+    Vfc2017AstrometricUncertaintyFloor {
+        /// Exact station/catalog uncertainty-table requirement to bind.
+        resource: ResourceRequirement,
+        /// Whether missing/non-finite supplied variances are filled by the floor.
+        fill_missing: bool,
+    },
+    /// Replace supplied per-axis uncertainty with the VFC2017 station/catalog value.
+    /// Both angular cross entries become exactly +0.0 because the table has no
+    /// correlation.
+    Vfc2017AstrometricUncertaintyReplace {
+        /// Exact station/catalog uncertainty-table requirement to bind.
+        resource: ResourceRequirement,
+    },
     /// Apply EFCC18 catalog-bias correction except for explicitly excluded catalogs.
     Efcc18CatalogBiasCorrection {
         /// Exact EFCC18 catalog-bias-table requirement to bind.
@@ -367,6 +385,20 @@ pub enum ObservationTransform {
         /// Minimum residual count required before applying one lookup-table row.
         minimum_residual_count: usize,
     },
+    /// Scale supplied covariance by `max(chi2_per_obs, 1)` from station/band statistics.
+    PerformanceWeightedCovarianceScaling {
+        /// Exact station/band residual-statistics table requirement to bind.
+        resource: ResourceRequirement,
+        /// Minimum residual count required before applying one lookup-table row.
+        minimum_residual_count: usize,
+    },
+    /// Floor supplied per-axis uncertainty at measured station/band bias magnitude.
+    MeasuredBiasAstrometricUncertaintyFloor {
+        /// Exact station/band residual-statistics table requirement to bind.
+        resource: ResourceRequirement,
+        /// Minimum residual count required before applying one lookup-table row.
+        minimum_residual_count: usize,
+    },
     /// Deweight same-night observations to an effective independent-observation cap.
     NightlyBatchDeweighting {
         /// Effective independent-observation cap used to compute nightly deweighting.
@@ -379,6 +411,13 @@ impl ObservationTransform {
         match self {
             Self::FillMissingAstrometricUncertainty { .. } => {
                 json!({"kind": "fill_missing_astrometric_uncertainty"})
+            }
+            Self::Vfc2017AstrometricUncertaintyFloor { fill_missing, .. } => json!({
+                "kind": "vfc2017_astrometric_uncertainty_floor",
+                "fill_missing": fill_missing,
+            }),
+            Self::Vfc2017AstrometricUncertaintyReplace { .. } => {
+                json!({"kind": "vfc2017_astrometric_uncertainty_replace"})
             }
             Self::Efcc18CatalogBiasCorrection {
                 exclude_astcats, ..
@@ -395,6 +434,20 @@ impl ObservationTransform {
                 "operation": operation.as_str(),
                 "minimum_residual_count": minimum_residual_count,
             }),
+            Self::PerformanceWeightedCovarianceScaling {
+                minimum_residual_count,
+                ..
+            } => json!({
+                "kind": "performance_weighted_covariance_scaling",
+                "minimum_residual_count": minimum_residual_count,
+            }),
+            Self::MeasuredBiasAstrometricUncertaintyFloor {
+                minimum_residual_count,
+                ..
+            } => json!({
+                "kind": "measured_bias_astrometric_uncertainty_floor",
+                "minimum_residual_count": minimum_residual_count,
+            }),
             Self::NightlyBatchDeweighting {
                 effective_observation_cap,
             } => json!({
@@ -406,10 +459,15 @@ impl ObservationTransform {
 
     fn validate(&self) -> Result<(), String> {
         match self {
-            Self::FillMissingAstrometricUncertainty { resource } => {
+            Self::FillMissingAstrometricUncertainty { resource }
+            | Self::Vfc2017AstrometricUncertaintyFloor { resource, .. }
+            | Self::Vfc2017AstrometricUncertaintyReplace { resource } => {
                 resource.validate()?;
                 if resource.slot != ResourceSlot::StationCatalogUncertaintyTable {
-                    return Err("FillMissingAstrometricUncertainty requires station_catalog_uncertainty_table".to_string());
+                    return Err(
+                        "VFC2017 uncertainty transforms require station_catalog_uncertainty_table"
+                            .to_string(),
+                    );
                 }
             }
             Self::Efcc18CatalogBiasCorrection { resource, .. } => {
@@ -425,10 +483,20 @@ impl ObservationTransform {
                 resource,
                 minimum_residual_count,
                 ..
+            }
+            | Self::PerformanceWeightedCovarianceScaling {
+                resource,
+                minimum_residual_count,
+            }
+            | Self::MeasuredBiasAstrometricUncertaintyFloor {
+                resource,
+                minimum_residual_count,
             } => {
                 resource.validate()?;
                 if resource.slot != ResourceSlot::StationBandResidualCovarianceTable {
-                    return Err("StationBandResidualCovarianceAdjustment requires station_band_residual_covariance_table".to_string());
+                    return Err("station/band covariance transforms require \
+                         station_band_residual_covariance_table"
+                        .to_string());
                 }
                 if *minimum_residual_count == 0 {
                     return Err("minimum_residual_count must be positive".to_string());
@@ -453,6 +521,15 @@ enum BoundObservationTransform {
         lookup: VeresSigmaLookup,
         resource: ValidatedResourceIdentity,
     },
+    Vfc2017AstrometricUncertaintyFloor {
+        lookup: VeresSigmaLookup,
+        fill_missing: bool,
+        resource: ValidatedResourceIdentity,
+    },
+    Vfc2017AstrometricUncertaintyReplace {
+        lookup: VeresSigmaLookup,
+        resource: ValidatedResourceIdentity,
+    },
     Efcc18CatalogBiasCorrection {
         bias_table: Arc<Efcc18BiasTable>,
         exclude_astcats: Vec<String>,
@@ -461,6 +538,16 @@ enum BoundObservationTransform {
     StationBandResidualCovarianceAdjustment {
         table: BiasTable,
         operation: ResidualCovarianceOperation,
+        minimum_residual_count: usize,
+        resource: ValidatedResourceIdentity,
+    },
+    PerformanceWeightedCovarianceScaling {
+        table: BiasTable,
+        minimum_residual_count: usize,
+        resource: ValidatedResourceIdentity,
+    },
+    MeasuredBiasAstrometricUncertaintyFloor {
+        table: BiasTable,
         minimum_residual_count: usize,
         resource: ValidatedResourceIdentity,
     },
@@ -473,6 +560,14 @@ impl BoundObservationTransform {
     pub fn validate(&self) -> Result<(), String> {
         match self {
             Self::StationBandResidualCovarianceAdjustment {
+                minimum_residual_count,
+                ..
+            }
+            | Self::PerformanceWeightedCovarianceScaling {
+                minimum_residual_count,
+                ..
+            }
+            | Self::MeasuredBiasAstrometricUncertaintyFloor {
                 minimum_residual_count,
                 ..
             } if *minimum_residual_count == 0 => {
@@ -492,9 +587,21 @@ impl BoundObservationTransform {
             Self::FillMissingAstrometricUncertainty { .. } => {
                 "fill_missing_astrometric_uncertainty"
             }
+            Self::Vfc2017AstrometricUncertaintyFloor { .. } => {
+                "vfc2017_astrometric_uncertainty_floor"
+            }
+            Self::Vfc2017AstrometricUncertaintyReplace { .. } => {
+                "vfc2017_astrometric_uncertainty_replace"
+            }
             Self::Efcc18CatalogBiasCorrection { .. } => "efcc18_catalog_bias_correction",
             Self::StationBandResidualCovarianceAdjustment { .. } => {
                 "station_band_residual_covariance_adjustment"
+            }
+            Self::PerformanceWeightedCovarianceScaling { .. } => {
+                "performance_weighted_covariance_scaling"
+            }
+            Self::MeasuredBiasAstrometricUncertaintyFloor { .. } => {
+                "measured_bias_astrometric_uncertainty_floor"
             }
             Self::NightlyBatchDeweighting { .. } => "nightly_batch_deweighting",
         }
@@ -508,6 +615,19 @@ impl BoundObservationTransform {
         self.validate()?;
         match self {
             Self::FillMissingAstrometricUncertainty { lookup, .. } => SigmaFillModel {
+                lookup: lookup.clone(),
+            }
+            .apply(observations),
+            Self::Vfc2017AstrometricUncertaintyFloor {
+                lookup,
+                fill_missing,
+                ..
+            } => VeresFloorModel {
+                lookup: lookup.clone(),
+                fill_missing: *fill_missing,
+            }
+            .apply(observations),
+            Self::Vfc2017AstrometricUncertaintyReplace { lookup, .. } => VeresReplaceModel {
                 lookup: lookup.clone(),
             }
             .apply(observations),
@@ -534,6 +654,24 @@ impl BoundObservationTransform {
                 min_resid_cov_n: *minimum_residual_count as f64,
             }
             .apply(observations),
+            Self::PerformanceWeightedCovarianceScaling {
+                table,
+                minimum_residual_count,
+                ..
+            } => PerformanceWeightedModel {
+                table: table.clone(),
+                min_resid_cov_n: *minimum_residual_count as f64,
+            }
+            .apply(observations),
+            Self::MeasuredBiasAstrometricUncertaintyFloor {
+                table,
+                minimum_residual_count,
+                ..
+            } => SigmaFloorModel {
+                table: table.clone(),
+                min_resid_cov_n: *minimum_residual_count as f64,
+            }
+            .apply(observations),
             Self::NightlyBatchDeweighting {
                 effective_observation_cap,
             } => NightBatchDeweightingModel::new(*effective_observation_cap)?.apply(observations),
@@ -542,8 +680,17 @@ impl BoundObservationTransform {
 
     pub fn provenance_value(&self) -> Value {
         match self {
-            Self::FillMissingAstrometricUncertainty { resource, .. } => json!({
+            Self::FillMissingAstrometricUncertainty { resource, .. }
+            | Self::Vfc2017AstrometricUncertaintyReplace { resource, .. } => json!({
                 "kind": self.kind(), "resource": resource.canonical_value(),
+            }),
+            Self::Vfc2017AstrometricUncertaintyFloor {
+                fill_missing,
+                resource,
+                ..
+            } => json!({
+                "kind": self.kind(), "fill_missing": fill_missing,
+                "resource": resource.canonical_value(),
             }),
             Self::Efcc18CatalogBiasCorrection {
                 exclude_astcats,
@@ -560,6 +707,20 @@ impl BoundObservationTransform {
                 ..
             } => json!({
                 "kind": self.kind(), "operation": operation.as_str(),
+                "minimum_residual_count": minimum_residual_count,
+                "resource": resource.canonical_value(),
+            }),
+            Self::PerformanceWeightedCovarianceScaling {
+                minimum_residual_count,
+                resource,
+                ..
+            }
+            | Self::MeasuredBiasAstrometricUncertaintyFloor {
+                minimum_residual_count,
+                resource,
+                ..
+            } => json!({
+                "kind": self.kind(),
                 "minimum_residual_count": minimum_residual_count,
                 "resource": resource.canonical_value(),
             }),
@@ -681,8 +842,14 @@ impl ObservationPipeline {
             .iter()
             .filter_map(|definition| match definition {
                 ObservationTransform::FillMissingAstrometricUncertainty { resource }
+                | ObservationTransform::Vfc2017AstrometricUncertaintyFloor { resource, .. }
+                | ObservationTransform::Vfc2017AstrometricUncertaintyReplace { resource }
                 | ObservationTransform::Efcc18CatalogBiasCorrection { resource, .. }
                 | ObservationTransform::StationBandResidualCovarianceAdjustment {
+                    resource, ..
+                }
+                | ObservationTransform::PerformanceWeightedCovarianceScaling { resource, .. }
+                | ObservationTransform::MeasuredBiasAstrometricUncertaintyFloor {
                     resource, ..
                 } => Some(*resource),
                 ObservationTransform::NightlyBatchDeweighting { .. } => None,
@@ -700,6 +867,42 @@ impl ObservationPipeline {
                     parse_sigma_parquet(&bound.bytes, resource)
                         .map(|lookup| {
                             BoundObservationTransform::FillMissingAstrometricUncertainty {
+                                lookup,
+                                resource: bound.identity.clone(),
+                            }
+                        })
+                        .map_err(|reason| ResourceProblem {
+                            slot: resource.slot,
+                            reason,
+                        })
+                }
+                ObservationTransform::Vfc2017AstrometricUncertaintyFloor {
+                    resource,
+                    fill_missing,
+                } => {
+                    let bound = validated
+                        .get(&resource.slot)
+                        .expect("validated explicit resource");
+                    parse_sigma_parquet(&bound.bytes, resource)
+                        .map(|lookup| {
+                            BoundObservationTransform::Vfc2017AstrometricUncertaintyFloor {
+                                lookup,
+                                fill_missing,
+                                resource: bound.identity.clone(),
+                            }
+                        })
+                        .map_err(|reason| ResourceProblem {
+                            slot: resource.slot,
+                            reason,
+                        })
+                }
+                ObservationTransform::Vfc2017AstrometricUncertaintyReplace { resource } => {
+                    let bound = validated
+                        .get(&resource.slot)
+                        .expect("validated explicit resource");
+                    parse_sigma_parquet(&bound.bytes, resource)
+                        .map(|lookup| {
+                            BoundObservationTransform::Vfc2017AstrometricUncertaintyReplace {
                                 lookup,
                                 resource: bound.identity.clone(),
                             }
@@ -750,6 +953,46 @@ impl ObservationPipeline {
                             BoundObservationTransform::StationBandResidualCovarianceAdjustment {
                                 table,
                                 operation,
+                                minimum_residual_count,
+                                resource: bound.identity.clone(),
+                            }
+                        })
+                        .map_err(|reason| ResourceProblem {
+                            slot: resource.slot,
+                            reason,
+                        })
+                }
+                ObservationTransform::PerformanceWeightedCovarianceScaling {
+                    resource,
+                    minimum_residual_count,
+                } => {
+                    let bound = validated
+                        .get(&resource.slot)
+                        .expect("validated explicit resource");
+                    parse_bias_parquet(&bound.bytes, resource)
+                        .map(|table| {
+                            BoundObservationTransform::PerformanceWeightedCovarianceScaling {
+                                table,
+                                minimum_residual_count,
+                                resource: bound.identity.clone(),
+                            }
+                        })
+                        .map_err(|reason| ResourceProblem {
+                            slot: resource.slot,
+                            reason,
+                        })
+                }
+                ObservationTransform::MeasuredBiasAstrometricUncertaintyFloor {
+                    resource,
+                    minimum_residual_count,
+                } => {
+                    let bound = validated
+                        .get(&resource.slot)
+                        .expect("validated explicit resource");
+                    parse_bias_parquet(&bound.bytes, resource)
+                        .map(|table| {
+                            BoundObservationTransform::MeasuredBiasAstrometricUncertaintyFloor {
+                                table,
                                 minimum_residual_count,
                                 resource: bound.identity.clone(),
                             }
@@ -1990,12 +2233,45 @@ mod tests {
         let jpl = std::env::var("ADAM_TEST_EFCC18_BIAS_DAT").unwrap();
         let sigma = std::env::var("ADAM_TEST_SIGMA_FILL_PARQUET").unwrap();
         let full = std::env::var("ADAM_TEST_RESIDUAL_COVARIANCE_PARQUET").unwrap();
+        let sigma_binding = ResourceBindings::new()
+            .bind(ResourceSlot::StationCatalogUncertaintyTable, sigma.clone());
         let bindings = ResourceBindings::new()
             .bind(ResourceSlot::Efcc18CatalogBiasTable, jpl)
             .bind(ResourceSlot::StationCatalogUncertaintyTable, sigma)
             .bind(ResourceSlot::StationBandResidualCovarianceTable, full);
         let config = ASTEROID_INSTITUTE_OD_V1.bind(&bindings).unwrap();
         assert_eq!(config.observation_pipeline.transform_kinds().len(), 4);
+
+        let replace = ObservationPipeline::bind_explicit(
+            vec![ObservationTransform::Vfc2017AstrometricUncertaintyReplace {
+                resource: V2_SIGMA_FILL_RESOURCE,
+            }],
+            &sigma_binding,
+        )
+        .unwrap();
+        let reported_variance = (1.0_f64 / 3600.0).powi(2);
+        let reported_covariance = 0.9 * reported_variance;
+        let mut covariance = vec![f64::NAN; 36];
+        covariance[7] = reported_variance;
+        covariance[14] = reported_variance;
+        covariance[8] = reported_covariance;
+        covariance[13] = reported_covariance;
+        let mut observations = OrbitDeterminationAstrometry {
+            lon: vec![10.0],
+            lat: vec![0.0],
+            covariance,
+            obs_code: vec!["006".to_string()],
+            band: vec![None],
+            astcat: vec![Some("UCAC4".to_string())],
+            mjd_utc: vec![60_000.0],
+            jd_tdb: vec![2_460_000.5],
+        };
+        assert!(replace.apply(&mut observations).unwrap());
+        assert_eq!(observations.covariance[8].to_bits(), 0.0_f64.to_bits());
+        assert_eq!(observations.covariance[13].to_bits(), 0.0_f64.to_bits());
+        let determinant = observations.covariance[7] * observations.covariance[14]
+            - observations.covariance[8] * observations.covariance[13];
+        assert!(determinant.is_finite() && determinant > 0.0);
     }
 
     #[test]
@@ -2044,6 +2320,194 @@ mod tests {
             pipeline.transform_kinds(),
             vec!["nightly_batch_deweighting", "nightly_batch_deweighting"]
         );
+    }
+
+    #[test]
+    fn optional_transform_declarations_are_path_free_and_ordered() {
+        let definitions = [
+            ObservationTransform::Vfc2017AstrometricUncertaintyFloor {
+                resource: V2_SIGMA_FILL_RESOURCE,
+                fill_missing: false,
+            },
+            ObservationTransform::Vfc2017AstrometricUncertaintyFloor {
+                resource: V2_SIGMA_FILL_RESOURCE,
+                fill_missing: true,
+            },
+            ObservationTransform::Vfc2017AstrometricUncertaintyReplace {
+                resource: V2_SIGMA_FILL_RESOURCE,
+            },
+            ObservationTransform::PerformanceWeightedCovarianceScaling {
+                resource: V2_FULL_RESOURCE,
+                minimum_residual_count: 31,
+            },
+            ObservationTransform::MeasuredBiasAstrometricUncertaintyFloor {
+                resource: V2_FULL_RESOURCE,
+                minimum_residual_count: 47,
+            },
+        ];
+        let values: Vec<Value> = definitions
+            .iter()
+            .map(ObservationTransform::definition_value)
+            .collect();
+        assert_eq!(
+            values,
+            vec![
+                json!({"kind": "vfc2017_astrometric_uncertainty_floor", "fill_missing": false}),
+                json!({"kind": "vfc2017_astrometric_uncertainty_floor", "fill_missing": true}),
+                json!({"kind": "vfc2017_astrometric_uncertainty_replace"}),
+                json!({
+                    "kind": "performance_weighted_covariance_scaling",
+                    "minimum_residual_count": 31
+                }),
+                json!({
+                    "kind": "measured_bias_astrometric_uncertainty_floor",
+                    "minimum_residual_count": 47
+                }),
+            ]
+        );
+        assert!(!Value::Array(values).to_string().contains("\"path\""));
+    }
+
+    #[test]
+    fn optional_bound_transforms_execute_the_retained_scientific_models() {
+        let identity = |requirement: ResourceRequirement| ValidatedResourceIdentity {
+            requirement,
+            actual_sha256: requirement.sha256.to_string(),
+            actual_byte_size: requirement.byte_size,
+        };
+        let lookup = VeresSigmaLookup::new(
+            &[VeresSigmaRow {
+                obs_code: None,
+                astcat: None,
+                sigma_ra_arcsec: 2.0,
+                sigma_dec_arcsec: 3.0,
+            }],
+            None,
+        )
+        .unwrap();
+        let table = BiasTable::new(
+            vec!["500".to_string()],
+            vec![None],
+            vec![BiasTableRow {
+                bias_ra_arcsec: 2.0,
+                bias_dec_arcsec: 3.0,
+                resid_var_ra: 0.0,
+                resid_var_dec: 0.0,
+                resid_cov_ra_dec: 0.0,
+                resid_cov_n: 50.0,
+                chi2_per_obs: 4.0,
+            }],
+        )
+        .unwrap();
+        let input = || {
+            let mut covariance = vec![f64::NAN; 36];
+            covariance[7] = 1.0e-8;
+            covariance[14] = 1.0e-8;
+            covariance[8] = 1.0e-9;
+            covariance[13] = 1.0e-9;
+            OrbitDeterminationAstrometry {
+                lon: vec![10.0],
+                lat: vec![0.0],
+                covariance,
+                obs_code: vec!["500".to_string()],
+                band: vec![None],
+                astcat: vec![None],
+                mjd_utc: vec![60_000.0],
+                jd_tdb: vec![2_460_000.5],
+            }
+        };
+
+        let floor = BoundObservationTransform::Vfc2017AstrometricUncertaintyFloor {
+            lookup: lookup.clone(),
+            fill_missing: false,
+            resource: identity(V2_SIGMA_FILL_RESOURCE),
+        };
+        let replace = BoundObservationTransform::Vfc2017AstrometricUncertaintyReplace {
+            lookup: lookup.clone(),
+            resource: identity(V2_SIGMA_FILL_RESOURCE),
+        };
+        let provenance = vec![floor.provenance_value(), replace.provenance_value()];
+        assert_eq!(provenance[0]["fill_missing"], json!(false));
+        assert_eq!(
+            provenance[1]["resource"]["actual_sha256"],
+            json!(V2_SIGMA_FILL_RESOURCE.sha256)
+        );
+        assert!(!Value::Array(provenance).to_string().contains("\"path\""));
+
+        let mut floored = input();
+        assert!(floor.apply(&mut floored).unwrap());
+        assert!(floored.covariance[7] > 1.0e-8);
+        assert!(floored.covariance[14] > 1.0e-8);
+        assert_eq!(floored.covariance[8].to_bits(), 1.0e-9_f64.to_bits());
+        assert_eq!(floored.covariance[13].to_bits(), 1.0e-9_f64.to_bits());
+
+        let mut replaced = input();
+        replaced.covariance[8] = 9.0e-9;
+        replaced.covariance[13] = 9.0e-9;
+        let input_determinant = replaced.covariance[7] * replaced.covariance[14]
+            - replaced.covariance[8] * replaced.covariance[13];
+        assert!(input_determinant.is_finite() && input_determinant > 0.0);
+        let replace_pipeline = ObservationPipeline::ordered(vec![replace]).unwrap();
+        assert!(replace_pipeline.apply(&mut replaced).unwrap());
+        assert!(replaced.covariance[7].is_finite() && replaced.covariance[7] > 0.0);
+        assert!(replaced.covariance[14].is_finite() && replaced.covariance[14] > 0.0);
+        assert_eq!(replaced.covariance[8].to_bits(), 0.0_f64.to_bits());
+        assert_eq!(replaced.covariance[13].to_bits(), 0.0_f64.to_bits());
+        assert_eq!(
+            replaced.covariance[8].to_bits(),
+            replaced.covariance[13].to_bits()
+        );
+        let determinant = replaced.covariance[7] * replaced.covariance[14]
+            - replaced.covariance[8] * replaced.covariance[13];
+        assert!(determinant.is_finite() && determinant > 0.0);
+
+        let mut missing_without_fill = input();
+        missing_without_fill.covariance[7] = f64::NAN;
+        BoundObservationTransform::Vfc2017AstrometricUncertaintyFloor {
+            lookup: lookup.clone(),
+            fill_missing: false,
+            resource: identity(V2_SIGMA_FILL_RESOURCE),
+        }
+        .apply(&mut missing_without_fill)
+        .unwrap();
+        assert!(missing_without_fill.covariance[7].is_nan());
+        let mut missing_with_fill = input();
+        missing_with_fill.covariance[7] = f64::NAN;
+        BoundObservationTransform::Vfc2017AstrometricUncertaintyFloor {
+            lookup,
+            fill_missing: true,
+            resource: identity(V2_SIGMA_FILL_RESOURCE),
+        }
+        .apply(&mut missing_with_fill)
+        .unwrap();
+        assert!(missing_with_fill.covariance[7].is_finite());
+        assert_eq!(
+            missing_with_fill.covariance[8].to_bits(),
+            1.0e-9_f64.to_bits()
+        );
+
+        let mut observations = input();
+        BoundObservationTransform::PerformanceWeightedCovarianceScaling {
+            table: table.clone(),
+            minimum_residual_count: 30,
+            resource: identity(V2_FULL_RESOURCE),
+        }
+        .apply(&mut observations)
+        .unwrap();
+        assert_eq!(observations.covariance[7].to_bits(), 4.0e-8_f64.to_bits());
+        assert_eq!(observations.covariance[8].to_bits(), 4.0e-9_f64.to_bits());
+
+        let mut observations = input();
+        BoundObservationTransform::MeasuredBiasAstrometricUncertaintyFloor {
+            table,
+            minimum_residual_count: 30,
+            resource: identity(V2_FULL_RESOURCE),
+        }
+        .apply(&mut observations)
+        .unwrap();
+        assert!(observations.covariance[7] > 1.0e-8);
+        assert!(observations.covariance[14] > 1.0e-8);
+        assert_eq!(observations.covariance[8].to_bits(), 1.0e-9_f64.to_bits());
     }
 
     #[test]

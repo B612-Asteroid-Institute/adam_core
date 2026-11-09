@@ -19,12 +19,56 @@ class ResidualCovarianceOperation(str, Enum):
     REPLACE = "replace"
 
 
+def _require_descriptor_fields(
+    descriptor: dict[str, object], expected: set[str], kind: object
+) -> None:
+    if set(descriptor) != expected:
+        raise RuntimeError(f"native {kind!r} declaration has invalid fields")
+
+
 @dataclass(frozen=True, slots=True)
 class FillMissingAstrometricUncertainty:
     """Fill missing RA/Dec marginal uncertainty from the bound station table."""
 
     kind: Final[str] = field(
         default="fill_missing_astrometric_uncertainty", init=False, repr=False
+    )
+
+    def _descriptor(self) -> dict[str, object]:
+        return {"kind": self.kind}
+
+
+@dataclass(frozen=True, slots=True)
+class Vfc2017AstrometricUncertaintyFloor:
+    """Floor per-axis uncertainty at the bound VFC2017 lookup value.
+
+    ``fill_missing`` defaults to ``False``, the legacy floor-only policy; when
+    true, missing/non-finite variances are filled. The cross term is preserved.
+    """
+
+    fill_missing: bool = False
+    kind: Final[str] = field(
+        default="vfc2017_astrometric_uncertainty_floor", init=False, repr=False
+    )
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.fill_missing, bool):
+            raise TypeError("fill_missing must be a bool")
+
+    def _descriptor(self) -> dict[str, object]:
+        return {"kind": self.kind, "fill_missing": self.fill_missing}
+
+
+@dataclass(frozen=True, slots=True)
+class Vfc2017AstrometricUncertaintyReplace:
+    """Replace per-axis uncertainty with the bound VFC2017 lookup value.
+
+    Both RA/Dec cross entries are set to exactly +0.0 because the lookup has no
+    correlation.
+    """
+
+    kind: Final[str] = field(
+        default="vfc2017_astrometric_uncertainty_replace", init=False, repr=False
     )
 
     def _descriptor(self) -> dict[str, object]:
@@ -79,6 +123,56 @@ class StationBandResidualCovarianceAdjustment:
 
 
 @dataclass(frozen=True, slots=True)
+class PerformanceWeightedCovarianceScaling:
+    """Scale covariance by ``max(chi2_per_obs, 1)`` when supported."""
+
+    minimum_residual_count: int
+    kind: Final[str] = field(
+        default="performance_weighted_covariance_scaling", init=False, repr=False
+    )
+
+    def __post_init__(self) -> None:
+        if (
+            isinstance(self.minimum_residual_count, bool)
+            or not isinstance(self.minimum_residual_count, int)
+            or self.minimum_residual_count <= 0
+        ):
+            raise ValueError("minimum_residual_count must be a positive integer")
+
+    def _descriptor(self) -> dict[str, object]:
+        return {
+            "kind": self.kind,
+            "minimum_residual_count": self.minimum_residual_count,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class MeasuredBiasAstrometricUncertaintyFloor:
+    """Floor per-axis uncertainty at measured station/band bias magnitude."""
+
+    minimum_residual_count: int
+    kind: Final[str] = field(
+        default="measured_bias_astrometric_uncertainty_floor",
+        init=False,
+        repr=False,
+    )
+
+    def __post_init__(self) -> None:
+        if (
+            isinstance(self.minimum_residual_count, bool)
+            or not isinstance(self.minimum_residual_count, int)
+            or self.minimum_residual_count <= 0
+        ):
+            raise ValueError("minimum_residual_count must be a positive integer")
+
+    def _descriptor(self) -> dict[str, object]:
+        return {
+            "kind": self.kind,
+            "minimum_residual_count": self.minimum_residual_count,
+        }
+
+
+@dataclass(frozen=True, slots=True)
 class NightlyBatchDeweighting:
     """Deweight station/UTC-night batches above an effective observation cap.
 
@@ -107,8 +201,12 @@ class NightlyBatchDeweighting:
 
 ObservationTransform = (
     FillMissingAstrometricUncertainty
+    | Vfc2017AstrometricUncertaintyFloor
+    | Vfc2017AstrometricUncertaintyReplace
     | Efcc18CatalogBiasCorrection
     | StationBandResidualCovarianceAdjustment
+    | PerformanceWeightedCovarianceScaling
+    | MeasuredBiasAstrometricUncertaintyFloor
     | NightlyBatchDeweighting
 )
 
@@ -135,8 +233,12 @@ class ObservationPipeline:
             )
         valid = (
             FillMissingAstrometricUncertainty,
+            Vfc2017AstrometricUncertaintyFloor,
+            Vfc2017AstrometricUncertaintyReplace,
             Efcc18CatalogBiasCorrection,
             StationBandResidualCovarianceAdjustment,
+            PerformanceWeightedCovarianceScaling,
+            MeasuredBiasAstrometricUncertaintyFloor,
             NightlyBatchDeweighting,
         )
         if any(not isinstance(transform, valid) for transform in self.transforms):
@@ -169,8 +271,23 @@ class ObservationPipeline:
         for descriptor in descriptors:
             kind = descriptor.get("kind")
             if kind == "fill_missing_astrometric_uncertainty":
+                _require_descriptor_fields(descriptor, {"kind"}, kind)
                 transforms.append(FillMissingAstrometricUncertainty())
+            elif kind == "vfc2017_astrometric_uncertainty_floor":
+                _require_descriptor_fields(descriptor, {"kind", "fill_missing"}, kind)
+                fill_missing = descriptor.get("fill_missing")
+                if not isinstance(fill_missing, bool):
+                    raise RuntimeError("native VFC2017 floor declaration is malformed")
+                transforms.append(
+                    Vfc2017AstrometricUncertaintyFloor(fill_missing=fill_missing)
+                )
+            elif kind == "vfc2017_astrometric_uncertainty_replace":
+                _require_descriptor_fields(descriptor, {"kind"}, kind)
+                transforms.append(Vfc2017AstrometricUncertaintyReplace())
             elif kind == "efcc18_catalog_bias_correction":
+                _require_descriptor_fields(
+                    descriptor, {"kind", "exclude_astcats"}, kind
+                )
                 values = descriptor.get("exclude_astcats")
                 if not isinstance(values, list) or any(
                     not isinstance(value, str) for value in values
@@ -180,6 +297,11 @@ class ObservationPipeline:
                     Efcc18CatalogBiasCorrection(exclude_astcats=tuple(values))
                 )
             elif kind == "station_band_residual_covariance_adjustment":
+                _require_descriptor_fields(
+                    descriptor,
+                    {"kind", "operation", "minimum_residual_count"},
+                    kind,
+                )
                 operation = descriptor.get("operation")
                 count = descriptor.get("minimum_residual_count")
                 if not isinstance(operation, str) or not isinstance(count, int):
@@ -192,7 +314,30 @@ class ObservationPipeline:
                         minimum_residual_count=count,
                     )
                 )
+            elif kind == "performance_weighted_covariance_scaling":
+                _require_descriptor_fields(
+                    descriptor, {"kind", "minimum_residual_count"}, kind
+                )
+                count = descriptor.get("minimum_residual_count")
+                if not isinstance(count, int) or isinstance(count, bool):
+                    raise RuntimeError(
+                        "native performance-weighted declaration is malformed"
+                    )
+                transforms.append(PerformanceWeightedCovarianceScaling(count))
+            elif kind == "measured_bias_astrometric_uncertainty_floor":
+                _require_descriptor_fields(
+                    descriptor, {"kind", "minimum_residual_count"}, kind
+                )
+                count = descriptor.get("minimum_residual_count")
+                if not isinstance(count, int) or isinstance(count, bool):
+                    raise RuntimeError(
+                        "native measured-bias floor declaration is malformed"
+                    )
+                transforms.append(MeasuredBiasAstrometricUncertaintyFloor(count))
             elif kind == "nightly_batch_deweighting":
+                _require_descriptor_fields(
+                    descriptor, {"kind", "effective_observation_cap"}, kind
+                )
                 cap = descriptor.get("effective_observation_cap")
                 if not isinstance(cap, int):
                     raise RuntimeError("native nightly declaration is malformed")
@@ -205,9 +350,13 @@ class ObservationPipeline:
 __all__ = [
     "Efcc18CatalogBiasCorrection",
     "FillMissingAstrometricUncertainty",
+    "MeasuredBiasAstrometricUncertaintyFloor",
     "NightlyBatchDeweighting",
+    "PerformanceWeightedCovarianceScaling",
     "ObservationPipeline",
     "ObservationTransform",
     "ResidualCovarianceOperation",
     "StationBandResidualCovarianceAdjustment",
+    "Vfc2017AstrometricUncertaintyFloor",
+    "Vfc2017AstrometricUncertaintyReplace",
 ]

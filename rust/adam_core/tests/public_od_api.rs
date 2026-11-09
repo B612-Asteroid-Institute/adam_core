@@ -1,4 +1,3 @@
-#[allow(dead_code)]
 fn canonical_workflow_signatures_do_not_drift() {
     use adam_core::od::*;
     type Batch = Result<OdBatchResult, OdBatchError>;
@@ -23,7 +22,6 @@ fn canonical_workflow_signatures_do_not_drift() {
     ) -> Result<ProviderMetadata, OdBatchError> = ProviderMetadata::from_external_propagator;
 }
 
-#[allow(dead_code)]
 fn advanced_algorithm_exports_are_deliberate() {
     use adam_core::od::algorithms::{
         prepare_observations, refine_prepared_orbit, solve_prepared_iod, PreparedObservations,
@@ -35,7 +33,6 @@ fn advanced_algorithm_exports_are_deliberate() {
     let _: Option<PreparedObservations> = None;
 }
 
-#[allow(dead_code)]
 fn batch_products_are_immutable_and_losslessly_consumable(result: &adam_core::od::OdBatchResult) {
     let _: &[adam_core::od::FittedOrbitRecord] = result.fitted_orbits();
     let _: &[adam_core::od::FittedOrbitMemberRecord] = result.fitted_orbit_members();
@@ -50,6 +47,11 @@ fn batch_products_are_immutable_and_losslessly_consumable(result: &adam_core::od
 
 #[test]
 fn canonical_workflows_have_deliberate_root_and_module_exports() {
+    canonical_workflow_signatures_do_not_drift();
+    advanced_algorithm_exports_are_deliberate();
+    let _: fn(&adam_core::od::OdBatchResult) =
+        batch_products_are_immutable_and_losslessly_consumable;
+
     assert_eq!(adam_core::od::OdRoute::RunIod.as_str(), "run_iod");
     assert_eq!(adam_core::od::OdRoute::RunOd.as_str(), "run_od");
     assert_eq!(adam_core::od::OdRoute::Refine.as_str(), "refine");
@@ -64,6 +66,48 @@ fn canonical_workflows_have_deliberate_root_and_module_exports() {
     assert!(std::mem::size_of::<adam_core::od::EvaluationConfig>() > 0);
     assert!(std::mem::size_of::<adam_core::od::profiles::ProfileIdentity>() > 0);
     assert!(!adam_core::build_identity().version.is_empty());
+}
+
+#[test]
+fn optional_observation_policies_are_typed_public_rust_configuration() {
+    use adam_core::od::profiles::{V2_FULL_RESOURCE, V2_SIGMA_FILL_RESOURCE};
+    use adam_core::od::{
+        ObservationPipeline, ObservationTransform, ResourceBindings, ResourceSlot,
+    };
+
+    let error = ObservationPipeline::bind_explicit(
+        vec![
+            ObservationTransform::Vfc2017AstrometricUncertaintyFloor {
+                resource: V2_SIGMA_FILL_RESOURCE,
+                fill_missing: false,
+            },
+            ObservationTransform::Vfc2017AstrometricUncertaintyReplace {
+                resource: V2_SIGMA_FILL_RESOURCE,
+            },
+            ObservationTransform::PerformanceWeightedCovarianceScaling {
+                resource: V2_FULL_RESOURCE,
+                minimum_residual_count: 30,
+            },
+            ObservationTransform::MeasuredBiasAstrometricUncertaintyFloor {
+                resource: V2_FULL_RESOURCE,
+                minimum_residual_count: 30,
+            },
+        ],
+        &ResourceBindings::new(),
+    )
+    .expect_err("resource transforms require exact bindings");
+    let slots = error
+        .resource_problems()
+        .iter()
+        .map(|problem| problem.slot)
+        .collect::<std::collections::BTreeSet<_>>();
+    assert_eq!(
+        slots,
+        std::collections::BTreeSet::from([
+            ResourceSlot::StationCatalogUncertaintyTable,
+            ResourceSlot::StationBandResidualCovarianceTable,
+        ])
+    );
 }
 
 #[test]

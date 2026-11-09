@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 //! Observation uncertainty models for orbit determination.
 //!
 //! Rust-canonical port of `adam_core.orbit_determination.observation_uncertainty`:
@@ -7,10 +5,10 @@
 //! turn an observatory bias table into inflated observation covariances
 //! ([`EmpiricalCovarianceModel`], [`PerformanceWeightedModel`],
 //! [`SigmaFloorModel`]), the bias-table-free
-//! [`NightBatchDeweightingModel`], the position-modifying
-//! [`Efcc18DebiasModel`], and [`CompositeModel`]. The Python classes of the
-//! same names are thin veneers over these kernels; quivr schema validation of
-//! the bias table (`BIAS_TABLE_SCHEMA`) stays at the pyarrow boundary.
+//! [`NightBatchDeweightingModel`], and the position-modifying
+//! [`Efcc18DebiasModel`]. Public Rust and Python configuration uses typed
+//! [`crate::od_config::ObservationTransform`] declarations; composition and
+//! identity are represented by an ordered or as-supplied observation pipeline.
 //!
 //! Frames and units
 //! ----------------
@@ -111,16 +109,6 @@ pub(crate) trait ObservationUncertaintyModel: Send + Sync {
     fn apply(&self, observations: &mut OrbitDeterminationAstrometry) -> Result<bool, String>;
 }
 
-/// No-op model: observations are returned unchanged (the naive baseline).
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-pub(crate) struct IdentityModel;
-
-impl ObservationUncertaintyModel for IdentityModel {
-    fn apply(&self, _observations: &mut OrbitDeterminationAstrometry) -> Result<bool, String> {
-        Ok(false)
-    }
-}
-
 /// Float-valued bias-table columns cached per row for fast lookup. Null
 /// entries are carried as NaN, matching the Python interpreters.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -163,14 +151,6 @@ impl BiasTable {
             table.insert(key, row);
         }
         Ok(Self { rows: table })
-    }
-
-    pub fn len(&self) -> usize {
-        self.rows.len()
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.rows.is_empty()
     }
 
     pub fn lookup(&self, code: &str, band: Option<&str>) -> Option<&BiasTableRow> {
@@ -250,23 +230,6 @@ fn same_value(a: f64, b: f64) -> bool {
 pub(crate) enum EmpiricalCovarianceMode {
     Add,
     Replace,
-}
-
-impl EmpiricalCovarianceMode {
-    pub fn parse(value: &str) -> Result<Self, String> {
-        match value {
-            "add" => Ok(Self::Add),
-            "replace" => Ok(Self::Replace),
-            _ => Err(format!("mode must be 'add' or 'replace', got {value:?}")),
-        }
-    }
-
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::Add => "add",
-            Self::Replace => "replace",
-        }
-    }
 }
 
 /// Inflate the RA/Dec covariance block with the station's measured 2×2
@@ -518,36 +481,11 @@ impl ObservationUncertaintyModel for Efcc18DebiasModel {
     }
 }
 
-/// Apply a sequence of models in order (left to right). Because the shipped
-/// models act multiplicatively or additively on the covariance block, order
-/// can matter.
-pub(crate) struct CompositeModel {
-    pub models: Vec<Box<dyn ObservationUncertaintyModel>>,
-}
-
-impl CompositeModel {
-    pub fn new(models: Vec<Box<dyn ObservationUncertaintyModel>>) -> Result<Self, String> {
-        if models.is_empty() {
-            return Err("CompositeModel requires at least one model".to_string());
-        }
-        Ok(Self { models })
-    }
-}
-
-impl ObservationUncertaintyModel for CompositeModel {
-    fn apply(&self, observations: &mut OrbitDeterminationAstrometry) -> Result<bool, String> {
-        let mut changed = false;
-        for model in &self.models {
-            changed |= model.apply(observations)?;
-        }
-        Ok(changed)
-    }
-}
-
 /// Assert that a model application did not modify observed positions
 /// (ids/times are the caller's responsibility). Opt-in helper for tests of
 /// position-preserving models.
-pub fn assert_positions_unchanged(
+#[cfg(test)]
+fn assert_positions_unchanged(
     before: &OrbitDeterminationAstrometry,
     after: &OrbitDeterminationAstrometry,
 ) -> Result<(), String> {
@@ -780,7 +718,6 @@ mod tests {
         assert_eq!(block(&obs, 0).0, block(&before, 0).0);
         assert_eq!(block(&obs, 0).1, block(&before, 0).1);
 
-        assert!(EmpiricalCovarianceMode::parse("subtract").is_err());
         assert!(BiasTable::new(
             vec!["500".into(), "500".into()],
             vec![None, None],
@@ -907,33 +844,6 @@ mod tests {
             1.25, 1.25, 1.25, 1.25, 1.25, 1.0, 1.0, 1.25, 1.25, 1.25, 1.25, 1.25,
         ];
         assert_eq!(factors, expected);
-    }
-
-    #[test]
-    fn composite_applies_in_sequence_and_identity_is_noop() {
-        let performance = PerformanceWeightedModel {
-            table: table(vec![("F51", None, row(|r| r.chi2_per_obs = 4.0))]),
-            min_resid_cov_n: 30.0,
-        };
-        let composite = CompositeModel::new(vec![
-            Box::new(performance),
-            Box::new(NightBatchDeweightingModel::new(4).unwrap()),
-        ])
-        .unwrap();
-        let mut obs = observations(&["F51"; 5], &[10.0; 5], 1e-4, 2e-4, None, None);
-        assert!(composite.apply(&mut obs).unwrap());
-        for row in 0..5 {
-            let (var_lon, var_lat, _, _) = block(&obs, row);
-            assert!(close(var_lon, 1e-8 * 5.0) && close(var_lat, 4e-8 * 5.0));
-        }
-        assert!(CompositeModel::new(vec![]).is_err());
-
-        let identity =
-            CompositeModel::new(vec![Box::new(IdentityModel), Box::new(IdentityModel)]).unwrap();
-        let mut obs = observations(&["F51", "500"], &[10.0, -20.0], 1e-4, 2e-4, None, None);
-        let before = obs.clone();
-        assert!(!identity.apply(&mut obs).unwrap());
-        assert_same(&obs, &before);
     }
 
     #[test]

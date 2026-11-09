@@ -307,11 +307,26 @@ below.
   prediction-fit settings.
 
 The closed transform set is ``FillMissingAstrometricUncertainty``,
+``Vfc2017AstrometricUncertaintyFloor`` (with explicit ``fill_missing``),
+``Vfc2017AstrometricUncertaintyReplace``,
 ``Efcc18CatalogBiasCorrection``,
 ``StationBandResidualCovarianceAdjustment`` (explicit Add/Replace and minimum
-count), and ``NightlyBatchDeweighting``. Order and repetition are authoritative.
-Python callbacks, dynamically registered transforms, model dictionaries,
-profile-selected propagators, and resource fallback are not supported.
+count), ``PerformanceWeightedCovarianceScaling``,
+``MeasuredBiasAstrometricUncertaintyFloor``, and
+``NightlyBatchDeweighting``. The VFC2017 floor operates per axis and preserves
+the supplied RA/Dec cross term; its Python ``fill_missing=False`` default is
+the deliberate legacy floor-only policy and is always serialized explicitly.
+VFC2017 replacement sets both cross entries to exactly +0.0 because its table
+carries no correlation. Performance weighting scales the complete RA/Dec
+covariance block by ``max(chi2_per_obs, 1)``; the measured-bias policy floors
+each marginal sigma and preserves the cross term. Both station/band policies
+require an explicit minimum residual count.
+
+Order and repetition are authoritative. Pipeline identity is
+``ObservationPipeline.as_supplied()``; composition is
+``ObservationPipeline.ordered(...)``. Python callbacks, dynamically registered
+transforms, model dictionaries, profile-selected propagators, and resource
+fallback are not supported.
 
 ``CORE_OD_V1`` applies EFCC18 correction and nightly deweighting. It does not
 fill missing uncertainty. ``ASTEROID_INSTITUTE_OD_V1`` additionally uses the
@@ -338,6 +353,46 @@ provision local files and bind all semantic slots explicitly:
        }
    )
    institute_config = ASTEROID_INSTITUTE_OD_V1.bind(resources)
+
+Optional policies use the same path-free declarations and exact resource
+bindings. For example, an explicitly ordered VFC2017 floor followed by
+performance weighting is declared as follows (the files must match Core's
+pinned content identities):
+
+.. code-block:: python
+
+   from pathlib import Path
+
+   from adam_core.orbit_determination import (
+       IodStageConfig,
+       OdConfig,
+       ObservationPipeline,
+       PerformanceWeightedCovarianceScaling,
+       RefinementRunConfig,
+       ResourceBindings,
+       Vfc2017AstrometricUncertaintyFloor,
+   )
+
+   optional_resources = ResourceBindings(
+       {
+           "station_catalog_uncertainty_table": Path("/srv/od/station.parquet"),
+           "station_band_residual_covariance_table": Path(
+               "/srv/od/residual-covariance.parquet"
+           ),
+       }
+   )
+   pipeline = ObservationPipeline.ordered(
+       [
+           Vfc2017AstrometricUncertaintyFloor(fill_missing=False),
+           PerformanceWeightedCovarianceScaling(minimum_residual_count=30),
+       ]
+   )
+   explicit_config = OdConfig.explicit(
+       observation_pipeline=pipeline,
+       iod=IodStageConfig.core_v1(),
+       refinement=RefinementRunConfig.core_v1(),
+       resources=optional_resources,
+   )
 
 Validation aggregates missing, unused, swapped, corrupt, schema, identity, and
 structural problems by slot before transforms, propagation, or fitting.

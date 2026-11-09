@@ -1720,7 +1720,9 @@ struct WorkingGroupResult {
     group_id: String,
     orbit_id: String,
     row_indices: Vec<usize>,
+    #[cfg(feature = "python-bindings")]
     input_orbit_index: Option<usize>,
+    #[cfg(feature = "python-bindings")]
     member_indices: Vec<usize>,
     prepared: PreparedObservations,
     orbit: Option<FittedOrbitRecord>,
@@ -1730,29 +1732,37 @@ struct WorkingGroupResult {
 }
 
 /// Internal planning/diagnostic metadata for one deterministic disposition.
-#[cfg_attr(not(feature = "python-bindings"), allow(dead_code))]
 #[derive(Debug, Clone)]
 struct OdGroupResult {
+    #[cfg(any(feature = "python-bindings", test))]
     group_id: String,
+    #[cfg(any(feature = "python-bindings", test))]
     orbit_id: String,
+    #[cfg(any(feature = "python-bindings", test))]
     row_indices: Vec<usize>,
+    #[cfg(feature = "python-bindings")]
     input_orbit_index: Option<usize>,
+    #[cfg(feature = "python-bindings")]
     member_indices: Vec<usize>,
+    #[cfg(feature = "python-bindings")]
     prepared: PreparedObservations,
     orbit_index: Option<usize>,
     member_start: usize,
     member_end: usize,
+    #[cfg(any(feature = "python-bindings", test))]
     failure_index: Option<usize>,
     /// IOD diagnostics are retained even when no fitted orbit exists.
+    #[cfg(feature = "python-bindings")]
     iod: Option<IodResult>,
 }
 
-#[cfg_attr(not(feature = "python-bindings"), allow(dead_code))]
 #[derive(Debug, Clone, Copy)]
 struct GroupView<'a> {
+    #[cfg(any(feature = "python-bindings", test))]
     group: &'a OdGroupResult,
     orbit: Option<&'a FittedOrbitRecord>,
     members: &'a [FittedOrbitMemberRecord],
+    #[cfg(any(feature = "python-bindings", test))]
     failure: Option<&'a OrbitDeterminationFailure>,
 }
 
@@ -1833,12 +1843,13 @@ impl WorkingBatchResult {
         let mut failures = Vec::new();
         let mut groups = Vec::with_capacity(self.groups.len());
         for group in self.groups {
+            #[cfg(any(feature = "python-bindings", test))]
             let orbit_id = group
                 .orbit
                 .as_ref()
                 .and_then(|record| record.orbit.orbit_id.first())
                 .map(|value| value.0.clone())
-                .unwrap_or(group.orbit_id);
+                .unwrap_or_else(|| group.orbit_id.clone());
             let orbit_index = group.orbit.map(|orbit| {
                 let index = fitted_orbits.len();
                 fitted_orbits.push(orbit);
@@ -1847,22 +1858,35 @@ impl WorkingBatchResult {
             let member_start = fitted_orbit_members.len();
             fitted_orbit_members.extend(group.members);
             let member_end = fitted_orbit_members.len();
+            #[cfg(any(feature = "python-bindings", test))]
             let failure_index = group.failure.map(|failure| {
                 let index = failures.len();
                 failures.push(failure);
                 index
             });
+            #[cfg(not(any(feature = "python-bindings", test)))]
+            if let Some(failure) = group.failure {
+                failures.push(failure);
+            }
             groups.push(OdGroupResult {
+                #[cfg(any(feature = "python-bindings", test))]
                 group_id: group.group_id,
+                #[cfg(any(feature = "python-bindings", test))]
                 orbit_id,
+                #[cfg(any(feature = "python-bindings", test))]
                 row_indices: group.row_indices,
+                #[cfg(feature = "python-bindings")]
                 input_orbit_index: group.input_orbit_index,
+                #[cfg(feature = "python-bindings")]
                 member_indices: group.member_indices,
+                #[cfg(feature = "python-bindings")]
                 prepared: group.prepared,
                 orbit_index,
                 member_start,
                 member_end,
+                #[cfg(any(feature = "python-bindings", test))]
                 failure_index,
+                #[cfg(feature = "python-bindings")]
                 iod: group.iod,
             });
         }
@@ -2126,9 +2150,11 @@ fn member_batch_from_records<'a>(
 impl OdBatchResult {
     fn group_views(&self) -> impl ExactSizeIterator<Item = GroupView<'_>> + '_ {
         self.groups.iter().map(|group| GroupView {
+            #[cfg(any(feature = "python-bindings", test))]
             group,
             orbit: group.orbit_index.map(|index| &self.fitted_orbits[index]),
             members: &self.fitted_orbit_members[group.member_start..group.member_end],
+            #[cfg(any(feature = "python-bindings", test))]
             failure: group.failure_index.map(|index| &self.failures[index]),
         })
     }
@@ -3155,7 +3181,9 @@ fn run_iod_prepared(
                         group_id: group.group_id,
                         orbit_id,
                         row_indices: group.source_indices,
+                        #[cfg(feature = "python-bindings")]
                         input_orbit_index: None,
+                        #[cfg(feature = "python-bindings")]
                         member_indices: Vec::new(),
                         prepared,
                         orbit,
@@ -3177,7 +3205,9 @@ fn run_iod_prepared(
                         group_id: group.group_id,
                         orbit_id,
                         row_indices: group.source_indices,
+                        #[cfg(feature = "python-bindings")]
                         input_orbit_index: None,
+                        #[cfg(feature = "python-bindings")]
                         member_indices: Vec::new(),
                         prepared,
                         orbit: None,
@@ -4139,7 +4169,9 @@ fn refine_prepared(
                             group_id: group_id.clone(),
                             orbit_id: group.orbit_id.clone(),
                             row_indices: group.source_indices,
+                            #[cfg(feature = "python-bindings")]
                             input_orbit_index: Some(group.orbit_index),
+                            #[cfg(feature = "python-bindings")]
                             member_indices: group.member_indices,
                             prepared,
                             orbit: Some(FittedOrbitRecord {
@@ -4175,7 +4207,9 @@ fn refine_prepared(
                             group_id,
                             orbit_id: group.orbit_id,
                             row_indices: group.source_indices,
+                            #[cfg(feature = "python-bindings")]
                             input_orbit_index: Some(group.orbit_index),
+                            #[cfg(feature = "python-bindings")]
                             member_indices: group.member_indices,
                             prepared,
                             orbit: None,
@@ -4384,7 +4418,9 @@ fn evaluate_prepared(
                             group_id: group_id.clone(),
                             orbit_id: group.orbit_id.clone(),
                             row_indices: group.source_indices,
+                            #[cfg(feature = "python-bindings")]
                             input_orbit_index: Some(group.orbit_index),
+                            #[cfg(feature = "python-bindings")]
                             member_indices: group.member_indices,
                             prepared,
                             orbit: Some(FittedOrbitRecord {
@@ -4414,7 +4450,9 @@ fn evaluate_prepared(
                             group_id,
                             orbit_id: group.orbit_id,
                             row_indices: group.source_indices,
+                            #[cfg(feature = "python-bindings")]
                             input_orbit_index: Some(group.orbit_index),
+                            #[cfg(feature = "python-bindings")]
                             member_indices: group.member_indices,
                             prepared,
                             orbit: None,
@@ -6691,7 +6729,9 @@ mod tests {
                 group_id: "group".to_string(),
                 orbit_id: "fit".to_string(),
                 row_indices: vec![0],
+                #[cfg(feature = "python-bindings")]
                 input_orbit_index: None,
+                #[cfg(feature = "python-bindings")]
                 member_indices: Vec::new(),
                 prepared,
                 orbit: Some(FittedOrbitRecord {

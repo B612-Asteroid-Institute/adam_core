@@ -30,10 +30,6 @@ use crate::observation_uncertainty::{
 };
 use std::collections::HashMap;
 
-/// Global fallback when neither a (station, catalog) nor a catalog row exists.
-#[allow(dead_code)]
-pub const VERES2017_FALLBACK_SIGMA_ARCSEC: f64 = 0.75;
-
 /// One row of a station/catalog sigma table: a (station, catalog) row, a
 /// station-only row (`astcat` None), a per-catalog default (`obs_code` None)
 /// or the single global row (both None).
@@ -201,11 +197,10 @@ fn apply_veres_model(
 /// practice). The RA/Dec cross-term is left unchanged. A non-finite reported
 /// variance is left as is unless `fill_missing` is set, in which case it is
 /// replaced by the VFC2017 variance.
-#[allow(dead_code)]
 #[derive(Debug, Clone, PartialEq)]
-pub struct VeresFloorModel {
-    pub lookup: VeresSigmaLookup,
-    pub fill_missing: bool,
+pub(crate) struct VeresFloorModel {
+    pub(crate) lookup: VeresSigmaLookup,
+    pub(crate) fill_missing: bool,
 }
 
 impl ObservationUncertaintyModel for VeresFloorModel {
@@ -239,11 +234,11 @@ impl ObservationUncertaintyModel for VeresFloorModel {
 
 /// Replace each axis sigma by the VFC2017 station/catalog sigma outright
 /// (classic weighting-file practice, ignoring reported uncertainties). The
-/// RA/Dec cross-term is set to zero since the table carries no correlation.
-#[allow(dead_code)]
+/// RA/Dec cross-term is set to exactly +0.0 since the table carries no
+/// correlation.
 #[derive(Debug, Clone, PartialEq)]
-pub struct VeresReplaceModel {
-    pub lookup: VeresSigmaLookup,
+pub(crate) struct VeresReplaceModel {
+    pub(crate) lookup: VeresSigmaLookup,
 }
 
 impl ObservationUncertaintyModel for VeresReplaceModel {
@@ -619,14 +614,20 @@ mod tests {
     }
 
     #[test]
-    fn replace_model_overwrites_and_zeroes_cross_term() {
+    fn replace_model_overwrites_and_diagonalizes_a_correlated_input() {
         let model = VeresReplaceModel {
             lookup: small_lookup(Some(0.75)),
         };
         let mut obs = observations(&["500"], &[Some("UCAC4")], &[30.0]);
-        obs.covariance[VAR_LON] = 1e-6;
-        obs.covariance[COV_LON_LAT] = 1e-9;
-        obs.covariance[COV_LAT_LON] = 1e-9;
+        let reported_variance = (1.0 / ARCSEC_PER_DEG).powi(2);
+        let reported_covariance = 0.9 * reported_variance;
+        obs.covariance[VAR_LON] = reported_variance;
+        obs.covariance[VAR_LAT] = reported_variance;
+        obs.covariance[COV_LON_LAT] = reported_covariance;
+        obs.covariance[COV_LAT_LON] = reported_covariance;
+        let input_determinant = reported_variance.powi(2) - reported_covariance.powi(2);
+        assert!(input_determinant.is_finite() && input_determinant > 0.0);
+
         assert!(model.apply(&mut obs).unwrap());
         let cos_dec = 30.0_f64.to_radians().cos();
         assert!(close(
@@ -637,7 +638,16 @@ mod tests {
             obs.covariance[VAR_LAT],
             (0.40 / ARCSEC_PER_DEG).powi(2)
         ));
-        assert_eq!(obs.covariance[COV_LON_LAT], 0.0);
-        assert_eq!(obs.covariance[COV_LAT_LON], 0.0);
+        assert_eq!(obs.covariance[COV_LON_LAT].to_bits(), 0.0_f64.to_bits());
+        assert_eq!(obs.covariance[COV_LAT_LON].to_bits(), 0.0_f64.to_bits());
+        assert_eq!(
+            obs.covariance[COV_LON_LAT].to_bits(),
+            obs.covariance[COV_LAT_LON].to_bits()
+        );
+        let determinant = obs.covariance[VAR_LON] * obs.covariance[VAR_LAT]
+            - obs.covariance[COV_LON_LAT] * obs.covariance[COV_LAT_LON];
+        assert!(obs.covariance[VAR_LON].is_finite() && obs.covariance[VAR_LON] > 0.0);
+        assert!(obs.covariance[VAR_LAT].is_finite() && obs.covariance[VAR_LAT] > 0.0);
+        assert!(determinant.is_finite() && determinant > 0.0);
     }
 }
