@@ -23,18 +23,19 @@ Only plotting/display may remain Python. Generic quivr/dataclass behavior and st
 | `convert_magnitude` | one Arrow-to-Rust crossing for validation, lookup, composition, and arithmetic; object-string conversion no longer allocates Python `list[str]` rows | selected | measured | Complete |
 | `estimate_absolute_magnitude_v_from_detections` | one ordinary-path crossing owns exposure-ID join, midpoint observer states, band mapping, prediction, filtering, fit, nulls, and Arrow `PhysicalParameters` assembly | selected facade, complete join, and Arrow-schema tests | complete Rust `Instant` sample | Complete |
 | `estimate_absolute_magnitude_v_from_detections_grouped` | one ordinary-path crossing additionally owns null-ID filtering, lexical grouping/order, degenerate-group removal, and nested Arrow assembly | selected facade, grouped ordering, and nested-schema tests | complete Rust `Instant` sample | Complete |
+| `estimate_colors` | one fused IPC crossing owns grouping, orbit handling, propagation/geometry, generic canonical-filter fitting/projection, diagnostics, failures, and exact Arrow assembly | six fixtures across all three phase laws plus generic-filter, projection, status/count, and exact-schema facade tests | complete fused-kernel timing and scaling review | Complete |
 
 The raw six photometry kernel lanes remain independently timed. A complete-facade adapter additionally times prediction, single fit, and grouped fit with Rust-owned observer generation and Arrow assembly inside each `Instant` sample and PyO3 conversion outside it.
 
 ## Rust-native color-estimation contract (PR #202 integration)
 
-`estimate_colors` remains a one-row-per-object API over native `SourceCatalog` and `Orbits`. The corrected Python implementation is a temporary legacy-behavior reference only; the final production facade performs schema validation/marshalling, makes exactly one fused native call, verifies that the raw `RecordBatch` schema exactly equals `ColorFit.schema`, and wraps it with quivr metadata. Rust owns canonical filter resolution, geometry/propagation integration, validity classification, optional projection and composition conversion, fitting, clipping, rank/null-space identifiability, covariance, pair colors, statuses/counts, and Arrow assembly.
+`estimate_colors` is a one-row-per-object API over native `SourceCatalog` and `Orbits`. Its production Python facade performs only schema definition and IPC/configuration marshalling, makes exactly one fused native call, decodes exactly one batch, verifies that the raw `RecordBatch` schema exactly equals `ColorFit.schema` including metadata, and wraps it with the shared quivr bridge. Rust owns canonical filter resolution, geometry/propagation integration, validity classification, optional projection and composition conversion, fitting, clipping, rank/null-space identifiability, covariance, pair colors, statuses/counts, and Arrow assembly.
 
 ### Filter resolution and eligibility
 
 Strict and non-strict modes share the magnitude resolver's precedence: canonical filter ID, exact `(observatory_code, reported_band)` mapping, then optional generic SDSS/PS1 fallback. Color estimation differs at the failure boundary: null, unresolved, and strict-disabled fallback filters are skipped into `num_unsupported_filter` rather than raising for the batch.
 
-Native mode is the default and fits every finite-valid observation in each resolved canonical filter as a separate intercept. It intentionally replaces the Python reference's same-letter `g/i/r/u` pooling and allow-list. The retention denominator is exactly the valid, mapped native rows. If that set is empty, status is `no_usable_photometry`.
+Native mode is the default and fits every finite-valid observation in each resolved canonical filter as a separate intercept. It replaces the retired legacy solver's same-letter `g/i/r/u` pooling and allow-list. The retention denominator is exactly the valid, mapped native rows. If that set is empty, status is `no_usable_photometry`.
 
 Projection mode receives an explicit canonical source-to-target map and a required `BandpassComposition`. Only sources in that map are eligible; Rust performs the composition conversion and pools rows after projection. Unprojected source filters count as unsupported, and the retention denominator is exactly the projected eligible rows. There is no implicit uncorrected pooling. LSST `u/g/r/i` is an optional explicit projection executed in the same fused native call, never a kernel assumption or Python transformation.
 
@@ -66,9 +67,9 @@ Rust enumerates every pair `(i, j)` with `i < j` in the canonical-ID order. The 
 - `phase_param_out_of_bounds` with forced bounds: retain non-null `filter_ids` and `num_used_by_filter` diagnostics, but set magnitude, magnitude-sigma, covariance, and every pair list field to top-level null.
 - `no_usable_photometry`, `too_many_outliers`, `no_orbit`, `multiple_orbits`, and `failed`: every native-product list field is top-level null.
 
-Scalar status/error, phase and fit diagnostics, convergence, and aggregate counts remain on the object row. The fixed `g/i/r/u` magnitude, sigma, filter, color, and per-band count columns in the Python reference are temporary only and must all be removed in the final Rust-port commit. Native and optional projected outputs use the same generic list schema.
+Scalar status/error, phase and fit diagnostics, convergence, and aggregate counts remain on the object row. The fixed `g/i/r/u` magnitude, sigma, filter, color, and per-band count columns have been removed. Native and optional projected outputs use the same generic list schema.
 
-Python-reference tests preserve legacy numerical behavior during migration. Rust tests—not added Python computation—establish native-mode parity where applicable and enforce the new native/projection ordering, null/NaN, covariance, contrast-fitability, status, retention, and count invariants.
+Rust tests—not Python computation—establish native-mode numerical parity where applicable and enforce native/projection ordering, null/NaN, covariance, contrast-fitability, status, retention, and count invariants. Public facade tests cover all six fixtures and three phase laws, one-call marshalling, generic filters, complete explicit projection (including identity edges), strict fallback accounting, multi-object order/failures, UTC/frame/non-gravitational behavior, exact schema equality, list-child nullability, and one-batch IPC rejection.
 
 ## Rotation-period surface
 

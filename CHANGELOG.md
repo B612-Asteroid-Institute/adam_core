@@ -113,6 +113,12 @@ This file contains notable changes in adam-core
 
 ### Added
 
+- Generic ``ColorFit`` results and a one-call ``estimate_colors`` facade for
+  native ``SourceCatalog``/``Orbits`` inputs. The fused Rust implementation owns
+  canonical-filter resolution, optional explicit composition-aware projection,
+  HG12*/HG/c1c2 fitting, clipping, identifiability, covariance, diagnostics, and
+  per-object failures; Python only marshals Arrow IPC, validates the exact result
+  schema, and wraps the batch as a quivr table.
 - A Rust-authoritative, complete OD configuration boundary: ``OdConfig``,
   stage-specific ``IodRunConfig``, ``RefinementRunConfig``, and
   ``EvaluationConfig``, ordered ``ObservationPipeline`` declarations, strict

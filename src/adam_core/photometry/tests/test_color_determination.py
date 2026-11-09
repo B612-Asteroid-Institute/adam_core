@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import ast
+import inspect
 from pathlib import Path
 from typing import Literal, get_type_hints
 
@@ -10,59 +12,51 @@ import pytest
 import quivr as qv
 
 from adam_core import _rust_native
-from adam_core.coordinates import CometaryCoordinates, Origin
+from adam_core.coordinates import CartesianCoordinates, CometaryCoordinates, Origin
 from adam_core.observations import SourceCatalog
-from adam_core.observations.arrow_bridge import observations_to_ipc
 from adam_core.orbits import NonGravitationalParameters, Orbits
-from adam_core.orbits.arrow_bridge import orbits_to_ipc
 from adam_core.time import Timestamp
-from adam_core.utils.spice import DEFAULT_KERNELS
 
 from .. import color_determination
 from ..bandpasses import BandpassComposition
-from ..bandpasses.api import _data_dir_str, bandpass_delta_mag
 from ..color_determination import (
-    _CHANNEL_FILTERS,
-    _FILTER_CHANNEL,
-    _TARGET_FILTERS,
     ColorFit,
-    _apply_color_terms,
     _color_fit_from_native_batch,
-    _g_bounds_violation,
-    _resolve_channels,
-    _UnreliableFitError,
+    _native_record_batch,
     estimate_colors,
 )
 
 DATA_DIR = Path(__file__).parent / "data"
-
-COLOR_FIXTURES: list[str] = sorted(p.name for p in DATA_DIR.glob("color_fixture_*.npz"))
-if not COLOR_FIXTURES:
-    COLOR_FIXTURES = ["__NO_FIXTURES__"]
-
-# Tolerances: compare within the given margin of the paper (Fourier) values.
-# Greenstreet et al. 2026 reports colors from Fourier fits that include a
-# rotational period term.  Our implementation sets g(t)=0 (no rotation), so
-# per-band H values can be biased when multi-band observations sample
-# different rotational phases. 2025 MO35 will have a separate larger tolerance.
-HG12STAR_TOLERANCE = 0.06
-HG_TOLERANCE = 0.06
-C1C2_TOLERANCE = 0.06
+COLOR_FIXTURES = sorted(DATA_DIR.glob("color_fixture_*.npz"))
+PHASE_MODELS: tuple[Literal["HG12star", "HG", "c1c2"], ...] = (
+    "HG12star",
+    "HG",
+    "c1c2",
+)
+LIST_FIELDS = (
+    "filter_ids",
+    "absolute_magnitudes",
+    "absolute_magnitude_sigmas",
+    "num_used_by_filter",
+    "magnitude_covariance",
+    "color_lhs_filter_ids",
+    "color_rhs_filter_ids",
+    "colors",
+    "color_sigmas",
+)
 
 
 def _load_fixture_observations(fx: np.lib.npyio.NpzFile) -> SourceCatalog:
     n = int(fx["mag_obs"].shape[0])
-    obstime = Timestamp.from_kwargs(
-        days=pa.array(fx["obstime_days"].tolist(), type=pa.int64()),
-        nanos=pa.array(fx["obstime_nanos"].tolist(), type=pa.int64()),
-        scale="utc",
-    )
-
     return SourceCatalog.from_kwargs(
         id=np.arange(n).astype(str).tolist(),
         object_id=[str(fx["object_id"][0])] * n,
         exposure_id=fx["obsid"].astype(str).tolist(),
-        time=obstime,
+        time=Timestamp.from_kwargs(
+            days=pa.array(fx["obstime_days"].tolist(), type=pa.int64()),
+            nanos=pa.array(fx["obstime_nanos"].tolist(), type=pa.int64()),
+            scale="utc",
+        ),
         ra=fx["ra"].tolist(),
         dec=fx["dec"].tolist(),
         ra_sigma=[None] * n,
@@ -76,7 +70,6 @@ def _load_fixture_observations(fx: np.lib.npyio.NpzFile) -> SourceCatalog:
 
 
 def _load_fixture_orbits(fx: np.lib.npyio.NpzFile) -> Orbits:
-    obj_id = str(fx["object_id"][0])
     epoch = Timestamp.from_kwargs(
         days=pa.array([int(fx["epoch_days"][0])], type=pa.int64()),
         nanos=pa.array([int(fx["epoch_nanos"][0])], type=pa.int64()),
@@ -84,7 +77,7 @@ def _load_fixture_orbits(fx: np.lib.npyio.NpzFile) -> Orbits:
     )
     return Orbits.from_kwargs(
         orbit_id=[None],
-        object_id=[obj_id],
+        object_id=[str(fx["object_id"][0])],
         coordinates=CometaryCoordinates.from_kwargs(
             q=fx["q"].tolist(),
             e=fx["e"].tolist(),
@@ -93,955 +86,451 @@ def _load_fixture_orbits(fx: np.lib.npyio.NpzFile) -> Orbits:
             ap=fx["argperi"].tolist(),
             tp=fx["peri_time"].tolist(),
             time=epoch,
-            origin=Origin.from_kwargs(
-                code=pa.repeat("SUN", len(epoch)),
-            ),
+            origin=Origin.from_kwargs(code=pa.repeat("SUN", len(epoch))),
             frame="ecliptic",
         ).to_cartesian(),
     )
 
 
-def _paper_colors(fx: np.lib.npyio.NpzFile) -> dict[str, float]:
-    return {
-        "g_r": float(fx["paper_g_r_fourier"][0]),
-        "g_i": float(fx["paper_g_i_fourier"][0]),
-        "r_i": float(fx["paper_r_i_fourier"][0]),
-    }
+def _fixture(name: str = "color_fixture_2025_MN25.npz") -> tuple[SourceCatalog, Orbits]:
+    path = DATA_DIR / name
+    if not path.exists():
+        pytest.skip(f"Missing fixture {name}")
+    with np.load(path, allow_pickle=True) as fx:
+        return _load_fixture_observations(fx), _load_fixture_orbits(fx)
 
 
-def _assert_colors_close(
-    result: ColorFit, object_id: str, paper: dict[str, float], tolerance: float
-) -> None:
-    # Keep tighter tolerances for all but this one
-    if object_id == "2025 MO35":
-        tolerance = max(tolerance, 0.11)
-    row = result.apply_mask(pc.equal(result.object_id, object_id))
-    assert len(row) == 1, f"Expected 1 result row for {object_id}, got {len(row)}"
-
-    g_r = row.g_r[0].as_py()
-    g_i = row.g_i[0].as_py()
-    r_i = row.r_i[0].as_py()
-
-    assert np.isfinite(g_r), f"g-r not finite for {object_id}"
-    assert np.isfinite(g_i), f"g-i not finite for {object_id}"
-    assert np.isfinite(r_i), f"r-i not finite for {object_id}"
-
-    assert abs(g_r - paper["g_r"]) <= tolerance, (
-        f"{object_id} g-r: got {g_r:.3f}, paper Fourier {paper['g_r']:.3f}, "
-        f"diff={g_r - paper['g_r']:+.3f} > tol={tolerance}"
-    )
-    assert abs(g_i - paper["g_i"]) <= tolerance, (
-        f"{object_id} g-i: got {g_i:.3f}, paper Fourier {paper['g_i']:.3f}, "
-        f"diff={g_i - paper['g_i']:+.3f} > tol={tolerance}"
-    )
-    assert abs(r_i - paper["r_i"]) <= tolerance, (
-        f"{object_id} r-i: got {r_i:.3f}, paper Fourier {paper['r_i']:.3f}, "
-        f"diff={r_i - paper['r_i']:+.3f} > tol={tolerance}"
-    )
+def _row(result: ColorFit) -> dict[str, object]:
+    assert len(result) == 1
+    return result.table.to_pylist()[0]
 
 
-@pytest.mark.parametrize(
-    "phi_type,tolerance",
-    [("HG12star", HG12STAR_TOLERANCE), ("HG", HG_TOLERANCE), ("c1c2", C1C2_TOLERANCE)],
-)
-@pytest.mark.parametrize("fixture_name", COLOR_FIXTURES)
-def test_estimate_colors_from_fixture(
-    fixture_name: str, phi_type: Literal["HG", "c1c2"], tolerance: float
-) -> None:
-    if fixture_name == "__NO_FIXTURES__":
-        pytest.skip("No color fixtures found on disk.")
-
-    fixture_path = DATA_DIR / fixture_name
-    if not fixture_path.exists():
-        pytest.skip(f"Missing fixture {fixture_name}")
-
-    fx = np.load(fixture_path, allow_pickle=True)
-    object_id = str(fx["object_id"][0])
-
-    observations = _load_fixture_observations(fx)
-    orbits = _load_fixture_orbits(fx)
-
-    # Greenstreet et al. is only reproduced when slope parameters outside their
-    # validity bounds are allowed, so relax the bound here.
-    result = estimate_colors(observations, orbits, phi_type, force_g_bounds=False)
-
-    assert isinstance(result, ColorFit)
-    assert len(result) >= 1
-
-    _assert_colors_close(result, object_id, _paper_colors(fx), tolerance)
-
-
-@pytest.mark.parametrize("phi_type", ["HG12star", "HG", "c1c2"])
-def test_fused_native_crossing_initializes_spice_and_matches_frozen_reference(
-    phi_type: Literal["HG12star", "HG", "c1c2"],
-) -> None:
-    from mpc_obscodes import mpc_obscodes
-
-    fx = np.load(DATA_DIR / "color_fixture_2025_MN25.npz", allow_pickle=True)
-    observations = _load_fixture_observations(fx)
-    orbits = _load_fixture_orbits(fx)
-    source_ipc = observations_to_ipc(observations)
-    orbit_ipc = orbits_to_ipc(orbits)
-    obscodes_json = Path(mpc_obscodes).read_text()
-
-    with pytest.raises(ValueError, match="default SPICE kernel paths"):
-        _rust_native.estimate_colors_fused_ipc(
-            source_ipc,
-            orbit_ipc,
-            _data_dir_str(),
-            [],
-            obscodes_json,
-            phi_type,
-            force_g_bounds=False,
-        )
-
-    raw = _rust_native.estimate_colors_fused_ipc(
-        source_ipc,
-        orbit_ipc,
-        _data_dir_str(),
-        [str(path) for path in DEFAULT_KERNELS],
-        obscodes_json,
-        phi_type,
-        force_g_bounds=False,
-    )
-    with pa.ipc.open_stream(pa.py_buffer(raw)) as reader:
-        native = reader.read_all().combine_chunks()
-    assert native.column("status").to_pylist() == ["ok"]
-    row = native.to_pylist()[0]
+def _assert_partition(row: dict[str, object]) -> None:
     assert row["num_obs"] == (
         row["num_invalid"]
         + row["num_unsupported_filter"]
         + row["num_clipped"]
         + row["num_used"]
     )
-    native_colors = {
-        (lhs, rhs): color
-        for lhs, rhs, color in zip(
+
+
+def _pair_map(row: dict[str, object]) -> dict[tuple[str, str], float]:
+    return {
+        (lhs, rhs): value
+        for lhs, rhs, value in zip(
             row["color_lhs_filter_ids"],
             row["color_rhs_filter_ids"],
             row["colors"],
             strict=True,
         )
     }
-    reference = estimate_colors(observations, orbits, phi_type, force_g_bounds=False)
-    assert native_colors[("LSST_g", "LSST_r")] == pytest.approx(
-        reference.g_r[0].as_py(), abs=1.0e-6
-    )
-    assert native_colors[("LSST_g", "LSST_i")] == pytest.approx(
-        reference.g_i[0].as_py(), abs=1.0e-6
-    )
-    assert native_colors[("LSST_i", "LSST_r")] == pytest.approx(
-        -reference.r_i[0].as_py(), abs=1.0e-6
+
+
+def test_facade_is_schema_marshalling_and_one_native_call(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    observations, orbits = _fixture()
+    calls: list[tuple[tuple[object, ...], dict[str, object]]] = []
+    native = _rust_native.estimate_colors_fused_ipc
+
+    def one_call(*args: object, **kwargs: object) -> bytes:
+        calls.append((args, kwargs))
+        return native(*args, **kwargs)
+
+    def forbidden_setup() -> None:
+        raise AssertionError("the facade must not make a separate setup crossing")
+
+    monkeypatch.setattr(_rust_native, "estimate_colors_fused_ipc", one_call)
+    monkeypatch.setattr("adam_core._rust.arrow.ensure_spice_backend", forbidden_setup)
+    result = estimate_colors(observations, orbits, "c1c2", force_g_bounds=False)
+
+    assert _row(result)["status"] == "ok"
+    assert len(calls) == 1
+    args, kwargs = calls[0]
+    assert len(args) == 6
+    assert isinstance(args[0], bytes) and isinstance(args[1], bytes)
+    assert kwargs["projection"] is None
+    assert kwargs["template_id"] is None
+    assert kwargs["mix"] is None
+
+
+def test_production_module_has_no_python_scientific_algorithm() -> None:
+    source = inspect.getsource(color_determination)
+    tree = ast.parse(source)
+    imported = {
+        alias.name.split(".")[0]
+        for node in ast.walk(tree)
+        if isinstance(node, (ast.Import, ast.ImportFrom))
+        for alias in node.names
+    }
+    assert imported.isdisjoint({"numpy", "scipy"})
+    assert not any(isinstance(node, (ast.For, ast.While)) for node in ast.walk(tree))
+    assert "propagate_2body" not in source
+    assert "least_squares" not in source
+    assert "ensure_spice_backend" not in source
+    assert source.count("estimate_colors_fused_ipc(") == 1
+
+
+def test_color_uses_shared_bandpass_composition_and_explicit_mapping_types() -> None:
+    hints = get_type_hints(estimate_colors)
+    assert hints["color_term_composition"] == BandpassComposition | None
+    assert hints["filter_projection"] == dict[str, str] | None or str(
+        hints["filter_projection"]
+    ).endswith("Mapping[str, str] | None")
+
+
+def _empty_batch(schema: pa.Schema) -> pa.RecordBatch:
+    return pa.RecordBatch.from_arrays(
+        [pa.array([], type=field.type) for field in schema], schema=schema
     )
 
-    if phi_type == "c1c2":
-        nongrav_orbit = Orbits.from_kwargs(
-            orbit_id=orbits.orbit_id,
-            object_id=orbits.object_id,
-            coordinates=orbits.coordinates,
-            non_gravitational_parameters=NonGravitationalParameters.from_kwargs(
-                A1=[1.0e-12]
-            ),
+
+@pytest.mark.parametrize("drift", ["missing", "order", "item", "metadata", "type"])
+def test_native_batch_schema_is_exact_before_quivr_wrapping(drift: str) -> None:
+    exact = _empty_batch(ColorFit.schema)
+    assert len(_color_fit_from_native_batch(exact)) == 0
+
+    fields = list(ColorFit.schema)
+    if drift == "missing":
+        schema = pa.schema(fields[:-1])
+    elif drift == "order":
+        fields[3], fields[4] = fields[4], fields[3]
+        schema = pa.schema(fields)
+    elif drift == "item":
+        fields[3] = pa.field(
+            "filter_ids",
+            pa.large_list(pa.field("value", pa.large_string(), nullable=True)),
+            nullable=True,
         )
-        raw = _rust_native.estimate_colors_fused_ipc(
-            source_ipc,
-            orbits_to_ipc(nongrav_orbit),
-            _data_dir_str(),
-            [str(path) for path in DEFAULT_KERNELS],
-            obscodes_json,
+        schema = pa.schema(fields)
+    elif drift == "metadata":
+        schema = ColorFit.schema.with_metadata({b"unexpected": b"metadata"})
+    else:
+        fields[10] = pa.field(
+            "colors",
+            pa.large_list(pa.field("item", pa.float32(), nullable=False)),
+            nullable=True,
+        )
+        schema = pa.schema(fields)
+    drifted = _empty_batch(schema)
+    with pytest.raises(ValueError, match="does not exactly match ColorFit.schema"):
+        _color_fit_from_native_batch(drifted)
+
+
+@pytest.mark.parametrize("fixture_path", COLOR_FIXTURES, ids=lambda path: path.stem)
+@pytest.mark.parametrize("phi_type", PHASE_MODELS)
+def test_public_facade_all_fixtures_all_phase_models(
+    fixture_path: Path, phi_type: Literal["HG12star", "HG", "c1c2"]
+) -> None:
+    with np.load(fixture_path, allow_pickle=True) as fx:
+        result = estimate_colors(
+            _load_fixture_observations(fx),
+            _load_fixture_orbits(fx),
             phi_type,
             force_g_bounds=False,
         )
-        with pa.ipc.open_stream(pa.py_buffer(raw)) as reader:
-            row = reader.read_all().to_pylist()[0]
-        assert row["status"] == "failed"
-        assert "non-gravitational" in row["error"]
+        row = _row(result)
+        paper = {
+            "g_r": float(fx["paper_g_r_fourier"][0]),
+            "g_i": float(fx["paper_g_i_fourier"][0]),
+            "r_i": float(fx["paper_r_i_fourier"][0]),
+        }
+
+    assert row["status"] == "ok"
+    _assert_partition(row)
+    filters = row["filter_ids"]
+    assert filters == sorted(filters)
+    assert sum(row["num_used_by_filter"]) == row["num_used"]
+    assert len(row["absolute_magnitudes"]) == len(filters)
+    assert len(row["absolute_magnitude_sigmas"]) == len(filters)
+    assert len(row["magnitude_covariance"]) == len(filters) ** 2
+    pairs = len(filters) * (len(filters) - 1) // 2
+    assert all(len(row[name]) == pairs for name in LIST_FIELDS[5:])
+
+    colors = _pair_map(row)
+    tolerance = 0.11 if row["object_id"] == "2025 MO35" else 0.06
+    assert colors[("LSST_g", "LSST_r")] == pytest.approx(paper["g_r"], abs=tolerance)
+    assert colors[("LSST_g", "LSST_i")] == pytest.approx(paper["g_i"], abs=tolerance)
+    assert colors[("LSST_i", "LSST_r")] == pytest.approx(-paper["r_i"], abs=tolerance)
+
+    for name in LIST_FIELDS:
+        array = result.table.column(name).combine_chunks()
+        assert isinstance(array, pa.LargeListArray)
+        assert array.values.null_count == 0
 
 
-_BAND_MAG_FIELD = {"g": "g_mag", "i": "i_mag", "r": "r_mag", "u": "u_mag"}
+@pytest.mark.parametrize("filter_id", ["ATLAS_c", "ATLAS_o", "PS1_w", "DECam_VR", "V"])
+def test_native_mode_fits_generic_canonical_filters(filter_id: str) -> None:
+    observations, orbits = _fixture()
+    observations = observations.set_column(
+        "filter",
+        pa.array([filter_id] * len(observations), type=observations.filter.type),
+    )
+    row = _row(estimate_colors(observations, orbits, "c1c2", force_g_bounds=False))
+    assert row["status"] == "ok"
+    assert row["filter_ids"] == [filter_id]
+    assert row["num_used_by_filter"] == [row["num_used"]]
+    assert row["color_lhs_filter_ids"] == []
+    assert row["colors"] == []
 
 
-def _channels_present(fx: np.lib.npyio.NpzFile) -> set[str]:
-    """
-    Color channels (g/i/r/u) present in a fixture, derived from the canonical
-    ``filter_id`` the fixture generator resolved via `map_to_canonical_filter_bands`
-    (e.g. ``SDSS_g``/``LSST_g`` -> "g"). This mirrors how `estimate_colors` groups
-    observations into channels, rather than matching raw MPC band strings.
-    """
-    present: set[str] = set()
-    for fid in fx["filter_id"].astype(str).tolist():
-        channel = _FILTER_CHANNEL.get(fid)
-        if channel is not None:
-            present.add(channel)
-    return present
+def test_explicit_projection_requires_identity_edges_and_emits_targets() -> None:
+    observations, orbits = _fixture()
+    bands = observations.filter.to_pylist()
+    bands = ["SDSS_g" if band == "g" else band for band in bands]
+    observations = observations.set_column(
+        "filter", pa.array(bands, type=observations.filter.type)
+    )
+    projection = {
+        "SDSS_g": "LSST_g",
+        "LSST_i": "LSST_i",
+        "LSST_r": "LSST_r",
+    }
+    projected = _row(
+        estimate_colors(
+            observations,
+            orbits,
+            "HG12star",
+            force_g_bounds=False,
+            filter_projection=projection,
+            color_term_composition="C",
+        )
+    )
+    assert projected["status"] == "ok"
+    assert projected["filter_ids"] == ["LSST_g", "LSST_i", "LSST_r"]
+    assert projected["num_unsupported_filter"] == 0
+
+    missing_identity = dict(projection)
+    del missing_identity["LSST_i"]
+    partial = _row(
+        estimate_colors(
+            observations,
+            orbits,
+            "HG12star",
+            force_g_bounds=False,
+            filter_projection=missing_identity,
+            color_term_composition=(0.4, 0.6),
+        )
+    )
+    assert "LSST_i" not in partial["filter_ids"]
+    assert partial["num_unsupported_filter"] > 0
+    _assert_partition(partial)
 
 
-@pytest.mark.parametrize("fixture_name", COLOR_FIXTURES)
-def test_estimate_colors_missing_band_is_nan(fixture_name: str) -> None:
-    """
-    A band with zero recognized-band observations for an object must be
-    reported as NaN, not a spuriously finite value from an unconstrained fit.
-    """
-    if fixture_name == "__NO_FIXTURES__":
-        pytest.skip("No color fixtures found on disk.")
-
-    fixture_path = DATA_DIR / fixture_name
-    fx = np.load(fixture_path, allow_pickle=True)
-    object_id = str(fx["object_id"][0])
-    bands_present = _channels_present(fx)
-    missing_bands = set(_BAND_MAG_FIELD) - bands_present
-    if not missing_bands:
-        print(f"{fixture_name} has observations in every band; nothing to check.")
-        # Declare this test passing instead of skipped, to avoid making people wonder
-        return
-
-    observations = _load_fixture_observations(fx)
-    orbits = _load_fixture_orbits(fx)
-    result = estimate_colors(observations, orbits, "HG12star", force_g_bounds=False)
-    row = result.apply_mask(pc.equal(result.object_id, object_id))
-    assert len(row) == 1
-
-    for band, field in _BAND_MAG_FIELD.items():
-        value = getattr(row, field)[0].as_py()
-        sigma = getattr(row, f"{field}_sigma")[0].as_py()
-        if band in missing_bands:
-            assert value is not None and np.isnan(
-                value
-            ), f"{object_id} {field}: expected NaN for unobserved band {band!r}, got {value}"
-            assert sigma is not None and np.isnan(
-                sigma
-            ), f"{object_id} {field}_sigma: expected NaN for unobserved band {band!r}, got {sigma}"
-        else:
-            assert value is not None and np.isfinite(
-                value
-            ), f"{object_id} {field}: expected a finite value for observed band {band!r}, got {value}"
-            assert (
-                sigma is not None and np.isfinite(sigma) and sigma > 0
-            ), f"{object_id} {field}_sigma: expected a positive finite value for band {band!r}, got {sigma}"
+@pytest.mark.parametrize(
+    "projection,composition",
+    [(None, "C"), ({"LSST_g": "LSST_g"}, None)],
+)
+def test_projection_and_composition_must_be_paired(
+    projection: dict[str, str] | None,
+    composition: BandpassComposition | None,
+) -> None:
+    observations, orbits = _fixture()
+    with pytest.raises(ValueError, match="projection|composition"):
+        estimate_colors(
+            observations,
+            orbits,
+            "c1c2",
+            filter_projection=projection,
+            color_term_composition=composition,
+        )
 
 
-def test_estimate_colors_multi_object() -> None:
-    """
-    estimate_colors should produce identical per-object results whether
-    objects are passed in one at a time or batched together.
-    """
-    fixture_paths = [
-        DATA_DIR / name for name in COLOR_FIXTURES if name != "__NO_FIXTURES__"
+def test_strict_mapping_accounts_for_generic_fallback() -> None:
+    observations, orbits = _fixture()
+    stations = observations.observatory_code.to_pylist()
+    bands = observations.filter.to_pylist()
+    stations[0] = "500"
+    bands[0] = "g"
+    observations = observations.set_column(
+        "observatory_code",
+        pa.array(stations, type=observations.observatory_code.type),
+    ).set_column("filter", pa.array(bands, type=observations.filter.type))
+
+    loose = _row(estimate_colors(observations, orbits, "c1c2", force_g_bounds=False))
+    strict = _row(
+        estimate_colors(
+            observations,
+            orbits,
+            "c1c2",
+            force_g_bounds=False,
+            strict_band_mapping=True,
+        )
+    )
+    assert loose["num_unsupported_filter"] == 0
+    assert strict["num_unsupported_filter"] == 1
+    assert loose["num_used"] == strict["num_used"] + 1
+    _assert_partition(loose)
+    _assert_partition(strict)
+
+
+def test_multi_object_order_null_ids_and_orbit_cardinality_isolation() -> None:
+    if len(COLOR_FIXTURES) < 3:
+        pytest.skip("Need three fixtures")
+    loaded = [np.load(path, allow_pickle=True) for path in COLOR_FIXTURES[:3]]
+    try:
+        observations = [_load_fixture_observations(fx) for fx in loaded]
+        orbits = [_load_fixture_orbits(fx) for fx in loaded]
+        first_id, second_id, third_id = [
+            table.object_id[0].as_py() for table in observations
+        ]
+        first = observations[0].set_column(
+            "object_id",
+            pc.if_else(
+                pa.array([True] + [False] * (len(observations[0]) - 1)),
+                pa.nulls(len(observations[0]), pa.large_string()),
+                observations[0].object_id,
+            ),
+        )
+        result = estimate_colors(
+            qv.concatenate([first, observations[1], observations[2]]),
+            qv.concatenate([orbits[1], orbits[1], orbits[2]]),
+            "c1c2",
+            force_g_bounds=False,
+        )
+    finally:
+        for fx in loaded:
+            fx.close()
+
+    rows = result.table.to_pylist()
+    assert [row["object_id"] for row in rows] == [first_id, second_id, third_id]
+    assert [row["status"] for row in rows] == [
+        "no_orbit",
+        "multiple_orbits",
+        "ok",
     ]
-    if len(fixture_paths) < 2:
-        pytest.skip("Need at least two color fixtures to test multi-object batching.")
-
-    fixtures = [np.load(p, allow_pickle=True) for p in fixture_paths]
-    object_ids = [str(fx["object_id"][0]) for fx in fixtures]
-
-    observations = qv.concatenate([_load_fixture_observations(fx) for fx in fixtures])
-    orbits = qv.concatenate([_load_fixture_orbits(fx) for fx in fixtures])
-
-    result = estimate_colors(observations, orbits, "HG12star", force_g_bounds=False)
-
-    assert isinstance(result, ColorFit)
-    assert len(result) == len(object_ids)
-    assert set(result.object_id.to_pylist()) == set(object_ids)
-
-    for fx, object_id in zip(fixtures, object_ids):
-        _assert_colors_close(result, object_id, _paper_colors(fx), HG12STAR_TOLERANCE)
+    assert rows[0]["num_obs"] == len(observations[0]) - 1
+    assert all(rows[0][name] is None for name in LIST_FIELDS)
+    assert all(rows[1][name] is None for name in LIST_FIELDS)
+    _assert_partition(rows[2])
 
 
-def test_failed_objects_do_not_abort_the_batch() -> None:
-    """
-    Objects with no orbit, several orbits, or no usable photometry each get a row
-    with the matching status, and every other object in the batch is still fit.
-    """
-    fixtures = [
-        np.load(DATA_DIR / name, allow_pickle=True)
-        for name in COLOR_FIXTURES
-        if name != "__NO_FIXTURES__"
-    ]
-    if len(fixtures) < 4:
-        pytest.skip("Need at least four color fixtures to test batch failures.")
-    no_orbit, two_orbits, no_photometry, *good = fixtures
-    ids = {key: str(fx["object_id"][0]) for key, fx in zip("ABC", fixtures)}
-
-    unusable = _load_fixture_observations(no_photometry)
-    unusable = unusable.set_column(
-        "filter", pa.array(["V"] * len(unusable), type=unusable.filter.type)
+def test_utc_orbit_epochs_and_call_level_frame_validation() -> None:
+    observations, orbits = _fixture()
+    utc_coordinates = orbits.coordinates.set_column(
+        "time", orbits.coordinates.time.rescale("utc")
     )
-    observations = qv.concatenate(
-        [_load_fixture_observations(fx) for fx in (no_orbit, two_orbits)]
-        + [unusable]
-        + [_load_fixture_observations(fx) for fx in good]
+    utc = orbits.set_column("coordinates", utc_coordinates)
+    base = _row(estimate_colors(observations, orbits, "c1c2", force_g_bounds=False))
+    converted = _row(estimate_colors(observations, utc, "c1c2", force_g_bounds=False))
+    assert converted["colors"] == pytest.approx(base["colors"], abs=1.0e-12)
+
+    c = orbits.coordinates
+    equatorial = CartesianCoordinates.from_kwargs(
+        x=c.x,
+        y=c.y,
+        z=c.z,
+        vx=c.vx,
+        vy=c.vy,
+        vz=c.vz,
+        time=c.time,
+        origin=c.origin,
+        frame="equatorial",
+        covariance=c.covariance,
     )
-    orbits = qv.concatenate(
-        [_load_fixture_orbits(two_orbits)] * 2
-        + [_load_fixture_orbits(fx) for fx in [no_photometry, *good]]
+    with pytest.raises(ValueError, match="requires ecliptic orbit coordinates"):
+        estimate_colors(
+            observations,
+            orbits.set_column("coordinates", equatorial),
+            "c1c2",
+        )
+
+
+def test_active_nongrav_is_isolated_failure() -> None:
+    observations, orbits = _fixture()
+    nongrav = Orbits.from_kwargs(
+        orbit_id=orbits.orbit_id,
+        object_id=orbits.object_id,
+        coordinates=orbits.coordinates,
+        non_gravitational_parameters=NonGravitationalParameters.from_kwargs(A1=[1e-12]),
     )
-
-    result = estimate_colors(observations, orbits, "HG12star", force_g_bounds=False)
-
-    assert len(result) == len(fixtures)
-    status = dict(zip(result.object_id.to_pylist(), result.status.to_pylist()))
-    error = dict(zip(result.object_id.to_pylist(), result.error.to_pylist()))
-    assert status[ids["A"]] == "no_orbit"
-    assert status[ids["B"]] == "multiple_orbits"
-    assert "got 2" in error[ids["B"]]
-    assert status[ids["C"]] == "no_usable_photometry"
-    failed = result.apply_mask(pc.not_equal(result.status, "ok"))
-    assert failed.g_r.to_pylist() == [None] * 3
-    # The unusable photometry is still accounted for.
-    c_row = result.apply_mask(pc.equal(result.object_id, ids["C"])).table.to_pylist()[0]
-    assert c_row["num_used"] == 0
-    assert c_row["num_invalid"] + c_row["num_unsupported_filter"] == c_row["num_obs"]
-
-    for fx in good:
-        object_id = str(fx["object_id"][0])
-        assert status[object_id] == "ok"
-        assert error[object_id] is None
-        _assert_colors_close(result, object_id, _paper_colors(fx), HG12STAR_TOLERANCE)
+    row = _row(estimate_colors(observations, nongrav, "c1c2"))
+    assert row["status"] == "failed"
+    assert "non-gravitational" in row["error"]
+    assert all(row[name] is None for name in LIST_FIELDS)
 
 
 def _with_nulls(
-    observations: SourceCatalog, column: str, null: np.ndarray
+    observations: SourceCatalog, column: str, mask: np.ndarray
 ) -> SourceCatalog:
-    """Null out ``column`` on the rows selected by the boolean mask ``null``."""
     values = getattr(observations, column)
     return observations.set_column(
-        column, pc.if_else(pa.array(null), pa.nulls(len(null), values.type), values)
+        column, pc.if_else(pa.array(mask), pa.nulls(len(mask), values.type), values)
     )
 
 
-# Fixtures whose photometry is all valid and all in a g/i/r channel, so any
-# invalid or unsupported row in these tests is one the test put there.
-_CLEAN_FIXTURES = ("color_fixture_2025_MS34.npz", "color_fixture_2025_MU8.npz")
-
-
-def _load_clean_fixture(name: str) -> tuple[SourceCatalog, Orbits]:
-    path = DATA_DIR / name
-    if not path.exists():
-        pytest.skip(f"Missing fixture {name}")
-    fx = np.load(path, allow_pickle=True)
-    return _load_fixture_observations(fx), _load_fixture_orbits(fx)
-
-
-def test_null_photometry_rows_are_counted_not_dropped() -> None:
-    """
-    Rows with a null magnitude, uncertainty or filter stay in the object's
-    counts: the first two as invalid (whatever the filter), a null filter as
-    unsupported. The fit itself is the one obtained without those rows.
-    """
-    observations, orbits = _load_clean_fixture(_CLEAN_FIXTURES[0])
-    idx = np.arange(len(observations)) % 9
-    null_mag = (idx == 0) | (idx == 2)
-    null_sigma = idx == 4
-    # idx == 2 has neither magnitude nor filter: invalid takes precedence.
-    null_filter = (idx == 2) | (idx == 7)
+def test_mixed_null_photometry_precedence_and_partition() -> None:
+    observations, orbits = _fixture("color_fixture_2025_MS34.npz")
+    index = np.arange(len(observations)) % 9
+    null_mag = (index == 0) | (index == 2)
+    null_sigma = index == 4
+    null_filter = (index == 2) | (index == 7)
 
     mixed = _with_nulls(observations, "mag", null_mag)
     mixed = _with_nulls(mixed, "mag_sigma", null_sigma)
     mixed = _with_nulls(mixed, "filter", null_filter)
-    clean = observations.apply_mask(~(null_mag | null_sigma | null_filter))
+    row = _row(estimate_colors(mixed, orbits, "c1c2", force_g_bounds=False))
 
-    result = estimate_colors(mixed, orbits, "HG12star", force_g_bounds=False)
-    expected = estimate_colors(clean, orbits, "HG12star", force_g_bounds=False)
-
-    row = result.table.to_pylist()[0]
     assert row["status"] == "ok"
     assert row["num_obs"] == len(observations)
     assert row["num_invalid"] == int(np.sum(null_mag | null_sigma))
-    assert row["num_unsupported_filter"] == int(np.sum(null_filter & ~null_mag))
-    assert row["num_obs"] == (
-        row["num_invalid"]
-        + row["num_unsupported_filter"]
-        + row["num_clipped"]
-        + row["num_used"]
+    assert row["num_unsupported_filter"] == int(
+        np.sum(null_filter & ~(null_mag | null_sigma))
     )
-    for field in ("num_clipped", "num_used", "g_filter", "r_filter", "i_filter"):
-        assert row[field] == getattr(expected, field)[0].as_py(), field
-    for field in ("g_mag", "r_mag", "i_mag", "g_r", "g_i", "r_i", "phase_param"):
-        np.testing.assert_allclose(
-            row[field], getattr(expected, field)[0].as_py(), rtol=1e-12, err_msg=field
-        )
-
-
-@pytest.mark.parametrize("column", ["mag", "mag_sigma", "filter"])
-def test_all_null_object_has_no_usable_photometry(column: str) -> None:
-    """
-    An object whose every row lacks ``column`` is reported as
-    "no_usable_photometry" with all its rows accounted for, while the other
-    object in the batch is fit as usual.
-    """
-    empty_obs, empty_orb = _load_clean_fixture(_CLEAN_FIXTURES[0])
-    good_obs, good_orb = _load_clean_fixture(_CLEAN_FIXTURES[1])
-    n = len(empty_obs)
-    empty_obs = _with_nulls(empty_obs, column, np.ones(n, dtype=bool))
-
-    result = estimate_colors(
-        qv.concatenate([empty_obs, good_obs]),
-        qv.concatenate([empty_orb, good_orb]),
-        "HG12star",
-        force_g_bounds=False,
-    )
-
-    empty, good = result.table.to_pylist()
-    assert empty["status"] == "no_usable_photometry"
-    assert empty["g_r"] is None
-    assert empty["num_obs"] == n
-    assert empty["num_used"] == 0
-    if column == "filter":
-        assert (empty["num_invalid"], empty["num_unsupported_filter"]) == (0, n)
-    else:
-        assert (empty["num_invalid"], empty["num_unsupported_filter"]) == (n, 0)
-    assert good["status"] == "ok"
-    assert good["num_obs"] == len(good_obs)
+    _assert_partition(row)
 
 
 @pytest.mark.parametrize(
-    "exc, expected_status, expected_error",
-    [
-        (_UnreliableFitError("fit is unreliable"), "too_many_outliers", "unreliable"),
-        (RuntimeError("boom"), "failed", "RuntimeError: boom"),
-    ],
+    ("column", "invalid", "unsupported"),
+    [("mag", True, False), ("mag_sigma", True, False), ("filter", False, True)],
 )
-def test_fit_errors_are_reported_per_object(
-    monkeypatch: pytest.MonkeyPatch,
-    exc: Exception,
-    expected_status: str,
-    expected_error: str,
+def test_all_null_photometry_is_accounted(
+    column: str, invalid: bool, unsupported: bool
 ) -> None:
-    """An error while fitting one object is recorded on its row, not raised."""
-    fixtures = [
-        np.load(DATA_DIR / name, allow_pickle=True)
-        for name in COLOR_FIXTURES
-        if name != "__NO_FIXTURES__"
-    ]
-    if len(fixtures) < 2:
-        pytest.skip("Need at least two color fixtures.")
-    fixtures = fixtures[:2]
-    observations = qv.concatenate([_load_fixture_observations(fx) for fx in fixtures])
-    orbits = qv.concatenate([_load_fixture_orbits(fx) for fx in fixtures])
+    observations, orbits = _fixture("color_fixture_2025_MU8.npz")
+    empty = _with_nulls(observations, column, np.ones(len(observations), dtype=bool))
+    row = _row(estimate_colors(empty, orbits, "c1c2"))
 
-    # Fail only the first object's fit; the second goes through the real one.
-    real_fit = color_determination._fit_per_band_h
-    calls = []
-
-    def flaky_fit(*args, **kwargs):
-        calls.append(None)
-        if len(calls) == 1:
-            raise exc
-        return real_fit(*args, **kwargs)
-
-    monkeypatch.setattr(color_determination, "_fit_per_band_h", flaky_fit)
-    result = estimate_colors(observations, orbits, "HG12star", force_g_bounds=False)
-
-    assert len(calls) == 2
-    first, second = result.status.to_pylist()
-    assert first == expected_status
-    assert expected_error in result.error[0].as_py()
-    assert result.g_r[0].as_py() is None
-    assert second == "ok"
-    assert result.g_r[1].as_py() is not None
+    assert row["status"] == "no_usable_photometry"
+    assert row["num_invalid"] == (len(observations) if invalid else 0)
+    assert row["num_unsupported_filter"] == (len(observations) if unsupported else 0)
+    assert all(row[name] is None for name in LIST_FIELDS)
+    _assert_partition(row)
 
 
-# 2025 MN25 fits G12* well below 0 with the HG12* model, so it exercises the
-# out-of-range slope-parameter handling.
-_OUT_OF_BOUNDS_FIXTURE = "color_fixture_2025_MN25.npz"
-
-
-def _load_out_of_bounds_case():
-    fixture_path = DATA_DIR / _OUT_OF_BOUNDS_FIXTURE
-    if not fixture_path.exists():
-        pytest.skip(f"Missing fixture {_OUT_OF_BOUNDS_FIXTURE}")
-    fx = np.load(fixture_path, allow_pickle=True)
-    return (
-        _load_fixture_observations(fx),
-        _load_fixture_orbits(fx),
-        str(fx["object_id"][0]),
+def test_status_list_and_scalar_nullability() -> None:
+    observations, orbits = _fixture()
+    unmatched = orbits.set_column(
+        "object_id", pa.array(["unmatched"], type=orbits.object_id.type)
     )
+    no_orbit = _row(estimate_colors(observations, unmatched, "c1c2"))
+    assert no_orbit["status"] == "no_orbit"
+    assert no_orbit["num_obs"] == len(observations)
+    assert no_orbit["num_invalid"] is None
+    assert all(no_orbit[name] is None for name in LIST_FIELDS)
 
-
-def test_force_g_bounds_true_rejects_out_of_range_fit() -> None:
-    """
-    With force_g_bounds=True (default), an out-of-[0,1] slope fit is rejected:
-    flagged by status, with magnitudes and colors withheld but the slope and
-    diagnostics kept to show why.
-    """
-    observations, orbits, object_id = _load_out_of_bounds_case()
-
-    row = estimate_colors(observations, orbits, "HG12star")
-
-    assert row.object_id.to_pylist() == [object_id]
-    assert row.status.to_pylist() == ["phase_param_out_of_bounds"]
-    assert "G12*" in row.error[0].as_py()
-    assert "outside the HG12star validity" in row.error[0].as_py()
-    for field in ("g_mag", "r_mag", "i_mag", "g_mag_sigma", "g_r", "g_i", "r_i"):
-        assert getattr(row, field).to_pylist() == [None], field
-    assert row.phase_param[0].as_py() < 0.0
-    assert row.num_used[0].as_py() > 0
-
-
-def test_force_g_bounds_false_warns_and_returns(
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    """With force_g_bounds=False, the out-of-range fit is kept and a warning logged."""
-    observations, orbits, object_id = _load_out_of_bounds_case()
-
-    with caplog.at_level("WARNING", logger="adam_core.photometry.color_determination"):
-        result = estimate_colors(observations, orbits, "HG12star", force_g_bounds=False)
-
-    assert isinstance(result, ColorFit)
-    row = result.apply_mask(pc.equal(result.object_id, object_id))
-    assert len(row) == 1
-    assert row.status.to_pylist() == ["ok"]
-    assert row.error.to_pylist() == [None]
-    assert any(
-        "outside the HG12star validity" in record.message
-        and "force_g_bounds=False" in record.message
-        for record in caplog.records
-    ), "Expected an out-of-range warning mentioning force_g_bounds=False"
-
-
-@pytest.mark.parametrize(
-    "phi_type, G, valid",
-    [
-        ("HG12star", 0.0, True),
-        ("HG12star", 1.0, True),
-        ("HG12star", -0.1, False),
-        ("HG12star", 1.1, False),
-        # The H-G bounds are wider below 0 than HG12*'s,
-        ("HG", -0.1, True),
-        ("HG", -0.255, True),
-        ("HG", 1.0, True),
-        ("HG", -0.26, False),
-        # but not above 1: sbpy's ~1.194 is for Bowell's full formula, not
-        # the exponential approximation implemented here.
-        ("HG", 1.1, False),
-    ],
-)
-def test_g_bounds_are_model_specific(phi_type: str, G: float, valid: bool) -> None:
-    """Each phase model's slope parameter is checked against its own bounds."""
-    violation = _g_bounds_violation(G, phi_type, "obj")
-    if valid:
-        assert violation is None
-    else:
-        assert violation is not None
-        assert f"outside the {phi_type} validity" in violation
-
-
-# ---------------------------------------------------------------------------
-# Filter mapping and inter-system color-term correction
-# ---------------------------------------------------------------------------
-
-
-def test_color_uses_shared_bandpass_composition_contract() -> None:
-    """Color and magnitude conversion expose one composition input type."""
-    hints = get_type_hints(estimate_colors)
-    assert hints["color_term_composition"] == BandpassComposition | None
-
-
-def test_color_fit_declares_fused_native_filter_contract() -> None:
-    """The Rust handoff is one object row with aligned native-filter lists."""
-
-    def non_null_items(value_type: pa.DataType) -> pa.LargeListType:
-        return pa.large_list(pa.field("item", value_type, nullable=False))
-
-    expected_types = {
-        "filter_ids": non_null_items(pa.large_string()),
-        "absolute_magnitudes": non_null_items(pa.float64()),
-        "absolute_magnitude_sigmas": non_null_items(pa.float64()),
-        "num_used_by_filter": non_null_items(pa.int64()),
-        "magnitude_covariance": non_null_items(pa.float64()),
-        "color_lhs_filter_ids": non_null_items(pa.large_string()),
-        "color_rhs_filter_ids": non_null_items(pa.large_string()),
-        "colors": non_null_items(pa.float64()),
-        "color_sigmas": non_null_items(pa.float64()),
-    }
-    for name, expected_type in expected_types.items():
-        field = ColorFit.schema.field(name)
-        assert field.type == expected_type
-        assert field.nullable
-        assert not field.type.value_field.nullable
-
-
-def test_native_batch_schema_is_exact_before_quivr_wrapping() -> None:
-    """The one-crossing facade rejects any raw Arrow schema drift."""
-    arrays = [pa.array([], type=field.type) for field in ColorFit.schema]
-    exact = pa.RecordBatch.from_arrays(arrays, schema=ColorFit.schema)
-    assert len(_color_fit_from_native_batch(exact)) == 0
-
-    missing_last = pa.RecordBatch.from_arrays(
-        arrays[:-1], schema=pa.schema(list(ColorFit.schema)[:-1])
+    unusable = observations.set_column(
+        "mag", pa.nulls(len(observations), observations.mag.type)
     )
-    with pytest.raises(ValueError, match="does not exactly match ColorFit.schema"):
-        _color_fit_from_native_batch(missing_last)
+    none = _row(estimate_colors(unusable, orbits, "c1c2"))
+    assert none["status"] == "no_usable_photometry"
+    assert none["num_invalid"] == none["num_obs"]
+    _assert_partition(none)
+    assert all(none[name] is None for name in LIST_FIELDS)
 
 
-def test_strict_band_mapping_only_disables_generic_fallbacks() -> None:
-    """Strict mode keeps exact mappings and canonical IDs but skips fallback rows."""
-    stations = np.array(["XXX", "W84", "XXX"], dtype=object)
-    bands = np.array(["g", "g", "LSST_r"], dtype=object)
+def test_native_result_decoder_rejects_zero_or_multiple_batches() -> None:
+    sink = pa.BufferOutputStream()
+    schema = pa.schema([pa.field("value", pa.int64())])
+    with pa.ipc.new_stream(sink, schema):
+        pass
+    with pytest.raises(ValueError, match="contains no record batch"):
+        _native_record_batch(sink.getvalue().to_pybytes())
 
-    loose_channels, loose_filters = _resolve_channels(stations, bands)
-    strict_channels, strict_filters = _resolve_channels(
-        stations, bands, strict_band_mapping=True
-    )
-
-    assert loose_filters.tolist() == ["SDSS_g", "DECam_g", "LSST_r"]
-    assert loose_channels.tolist() == ["g", "g", "r"]
-    assert strict_filters.tolist() == [None, "DECam_g", "LSST_r"]
-    assert strict_channels.tolist() == [None, "g", "r"]
-
-
-def test_estimate_colors_strict_mapping_accounts_for_fallback_row() -> None:
-    """Strict end-to-end fitting skips a fallback row and preserves the partition."""
-    observations, orbits = _load_clean_fixture(_CLEAN_FIXTURES[0])
-    stations = observations.observatory_code.to_pylist()
-    bands = observations.filter.to_pylist()
-    # MPC 500 is a valid observer, but 500|g has no exact band-map entry: loose
-    # mode uses the generic SDSS_g fallback while strict mode skips this row.
-    stations[0] = "500"
-    bands[0] = "g"
-    observations = observations.set_column(
-        "observatory_code", pa.array(stations, type=observations.observatory_code.type)
-    ).set_column("filter", pa.array(bands, type=observations.filter.type))
-
-    loose = estimate_colors(
-        observations, orbits, "HG12star", force_g_bounds=False
-    ).table.to_pylist()[0]
-    strict = estimate_colors(
-        observations,
-        orbits,
-        "HG12star",
-        force_g_bounds=False,
-        strict_band_mapping=True,
-    ).table.to_pylist()[0]
-
-    assert loose["status"] == strict["status"] == "ok"
-    assert loose["num_unsupported_filter"] == 0
-    assert strict["num_unsupported_filter"] == 1
-    assert strict["num_obs"] == (
-        strict["num_invalid"]
-        + strict["num_unsupported_filter"]
-        + strict["num_clipped"]
-        + strict["num_used"]
-    )
-
-
-@pytest.mark.parametrize("composition", ["C", "S", "NEO", "MBA"])
-def test_channel_allow_list_is_close_to_the_target_system(composition: str) -> None:
-    """
-    Every filter allowed into a channel is within 0.03 mag of the channel's
-    target filter, so pooling it without a color-term correction is defensible.
-    """
-    for channel, fids in _CHANNEL_FILTERS.items():
-        target = _TARGET_FILTERS[channel]
-        assert target in fids
-        for fid in fids:
-            delta = bandpass_delta_mag(composition, fid, target)
-            assert abs(delta) <= 0.03, f"{fid} -> {target}: {delta:+.4f} mag"
-
-
-def test_channels_do_not_pool_by_base_letter() -> None:
-    """
-    Filters sharing a channel's letter but not on its allow-list are not fit:
-    Vega-system Bessell U/R/I, and same-letter filters too far from the target.
-    """
-    excluded = [
-        "Bessell_U",
-        "Bessell_R",
-        "Bessell_I",
-        "SkyMapper_g",
-        "SDSS_u",
-        "DECam_u",
-        "SkyMapper_u",
-    ]
-    stn = np.array(["X05"] * len(excluded), dtype=object)
-    channels, filter_ids = _resolve_channels(stn, np.array(excluded, dtype=object))
-    # Each resolves to itself (canonical pass-through) but feeds no channel.
-    assert filter_ids.tolist() == excluded
-    assert channels.tolist() == [None] * len(excluded)
-
-
-def test_apply_color_terms_normalizes_every_channel_onto_the_target() -> None:
-    """
-    Every row is shifted onto its channel's LSST target by exactly
-    `bandpass_delta_mag`, both within a mixed channel and in a channel observed
-    through a single non-target filter. Target-filter rows are left untouched.
-    """
-    # g: 3x LSST_g + 1x SDSS_g (mixed channel); r: only SDSS_r (cross-channel mix).
-    filter_ids = np.array(
-        ["LSST_g", "LSST_g", "LSST_g", "SDSS_g", "SDSS_r", "SDSS_r"], dtype=object
-    )
-    channels = np.array(["g", "g", "g", "g", "r", "r"], dtype=object)
-    m_red = np.array([20.0, 20.0, 20.0, 20.0, 19.0, 19.0], dtype=np.float64)
-
-    out = _apply_color_terms(m_red, filter_ids, channels, "S")
-    delta_g = bandpass_delta_mag("S", "SDSS_g", "LSST_g")
-    delta_r = bandpass_delta_mag("S", "SDSS_r", "LSST_r")
-
-    assert delta_g != 0.0 and delta_r != 0.0
-    np.testing.assert_array_equal(out[:3], 20.0)
-    assert np.isclose(out[3], 20.0 + delta_g)
-    np.testing.assert_allclose(out[4:], 19.0 + delta_r)
-    # Input is not mutated.
-    np.testing.assert_array_equal(m_red[3], 20.0)
-
-
-def test_apply_color_terms_target_system_is_noop() -> None:
-    """Rows already in the LSST target filters are never corrected."""
-    filter_ids = np.array(["LSST_g", "LSST_g", "LSST_r"], dtype=object)
-    channels = np.array(["g", "g", "r"], dtype=object)
-    m_red = np.array([20.0, 21.0, 19.0], dtype=np.float64)
-    out = _apply_color_terms(m_red, filter_ids, channels, "C")
-    np.testing.assert_array_equal(out, m_red)
-
-
-def _all_in_target_system(fx: np.lib.npyio.NpzFile) -> bool:
-    """True if every row feeding a color channel is already in its target filter."""
-    return all(
-        fid == _TARGET_FILTERS[_FILTER_CHANNEL[fid]]
-        for fid in fx["filter_id"].astype(str).tolist()
-        if fid in _FILTER_CHANNEL
-    )
-
-
-_CROSS_SYSTEM_FIXTURE = "color_fixture_2025_MN25.npz"
-
-
-def _cross_system_case():
-    """
-    An all-LSST fixture with its r band relabelled SDSS_r, so g and r are in
-    different systems and no single channel mixes filters.
-    """
-    path = DATA_DIR / _CROSS_SYSTEM_FIXTURE
-    if not path.exists():
-        pytest.skip(f"Missing fixture {_CROSS_SYSTEM_FIXTURE}")
-    fx = np.load(path, allow_pickle=True)
-    assert set(fx["filter_id"].astype(str).tolist()) == {"LSST_g", "LSST_r", "LSST_i"}
-    observations = _load_fixture_observations(fx)
-    is_r = fx["filter_id"].astype(str) == "LSST_r"
-    band = np.where(is_r, "SDSS_r", fx["band"].astype(str))
-    observations = observations.set_column(
-        "filter", pa.array(band.tolist(), type=observations.filter.type)
-    )
-    return observations, _load_fixture_orbits(fx)
-
-
-def test_cross_channel_mixed_system_colors_are_labelled() -> None:
-    """
-    LSST_g + SDSS_r without a color-term correction: nothing is converted, and the
-    filter columns record that g_r is an LSST_g minus SDSS_r color.
-    """
-    observations, orbits = _cross_system_case()
-    row = estimate_colors(observations, orbits, "HG12star", force_g_bounds=False)
-
-    assert row.g_filter.to_pylist() == ["LSST_g"]
-    assert row.r_filter.to_pylist() == ["SDSS_r"]
-    assert row.i_filter.to_pylist() == ["LSST_i"]
-    assert row.u_filter.to_pylist() == [None]
-
-
-def test_cross_channel_mixed_system_is_normalized_to_lsst() -> None:
-    """
-    LSST_g + SDSS_r with a color-term correction: the single-filter SDSS_r channel
-    is still converted, so g_r comes out in the LSST system, shifted from the
-    uncorrected color by exactly the SDSS_r -> LSST_r color term.
-    """
-    observations, orbits = _cross_system_case()
-    raw = estimate_colors(observations, orbits, "HG12star", force_g_bounds=False)
-    lsst = estimate_colors(
-        observations,
-        orbits,
-        "HG12star",
-        force_g_bounds=False,
-        color_term_composition="S",
-    )
-
-    assert lsst.g_filter.to_pylist() == ["LSST_g"]
-    assert lsst.r_filter.to_pylist() == ["LSST_r"]
-    assert lsst.i_filter.to_pylist() == ["LSST_i"]
-    delta_r = bandpass_delta_mag("S", "SDSS_r", "LSST_r")
-    assert delta_r != 0.0
-    # A uniform shift of every r row moves H_r by that shift and nothing else.
-    np.testing.assert_allclose(lsst.r_mag.to_numpy(), raw.r_mag.to_numpy() + delta_r)
-    np.testing.assert_allclose(lsst.g_r.to_numpy(), raw.g_r.to_numpy() - delta_r)
-    np.testing.assert_allclose(lsst.r_i.to_numpy(), raw.r_i.to_numpy() + delta_r)
-    np.testing.assert_allclose(lsst.g_i.to_numpy(), raw.g_i.to_numpy())
-
-
-@pytest.mark.parametrize("fixture_name", COLOR_FIXTURES)
-def test_color_term_composition_noop_on_single_system_fixtures(
-    fixture_name: str,
-) -> None:
-    """
-    On a fixture already entirely in the LSST target system, the color-term
-    correction changes nothing: colors are bit-for-bit identical with and without
-    it, and every band reports its LSST filter either way.
-    """
-    if fixture_name == "__NO_FIXTURES__":
-        pytest.skip("No color fixtures found on disk.")
-    fx = np.load(DATA_DIR / fixture_name, allow_pickle=True)
-    if not _all_in_target_system(fx):
-        pytest.skip(f"{fixture_name} has non-LSST photometry; covered elsewhere.")
-
-    observations = _load_fixture_observations(fx)
-    orbits = _load_fixture_orbits(fx)
-
-    base = estimate_colors(observations, orbits, "HG12star", force_g_bounds=False)
-    corrected = estimate_colors(
-        observations,
-        orbits,
-        "HG12star",
-        force_g_bounds=False,
-        color_term_composition="S",
-    )
-    for field in ("g_r", "g_i", "r_i", "g_mag", "r_mag", "i_mag"):
-        assert getattr(base, field).to_pylist() == getattr(corrected, field).to_pylist()
-    for field in ("g_filter", "i_filter", "r_filter", "u_filter"):
-        assert getattr(base, field).to_pylist() == getattr(corrected, field).to_pylist()
-
-
-@pytest.mark.parametrize("fixture_name", COLOR_FIXTURES)
-def test_color_term_composition_preserves_paper_on_mixed_fixtures(
-    fixture_name: str,
-) -> None:
-    """
-    On a fixture with non-LSST photometry, normalizing it onto LSST keeps colors
-    finite and still within tolerance of the paper (the griz inter-system terms
-    are small, so reproduction is preserved), and labels every band LSST.
-    """
-    if fixture_name == "__NO_FIXTURES__":
-        pytest.skip("No color fixtures found on disk.")
-    fx = np.load(DATA_DIR / fixture_name, allow_pickle=True)
-    if _all_in_target_system(fx):
-        pytest.skip(f"{fixture_name} is already entirely LSST.")
-
-    object_id = str(fx["object_id"][0])
-    observations = _load_fixture_observations(fx)
-    orbits = _load_fixture_orbits(fx)
-
-    result = estimate_colors(
-        observations,
-        orbits,
-        "HG12star",
-        force_g_bounds=False,
-        color_term_composition="S",
-    )
-    _assert_colors_close(result, object_id, _paper_colors(fx), HG12STAR_TOLERANCE)
-    for channel, target in _TARGET_FILTERS.items():
-        assert getattr(result, f"{channel}_filter").to_pylist() in ([target], [None])
-
-
-# ---------------------------------------------------------------------------
-# Fit diagnostics (uncertainties, chi-square, DOF/rank, convergence)
-# ---------------------------------------------------------------------------
-
-_DIAGNOSTICS_FIXTURE = "color_fixture_2025_MF76.npz"
-
-
-def _load_diagnostics_fixture() -> np.lib.npyio.NpzFile:
-    path = DATA_DIR / _DIAGNOSTICS_FIXTURE
-    if not path.exists():
-        pytest.skip(f"Missing fixture {_DIAGNOSTICS_FIXTURE}")
-    fx: np.lib.npyio.NpzFile = np.load(path, allow_pickle=True)
-    return fx
-
-
-@pytest.mark.parametrize("phi_type", ["HG12star", "HG", "c1c2"])
-def test_fit_diagnostics_are_populated(
-    phi_type: Literal["HG12star", "HG", "c1c2"],
-) -> None:
-    """Every fit reports goodness-of-fit, covariance-based errors, and status."""
-    fx = _load_diagnostics_fixture()
-    observations = _load_fixture_observations(fx)
-    orbits = _load_fixture_orbits(fx)
-
-    row = estimate_colors(observations, orbits, phi_type, force_g_bounds=False)
-    assert len(row) == 1
-
-    chi2 = row.chi2[0].as_py()
-    dof = row.dof[0].as_py()
-    reduced_chi2 = row.reduced_chi2[0].as_py()
-    assert chi2 > 0
-    assert dof > 0
-    assert np.isfinite(reduced_chi2) and reduced_chi2 > 0
-    assert np.isclose(reduced_chi2, chi2 / dof)
-    assert row.converged[0].as_py() is True
-
-    # Parameters actually fitted: one per observed band plus the phase terms
-    # (G for HG/HG12star; c1*alpha + c2*alpha^2 for c1c2).  This object has
-    # enough phase coverage in every band for all of them to be identified, so
-    # the rank matches and the DOF invariant is included observations minus rank.
-    present = _channels_present(fx)
-    phase_cols = 2 if phi_type == "c1c2" else 1
-    num_params = len(present) + phase_cols
-    assert row.num_params[0].as_py() == num_params
-    assert row.rank[0].as_py() == num_params
-    assert dof == row.num_used[0].as_py() - num_params
-
-    # The four buckets account for every observation of the object exactly
-    # once, and the per-band retained counts add up to the total used.
-    counts = {
-        name: row.column(name)[0].as_py()
-        for name in (
-            "num_obs",
-            "num_invalid",
-            "num_unsupported_filter",
-            "num_clipped",
-            "num_used",
-        )
-    }
-    assert counts["num_obs"] == (
-        counts["num_invalid"]
-        + counts["num_unsupported_filter"]
-        + counts["num_clipped"]
-        + counts["num_used"]
-    )
-    assert counts["num_used"] > 0
-    per_band = {b: row.column(f"num_used_{b}")[0].as_py() for b in "giru"}
-    assert sum(per_band.values()) == counts["num_used"]
-    # A band is used exactly when it carries one of the fitted magnitudes.
-    assert {b for b, n in per_band.items() if n > 0} == set(present)
-
-    # Phase slope parameter: fitted (with an uncertainty) for HG/HG12star, and
-    # NaN for c1c2 which has no such parameter.
-    phase_param = row.phase_param[0].as_py()
-    phase_param_sigma = row.phase_param_sigma[0].as_py()
-    if phi_type == "c1c2":
-        assert np.isnan(phase_param) and np.isnan(phase_param_sigma)
-    else:
-        assert np.isfinite(phase_param)
-        assert np.isfinite(phase_param_sigma) and phase_param_sigma > 0
-
-    # Per-band uncertainties are positive-finite for observed bands (NaN handling
-    # for unobserved bands is covered by test_estimate_colors_missing_band_is_nan).
-    for band, field in _BAND_MAG_FIELD.items():
-        if band not in present:
-            continue
-        sigma = getattr(row, f"{field}_sigma")[0].as_py()
-        assert np.isfinite(sigma) and sigma > 0
-
-    for field in ("g_r_sigma", "g_i_sigma", "r_i_sigma"):
-        value = getattr(row, field)[0].as_py()
-        assert np.isfinite(value) and value > 0
-
-
-def test_color_sigma_propagates_covariance_not_quadrature() -> None:
-    """
-    Color uncertainties use the full parameter covariance, so the H_x/H_y
-    correlation through the shared phase parameter reduces them below a naive
-    quadrature sum. The HG model makes G and H strongly degenerate, so the effect
-    is pronounced there.
-    """
-    fx = _load_diagnostics_fixture()
-    observations = _load_fixture_observations(fx)
-    orbits = _load_fixture_orbits(fx)
-
-    row = estimate_colors(observations, orbits, "HG", force_g_bounds=False)
-    g_sigma = row.g_mag_sigma[0].as_py()
-    r_sigma = row.r_mag_sigma[0].as_py()
-    g_r_sigma = row.g_r_sigma[0].as_py()
-
-    quadrature = float(np.hypot(g_sigma, r_sigma))
-    assert g_r_sigma < quadrature
-    # The per-band magnitudes share the G degeneracy, so each is far more
-    # uncertain than the color itself.
-    assert g_r_sigma < g_sigma
+    sink = pa.BufferOutputStream()
+    batch = pa.record_batch({"value": [1]})
+    with pa.ipc.new_stream(sink, batch.schema) as writer:
+        writer.write_batch(batch)
+        writer.write_batch(batch)
+    with pytest.raises(ValueError, match="more than one record batch"):
+        _native_record_batch(sink.getvalue().to_pybytes())
