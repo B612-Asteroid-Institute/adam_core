@@ -825,8 +825,13 @@ fn fit_once(
             if nfev >= max_nfev {
                 break 'iterations;
             }
-            let (step_eigen, alpha_used) =
-                crate::trust_region::trust_region_step(&eigenvalues, &q, radius, alpha);
+            let (step_eigen, alpha_used) = crate::trust_region::trust_region_step(
+                &eigenvalues,
+                &q,
+                radius,
+                alpha,
+                crate::trust_region::RankDeficientStepPolicy::MinimumNormInterior,
+            );
             alpha = alpha_used;
             let step_scaled = DVector::from_iterator(
                 width,

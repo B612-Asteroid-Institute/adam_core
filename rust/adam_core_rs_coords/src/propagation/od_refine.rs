@@ -824,8 +824,13 @@ fn trust_region_step(
     radius: f64,
     initial_alpha: f64,
 ) -> ([f64; 6], f64) {
-    let (step, alpha) =
-        crate::trust_region::trust_region_step(eigenvalues, q, radius, initial_alpha);
+    let (step, alpha) = crate::trust_region::trust_region_step(
+        eigenvalues,
+        q,
+        radius,
+        initial_alpha,
+        crate::trust_region::RankDeficientStepPolicy::Boundary,
+    );
     (
         step.try_into().expect("six-dimensional trust-region step"),
         alpha,

@@ -1360,7 +1360,7 @@ fn benchmark_fit_absolute_magnitude_grouped_numpy(
 /// Inputs are the canonical nested Arrow IPC encodings of `SourceCatalog` and
 /// `Orbits`, installed default SPICE kernel paths, and MPC-obscode JSON. This
 /// same crossing idempotently initializes the process-global observer backend;
-/// missing environment data is a call-level error, never one failure per object.
+/// invalid or unloadable setup inputs fail the call before object processing.
 /// Rust owns grouping, orbit matching and propagation, observer-state preparation,
 /// geometry, filter resolution/projection, fitting and Arrow assembly. The
 /// returned IPC stream contains exactly one final `ColorFit` record batch.
