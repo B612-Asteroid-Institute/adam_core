@@ -6,22 +6,18 @@ Artifact policy
 
 Release artifacts are built once and tested as artifacts. The release-candidate
 workflow builds one Core wheel for each supported Python/platform pair and
-installs those exact files in isolated binary-only environments. CPython
-3.11-3.13 cells pair an exact compatible Assist revision, run ``pip check``,
-prove offline installed-package kernel discovery without duplicate cache
-files, and exercise public SBDB, observer, ephemeris, and
-propagation-provider workflows. CPython 3.14 cells instead run Core-only import,
-identity, dependency, timestamp, and native numerical checks until Assist's
-separately tracked 3.14 migration is complete.
-Publication jobs download those accepted artifacts by workflow run ID; they do
-not rebuild wheels or crates.
+installs those exact files in isolated binary-only environments. Every cell
+runs the same Core-owned acceptance: ``pip check``, installed-package kernel
+discovery, distribution/Python/native identity, timestamp round trips, and a
+native numerical smoke test. Publication jobs download those accepted artifacts
+by workflow run ID; they do not rebuild wheels or crates. Downstream projects
+validate their own Core compatibility in their repositories.
 
 The supported Core matrix is CPython 3.11-3.14 on manylinux 2.17 x86-64 and
-AArch64 and macOS Apple silicon and Intel (16 Core wheels). The compatible
-Assist candidate is paired only on CPython 3.11-3.13 (12 paired cells). The
-workflow checks runner architecture, exact wheel count, runtime/distribution version
-equality, native members, and platform tags. Windows and musllinux are not
-current release targets.
+AArch64 and macOS Apple silicon and Intel (16 Core wheels). The workflow checks
+runner architecture, exact wheel count, runtime/distribution version equality,
+native members, and platform tags. Windows and musllinux are not current release
+targets.
 
 Stable release line
 -------------------
@@ -77,18 +73,13 @@ Release order
 Stable promotion remains separately approval-gated and proceeds in dependency
 order:
 
-#. prepare and review an exact propagation-only v2 reference-provider source
-   revision for dependent acceptance. The current workflow names this required
-   operational input ``adam_assist_ref`` and requires a full commit SHA; that
-   revision is evidence for the Core candidate, not a Core dependency or
-   publication candidate;
 #. after separate version-bump authorization, align the Python distribution,
    unpublished ``adam_core_py`` implementation crate, and six public Rust
    crates on the intended ``0.8.0`` boundary without rewriting published
    ``0.7.0`` history;
 #. accept the exact 16-wheel Core Python matrix for that authorized post-0.7
-   version, including paired provider compatibility on CPython 3.11-3.13 and
-   explicit Core-only CPython 3.14 acceptance;
+   version with the same Core-owned checks on CPython 3.11-3.14; downstream
+   projects validate their compatibility in separately reviewed changes;
 #. accept and publish the aligned six-crate Rust ``0.8.0`` set in dependency
    order;
 #. publish and verify the exact Core Python wheel set; and
