@@ -1464,6 +1464,25 @@ fn estimate_colors_fused_ipc<'py>(
         }
     }
 
+    if orbits.is_empty() {
+        let output = object_order
+            .into_iter()
+            .map(|object_id| {
+                ColorFitRow::terminal(
+                    object_id.clone(),
+                    source_groups[&object_id].len(),
+                    "no_orbit",
+                    "No orbit given for this object",
+                )
+            })
+            .collect::<Vec<_>>();
+        let batch = color_fit_record_batch(&output).map_err(|error| {
+            PyValueError::new_err(format!("failed to assemble ColorFit: {error}"))
+        })?;
+        let bytes = crate::coordinates::write_orbit_ipc(&batch)?;
+        return Ok(PyBytes::new(py, &bytes));
+    }
+
     let source_times = TimeArray::from_parts(
         source.time.scale,
         source.time.days.clone(),

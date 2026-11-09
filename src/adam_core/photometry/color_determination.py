@@ -154,16 +154,20 @@ def estimate_colors(
         ``object_id`` are skipped; every attributable row is retained for
         diagnostic accounting.
     orbits
-        Native :class:`~adam_core.orbits.Orbits`, with Cartesian heliocentric
-        ecliptic coordinates. Frame/representation errors are call-level
-        validation errors. Objects with zero or multiple matching orbits receive
-        isolated status rows; active non-gravitational solutions are rejected.
+        Native :class:`~adam_core.orbits.Orbits`. A nonempty table must use
+        Cartesian ecliptic coordinates; frame/representation/epoch errors are
+        call-level validation errors. Heliocentric origin is checked per matched
+        orbit. Objects with zero or multiple matching orbits receive isolated
+        status rows, including ``no_orbit`` for every object when this table is
+        empty; active non-gravitational solutions are rejected per object.
     phi_type
         ``"HG12star"``, ``"HG"``, or ``"c1c2"``.
     force_g_bounds
-        If true, withhold scientific list products when a fitted HG/G12* slope
-        is outside its model validity bounds. Fit diagnostics and filter/count
-        lists remain available.
+        If true, withhold scientific list products when a fitted slope is
+        outside its model validity bounds: ``G12*`` in ``[0, 1]`` for
+        ``"HG12star"`` and ``G`` in ``[-0.255, 1]`` for ``"HG"``. It has no
+        effect for ``"c1c2"``. Fit diagnostics and filter/count lists remain
+        available.
     color_term_composition
         Reflectance template ID or ``(weight_C, weight_S)`` mix required by
         ``filter_projection``. It is invalid without an explicit projection.
@@ -181,7 +185,22 @@ def estimate_colors(
     Returns
     -------
     ColorFit
-        One row per first-appearing non-null observation object ID.
+        One row per first-appearing non-null observation object ID. Status is
+        one of ``"ok"``, ``"no_orbit"``, ``"multiple_orbits"``,
+        ``"no_usable_photometry"``, ``"too_many_outliers"``,
+        ``"phase_param_out_of_bounds"``, or ``"failed"``. ``no_orbit``,
+        ``multiple_orbits``, and failures before row classification retain only
+        ``error`` and ``num_obs`` among nullable scalar diagnostics/counts.
+        Failures after classification retain an exact count partition, where
+        ``num_used`` means rows admitted to the attempted fit.
+
+    Raises
+    ------
+    ValueError
+        If whole-call configuration, projection/composition pairing, the
+        nonempty orbit table's frame/representation/epochs, native setup, IPC,
+        or returned schema is invalid. A matching orbit with a non-heliocentric
+        origin is instead isolated as an object-level ``failed`` row.
     """
     from adam_core import _rust_native
 

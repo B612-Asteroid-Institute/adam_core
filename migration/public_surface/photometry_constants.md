@@ -23,13 +23,15 @@ Only plotting/display may remain Python. Generic quivr/dataclass behavior and st
 | `convert_magnitude` | one Arrow-to-Rust crossing for validation, lookup, composition, and arithmetic; object-string conversion no longer allocates Python `list[str]` rows | selected | measured | Complete |
 | `estimate_absolute_magnitude_v_from_detections` | one ordinary-path crossing owns exposure-ID join, midpoint observer states, band mapping, prediction, filtering, fit, nulls, and Arrow `PhysicalParameters` assembly | selected facade, complete join, and Arrow-schema tests | complete Rust `Instant` sample | Complete |
 | `estimate_absolute_magnitude_v_from_detections_grouped` | one ordinary-path crossing additionally owns null-ID filtering, lexical grouping/order, degenerate-group removal, and nested Arrow assembly | selected facade, grouped ordering, and nested-schema tests | complete Rust `Instant` sample | Complete |
-| `estimate_colors` | one fused IPC crossing owns grouping, orbit handling, propagation/geometry, generic canonical-filter fitting/projection, diagnostics, failures, and exact Arrow assembly | six fixtures across all three phase laws plus generic-filter, projection, status/count, and exact-schema facade tests | complete fused-kernel timing and scaling review | Complete |
+| `estimate_colors` | one fused IPC crossing owns grouping, orbit handling, propagation/geometry, generic canonical-filter fitting/projection, diagnostics, failures, and exact Arrow assembly | frozen outputs for six fixtures across all three phase laws plus generic-filter, projection, status/count, and exact-schema facade tests | scaling reviewed externally; no in-tree timing surface | Complete |
 
 The raw six photometry kernel lanes remain independently timed. A complete-facade adapter additionally times prediction, single fit, and grouped fit with Rust-owned observer generation and Arrow assembly inside each `Instant` sample and PyO3 conversion outside it.
 
 ## Rust-native color-estimation contract (PR #202 integration)
 
 `estimate_colors` is a one-row-per-object API over native `SourceCatalog` and `Orbits`. Its production Python facade performs only schema definition and IPC/configuration marshalling, makes exactly one fused native call, decodes exactly one batch, verifies that the raw `RecordBatch` schema exactly equals `ColorFit.schema` including metadata, and wraps it with the shared quivr bridge. Rust owns canonical filter resolution, geometry/propagation integration, validity classification, optional projection and composition conversion, fitting, clipping, rank/null-space identifiability, covariance, pair colors, statuses/counts, and Arrow assembly.
+
+A nonempty orbit table is validated call-wide for Cartesian representation, ecliptic frame, and convertible epochs. An empty orbit table bypasses only those inapplicable validations and emits one isolated `no_orbit` row for every attributable observation object. Matching-orbit heliocentric origin and active non-gravitational parameters are per-object validations that isolate `failed` rows.
 
 ### Filter resolution and eligibility
 
@@ -63,11 +65,11 @@ Rust enumerates every pair `(i, j)` with `i < j` in the canonical-ID order. The 
 
 ### Status/list contract
 
-- `ok`: filter/count/H/covariance lists and all pair lists are non-null. With one active filter, all four pair lists are non-null empty lists. `force_g_bounds=False` always follows ordinary `ok` behavior even when the fitted phase parameter is outside nominal bounds.
+- `ok`: `filter_ids`, `absolute_magnitudes`, `absolute_magnitude_sigmas`, `num_used_by_filter`, `magnitude_covariance`, and all four pair lists are non-null. With one active filter, all four pair lists are non-null empty lists. `force_g_bounds=False` always follows ordinary `ok` behavior even when the fitted phase parameter is outside nominal bounds.
 - `phase_param_out_of_bounds` with forced bounds: retain non-null `filter_ids` and `num_used_by_filter` diagnostics, but set magnitude, magnitude-sigma, covariance, and every pair list field to top-level null.
 - `no_usable_photometry`, `too_many_outliers`, `no_orbit`, `multiple_orbits`, and `failed`: every native-product list field is top-level null.
 
-Scalar status/error, phase and fit diagnostics, convergence, and aggregate counts remain on the object row. The fixed `g/i/r/u` magnitude, sigma, filter, color, and per-band count columns have been removed. Native and optional projected outputs use the same generic list schema.
+Forced bounds are `G12* in [0, 1]` for `HG12star` and `G in [-0.255, 1]` for `HG`; `c1c2` has no forced-bound status. Status is always present and error is nullable. Every attributable terminal row retains `num_obs`. `no_orbit`, `multiple_orbits`, and failures before classification have null classification counts; classified rows retain the exact count partition, and `num_used` on an attempted-fit failure means rows admitted to that fit. Phase and fit diagnostics remain only when the corresponding fit ran. The fixed `g/i/r/u` magnitude, sigma, filter, color, and per-band count columns have been removed. Native and optional projected outputs use the same generic list schema.
 
 Rust tests—not Python computation—establish native-mode numerical parity where applicable and enforce native/projection ordering, null/NaN, covariance, contrast-fitability, status, retention, and count invariants. Public facade tests cover all six fixtures and three phase laws, one-call marshalling, generic filters, complete explicit projection (including identity edges), strict fallback accounting, multi-object order/failures, UTC/frame/non-gravitational behavior, exact schema equality, list-child nullability, and one-batch IPC rejection.
 

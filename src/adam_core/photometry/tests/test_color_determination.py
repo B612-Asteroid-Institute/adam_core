@@ -2,8 +2,13 @@ from __future__ import annotations
 
 import ast
 import inspect
+import json
+import os
+import subprocess
+import sys
+import textwrap
 from pathlib import Path
-from typing import Literal, get_type_hints
+from typing import get_type_hints
 
 import numpy as np
 import pyarrow as pa
@@ -28,16 +33,22 @@ from ..color_determination import (
 
 DATA_DIR = Path(__file__).parent / "data"
 COLOR_FIXTURES = sorted(DATA_DIR.glob("color_fixture_*.npz"))
-PHASE_MODELS: tuple[Literal["HG12star", "HG", "c1c2"], ...] = (
-    "HG12star",
-    "HG",
-    "c1c2",
-)
+with (DATA_DIR / "color_fit_goldens.json").open() as golden_file:
+    COLOR_FIT_GOLDENS = json.load(golden_file)
 LIST_FIELDS = (
     "filter_ids",
     "absolute_magnitudes",
     "absolute_magnitude_sigmas",
     "num_used_by_filter",
+    "magnitude_covariance",
+    "color_lhs_filter_ids",
+    "color_rhs_filter_ids",
+    "colors",
+    "color_sigmas",
+)
+SCIENCE_LIST_FIELDS = (
+    "absolute_magnitudes",
+    "absolute_magnitude_sigmas",
     "magnitude_covariance",
     "color_lhs_filter_ids",
     "color_rhs_filter_ids",
@@ -114,39 +125,37 @@ def _assert_partition(row: dict[str, object]) -> None:
     )
 
 
-def _pair_map(row: dict[str, object]) -> dict[tuple[str, str], float]:
-    return {
-        (lhs, rhs): value
-        for lhs, rhs, value in zip(
-            row["color_lhs_filter_ids"],
-            row["color_rhs_filter_ids"],
-            row["colors"],
-            strict=True,
-        )
-    }
-
-
 def test_facade_is_schema_marshalling_and_one_native_call(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     observations, orbits = _fixture()
-    calls: list[tuple[tuple[object, ...], dict[str, object]]] = []
-    native = _rust_native.estimate_colors_fused_ipc
+    calls: list[tuple[str, tuple[object, ...], dict[str, object]]] = []
+    target = "estimate_colors_fused_ipc"
 
-    def one_call(*args: object, **kwargs: object) -> bytes:
-        calls.append((args, kwargs))
-        return native(*args, **kwargs)
+    for name in dir(_rust_native):
+        native = getattr(_rust_native, name)
+        if not callable(native):
+            continue
 
-    def forbidden_setup() -> None:
-        raise AssertionError("the facade must not make a separate setup crossing")
+        def tracked(
+            *args: object,
+            _name: str = name,
+            _native: object = native,
+            **kwargs: object,
+        ) -> object:
+            calls.append((_name, args, kwargs))
+            if _name != target:
+                raise AssertionError(f"unexpected chained native call: {_name}")
+            assert callable(_native)
+            return _native(*args, **kwargs)
 
-    monkeypatch.setattr(_rust_native, "estimate_colors_fused_ipc", one_call)
-    monkeypatch.setattr("adam_core._rust.arrow.ensure_spice_backend", forbidden_setup)
+        monkeypatch.setattr(_rust_native, name, tracked)
+
     result = estimate_colors(observations, orbits, "c1c2", force_g_bounds=False)
 
     assert _row(result)["status"] == "ok"
-    assert len(calls) == 1
-    args, kwargs = calls[0]
+    assert [name for name, _, _ in calls] == [target]
+    _, args, kwargs = calls[0]
     assert len(args) == 6
     assert isinstance(args[0], bytes) and isinstance(args[1], bytes)
     assert kwargs["projection"] is None
@@ -185,7 +194,9 @@ def _empty_batch(schema: pa.Schema) -> pa.RecordBatch:
     )
 
 
-@pytest.mark.parametrize("drift", ["missing", "order", "item", "metadata", "type"])
+@pytest.mark.parametrize(
+    "drift", ["missing", "order", "item", "nullability", "metadata", "type"]
+)
 def test_native_batch_schema_is_exact_before_quivr_wrapping(drift: str) -> None:
     exact = _empty_batch(ColorFit.schema)
     assert len(_color_fit_from_native_batch(exact)) == 0
@@ -199,7 +210,14 @@ def test_native_batch_schema_is_exact_before_quivr_wrapping(drift: str) -> None:
     elif drift == "item":
         fields[3] = pa.field(
             "filter_ids",
-            pa.large_list(pa.field("value", pa.large_string(), nullable=True)),
+            pa.large_list(pa.field("value", pa.large_string(), nullable=False)),
+            nullable=True,
+        )
+        schema = pa.schema(fields)
+    elif drift == "nullability":
+        fields[3] = pa.field(
+            "filter_ids",
+            pa.large_list(pa.field("item", pa.large_string(), nullable=True)),
             nullable=True,
         )
         schema = pa.schema(fields)
@@ -217,41 +235,92 @@ def test_native_batch_schema_is_exact_before_quivr_wrapping(drift: str) -> None:
         _color_fit_from_native_batch(drifted)
 
 
-@pytest.mark.parametrize("fixture_path", COLOR_FIXTURES, ids=lambda path: path.stem)
-@pytest.mark.parametrize("phi_type", PHASE_MODELS)
-def test_public_facade_all_fixtures_all_phase_models(
-    fixture_path: Path, phi_type: Literal["HG12star", "HG", "c1c2"]
+def _record_batch_ipc(batch: pa.RecordBatch) -> bytes:
+    sink = pa.BufferOutputStream()
+    with pa.ipc.new_stream(sink, batch.schema) as writer:
+        writer.write_batch(batch)
+    return sink.getvalue().to_pybytes()
+
+
+def test_public_facade_rejects_drifted_native_schema(
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    observations, orbits = _fixture()
+    fields = list(ColorFit.schema)[:-1]
+    drifted = _empty_batch(pa.schema(fields))
+
+    def drifted_native(*_args: object, **_kwargs: object) -> bytes:
+        return _record_batch_ipc(drifted)
+
+    monkeypatch.setattr(_rust_native, "estimate_colors_fused_ipc", drifted_native)
+    with pytest.raises(ValueError, match="does not exactly match ColorFit.schema"):
+        estimate_colors(observations, orbits, "c1c2")
+
+
+@pytest.mark.parametrize(
+    "golden",
+    COLOR_FIT_GOLDENS["cases"],
+    ids=lambda case: f"{case['fixture']}-{case['phi_type']}",
+)
+def test_public_facade_all_fixtures_all_phase_models(
+    golden: dict[str, object],
+) -> None:
+    fixture_path = DATA_DIR / f"color_fixture_{golden['fixture']}.npz"
     with np.load(fixture_path, allow_pickle=True) as fx:
+        observations = _load_fixture_observations(fx)
+        orbits = _load_fixture_orbits(fx)
         result = estimate_colors(
-            _load_fixture_observations(fx),
-            _load_fixture_orbits(fx),
-            phi_type,
+            observations,
+            orbits,
+            golden["phi_type"],
             force_g_bounds=False,
         )
-        row = _row(result)
-        paper = {
-            "g_r": float(fx["paper_g_r_fourier"][0]),
-            "g_i": float(fx["paper_g_i_fourier"][0]),
-            "r_i": float(fx["paper_r_i_fourier"][0]),
-        }
+    row = _row(result)
+    tolerance = COLOR_FIT_GOLDENS["absolute_tolerance"]
 
     assert row["status"] == "ok"
+    assert row["filter_ids"] == golden["filter_ids"]
+    assert row["num_used_by_filter"] == golden["num_used_by_filter"]
+    for name in (
+        "absolute_magnitudes",
+        "absolute_magnitude_sigmas",
+        "colors",
+        "color_sigmas",
+    ):
+        np.testing.assert_allclose(
+            row[name], golden[name], rtol=0.0, atol=tolerance, equal_nan=True
+        )
     _assert_partition(row)
-    filters = row["filter_ids"]
-    assert filters == sorted(filters)
+    assert row["num_obs"] == len(observations)
     assert sum(row["num_used_by_filter"]) == row["num_used"]
-    assert len(row["absolute_magnitudes"]) == len(filters)
-    assert len(row["absolute_magnitude_sigmas"]) == len(filters)
-    assert len(row["magnitude_covariance"]) == len(filters) ** 2
-    pairs = len(filters) * (len(filters) - 1) // 2
-    assert all(len(row[name]) == pairs for name in LIST_FIELDS[5:])
+    assert len(row["magnitude_covariance"]) == len(row["filter_ids"]) ** 2
 
-    colors = _pair_map(row)
-    tolerance = 0.11 if row["object_id"] == "2025 MO35" else 0.06
-    assert colors[("LSST_g", "LSST_r")] == pytest.approx(paper["g_r"], abs=tolerance)
-    assert colors[("LSST_g", "LSST_i")] == pytest.approx(paper["g_i"], abs=tolerance)
-    assert colors[("LSST_i", "LSST_r")] == pytest.approx(-paper["r_i"], abs=tolerance)
+    forced = _row(
+        estimate_colors(
+            observations,
+            orbits,
+            golden["phi_type"],
+            force_g_bounds=True,
+        )
+    )
+    assert forced["status"] == golden["forced_status"]
+    if golden["forced_status"] == "phase_param_out_of_bounds":
+        assert forced["filter_ids"] == golden["filter_ids"]
+        assert forced["num_used_by_filter"] == golden["num_used_by_filter"]
+        for name in SCIENCE_LIST_FIELDS:
+            assert forced[name] is None
+    else:
+        assert forced["filter_ids"] == golden["filter_ids"]
+        assert forced["num_used_by_filter"] == golden["num_used_by_filter"]
+        for name in (
+            "absolute_magnitudes",
+            "absolute_magnitude_sigmas",
+            "colors",
+            "color_sigmas",
+        ):
+            np.testing.assert_allclose(
+                forced[name], golden[name], rtol=0.0, atol=tolerance
+            )
 
     for name in LIST_FIELDS:
         array = result.table.column(name).combine_chunks()
@@ -498,6 +567,34 @@ def test_all_null_photometry_is_accounted(
     _assert_partition(row)
 
 
+@pytest.mark.parametrize("empty_kind", ["canonical", "zero-row-ecliptic"])
+def test_empty_orbits_produce_isolated_no_orbit_rows(empty_kind: str) -> None:
+    observations, orbits = _fixture()
+    second_object_id = "second-empty-orbit-object"
+    second = observations.set_column(
+        "object_id",
+        pa.array([second_object_id] * len(observations), type=pa.large_string()),
+    )
+    observations = qv.concatenate([observations, second])
+    empty_orbits = (
+        Orbits.empty()
+        if empty_kind == "canonical"
+        else orbits.apply_mask(pa.array([False]))
+    )
+
+    rows = estimate_colors(observations, empty_orbits, "c1c2").table.to_pylist()
+
+    assert [row["object_id"] for row in rows] == [
+        orbits.object_id[0].as_py(),
+        second_object_id,
+    ]
+    for no_orbit in rows:
+        assert no_orbit["status"] == "no_orbit"
+        assert no_orbit["num_obs"] == len(second)
+        assert no_orbit["num_invalid"] is None
+        assert all(no_orbit[name] is None for name in LIST_FIELDS)
+
+
 def test_status_list_and_scalar_nullability() -> None:
     observations, orbits = _fixture()
     unmatched = orbits.set_column(
@@ -517,6 +614,35 @@ def test_status_list_and_scalar_nullability() -> None:
     assert none["num_invalid"] == none["num_obs"]
     _assert_partition(none)
     assert all(none[name] is None for name in LIST_FIELDS)
+
+
+def test_fresh_process_facade_initializes_spice_inside_fused_call() -> None:
+    code = textwrap.dedent("""
+        from adam_core.photometry.color_determination import estimate_colors
+        from adam_core.photometry.tests.test_color_determination import _fixture
+        from adam_core.utils.spice import DEFAULT_KERNELS
+        from adam_core.utils.spice_backend import get_backend
+
+        backend = get_backend()
+        assert backend.registered_kernels() == []
+        assert backend.mpc_obscodes_loaded() == 0
+        observations, orbits = _fixture()
+        result = estimate_colors(observations, orbits, "c1c2", force_g_bounds=False)
+        assert result.status.to_pylist() == ["ok"]
+        assert len(backend.registered_kernels()) == len(DEFAULT_KERNELS)
+        assert backend.mpc_obscodes_loaded() > 0
+        """)
+    environment = dict(os.environ)
+    environment["ADAM_CORE_REQUIRE_RUST_BACKEND"] = "1"
+    completed = subprocess.run(
+        [sys.executable, "-c", code],
+        cwd=Path(__file__).parents[4],
+        env=environment,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert completed.returncode == 0, completed.stdout + completed.stderr
 
 
 def test_native_result_decoder_rejects_zero_or_multiple_batches() -> None:

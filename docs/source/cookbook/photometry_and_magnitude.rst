@@ -424,9 +424,12 @@ counts obey
 counts. On attempted-fit failures, ``num_used`` means rows admitted to that fit.
 A forced out-of-bounds phase parameter retains filter IDs, per-filter counts,
 and scalar diagnostics but nulls scientific products; terminal failures null
-all list fields. Orbit coordinates must be Cartesian, heliocentric, and
-``ecliptic``. UTC orbit epochs are accepted; active non-gravitational solutions
-produce isolated failed rows.
+all list fields. A nonempty orbit table must use Cartesian ``ecliptic``
+coordinates; frame or representation errors fail the call. Heliocentric origin
+is validated per matching orbit, so a non-Sun origin produces an isolated
+``failed`` row. An empty orbit table produces ``no_orbit`` rows. UTC orbit
+epochs are accepted; active non-gravitational solutions produce isolated failed
+rows.
 
 Estimating ``H_v`` From Detections
 ----------------------------------
