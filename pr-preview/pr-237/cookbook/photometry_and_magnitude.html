@@ -843,9 +843,49 @@ empirical observatory or catalog debiasing correction.</p>
 <h2>Generic Color and Phase-Law Estimation<a class="headerlink" href="#generic-color-and-phase-law-estimation" title="Link to this heading">¶</a></h2>
 <p><code class="docutils literal notranslate"><span class="pre">estimate_colors</span></code> accepts native <code class="docutils literal notranslate"><span class="pre">SourceCatalog</span></code> observations and <code class="docutils literal notranslate"><span class="pre">Orbits</span></code>
 and returns one <code class="docutils literal notranslate"><span class="pre">ColorFit</span></code> row for each non-null object ID in first-appearance
-order. The Python API is a single-call facade: Rust owns grouping, propagation,
+order. Python and Rust expose the matching public name <code class="docutils literal notranslate"><span class="pre">estimate_colors</span></code>.
+The Python API is a single-call facade over public <code class="docutils literal notranslate"><span class="pre">adam_core::estimate_colors</span></code>;
+the private IPC adapter only decodes typed inputs, calls that API once, and
+encodes its <code class="docutils literal notranslate"><span class="pre">ColorFitBatch</span></code>. Public Rust owns setup, grouping, propagation,
 geometry, canonical-filter resolution, phase fitting, clipping, covariance,
-diagnostics, and per-object failure isolation.</p>
+diagnostics, and per-object failure isolation. Rust rows expose the
+<code class="docutils literal notranslate"><span class="pre">ColorFitStatus</span></code> enum; Arrow and Python preserve its stable string values.</p>
+<p>Pure-Rust callers obtain bandpasses embedded in the compiled coords crate and
+resolved kernel/MPC data without a Python installation or retained crate-source
+files:</p>
+<div class="highlight-rust notranslate"><div class="highlight"><pre><span></span><span class="k">use</span><span class="w"> </span><span class="n">adam_core</span><span class="p">::</span><span class="n">kernel_data</span><span class="p">::</span><span class="n">Resolver</span><span class="p">;</span>
+<span class="k">use</span><span class="w"> </span><span class="n">adam_core</span><span class="p">::{</span>
+<span class="w">    </span><span class="n">estimate_colors</span><span class="p">,</span>
+<span class="w">    </span><span class="n">ColorPhaseModel</span><span class="p">,</span>
+<span class="w">    </span><span class="n">ResolvedColorEstimationResources</span><span class="p">,</span>
+<span class="p">};</span>
+
+<span class="kd">let</span><span class="w"> </span><span class="n">resolved</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">ResolvedColorEstimationResources</span><span class="p">::</span><span class="n">resolve</span><span class="p">(</span>
+<span class="w">    </span><span class="o">&amp;</span><span class="n">Resolver</span><span class="p">::</span><span class="n">from_env</span><span class="p">(),</span>
+<span class="p">)</span><span class="o">?</span><span class="p">;</span>
+<span class="kd">let</span><span class="w"> </span><span class="n">resources</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">resolved</span><span class="p">.</span><span class="n">as_resources</span><span class="p">();</span>
+<span class="kd">let</span><span class="w"> </span><span class="n">fits</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">estimate_colors</span><span class="p">(</span>
+<span class="w">    </span><span class="o">&amp;</span><span class="n">observations</span><span class="p">,</span>
+<span class="w">    </span><span class="o">&amp;</span><span class="n">orbits</span><span class="p">,</span>
+<span class="w">    </span><span class="n">ColorPhaseModel</span><span class="p">::</span><span class="n">Hg12Star</span><span class="p">,</span>
+<span class="w">    </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">    </span><span class="nb">None</span><span class="p">,</span>
+<span class="w">    </span><span class="kc">false</span><span class="p">,</span>
+<span class="w">    </span><span class="nb">None</span><span class="p">,</span>
+<span class="w">    </span><span class="o">&amp;</span><span class="n">resources</span><span class="p">,</span>
+<span class="p">)</span><span class="o">?</span><span class="p">;</span>
+<span class="fm">println!</span><span class="p">(</span><span class="s">"{}"</span><span class="p">,</span><span class="w"> </span><span class="n">fits</span><span class="p">.</span><span class="n">rows</span><span class="p">[</span><span class="mi">0</span><span class="p">].</span><span class="n">status</span><span class="p">);</span>
+</pre></div>
+</div>
+<p>These resources initialize shared process state. Embedded bandpass bytes parse
+once in memory, while explicit custom directories cache by path. SPICE kernels
+accumulate in load order; and the first successfully loaded nonempty MPC
+obscodes table remains authoritative. Each estimate holds a SPICE
+read guard for its full workflow. Identical concurrent first calls wait for one
+initializer and then proceed, but callers must initialize the complete resource
+set before concurrent mutation. Until the separately tracked ERFA first-use
+race is corrected, perform one UTC rescale on a single thread before concurrent
+color calls containing UTC times.</p>
 <p>By default every resolved canonical filter is an independent fitted intercept.
 There is no implicit LSST projection or asteroid composition:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.photometry</span><span class="w"> </span><span class="kn">import</span> <span class="n">estimate_colors</span>
@@ -907,7 +947,9 @@ coordinates; frame or representation errors fail the call. Heliocentric origin
 is validated per matching orbit, so a non-Sun origin produces an isolated
 <code class="docutils literal notranslate"><span class="pre">failed</span></code> row. An empty orbit table produces <code class="docutils literal notranslate"><span class="pre">no_orbit</span></code> rows. UTC orbit
 epochs are accepted; active non-gravitational solutions produce isolated failed
-rows.</p>
+rows. Isolated failures use clean Rust-native error text without Python
+exception-class prefixes. Call-level time conversion errors retain their full
+operation context.</p>
 </section>
 <section id="estimating-h-v-from-detections">
 <h2>Estimating <code class="docutils literal notranslate"><span class="pre">H_v</span></code> From Detections<a class="headerlink" href="#estimating-h-v-from-detections" title="Link to this heading">¶</a></h2>

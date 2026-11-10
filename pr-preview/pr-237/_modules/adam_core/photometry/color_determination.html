@@ -588,10 +588,12 @@
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ColorFit</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Estimate canonical-filter absolute magnitudes and colors per object.</span>
 
-<span class="sd">    This is a thin facade over one fused Rust invocation. Rust owns object</span>
-<span class="sd">    grouping and isolation, orbit matching and propagation, observer geometry,</span>
-<span class="sd">    validity classification, canonical filter resolution, optional projection,</span>
-<span class="sd">    every phase-law fit, clipping, identifiability, covariance, diagnostics,</span>
+<span class="sd">    This is a thin facade over the public high-level</span>
+<span class="sd">    ``adam_core::estimate_colors`` Rust API through one private IPC adapter.</span>
+<span class="sd">    Rust owns object grouping and isolation, orbit matching and propagation,</span>
+<span class="sd">    observer geometry, validity classification, canonical filter resolution,</span>
+<span class="sd">    optional projection, every phase-law fit, clipping, identifiability,</span>
+<span class="sd">    covariance, diagnostics,</span>
 <span class="sd">    statuses/counts, and final Arrow assembly.</span>
 
 <span class="sd">    Parameters</span>
