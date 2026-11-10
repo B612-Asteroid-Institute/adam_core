@@ -1,6 +1,6 @@
 # adam_core: ADAM Core Utilities
 #### A Python package by the Asteroid Institute, a program of the B612 Foundation
-[![Python 3.11-3.13](https://img.shields.io/badge/Python-3.11--3.13-blue)](https://img.shields.io/badge/Python-3.9%2B-blue)
+[![Python 3.11-3.14](https://img.shields.io/badge/Python-3.11--3.14-blue)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)  
 [![pip - Build, Lint, Test, and Coverage](https://github.com/B612-Asteroid-Institute/adam_core/actions/workflows/pip-build-lint-test-coverage.yml/badge.svg)](https://github.com/B612-Asteroid-Institute/adam_core/actions/workflows/pip-build-lint-test-coverage.yml)
 
@@ -26,10 +26,11 @@ pip install "adam_core[jax]"          # Historical explicit JAX bridge
 pip install "adam_core[plots]"        # Plotting and date-axis formatting
 ```
 
-Native wheels support CPython 3.11-3.13 on manylinux 2.17+ x86-64/AArch64 and
+Native wheels support CPython 3.11-3.14 on manylinux 2.17+ x86-64/AArch64 and
 macOS Apple silicon/Intel. Windows and musllinux are not current release
-targets. Python installs reuse kernel data from the active environment;
-pure-Rust consumers use override -> installed-Python -> cache -> checksummed
+targets. The historical optional `jax` extra depends on upstream wheel
+availability and does not gate standard adam-core support. Python installs
+reuse kernel data from the active environment; pure-Rust consumers use override -> installed-Python -> cache -> checksummed
 wheel resolution, with ``ADAM_CORE_KERNEL_OFFLINE=1`` disabling downloads.
 
 Propagation and ephemeris generation require a separately installed concrete

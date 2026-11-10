@@ -59,6 +59,16 @@ This file contains notable changes in adam-core
   / ``ObservationPipeline.as_supplied()``. Resource paths remain separate exact
   ``ResourceBindings`` inputs and are excluded from configuration identity and
   provenance.
+- Native Python bindings now use the PyO3/NumPy 0.28 and Arrow/Parquet 58
+  generation, extending standard wheels, CI, and release validation through
+  CPython 3.14 on every existing manylinux and macOS target. Optional JAX wheel
+  availability remains outside the standard support gate. The already-published
+  0.7.0 artifacts are immutable, so these Python changes require a separately
+  authorized post-0.7 release. ``adam_core_rs_coords`` directly exposes Arrow
+  types and ``adam_core`` re-exports that API; the Arrow 58 source break and the
+  project's exact internal version policy require an aligned 0.8.0 line for all
+  six public Rust crates. Manifests intentionally remain at 0.7.0 in this
+  candidate pending separate version-bump and publication authorization.
 - MOID APIs now expose only algorithm-owned controls: Python
   ``calculate_perturber_moids`` no longer accepts ignored ``chunk_size`` or
   ``max_processes``, and NumPy/PyO3/Rust/SPICE/benchmark MOID entry points no
@@ -263,9 +273,13 @@ This file contains notable changes in adam-core
   the complete propagation-only ABI-v2 identity and provenance fingerprints.
   Invalid input/configuration/resource/provider contracts fail atomically;
   safely isolated scientific failures continue as typed group failures.
-- These changes are intentionally source-breaking for the removed Python and
-  Rust OD surfaces. They target adam-core 0.7.0; no merge, publication, release,
-  or cross-package compatibility claim is implied by this unreleased entry.
+- The removed legacy Python OD modules and Rust OD surfaces shipped as
+  source-breaking changes in immutable adam-core 0.7.0. This unreleased entry
+  does not rewrite that release or its artifact history.
+- Only the later Rust OD API cleanup described by the dedicated **Breaking Rust
+  API targeted for 0.8.0** bullet targets the intended 0.8.0 boundary. No merge,
+  publication, release, or cross-package compatibility claim is implied by that
+  unreleased cleanup.
 
 ## [0.6.1] - 2026-10-16
 

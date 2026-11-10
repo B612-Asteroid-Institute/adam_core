@@ -1,6 +1,6 @@
 # adam-core Rust Packaging Notes
 
-Last updated: 2026-11-03.
+Last updated: 2026-11-09.
 
 ## Supported Build Path
 
@@ -25,8 +25,9 @@ Last updated: 2026-11-03.
 - The wheel version source of truth is `rust/adam_core_py/Cargo.toml` `[package].version`.
 - This is intentional because maturin uses that Cargo version for wheel metadata when `project.version` is dynamic.
 - `migration/scripts/write_maturin_version.py` mirrors the Cargo version into `src/adam_core/_version.py` before build.
-- Stable versions are identical in both systems. Supported Cargo prereleases are normalized explicitly, for example `0.5.6-rc.1` to PEP 440 `0.5.6rc1`.
-- The current breaking source line is Python/Cargo `0.7.0` for the wheel implementation and all six public Rust crates, with exact `=0.7.0` internal requirements. Released `0.6.1` remains incompatible with the propagation-only v2 provider contract.
+- The Python distribution and unpublished `adam_core_py` wheel crate share a version. Supported Cargo prereleases are normalized explicitly, for example `0.5.6-rc.1` to PEP 440 `0.5.6rc1`.
+- The published `0.7.0` release is immutable: it shipped on 2026-11-06 as 12 CPython 3.11-3.13 wheels and six public Rust crates built against Arrow 54. This CPython 3.14/native-stack candidate retains `0.7.0` manifest values only because it is not authorized to bump or publish them; it cannot be released under that existing version and requires a separately authorized post-0.7 Python version.
+- `adam_core_rs_coords` directly exposes Arrow types and the `adam_core` umbrella crate re-exports that API. Moving those public types to Arrow 58 is semver-breaking. Exact internal public-crate requirements and the aligned version policy require all six public Rust crates to advance together on the intended `0.8.0` boundary before any crates.io publication.
 - `pyproject.toml` does not declare `[tool.pdm.version]`; PDM SCM versioning is not part of the native wheel path.
 - If the checkout is exactly on a `vX.Y.Z` or prerelease tag, `write_maturin_version.py` fails when the normalized tag and Cargo versions differ.
 - `migration/scripts/verify_preview_versions.py` enforces explicit preview/stable channel semantics and exact public-crate pins. Stable version, tag, protected-environment, resumable-publication, and release-order policy is canonical in `docs/source/getting_started/releasing.rst`.
@@ -38,7 +39,7 @@ Last updated: 2026-11-03.
 - `pdm run wheel-build` remains the sole authoritative build command.
 - A clean-wheel validation with uv must run outside the repository and pass
   `--no-config`, for example `uv pip install --no-config --python <venv-python>
-  dist/adam_core-0.7.0-<python>-<abi>-<platform>.whl`. Running outside the
+  dist/adam_core-<version>-<python>-<abi>-<platform>.whl`. Running outside the
   checkout prevents workspace source configuration from replacing the wheel
   under test.
 - Validate the installed distribution/native identity and run
@@ -62,8 +63,15 @@ Last updated: 2026-11-03.
   2026-11-03 showed that `main` was unprotected and that no repository rulesets
   applied, so no required `tier1-smoke` context existed at that date. Recheck
   branch protection and rulesets if repository policy changes.
-- The release-candidate wheel matrix remains a separate exact-ref workflow and
-  is unchanged; release pairing still requires its explicit Assist SHA input.
+- The release-candidate wheel matrix remains a separate manually dispatched
+  workflow. It builds and cleanly accepts one Core wheel for every CPython
+  3.11-3.14 and supported-platform cell with identical Core-owned checks. The
+  workflow delegates fresh-venv installation, identity, platform-tag, and native
+  smoke validation to the dedicated `run_core_wheel_acceptance.py` and copied
+  `core_wheel_smoke.py` scripts rather than embedding test programs in YAML.
+  Assist and other downstream
+  projects validate Core compatibility in their own repositories; they are not
+  built or lock-patched by the Core release matrix.
 
 ## Expected Validation Shape
 

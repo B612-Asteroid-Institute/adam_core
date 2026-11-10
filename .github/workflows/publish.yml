@@ -89,7 +89,7 @@ jobs:
           set -euo pipefail
           mkdir dist
           find acceptance-artifacts -type f -name 'adam_core-*.whl' -exec cp '{}' dist/ ';'
-          test "$(find dist -maxdepth 1 -name 'adam_core-*.whl' | wc -l | tr -d ' ')" = 12
+          test "$(find dist -maxdepth 1 -name 'adam_core-*.whl' | wc -l | tr -d ' ')" = 16
           python migration/scripts/check_wheel_artifacts.py dist
           python - <<'PY'
           import email
@@ -103,7 +103,7 @@ jobs:
           expected_version = Version(os.environ["EXPECTED_VERSION"])
           if expected_version.is_prerelease or expected_version.is_devrelease:
               raise SystemExit(f"only stable versions may be published: {expected_version}")
-          expected_python = {"cp311", "cp312", "cp313"}
+          expected_python = {"cp311", "cp312", "cp313", "cp314"}
           expected_platforms = {
               "manylinux_2_17_x86_64",
               "manylinux_2_17_aarch64",
@@ -198,7 +198,7 @@ jobs:
             --dist accepted-dist \
             --project adam-core \
             --version "$EXPECTED_VERSION" \
-            --expected-count 12 \
+            --expected-count 16 \
             --upload-dir upload-dist \
             --output pypi-before.json
           echo "missing_count=$(find upload-dist -maxdepth 1 -name '*.whl' | wc -l | tr -d ' ')" \
@@ -216,7 +216,7 @@ jobs:
             --dist accepted-dist \
             --project adam-core \
             --version "$EXPECTED_VERSION" \
-            --expected-count 12 \
+            --expected-count 16 \
             --require-complete \
             --output pypi-after.json
       - name: Upload public-registry comparison evidence

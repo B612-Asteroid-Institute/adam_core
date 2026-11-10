@@ -47,7 +47,7 @@ fn native_build_profile() -> (&'static str, &'static str, &'static str, bool) {
     )
 }
 
-#[pymodule]
+#[pymodule(gil_used = true)]
 fn _rust_native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(build_identity, m)?)?;
     m.add_function(wrap_pyfunction!(native_build_profile, m)?)?;

@@ -554,11 +554,11 @@ fn gauss_iod_orbits_arrow<'py>(
     light_time: bool,
     mu: f64,
     c: f64,
-) -> PyResult<PyObject> {
+) -> PyResult<Bound<'py, PyAny>> {
     let velocity_method_id = parse_velocity_method(velocity_method)?;
     let (ra, dec, times, obs) = triplet_inputs(&ra_deg, &dec_deg, &obs_times_mjd, &coords_obs)?;
     let output = py
-        .allow_threads(|| {
+        .detach(|| {
             gauss_iod_orbits_record_batch(
                 ra,
                 dec,
