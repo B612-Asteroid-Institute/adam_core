@@ -1,0 +1,7 @@
+adam\_core.photometry.color\_determination module
+=================================================
+
+.. automodule:: adam_core.photometry.color_determination
+   :members:
+   :show-inheritance:
+   :undoc-members:
