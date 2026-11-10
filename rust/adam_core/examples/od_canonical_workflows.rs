@@ -1,4 +1,4 @@
-//! Complete standalone Rust scenarios for the four canonical Core 0.7 OD workflows.
+//! Complete standalone Rust scenarios for the four canonical Core 0.8 OD workflows.
 //!
 //! The example constructs one- and multi-hypothesis batches, preserves overlap
 //! and source order, observes an isolated no-solution group between successful

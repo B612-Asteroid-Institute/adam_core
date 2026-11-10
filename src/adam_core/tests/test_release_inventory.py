@@ -28,7 +28,7 @@ def _git(repo: Path, *args: str) -> str:
 def test_native_artifact_build_identity_is_exact_clean_head() -> None:
     native = importlib.import_module("adam_core._rust_native")
     root = Path(__file__).resolve().parents[3]
-    assert native.build_identity() == ("0.7.0", _git(root, "rev-parse", "HEAD"))
+    assert native.build_identity() == ("0.8.0", _git(root, "rev-parse", "HEAD"))
 
 
 def _inventory_repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
@@ -61,7 +61,7 @@ def _inventory_repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 def _write_inspectable_wheel(path: Path) -> None:
     python_files = {
         "adam_core/__init__.py": b"VALUE = 1\n",
-        "adam_core/_version.py": b"__version__ = '0.7.0'\n",
+        "adam_core/_version.py": b"__version__ = '0.8.0'\n",
     }
     inventory = {
         "format": release_inventory.FORMAT,
@@ -83,11 +83,11 @@ def _write_inspectable_wheel(path: Path) -> None:
             "adam_core/_rust_native.cpython-312-aarch64-linux-gnu.so", b"ELF"
         )
         archive.writestr(
-            "adam_core-0.7.0.dist-info/METADATA",
-            "Metadata-Version: 2.4\nName: adam_core\nVersion: 0.7.0\n",
+            "adam_core-0.8.0.dist-info/METADATA",
+            "Metadata-Version: 2.4\nName: adam_core\nVersion: 0.8.0\n",
         )
         archive.writestr(
-            "adam_core-0.7.0.dist-info/WHEEL",
+            "adam_core-0.8.0.dist-info/WHEEL",
             "Wheel-Version: 1.0\n"
             "Generator: focused-test\n"
             "Root-Is-Purelib: false\n"
@@ -98,29 +98,29 @@ def _write_inspectable_wheel(path: Path) -> None:
 @pytest.mark.parametrize(
     "mutated_name",
     [
-        "Adam_Core-0.7.0-cp312-cp312-manylinux_2_39_aarch64.whl",
-        "ADAM_CORE-0.7.0-cp312-cp312-manylinux_2_39_aarch64.whl",
-        "adam_core-0.7.0-cp312-cp312-MANYLINUX_2_39_AARCH64.whl",
-        "adam_core-0.7.0-cp312-cp311-manylinux_2_39_aarch64.whl",
-        "adam_core-0.7.0-cp311-cp311-manylinux_2_39_aarch64.whl",
-        "adam_core-0.7.0-cp312-cp312-manylinux_2_39_x86_64.whl",
-        "adam_core-0.7.0-cp312-cp312-win_amd64.whl",
-        "adam_core-0.7.0-cp312-cp312-cc873d7f.whl",
-        "adam_core-0.7.0-cp312-cp312-manylinux_2_39_aarch64.zip.whl",
-        "adam_core-0.7.0-1-cp312-cp312-manylinux_2_39_aarch64.whl",
-        "adam_core-0.7.0-18e230cd-cp312-manylinux_2_39_aarch64.whl",
-        "adam_kore-0.7.0-cp312-cp312-manylinux_2_39_aarch64.whl",
+        "Adam_Core-0.8.0-cp312-cp312-manylinux_2_39_aarch64.whl",
+        "ADAM_CORE-0.8.0-cp312-cp312-manylinux_2_39_aarch64.whl",
+        "adam_core-0.8.0-cp312-cp312-MANYLINUX_2_39_AARCH64.whl",
+        "adam_core-0.8.0-cp312-cp311-manylinux_2_39_aarch64.whl",
+        "adam_core-0.8.0-cp311-cp311-manylinux_2_39_aarch64.whl",
+        "adam_core-0.8.0-cp312-cp312-manylinux_2_39_x86_64.whl",
+        "adam_core-0.8.0-cp312-cp312-win_amd64.whl",
+        "adam_core-0.8.0-cp312-cp312-cc873d7f.whl",
+        "adam_core-0.8.0-cp312-cp312-manylinux_2_39_aarch64.zip.whl",
+        "adam_core-0.8.0-1-cp312-cp312-manylinux_2_39_aarch64.whl",
+        "adam_core-0.8.0-18e230cd-cp312-manylinux_2_39_aarch64.whl",
+        "adam_kore-0.8.0-cp312-cp312-manylinux_2_39_aarch64.whl",
     ],
 )
 def test_wheel_checker_rejects_noncanonical_or_inconsistent_names(
     tmp_path: Path, mutated_name: str
 ) -> None:
-    canonical = tmp_path / "adam_core-0.7.0-cp312-cp312-manylinux_2_39_aarch64.whl"
+    canonical = tmp_path / "adam_core-0.8.0-cp312-cp312-manylinux_2_39_aarch64.whl"
     _write_inspectable_wheel(canonical)
     name, version, tags = _validated_wheel_filename(canonical)
-    assert (name, version) == ("adam-core", "0.7.0")
+    assert (name, version) == ("adam-core", "0.8.0")
     assert {str(tag) for tag in tags} == {"cp312-cp312-manylinux_2_39_aarch64"}
-    assert _inspect_wheel(canonical) == "0.7.0"
+    assert _inspect_wheel(canonical) == "0.8.0"
 
     mutated = tmp_path / mutated_name
     mutated.write_bytes(canonical.read_bytes())
@@ -129,9 +129,9 @@ def test_wheel_checker_rejects_noncanonical_or_inconsistent_names(
 
 
 def test_wheel_checker_rejects_wrong_version(tmp_path: Path) -> None:
-    canonical = tmp_path / "adam_core-0.7.0-cp312-cp312-manylinux_2_39_aarch64.whl"
+    canonical = tmp_path / "adam_core-0.8.0-cp312-cp312-manylinux_2_39_aarch64.whl"
     _write_inspectable_wheel(canonical)
-    wrong_version = tmp_path / "adam_core-0.7.1-cp312-cp312-manylinux_2_39_aarch64.whl"
+    wrong_version = tmp_path / "adam_core-0.8.1-cp312-cp312-manylinux_2_39_aarch64.whl"
     wrong_version.write_bytes(canonical.read_bytes())
     with pytest.raises(SystemExit, match="filename version.*METADATA version"):
         _inspect_wheel(wrong_version)

@@ -1,6 +1,6 @@
 [package]
 name = "adam_core_rs_kernel_data"
-version = "0.7.0"
+version = "0.8.0"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
@@ -26,7 +26,7 @@ icu_provider = { version = "=2.2.0", default-features = false }
 # only compressed method used by Python wheels.
 flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
 rawzip = "=0.5.2"
-adam_core_rs_spice = { version = "=0.7.0", path = "../adam_core_rs_spice", optional = true }
+adam_core_rs_spice = { version = "=0.8.0", path = "../adam_core_rs_spice", optional = true }
 
 [dev-dependencies]
 tempfile = "3"

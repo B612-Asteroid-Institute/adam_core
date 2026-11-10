@@ -883,9 +883,9 @@ def _tier1_exact_ref_failures() -> list[str]:
         '[[ "$ADAM_ASSIST_REF" =~ ^[0-9a-f]{40}$ ]]',
         'test "$(git -C dependent rev-parse HEAD)" = "$ADAM_ASSIST_REF"',
         "Validate requested dependent revision syntax",
-        "Verify dependent declares Core 0.7 compatibility",
+        "Verify dependent declares Core 0.8 compatibility",
         "pdm run python - <<'PY'",
-        'Version("0.7.0") in core[0].specifier',
+        'Version("0.8.0") in core[0].specifier',
     ):
         if required not in text:
             failures.append(f"Tier-1 exact-ref workflow is missing {required!r}")
@@ -901,7 +901,7 @@ def _tier1_exact_ref_failures() -> list[str]:
         "syntax": "Validate requested dependent revision syntax",
         "checkout": "Checkout requested dependent revision",
         "revision": "Verify exact dependent revision",
-        "metadata": "Verify dependent declares Core 0.7 compatibility",
+        "metadata": "Verify dependent declares Core 0.8 compatibility",
     }
     positions = {key: text.find(value) for key, value in step_names.items()}
     if all(position >= 0 for position in positions.values()):

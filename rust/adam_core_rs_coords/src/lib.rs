@@ -41,7 +41,7 @@ mod od_algorithms;
 mod od_batch;
 mod od_config;
 
-/// Rust-owned Core 0.7 orbit-determination configuration boundary.
+/// Rust-owned Core 0.8 orbit-determination configuration boundary.
 pub mod od {
     pub use crate::od_batch::{
         plan_associations, plan_orbit_members, AssociationGroup, OrbitMemberGroup,
