@@ -1,7 +1,7 @@
 Orbit determination
 ===================
 
-Core 0.7 has four canonical orbit-determination (OD) workflows. The Python and
+Core 0.8 has four canonical orbit-determination (OD) workflows. The Python and
 standalone Rust entry points call the same Rust orchestration:
 
 .. list-table:: Canonical OD workflows

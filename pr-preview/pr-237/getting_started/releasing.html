@@ -473,21 +473,19 @@ musllinux are not current release targets.</p>
 <h2>Stable release line<a class="headerlink" href="#stable-release-line" title="Link to this heading">¶</a></h2>
 <p>The current published baseline is <code class="docutils literal notranslate"><span class="pre">adam-core==0.7.0</span></code>, released on
 2026-11-06 as 12 CPython 3.11-3.13 PyPI wheels and six public Rust crates built
-against Arrow 54. Those files, crate versions, and the <code class="docutils literal notranslate"><span class="pre">v0.7.0</span></code> tag are
-immutable. This CPython 3.14/native-stack candidate cannot be published as
-<code class="docutils literal notranslate"><span class="pre">0.7.0</span></code>; it requires a separately authorized post-0.7 Python version. The
-intended aligned release boundary is <code class="docutils literal notranslate"><span class="pre">0.8.0</span></code>, but this candidate does not
-perform or authorize that version change.</p>
-<p><code class="docutils literal notranslate"><span class="pre">adam_core_rs_coords</span></code> directly exposes Arrow types, and the <code class="docutils literal notranslate"><span class="pre">adam_core</span></code>
-umbrella crate re-exports that API. Moving those public types from Arrow 54 to
-Arrow 58 is semver-breaking. The project’s exact internal requirements and
-aligned public-crate version policy therefore require all six public Rust
-crates to advance together to <code class="docutils literal notranslate"><span class="pre">0.8.0</span></code> before any crates.io publication. The
-source manifests and unpublished <code class="docutils literal notranslate"><span class="pre">adam_core_py</span></code> wheel implementation crate
-intentionally remain at <code class="docutils literal notranslate"><span class="pre">0.7.0</span></code> pending separate version-bump, review, and
-publication authorization; they are not publishable from this candidate. Rust
-1.87 is the authoritative MSRV; latest stable is compatibility-only. The
-Python wheel contains the Python veneer and compiled
+against Arrow 54. Its files, crate versions, and <code class="docutils literal notranslate"><span class="pre">v0.7.0</span></code> tag are immutable
+and must not be overwritten, deleted for replacement, or moved. Version 0.8.0
+adds CPython 3.14 and aligns the Python package, the unpublished
+<code class="docutils literal notranslate"><span class="pre">adam_core_py</span></code> wheel implementation crate, and all six public Rust crates.
+This 0.x minor release is required because public Arrow types move from Arrow 54
+to Arrow 58 and the Rust OD surface has breaking changes. The 0.8.0 changelog
+and expected <code class="docutils literal notranslate"><span class="pre">v0.8.0</span></code> tag use the release date 2026-11-10.</p>
+<p>Once published, 0.8.0 files, versions, and its tag have the same immutable
+policy. A correction after publication requires a new version and new tag; a
+publisher must never replace accepted bytes under an existing filename or crate
+version.</p>
+<p>Rust 1.87 remains the authoritative MSRV; latest stable is compatibility-only.
+The Python wheel contains the Python veneer and compiled
 <code class="docutils literal notranslate"><span class="pre">adam_core._rust_native</span></code> extension, so Python consumers do not install the
 component crates directly.</p>
 </section>
@@ -517,23 +515,20 @@ complete release matches the accepted bytes.</p>
 <p>Stable promotion remains separately approval-gated and proceeds in dependency
 order:</p>
 <ol class="arabic simple">
-<li><p>after separate version-bump authorization, align the Python distribution,
-unpublished <code class="docutils literal notranslate"><span class="pre">adam_core_py</span></code> implementation crate, and six public Rust
-crates on the intended <code class="docutils literal notranslate"><span class="pre">0.8.0</span></code> boundary without rewriting published
-<code class="docutils literal notranslate"><span class="pre">0.7.0</span></code> history;</p></li>
-<li><p>accept the exact 16-wheel Core Python matrix for that authorized post-0.7
-version with the same Core-owned checks on CPython 3.11-3.14; downstream
-projects validate their compatibility in separately reviewed changes;</p></li>
-<li><p>accept and publish the aligned six-crate Rust <code class="docutils literal notranslate"><span class="pre">0.8.0</span></code> set in dependency
-order;</p></li>
+<li><p>accept the exact 0.8.0 source candidate with aligned Python/Rust versions
+and stable publication guards;</p></li>
+<li><p>accept the exact 16-wheel Core matrix with the same Core-owned checks on
+CPython 3.11-3.14;</p></li>
+<li><p>publish and verify the aligned six-crate Rust 0.8.0 set in dependency order;</p></li>
 <li><p>publish and verify the exact Core Python wheel set; and</p></li>
 <li><p>run clean no-lock Cargo 1.87/latest-stable and clean pip/current-uv smoke
 tests from registry-only environments.</p></li>
 </ol>
-<p>Provider publication and compatibility policy belong to each provider’s own
-release process. A tag, GitHub release, protected-environment change,
-crates.io upload, or PyPI upload is a human approval boundary and is never
-performed as part of Core source preparation.</p>
+<p>After Core 0.8 is public, use the manual exact-ref workflow with the reviewed
+Assist candidate. Provider publication and compatibility policy belong to each
+provider’s own release process. A tag, GitHub release, protected-environment
+change, crates.io upload, or PyPI upload is a human approval boundary and is
+never performed as part of Core source preparation.</p>
 </section>
 </section>
 
@@ -609,7 +604,7 @@ performed as part of Core source preparation.</p>
       
     </aside>
   </div>
-</div><script src="../_static/documentation_options.js?v=b9678aa1"></script>
+</div><script src="../_static/documentation_options.js?v=cce5339e"></script>
     <script src="../_static/doctools.js?v=9bcbadda"></script>
     <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="../_static/scripts/furo.js?v=46bd48cc"></script>
