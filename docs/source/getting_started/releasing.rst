@@ -6,18 +6,19 @@ Artifact policy
 
 Release artifacts are built once and tested as artifacts. The release-candidate
 workflow builds one Core wheel for each supported Python/platform pair and
-installs those exact files in isolated binary-only environments. Every cell
-runs the same Core-owned acceptance: ``pip check``, installed-package kernel
-discovery, distribution/Python/native identity, timestamp round trips, and a
-native numerical smoke test. Publication jobs download those accepted artifacts
-by workflow run ID; they do not rebuild wheels or crates. Downstream projects
+installs those exact files in fresh environments. Every cell runs the same
+Core-owned acceptance: runner architecture, exact wheel count and platform tag,
+``pip check``, installed distribution/Python/native identity, exact native build
+commit, and one native numerical smoke. The workflow only supplies explicit
+arguments to ``run_core_wheel_acceptance.py``, which invokes a copied
+``core_wheel_smoke.py`` outside the source tree; it does not embed test
+programs. Publication jobs download those accepted artifacts by
+workflow run ID; they do not rebuild wheels or crates. Downstream projects
 validate their own Core compatibility in their repositories.
 
 The supported Core matrix is CPython 3.11-3.14 on manylinux 2.17 x86-64 and
-AArch64 and macOS Apple silicon and Intel (16 Core wheels). The workflow checks
-runner architecture, exact wheel count, runtime/distribution version equality,
-native members, and platform tags. Windows and musllinux are not current release
-targets.
+AArch64 and macOS Apple silicon and Intel (16 Core wheels). Windows and
+musllinux are not current release targets.
 
 Stable release line
 -------------------

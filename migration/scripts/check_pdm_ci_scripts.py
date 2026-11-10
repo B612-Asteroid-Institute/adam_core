@@ -634,6 +634,19 @@ def _release_workflow_failures(project: dict[str, Any]) -> list[str]:
                     "matrix.python-version in an if condition"
                 )
 
+        inline_python = re.compile(
+            r"(?<![A-Za-z0-9_])python(?:\d+(?:\.\d+)*)?\s+"
+            r"(?:-(?=\s|$)|-c(?=\s|$|['\"]))"
+        )
+        for step in steps:
+            run = step.get("run", "")
+            if "<<" in run or inline_python.search(run):
+                failures.append(
+                    "artifact acceptance run blocks must not embed shell heredocs "
+                    "or inline Python programs"
+                )
+                break
+
         core_steps = [
             step for step in steps if step.get("name") == "Run Core wheel acceptance"
         ]
@@ -646,66 +659,47 @@ def _release_workflow_failures(project: dict[str, Any]) -> list[str]:
             core_step = core_steps[0]
             if "if" in core_step:
                 failures.append("Core wheel acceptance step must be unconditional")
-            if "EXPECTED_PYTHON: ${{ matrix.python-version }}" not in core_step.get(
-                "env", ""
-            ):
-                failures.append(
-                    "Core wheel acceptance must bind expected runtime CPython "
-                    "from the matrix"
-                )
             normalized_run = " ".join(core_step.get("run", "").split())
-            core_checks = {
-                'test "${#core_wheels[@]}" -eq 1': "one built Core wheel",
-                '"$runtime_python" -m pip install "${core_wheels[0]}"': (
-                    "clean Core wheel installation"
-                ),
-                '"$runtime_python" -m pip check': "pip check",
-                "platform.python_version_tuple()[:2] != expected_python": (
-                    "expected runtime CPython"
-                ),
-                "distribution_version == adam_core.__version__ == native_version "
-                "== expected_version": "distribution/Python/native version identity",
-                'native_commit != os.environ["GITHUB_SHA"]': "exact native commit",
-                "kernel_paths = [Path(path).resolve() for path in DEFAULT_KERNELS]": (
-                    "installed-package kernel discovery"
-                ),
-                '"acceptance_mode": "core-wheel"': "Core acceptance report mode",
-            }
-            for token, description in core_checks.items():
-                if token not in normalized_run:
+            required_arguments = (
+                "python migration/scripts/run_core_wheel_acceptance.py",
+                '--python "$(command -v python)"',
+                '--wheelhouse "$GITHUB_WORKSPACE/wheelhouse"',
+                '--workspace "$RUNNER_TEMP/acceptance"',
+                '--report "$RUNNER_TEMP/acceptance-report.json"',
+                '--expected-python "${{ matrix.python-version }}"',
+                '--expected-version "$PYTHON_PREVIEW_VERSION"',
+                '--expected-commit "$GITHUB_SHA"',
+                '--expected-system "${{ matrix.platform.system }}"',
+                '--expected-wheel-tag "${{ matrix.platform.wheel_tag }}"',
+            )
+            for argument in required_arguments:
+                if normalized_run.count(argument) != 1:
                     failures.append(
-                        f"Core wheel acceptance must retain {description} check"
+                        "Core wheel acceptance must invoke the repository runner "
+                        f"with {argument!r} exactly once"
                     )
 
-        tag_steps = [
+        inspector_steps = [
             step
             for step in steps
-            if step.get("name") == "Verify platform wheel count and tags"
+            if step.get("name") == "Inspect adam-core wheel contents"
         ]
-        if len(tag_steps) != 1:
+        if len(inspector_steps) != 1:
             failures.append(
-                "artifact acceptance must contain one platform wheel count/tag step"
+                "artifact acceptance must contain one wheel-content inspection step"
             )
         else:
-            tag_step = tag_steps[0]
-            if "if" in tag_step:
-                failures.append("platform wheel count/tag step must be unconditional")
-            normalized_run = " ".join(tag_step.get("run", "").split())
-            tag_checks = {
-                'core = list(wheelhouse.glob("adam_core-*.whl"))': (
-                    "Core wheel inventory"
-                ),
-                "if len(core) != 1:": "exactly one accepted Core wheel",
-                'pattern = "*${{ matrix.platform.wheel_tag }}.whl"': (
-                    "matrix platform tag"
-                ),
-                "if not fnmatch.fnmatch(path.name, pattern)": "platform wheel tag",
-            }
-            for token, description in tag_checks.items():
-                if token not in normalized_run:
-                    failures.append(
-                        f"platform verification must retain {description} check"
-                    )
+            inspector_step = inspector_steps[0]
+            if "if" in inspector_step:
+                failures.append("wheel-content inspection step must be unconditional")
+            normalized_run = " ".join(inspector_step.get("run", "").split())
+            if (
+                "python migration/scripts/check_wheel_artifacts.py"
+                not in normalized_run
+            ):
+                failures.append(
+                    "wheel-content inspection must call check_wheel_artifacts.py"
+                )
 
         extended_coverage = text.split(extended_marker, 1)[1]
         extended_header, separator, _ = extended_coverage.partition("\n    steps:\n")

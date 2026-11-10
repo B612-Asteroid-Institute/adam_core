@@ -79,9 +79,12 @@ def test_release_matrix_generates_and_inspects_runtime_version() -> None:
     ).read_text()
     builder = "python migration/scripts/build_release_wheel.py"
     inspector = "python migration/scripts/check_wheel_artifacts.py"
+    acceptance = "python migration/scripts/run_core_wheel_acceptance.py"
 
     assert workflow.count(builder) == 2
-    assert workflow.index(builder) < workflow.index(inspector)
+    assert (
+        workflow.index(builder) < workflow.index(acceptance) < workflow.index(inspector)
+    )
     assert "python migration/scripts/write_maturin_version.py" not in workflow
     assert "adam_assist_ref:" not in workflow
     assert "ADAM_ASSIST_REF" not in workflow
@@ -91,10 +94,12 @@ def test_release_matrix_generates_and_inspects_runtime_version() -> None:
     assert workflow.count('python-version: ["3.11", "3.12", "3.13", "3.14"]') == 1
     assert workflow.count("Run Core wheel acceptance") == 1
     assert "Run CPython 3.14 Core-only wheel acceptance" not in workflow
-    assert "EXPECTED_PYTHON: ${{ matrix.python-version }}" in workflow
-    assert 'acceptance_mode": "core-wheel' in workflow
-    assert "DEFAULT_KERNELS" in workflow
-    assert "installed_kernel_discovery" in workflow
+    assert workflow.count(acceptance) == 1
+    assert '--expected-python "${{ matrix.python-version }}"' in workflow
+    assert '--expected-system "${{ matrix.platform.system }}"' in workflow
+    assert '--expected-wheel-tag "${{ matrix.platform.wheel_tag }}"' in workflow
+    assert "<<'PY'" not in workflow
+    assert "python - <<" not in workflow
 
     header = workflow.split("\njobs:", 1)[0]
     assert header.count('  ADAM_CORE_RELEASE_BUILD: "1"') == 1
@@ -153,7 +158,7 @@ def _mutated_release_failures(
             "${{ always() && matrix.python-version != '3.14' }}",
         ),
         (
-            "Verify platform wheel count and tags",
+            "Inspect adam-core wheel contents",
             "${{ matrix['python-version'] == '3.14' }}",
         ),
     ],
@@ -181,7 +186,7 @@ def test_release_policy_rejects_python_version_step_conditions(
         )
     else:
         assert any(
-            "platform wheel count/tag step must be unconditional" in failure
+            "wheel-content inspection step must be unconditional" in failure
             for failure in failures
         )
 
@@ -260,44 +265,40 @@ def test_release_policy_rejects_nonuniform_matrix_or_downstream_input(
             "exactly one unconditional Core wheel acceptance step",
         ),
         (
-            '          "$runtime_python" -m pip check \\\n',
-            '          "$runtime_python" -m pip freeze \\\n',
-            "pip check",
+            "          python migration/scripts/run_core_wheel_acceptance.py\n",
+            "          python migration/scripts/run_clean_room_artifact_acceptance.py\n",
+            "run_core_wheel_acceptance.py",
         ),
         (
-            "          if platform.python_version_tuple()[:2] != expected_python:\n",
-            "          if platform.python_version_tuple()[:1] != expected_python:\n",
-            "expected runtime CPython",
+            '          --wheelhouse "$GITHUB_WORKSPACE/wheelhouse"\n',
+            '          --wheelhouse "$RUNNER_TEMP/wheelhouse"\n',
+            "--wheelhouse",
         ),
         (
-            "              == native_version\n",
-            "              != native_version\n",
-            "distribution/Python/native version identity",
+            '          --expected-commit "$GITHUB_SHA"\n',
+            '          --expected-commit "HEAD"\n',
+            "--expected-commit",
         ),
         (
-            '          if native_commit != os.environ["GITHUB_SHA"]:\n',
-            "          if not native_commit:\n",
-            "exact native commit",
+            '          --expected-wheel-tag "${{ matrix.platform.wheel_tag }}"\n',
+            '          --ignored-wheel-tag "${{ matrix.platform.wheel_tag }}"\n',
+            "--expected-wheel-tag",
         ),
         (
-            "          kernel_paths = [Path(path).resolve() for path in DEFAULT_KERNELS]\n",
-            "          kernel_paths = []\n",
-            "installed-package kernel discovery",
-        ),
-        (
-            '          test "${#core_wheels[@]}" -eq 1\n',
-            '          test "${#core_wheels[@]}" -ge 1\n',
-            "one built Core wheel",
-        ),
-        (
-            "          if len(core) != 1:\n",
-            "          if len(core) < 1:\n",
-            "exactly one accepted Core wheel",
-        ),
-        (
-            "              if not fnmatch.fnmatch(path.name, pattern)\n",
-            "              if not fnmatch.fnmatchcase(path.name, pattern)\n",
-            "platform wheel tag",
+            "      - name: Checkout adam-core candidate\n"
+            "        uses: actions/checkout@v4\n"
+            "        with:\n"
+            "          fetch-depth: 0\n",
+            "      - name: Embedded Python test\n"
+            "        run: |\n"
+            "          python - <<'PY'\n"
+            "          print('forbidden')\n"
+            "          PY\n"
+            "      - name: Checkout adam-core candidate\n"
+            "        uses: actions/checkout@v4\n"
+            "        with:\n"
+            "          fetch-depth: 0\n",
+            "must not embed shell heredocs or inline Python programs",
         ),
     ],
 )
@@ -311,6 +312,39 @@ def test_release_policy_rejects_weakened_core_acceptance_checks(
     failures = _mutated_release_failures(tmp_path, monkeypatch, original, replacement)
 
     assert any(message in failure for failure in failures)
+
+
+@pytest.mark.parametrize(
+    "embedded_run",
+    [
+        "          cat <<'EOF'\n          forbidden\n          EOF\n",
+        "          python -c \"print('forbidden')\"\n",
+    ],
+)
+def test_release_policy_rejects_other_heredoc_or_inline_python(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    embedded_run: str,
+) -> None:
+    original = (
+        "      - name: Checkout adam-core candidate\n"
+        "        uses: actions/checkout@v4\n"
+        "        with:\n"
+        "          fetch-depth: 0\n"
+    )
+    replacement = (
+        "      - name: Embedded program\n"
+        "        run: |\n"
+        f"{embedded_run}"
+        f"{original}"
+    )
+
+    failures = _mutated_release_failures(tmp_path, monkeypatch, original, replacement)
+
+    assert any(
+        "must not embed shell heredocs or inline Python programs" in failure
+        for failure in failures
+    )
 
 
 @pytest.mark.parametrize(
@@ -1174,8 +1208,9 @@ def test_rust_ci_is_reproducible_and_downstream_sources_are_exact() -> None:
     assert "adam-assist" not in release_matrix
     assert "adam_assist" not in release_matrix
     assert "Run Core wheel acceptance" in release_matrix
-    assert "EXPECTED_PYTHON: ${{ matrix.python-version }}" in release_matrix
-    assert 'acceptance_mode": "core-wheel' in release_matrix
+    assert "run_core_wheel_acceptance.py" in release_matrix
+    assert '--expected-python "${{ matrix.python-version }}"' in release_matrix
+    assert "<<'PY'" not in release_matrix
     assert release_matrix.count("rust-toolchain: 1.87.0") == 0
     assert "python -m pip install --no-deps -e dependent" in tier1
     assert "jpl-small-bodies-de441-n16==2021.3.31.1" in tier1

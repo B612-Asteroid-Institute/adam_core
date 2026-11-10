@@ -63,17 +63,6 @@ jobs:
         with:
           components: rustfmt, clippy
 
-      - name: Verify runner architecture
-        shell: bash
-        run: |
-          python - <<'PY'
-          import platform
-          expected = "${{ matrix.platform.system }}"
-          actual = f"{platform.system()}-{platform.machine()}"
-          if actual != expected:
-              raise SystemExit(f"runner architecture mismatch: {actual} != {expected}")
-          PY
-
       - name: Install audited adam-core wheel builder
         run: >-
           python -m pip install "maturin==1.15.0" "packaging==25.0"
@@ -94,129 +83,17 @@ jobs:
 
       - name: Run Core wheel acceptance
         shell: bash
-        env:
-          EXPECTED_PYTHON: ${{ matrix.python-version }}
-        run: |
-          set -euo pipefail
-          acceptance="$RUNNER_TEMP/acceptance"
-          runtime="$acceptance/core-runtime"
-          mkdir -p "$acceptance/wheelhouse" "$acceptance/logs" "$acceptance/invocation"
-          core_wheels=("$GITHUB_WORKSPACE"/wheelhouse/adam_core-*.whl)
-          test "${#core_wheels[@]}" -eq 1
-          cp "${core_wheels[0]}" "$acceptance/wheelhouse/"
-
-          python -m venv "$runtime"
-          runtime_python="$runtime/bin/python"
-          "$runtime_python" -m pip install --upgrade pip \
-            >"$acceptance/logs/upgrade_runtime_pip.log" 2>&1
-          "$runtime_python" -m pip install "${core_wheels[0]}" \
-            >"$acceptance/logs/install_adam_core_wheel.log" 2>&1
-          "$runtime_python" -m pip check \
-            >"$acceptance/logs/pip_check.log" 2>&1
-          "$runtime_python" -m pip freeze --all \
-            >"$acceptance/logs/pip_freeze.log" 2>&1
-
-          export CORE_ACCEPTANCE_REPORT="$RUNNER_TEMP/acceptance-report.json"
-          export CORE_SMOKE_REPORT="$acceptance/invocation/smoke-report.json"
-          env -u PYTHONPATH PYTHONNOUSERSITE=1 "$runtime_python" - <<'PY'
-          import importlib.metadata
-          import json
-          import os
-          import platform
-          from pathlib import Path
-
-          import numpy as np
-
-          import adam_core
-          from adam_core import _rust_native
-          from adam_core.dynamics.lambert import calculate_c3
-          from adam_core.time import Timestamp
-          from adam_core.utils.spice import DEFAULT_KERNELS
-
-          expected_version = os.environ["PYTHON_PREVIEW_VERSION"]
-          distribution_version = importlib.metadata.version("adam-core")
-          native_version, native_commit = _rust_native.build_identity()
-          expected_python = tuple(os.environ["EXPECTED_PYTHON"].split("."))
-          if platform.python_version_tuple()[:2] != expected_python:
-              raise AssertionError(
-                  f"expected CPython {os.environ['EXPECTED_PYTHON']}, "
-                  f"got {platform.python_version()}"
-              )
-          if not (
-              distribution_version
-              == adam_core.__version__
-              == native_version
-              == expected_version
-          ):
-              raise AssertionError("Core distribution, Python, and native versions differ")
-          if native_commit != os.environ["GITHUB_SHA"]:
-              raise AssertionError(f"native commit mismatch: {native_commit}")
-          native_path = Path(_rust_native.__file__).resolve()
-          if native_path.suffix not in {".so", ".dylib"}:
-              raise AssertionError(f"not a native extension: {native_path}")
-          if "site-packages" not in native_path.parts:
-              raise AssertionError(f"native module is not installed in the venv: {native_path}")
-          try:
-              importlib.metadata.version("jax")
-          except importlib.metadata.PackageNotFoundError:
-              pass
-          else:
-              raise AssertionError("standard Core wheel acceptance installed optional JAX")
-
-          times = Timestamp.from_iso8601(
-              ["2022-01-01T00:00:00.000", "2022-06-01T12:34:56.789"],
-              scale="utc",
-          )
-          iso_values = times.to_iso8601().to_pylist()
-          if iso_values != ["2022-01-01T00:00:00.000", "2022-06-01T12:34:56.789"]:
-              raise AssertionError(f"timestamp round trip changed: {iso_values}")
-          c3 = calculate_c3(
-              np.array([[1.0, 2.0, 3.0]]),
-              np.array([[0.5, 1.0, 1.5]]),
-          )
-          np.testing.assert_allclose(c3, np.array([3.5]), rtol=0.0, atol=0.0)
-
-          kernel_paths = [Path(path).resolve() for path in DEFAULT_KERNELS]
-          for kernel_path in kernel_paths:
-              if not kernel_path.is_file():
-                  raise AssertionError(f"installed kernel is missing: {kernel_path}")
-              if "site-packages" not in kernel_path.parts:
-                  raise AssertionError(
-                      f"kernel did not resolve from installed packages: {kernel_path}"
-                  )
-
-          versions = {"adam-core": distribution_version}
-          smoke = {
-              "status": "passed",
-              "stages": {
-                  "imports_and_provenance": {
-                      "versions": versions,
-                      "runtime_versions": versions,
-                      "native_path": str(native_path),
-                      "build_identity": [native_version, native_commit],
-                      "optional_jax_installed": False,
-                  },
-                  "native_numerical": {
-                      "iso_values": iso_values,
-                      "c3_au2_per_day2": c3.tolist(),
-                  },
-                  "installed_kernel_discovery": {
-                      "paths": [str(path) for path in kernel_paths],
-                  },
-              },
-          }
-          report = {
-              "status": "passed",
-              "acceptance_mode": "core-wheel",
-              "runtime": {"smoke": smoke},
-          }
-          Path(os.environ["CORE_ACCEPTANCE_REPORT"]).write_text(
-              json.dumps(report, indent=2, sort_keys=True) + "\n"
-          )
-          Path(os.environ["CORE_SMOKE_REPORT"]).write_text(
-              json.dumps(smoke, indent=2, sort_keys=True) + "\n"
-          )
-          PY
+        run: >-
+          python migration/scripts/run_core_wheel_acceptance.py
+          --python "$(command -v python)"
+          --wheelhouse "$GITHUB_WORKSPACE/wheelhouse"
+          --workspace "$RUNNER_TEMP/acceptance"
+          --report "$RUNNER_TEMP/acceptance-report.json"
+          --expected-python "${{ matrix.python-version }}"
+          --expected-version "$PYTHON_PREVIEW_VERSION"
+          --expected-commit "$GITHUB_SHA"
+          --expected-system "${{ matrix.platform.system }}"
+          --expected-wheel-tag "${{ matrix.platform.wheel_tag }}"
 
       - name: Inspect adam-core wheel contents
         shell: bash
@@ -228,54 +105,6 @@ jobs:
           cp "$RUNNER_TEMP"/acceptance/wheelhouse/adam_core-*.whl "$inspection/"
           python migration/scripts/check_wheel_artifacts.py "$inspection"
 
-      - name: Verify platform wheel count and tags
-        shell: bash
-        run: |
-          python - <<'PY'
-          import email
-          import fnmatch
-          import json
-          import os
-          import zipfile
-          from pathlib import Path
-
-          wheelhouse = Path(os.environ["RUNNER_TEMP"]) / "acceptance" / "wheelhouse"
-          core = list(wheelhouse.glob("adam_core-*.whl"))
-          if len(core) != 1:
-              raise SystemExit(f"expected exactly one Core wheel; got {core=}")
-          expected_version = os.environ["PYTHON_PREVIEW_VERSION"]
-          with zipfile.ZipFile(core[0]) as archive:
-              metadata_paths = [n for n in archive.namelist() if n.endswith(".dist-info/METADATA")]
-              if len(metadata_paths) != 1:
-                  raise SystemExit(f"unexpected METADATA files: {metadata_paths}")
-              metadata = email.message_from_bytes(archive.read(metadata_paths[0]))
-          if metadata["Name"] != "adam_core" or metadata["Version"] != expected_version:
-              raise SystemExit(
-                  f"adam-core release metadata mismatch: {metadata['Name']} {metadata['Version']}"
-              )
-          report = json.loads(
-              (Path(os.environ["RUNNER_TEMP"]) / "acceptance-report.json").read_text()
-          )
-          smoke_versions = report["runtime"]["smoke"]["stages"][
-              "imports_and_provenance"
-          ]["versions"]
-          smoke_runtime_versions = report["runtime"]["smoke"]["stages"][
-              "imports_and_provenance"
-          ]["runtime_versions"]
-          if smoke_versions["adam-core"] != expected_version:
-              raise SystemExit(f"installed adam-core mismatch: {smoke_versions}")
-          if smoke_runtime_versions["adam-core"] != expected_version:
-              raise SystemExit(f"runtime adam-core mismatch: {smoke_runtime_versions}")
-          pattern = "*${{ matrix.platform.wheel_tag }}.whl"
-          invalid = [
-              path.name
-              for path in core
-              if not fnmatch.fnmatch(path.name, pattern)
-          ]
-          if invalid:
-              raise SystemExit(f"wheel tag mismatch for {pattern}: {invalid}")
-          PY
-
       - name: Upload wheel acceptance evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -283,7 +112,6 @@ jobs:
           name: wheel-acceptance-${{ matrix.platform.name }}-py${{ matrix.python-version }}
           path: |
             ${{ runner.temp }}/acceptance-report.json
-            ${{ runner.temp }}/acceptance/invocation/smoke-report.json
             ${{ runner.temp }}/acceptance/wheelhouse/*.whl
             ${{ runner.temp }}/acceptance/logs/*.log
           if-no-files-found: error

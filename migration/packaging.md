@@ -65,10 +65,13 @@ Last updated: 2026-11-09.
   branch protection and rulesets if repository policy changes.
 - The release-candidate wheel matrix remains a separate manually dispatched
   workflow. It builds and cleanly accepts one Core wheel for every CPython
-  3.11-3.14 and supported-platform cell with identical Core-owned checks.
-  Assist and other downstream projects validate Core compatibility in their
-  own repositories; they are not built or lock-patched by the Core release
-  matrix.
+  3.11-3.14 and supported-platform cell with identical Core-owned checks. The
+  workflow delegates fresh-venv installation, identity, platform-tag, and native
+  smoke validation to the dedicated `run_core_wheel_acceptance.py` and copied
+  `core_wheel_smoke.py` scripts rather than embedding test programs in YAML.
+  Assist and other downstream
+  projects validate Core compatibility in their own repositories; they are not
+  built or lock-patched by the Core release matrix.
 
 ## Expected Validation Shape
 
