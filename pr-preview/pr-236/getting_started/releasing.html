@@ -454,17 +454,18 @@
 <h2>Artifact policy<a class="headerlink" href="#artifact-policy" title="Link to this heading">¶</a></h2>
 <p>Release artifacts are built once and tested as artifacts. The release-candidate
 workflow builds one Core wheel for each supported Python/platform pair and
-installs those exact files in isolated binary-only environments. Every cell
-runs the same Core-owned acceptance: <code class="docutils literal notranslate"><span class="pre">pip</span> <span class="pre">check</span></code>, installed-package kernel
-discovery, distribution/Python/native identity, timestamp round trips, and a
-native numerical smoke test. Publication jobs download those accepted artifacts
-by workflow run ID; they do not rebuild wheels or crates. Downstream projects
+installs those exact files in fresh environments. Every cell runs the same
+Core-owned acceptance: runner architecture, exact wheel count and platform tag,
+<code class="docutils literal notranslate"><span class="pre">pip</span> <span class="pre">check</span></code>, installed distribution/Python/native identity, exact native build
+commit, and one native numerical smoke. The workflow only supplies explicit
+arguments to <code class="docutils literal notranslate"><span class="pre">run_core_wheel_acceptance.py</span></code>, which invokes a copied
+<code class="docutils literal notranslate"><span class="pre">core_wheel_smoke.py</span></code> outside the source tree; it does not embed test
+programs. Publication jobs download those accepted artifacts by
+workflow run ID; they do not rebuild wheels or crates. Downstream projects
 validate their own Core compatibility in their repositories.</p>
 <p>The supported Core matrix is CPython 3.11-3.14 on manylinux 2.17 x86-64 and
-AArch64 and macOS Apple silicon and Intel (16 Core wheels). The workflow checks
-runner architecture, exact wheel count, runtime/distribution version equality,
-native members, and platform tags. Windows and musllinux are not current release
-targets.</p>
+AArch64 and macOS Apple silicon and Intel (16 Core wheels). Windows and
+musllinux are not current release targets.</p>
 </section>
 <section id="stable-release-line">
 <h2>Stable release line<a class="headerlink" href="#stable-release-line" title="Link to this heading">¶</a></h2>
@@ -569,7 +570,7 @@ performed as part of Core source preparation.</p>
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-11-09</div>
+              Last updated on 2026-11-10</div>
           </div>
           <div class="right-details">
             
