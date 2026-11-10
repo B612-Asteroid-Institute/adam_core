@@ -4,7 +4,7 @@ version = 4
 
 [[package]]
 name = "adam_core"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "adam_core_rs_autodiff",
  "adam_core_rs_coords",
@@ -18,7 +18,7 @@ dependencies = [
 
 [[package]]
 name = "adam_core_py"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "adam_core",
  "adam_core_rs_coords",
@@ -44,11 +44,11 @@ dependencies = [
 
 [[package]]
 name = "adam_core_rs_autodiff"
-version = "0.7.0"
+version = "0.8.0"
 
 [[package]]
 name = "adam_core_rs_coords"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "adam_core_rs_autodiff",
  "adam_core_rs_orbit_determination",
@@ -70,7 +70,7 @@ dependencies = [
 
 [[package]]
 name = "adam_core_rs_kernel_data"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "adam_core_rs_spice",
  "flate2",
@@ -86,11 +86,11 @@ dependencies = [
 
 [[package]]
 name = "adam_core_rs_orbit_determination"
-version = "0.7.0"
+version = "0.8.0"
 
 [[package]]
 name = "adam_core_rs_spice"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "adam_core_rs_coords",
  "faer",

@@ -1,8 +1,8 @@
 name: Tier-1 Exact-Ref Compatibility
 
-# Core 0.7 intentionally lands before a compatible Assist release. Until a
-# separately reviewed Assist candidate exists, this is manual-only and makes
-# no scheduled or pull-request compatibility claim.
+# Core 0.8 lands before the compatible Assist release. Until a separately
+# reviewed Assist candidate exists, this is manual-only and makes no scheduled
+# or pull-request compatibility claim.
 on:
   workflow_dispatch:
     inputs:
@@ -54,7 +54,7 @@ jobs:
         run: |
           set -euo pipefail
           test "$(git -C dependent rev-parse HEAD)" = "$ADAM_ASSIST_REF"
-      - name: Verify dependent declares Core 0.7 compatibility
+      - name: Verify dependent declares Core 0.8 compatibility
         run: |
           pdm run python - <<'PY'
           import tomllib
@@ -70,7 +70,7 @@ jobs:
               and requirement.marker is None
           ]
           assert len(core) == 1, core
-          assert Version("0.7.0") in core[0].specifier, core[0]
+          assert Version("0.8.0") in core[0].specifier, core[0]
           PY
       - name: Build reference propagator in the Core test environment
         env:
@@ -100,7 +100,7 @@ jobs:
           import adam_core
           from adam_assist.version import __version__ as assist_version
 
-          assert version("adam-core") == adam_core.__version__ == "0.7.0"
+          assert version("adam-core") == adam_core.__version__ == "0.8.0"
           assert version("adam-assist") == assist_version
           PY
       - name: Run dependent import smoke
@@ -115,7 +115,7 @@ jobs:
           import adam_core
           from adam_assist.version import __version__ as assist_version
 
-          assert version("adam-core") == adam_core.__version__ == "0.7.0"
+          assert version("adam-core") == adam_core.__version__ == "0.8.0"
           assert version("adam-assist") == assist_version
           PY
       - name: Run Core integration tests with the reference propagator

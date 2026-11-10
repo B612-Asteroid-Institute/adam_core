@@ -4,7 +4,7 @@ Orbit Determination Pipeline (Moved)
 ====================================
 
 This guide was merged into :doc:`../use_cases/orbit_determination`, the single
-authoritative guide for Core 0.7 canonical OD. It documents:
+authoritative guide for Core 0.8 canonical OD. It documents:
 
 * Python and standalone Rust ``run_iod``, ``run_od``, ``refine``, and
   ``evaluate_orbits`` workflows;

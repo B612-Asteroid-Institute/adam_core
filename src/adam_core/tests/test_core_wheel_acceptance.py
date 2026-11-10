@@ -23,7 +23,7 @@ def _runner_arguments(tmp_path: Path) -> list[str]:
         "--expected-python",
         "3.14",
         "--expected-version",
-        "0.7.0",
+        "0.8.0",
         "--expected-commit",
         "a" * 40,
         "--expected-system",
@@ -67,7 +67,7 @@ def test_builder_python_mismatch_fails_before_workspace_creation(
 def test_selects_exactly_one_wheel_with_expected_platform_tag(
     tmp_path: Path,
 ) -> None:
-    wheel = tmp_path / "adam_core-0.7.0-cp314-cp314-manylinux_2_17_x86_64.whl"
+    wheel = tmp_path / "adam_core-0.8.0-cp314-cp314-manylinux_2_17_x86_64.whl"
     wheel.touch()
     assert (
         run_core_wheel_acceptance._select_core_wheel(tmp_path, "manylinux*x86_64")
@@ -77,13 +77,13 @@ def test_selects_exactly_one_wheel_with_expected_platform_tag(
     with pytest.raises(AssertionError, match="wheel tag mismatch"):
         run_core_wheel_acceptance._select_core_wheel(tmp_path, "macosx*arm64")
 
-    (tmp_path / "adam_core-0.7.0-cp313-cp313-manylinux_2_17_x86_64.whl").touch()
+    (tmp_path / "adam_core-0.8.0-cp313-cp313-manylinux_2_17_x86_64.whl").touch()
     with pytest.raises(AssertionError, match="expected one adam_core wheel"):
         run_core_wheel_acceptance._select_core_wheel(tmp_path, "manylinux*x86_64")
 
 
 def test_wheel_sha256_is_content_derived(tmp_path: Path) -> None:
-    wheel = tmp_path / "adam_core-0.7.0-cp314-cp314-manylinux_x86_64.whl"
+    wheel = tmp_path / "adam_core-0.8.0-cp314-cp314-manylinux_x86_64.whl"
     wheel.write_bytes(b"wheel bytes")
     assert (
         run_core_wheel_acceptance._sha256(wheel)
@@ -123,10 +123,10 @@ def _valid_runtime_identity(site_packages: Path) -> dict[str, object]:
     return {
         "expected_python": "3.14",
         "actual_python": "3.14",
-        "expected_version": "0.7.0",
-        "distribution_version": "0.7.0",
-        "python_package_version": "0.7.0",
-        "native_version": "0.7.0",
+        "expected_version": "0.8.0",
+        "distribution_version": "0.8.0",
+        "python_package_version": "0.8.0",
+        "native_version": "0.8.0",
         "expected_commit": "a" * 40,
         "native_commit": "a" * 40,
         "package_path": site_packages / "adam_core" / "__init__.py",
@@ -143,10 +143,10 @@ def test_runtime_identity_requires_installed_paths_python_versions_and_commit(
 
     mutations = (
         ("actual_python", "3.13", "expected CPython"),
-        ("expected_version", "0.7.1", "versions differ"),
-        ("distribution_version", "0.7.1", "versions differ"),
-        ("python_package_version", "0.7.1", "versions differ"),
-        ("native_version", "0.7.1", "versions differ"),
+        ("expected_version", "0.8.1", "versions differ"),
+        ("distribution_version", "0.8.1", "versions differ"),
+        ("python_package_version", "0.8.1", "versions differ"),
+        ("native_version", "0.8.1", "versions differ"),
         ("native_commit", "b" * 40, "native commit mismatch"),
         ("package_path", tmp_path / "source" / "__init__.py", "site-packages"),
         ("native_path", tmp_path / "source" / "_rust_native.so", "site-packages"),
@@ -182,13 +182,13 @@ def test_smoke_creates_one_self_contained_report(tmp_path: Path) -> None:
     report_path = tmp_path / "acceptance-report.json"
     assert not report_path.exists()
     report = core_wheel_smoke._acceptance_report(
-        wheel_filename="adam_core-0.7.0-cp314-cp314-manylinux_x86_64.whl",
+        wheel_filename="adam_core-0.8.0-cp314-cp314-manylinux_x86_64.whl",
         wheel_sha256="f" * 64,
         python_runtime="3.14.4",
         platform_system="Linux-x86_64",
-        distribution_version="0.7.0",
-        python_package_version="0.7.0",
-        native_version="0.7.0",
+        distribution_version="0.8.0",
+        python_package_version="0.8.0",
+        native_version="0.8.0",
         native_commit="a" * 40,
         package_path=Path("/venv/site-packages/adam_core/__init__.py"),
         native_path=Path("/venv/site-packages/adam_core/_rust_native.so"),

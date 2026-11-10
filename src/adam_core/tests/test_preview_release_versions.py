@@ -37,6 +37,7 @@ SPEC.loader.exec_module(MODULE)
         ("0.5.8", "0.5.8"),
         ("0.6.0", "0.6.0"),
         ("0.7.0", "0.7.0"),
+        ("0.8.0", "0.8.0"),
     ],
 )
 def test_cargo_version_to_pep440(cargo: str, python: str) -> None:
@@ -53,17 +54,17 @@ def test_cargo_version_to_pep440_rejects_unsupported_forms(version: str) -> None
 
 
 def test_python_tag_validation_uses_the_python_release_line() -> None:
-    assert MODULE._python_version_tag_glob("0.7.0") == "v0.7.*"
+    assert MODULE._python_version_tag_glob("0.8.0") == "v0.8.*"
 
 
 def test_stable_release_versions_align_python_and_public_rust_crates() -> None:
-    verify_preview_versions.verify(ROOT, "0.7.0", "0.7.0", "stable")
+    verify_preview_versions.verify(ROOT, "0.8.0", "0.8.0", "stable")
     with pytest.raises(ValueError, match="not a prerelease"):
-        verify_preview_versions.verify(ROOT, "0.7.0", "0.7.0", "preview")
+        verify_preview_versions.verify(ROOT, "0.8.0", "0.8.0", "preview")
 
 
 def test_runtime_versions_must_match_distribution_metadata() -> None:
-    versions = {"adam-core": "0.7.0", "adam-assist": "0.5.0"}
+    versions = {"adam-core": "0.8.0", "adam-assist": "0.5.0"}
     assert _validate_runtime_versions(versions, versions.copy()) == versions
 
     with pytest.raises(AssertionError, match="runtime package version mismatch"):
@@ -90,7 +91,7 @@ def test_release_matrix_generates_and_inspects_runtime_version() -> None:
     assert "ADAM_ASSIST_REF" not in workflow
     assert "adam-assist" not in workflow
     assert "adam_assist" not in workflow
-    assert 'PYTHON_PREVIEW_VERSION: "0.7.0"' in workflow
+    assert 'PYTHON_PREVIEW_VERSION: "0.8.0"' in workflow
     assert workflow.count('python-version: ["3.11", "3.12", "3.13", "3.14"]') == 1
     assert workflow.count("Run Core wheel acceptance") == 1
     assert "Run CPython 3.14 Core-only wheel acceptance" not in workflow
@@ -617,11 +618,11 @@ def test_kernel_data_constrains_icu_for_clean_rust_1_87_consumers() -> None:
     )
     assert workflow.count("name: Set up supported PyO3 build interpreter") == 2
     assert workflow.count(f"uses: {setup_python}") == 2
-    assert workflow.count('python-version: "3.13"') == 2
+    assert workflow.count('python-version: "3.14"') == 2
     package_job, latest_job = workflow.split("  latest-stable-compatibility:", 1)
     for job in (package_job, latest_job):
         assert job.count(setup_python) == 1
-        assert job.count('python-version: "3.13"') == 1
+        assert job.count('python-version: "3.14"') == 1
         assert job.index(setup_python) < job.index("dtolnay/rust-toolchain@")
         assert job.index(setup_python) < job.index("cargo ")
     assert "PYO3_USE_ABI3_FORWARD_COMPATIBILITY" not in workflow
@@ -646,8 +647,8 @@ def test_kernel_data_constrains_icu_for_clean_rust_1_87_consumers() -> None:
     )
 
     publisher = (ROOT / ".github/workflows/publish-crates.yml").read_text()
-    assert "default: 0.7.0" in publisher
-    assert 'PYTHON_SOURCE_VERSION: "0.7.0"' in publisher
+    assert "default: 0.8.0" in publisher
+    assert 'PYTHON_SOURCE_VERSION: "0.8.0"' in publisher
     assert "environment: crates-io" in publisher
     assert "--channel stable" in publisher
     assert (
@@ -734,7 +735,7 @@ def test_downstream_core_lock_refresh_is_one_targeted_transaction(
     def fake_check_call(command: list[str], **_: object) -> None:
         commands.append(command)
         after = [
-            *_core_packages("0.7.0"),
+            *_core_packages("0.8.0"),
             _package("unrelated", "1.0.0"),
             _package("rawzip", "0.5.2"),
         ]
@@ -747,7 +748,7 @@ def test_downstream_core_lock_refresh_is_one_targeted_transaction(
         develop_downstream_adam_assist.subprocess, "check_call", fake_check_call
     )
     monkeypatch.setattr(
-        develop_downstream_adam_assist, "_current_core_version", lambda: "0.7.0"
+        develop_downstream_adam_assist, "_current_core_version", lambda: "0.8.0"
     )
 
     develop_downstream_adam_assist._refresh_core_lock(tmp_path, {})
@@ -768,7 +769,7 @@ def test_downstream_core_lock_generation_supports_initial_absence(
     def fake_check_call(command: list[str], **_: object) -> None:
         commands.append(command)
         assert (tmp_path / ".cargo" / "config.toml").is_file()
-        _write_assist_lock(lock, _core_packages("0.7.0"))
+        _write_assist_lock(lock, _core_packages("0.8.0"))
 
     monkeypatch.setattr(
         develop_downstream_adam_assist.shutil, "which", lambda _: "/cargo"
@@ -777,7 +778,7 @@ def test_downstream_core_lock_generation_supports_initial_absence(
         develop_downstream_adam_assist.subprocess, "check_call", fake_check_call
     )
     monkeypatch.setattr(
-        develop_downstream_adam_assist, "_current_core_version", lambda: "0.7.0"
+        develop_downstream_adam_assist, "_current_core_version", lambda: "0.8.0"
     )
 
     prepared = develop_downstream_adam_assist._prepare_downstream(tmp_path, {})
@@ -805,7 +806,7 @@ def test_generated_lock_validation_failure_restores_initial_absence(
     mutation: str,
 ) -> None:
     manifest, lock = _write_assist_manifest(tmp_path)
-    generated = _core_packages("0.7.0")
+    generated = _core_packages("0.8.0")
     if mutation == "missing":
         generated.pop()
     elif mutation == "duplicate":
@@ -834,10 +835,10 @@ def test_generated_lock_validation_failure_restores_initial_absence(
         develop_downstream_adam_assist.subprocess, "check_call", fake_check_call
     )
     monkeypatch.setattr(
-        develop_downstream_adam_assist, "_current_core_version", lambda: "0.7.0"
+        develop_downstream_adam_assist, "_current_core_version", lambda: "0.8.0"
     )
 
-    with pytest.raises(SystemExit, match="exactly one local-path Core 0.7.0"):
+    with pytest.raises(SystemExit, match="exactly one local-path Core 0.8.0"):
         develop_downstream_adam_assist._prepare_downstream(tmp_path, {})
 
     assert not lock.exists()
@@ -846,32 +847,32 @@ def test_generated_lock_validation_failure_restores_initial_absence(
 
 
 def test_patched_core_lock_verification_requires_one_local_aligned_package() -> None:
-    valid = _core_packages("0.7.0")
-    develop_downstream_adam_assist._verify_patched_core_packages(valid, "0.7.0")
+    valid = _core_packages("0.8.0")
+    develop_downstream_adam_assist._verify_patched_core_packages(valid, "0.8.0")
 
     wrong_version = [dict(package) for package in valid]
     wrong_version[0]["version"] = "0.6.0"
-    with pytest.raises(SystemExit, match="exactly one local-path Core 0.7.0"):
+    with pytest.raises(SystemExit, match="exactly one local-path Core 0.8.0"):
         develop_downstream_adam_assist._verify_patched_core_packages(
-            wrong_version, "0.7.0"
+            wrong_version, "0.8.0"
         )
 
     registry_source = [dict(package) for package in valid]
     registry_source[0][
         "source"
     ] = "registry+https://github.com/rust-lang/crates.io-index"
-    with pytest.raises(SystemExit, match="exactly one local-path Core 0.7.0"):
+    with pytest.raises(SystemExit, match="exactly one local-path Core 0.8.0"):
         develop_downstream_adam_assist._verify_patched_core_packages(
-            registry_source, "0.7.0"
+            registry_source, "0.8.0"
         )
 
     duplicate = [*valid, dict(valid[0])]
-    with pytest.raises(SystemExit, match="exactly one local-path Core 0.7.0"):
-        develop_downstream_adam_assist._verify_patched_core_packages(duplicate, "0.7.0")
+    with pytest.raises(SystemExit, match="exactly one local-path Core 0.8.0"):
+        develop_downstream_adam_assist._verify_patched_core_packages(duplicate, "0.8.0")
 
     missing = valid[1:]
-    with pytest.raises(SystemExit, match="exactly one local-path Core 0.7.0"):
-        develop_downstream_adam_assist._verify_patched_core_packages(missing, "0.7.0")
+    with pytest.raises(SystemExit, match="exactly one local-path Core 0.8.0"):
+        develop_downstream_adam_assist._verify_patched_core_packages(missing, "0.8.0")
 
 
 def test_unrelated_lock_guard_allows_removals_but_rejects_added_versions() -> None:
@@ -882,7 +883,7 @@ def test_unrelated_lock_guard_allows_removals_but_rejects_added_versions() -> No
         _package("removed", "1.0.0"),
     ]
     accepted = [
-        *_core_packages("0.7.0"),
+        *_core_packages("0.8.0"),
         _package("retained", "1.0.0"),
         _package("rawzip", "0.5.2"),
     ]
@@ -932,7 +933,7 @@ def test_existing_lock_unrelated_addition_restores_original_bytes(
         _write_assist_lock(
             lock,
             [
-                *_core_packages("0.7.0"),
+                *_core_packages("0.8.0"),
                 _package("retained", "1.0.0"),
                 _package("retained", "2.0.0"),
             ],
@@ -945,7 +946,7 @@ def test_existing_lock_unrelated_addition_restores_original_bytes(
         develop_downstream_adam_assist.subprocess, "check_call", fake_check_call
     )
     monkeypatch.setattr(
-        develop_downstream_adam_assist, "_current_core_version", lambda: "0.7.0"
+        develop_downstream_adam_assist, "_current_core_version", lambda: "0.8.0"
     )
 
     with pytest.raises(SystemExit, match="added unrelated package versions"):
@@ -1079,7 +1080,7 @@ def test_prepare_only_cli_leaves_generated_lock_and_patch(
 
     def fake_check_call(command: list[str], **_: object) -> None:
         commands.append(command)
-        _write_assist_lock(lock, _core_packages("0.7.0"))
+        _write_assist_lock(lock, _core_packages("0.8.0"))
 
     monkeypatch.setenv("ADAM_ASSIST_RUST_REPO", str(tmp_path))
     monkeypatch.setattr(
@@ -1089,7 +1090,7 @@ def test_prepare_only_cli_leaves_generated_lock_and_patch(
         develop_downstream_adam_assist.subprocess, "check_call", fake_check_call
     )
     monkeypatch.setattr(
-        develop_downstream_adam_assist, "_current_core_version", lambda: "0.7.0"
+        develop_downstream_adam_assist, "_current_core_version", lambda: "0.8.0"
     )
 
     assert develop_downstream_adam_assist.main(["--prepare-only"]) == 0
@@ -1187,7 +1188,7 @@ def test_rust_ci_is_reproducible_and_downstream_sources_are_exact() -> None:
     checkout_name = "Checkout requested dependent revision"
     revision_name = "Verify exact dependent revision"
     install_name = "Install test and exact build dependencies"
-    metadata_name = "Verify dependent declares Core 0.7 compatibility"
+    metadata_name = "Verify dependent declares Core 0.8 compatibility"
     assert (
         tier1.index(syntax_name)
         < tier1.index(checkout_name)
@@ -1199,7 +1200,7 @@ def test_rust_ci_is_reproducible_and_downstream_sources_are_exact() -> None:
     metadata_block = tier1[metadata_start:metadata_end]
     assert "pdm run python - <<'PY'" in metadata_block
     assert "\n          python - <<'PY'" not in metadata_block
-    assert 'Version("0.7.0") in core[0].specifier' in metadata_block
+    assert 'Version("0.8.0") in core[0].specifier' in metadata_block
     assert "dependent/pyproject.toml" in metadata_block
     assert "adam-assist" not in normal_ci
     assert "adam_assist" not in normal_ci
@@ -1230,7 +1231,7 @@ def test_rust_ci_is_reproducible_and_downstream_sources_are_exact() -> None:
     assert "Verify Core test environment candidate installations" in tier1
     assert 'test_python="$(pdm info --python)"' in tier1
     assert (
-        tier1.count('assert version("adam-core") == adam_core.__version__ == "0.7.0"')
+        tier1.count('assert version("adam-core") == adam_core.__version__ == "0.8.0"')
         == 2
     )
     assert tier1.count('assert version("adam-assist") == assist_version') == 2
@@ -1275,7 +1276,7 @@ def test_rust_ci_is_reproducible_and_downstream_sources_are_exact() -> None:
     assert "Prepare compatible ASSIST lock for Core candidate" not in release_matrix
     assert helper_command not in release_matrix
     assert "[patch.crates-io]" not in release_matrix
-    assert 'version("adam-core") == adam_core.__version__ == "0.7.0"' in tier1
+    assert 'version("adam-core") == adam_core.__version__ == "0.8.0"' in tier1
 
     coords_manifest = (ROOT / "rust/adam_core_rs_coords/Cargo.toml").read_text()
     native_module = (ROOT / "rust/adam_core_py/src/lib.rs").read_text()
@@ -1293,7 +1294,7 @@ def test_rust_ci_is_reproducible_and_downstream_sources_are_exact() -> None:
     release_order = release_notes.split("Release order\n-------------\n", 1)[1]
     assert "adam_assist_ref" not in release_order
     first_release_step = release_order.split("#.", 1)[1].lstrip()
-    assert first_release_step.startswith("after separate version-bump authorization")
+    assert first_release_step.startswith("accept the exact 0.8.0 source candidate")
     assert 'version("adam-assist") == assist_version' in tier1
 
     for workflow in workflows.glob("*.yml"):

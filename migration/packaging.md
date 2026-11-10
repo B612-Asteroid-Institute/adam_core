@@ -1,6 +1,6 @@
 # adam-core Rust Packaging Notes
 
-Last updated: 2026-11-09.
+Last updated: 2026-11-10.
 
 ## Supported Build Path
 
@@ -18,7 +18,7 @@ Last updated: 2026-11-09.
 - `pdm run rust-build` is an alias for `pdm run wheel-build`. For explicit
   manylinux arguments call the same wrapper, for example
   `python migration/scripts/build_release_wheel.py --out wheelhouse -- --zig
-  --target aarch64-unknown-linux-gnu --manylinux 2_17 -i python3.12`.
+  --target aarch64-unknown-linux-gnu --manylinux 2_17 -i python3.14`.
 
 ## Version Source
 
@@ -26,8 +26,8 @@ Last updated: 2026-11-09.
 - This is intentional because maturin uses that Cargo version for wheel metadata when `project.version` is dynamic.
 - `migration/scripts/write_maturin_version.py` mirrors the Cargo version into `src/adam_core/_version.py` before build.
 - The Python distribution and unpublished `adam_core_py` wheel crate share a version. Supported Cargo prereleases are normalized explicitly, for example `0.5.6-rc.1` to PEP 440 `0.5.6rc1`.
-- The published `0.7.0` release is immutable: it shipped on 2026-11-06 as 12 CPython 3.11-3.13 wheels and six public Rust crates built against Arrow 54. This CPython 3.14/native-stack candidate retains `0.7.0` manifest values only because it is not authorized to bump or publish them; it cannot be released under that existing version and requires a separately authorized post-0.7 Python version.
-- `adam_core_rs_coords` directly exposes Arrow types and the `adam_core` umbrella crate re-exports that API. Moving those public types to Arrow 58 is semver-breaking. Exact internal public-crate requirements and the aligned version policy require all six public Rust crates to advance together on the intended `0.8.0` boundary before any crates.io publication.
+- The published `0.7.0` release shipped on 2026-11-06 as 12 CPython 3.11-3.13 wheels and six public Rust crates built against Arrow 54. Its files, versions, and `v0.7.0` tag are immutable.
+- Version `0.8.0` adds CPython 3.14 and aligns the Python distribution, `adam_core_py`, and all six public Rust crates. This 0.x minor release is semver-breaking because `adam_core_rs_coords` exposes Arrow types that move from Arrow 54 to Arrow 58 and the public Rust OD surface changes. The expected `v0.8.0` tag date is 2026-11-10.
 - `pyproject.toml` does not declare `[tool.pdm.version]`; PDM SCM versioning is not part of the native wheel path.
 - If the checkout is exactly on a `vX.Y.Z` or prerelease tag, `write_maturin_version.py` fails when the normalized tag and Cargo versions differ.
 - `migration/scripts/verify_preview_versions.py` enforces explicit preview/stable channel semantics and exact public-crate pins. Stable version, tag, protected-environment, resumable-publication, and release-order policy is canonical in `docs/source/getting_started/releasing.rst`.
@@ -48,16 +48,13 @@ Last updated: 2026-11-09.
 
 ## Core-before-Assist compatibility sequencing
 
-- Core pull requests do not claim compatibility with the frozen Assist 0.5
-  candidate: that candidate declares Core 0.6 requirements and cannot
-  legitimately exercise Core 0.7 provider ABI v2.
-- `.github/workflows/tier1-dependent-smoke.yml` is therefore manual-only. It
-  rejects a non-40-hex Assist revision before dependent checkout, verifies the
-  resulting HEAD, and checks the dependent's Core requirement with the
-  installed PDM interpreter after the exact test/build dependency install.
-  `pip check` then enforces that unmodified requirement. Add no pull-request or
-  scheduled trigger until a separately reviewed compatible Assist candidate
-  exists.
+- `.github/workflows/tier1-dependent-smoke.yml` is manual-only. It rejects a
+  non-40-hex Assist revision before checkout, verifies the resulting HEAD, and
+  requires the dependent to declare Core 0.8 compatibility. `pip check` then
+  enforces that unmodified requirement. Use this workflow after the downstream
+  candidate is updated; Core publication does not depend on it. Add no
+  pull-request or scheduled trigger until a separately reviewed compatible
+  Assist candidate exists.
 - Removing the former `tier1-smoke` pull-request job also removes that check
   context from new PR commits. Public repository API results verified on
   2026-11-03 showed that `main` was unprotected and that no repository rulesets
@@ -75,9 +72,14 @@ Last updated: 2026-11-09.
 
 ## Expected Validation Shape
 
-- `pdm run test-rust-full` currently runs under Python 3.13 in this checkout.
-- The current normal deterministic suite passes 1,539 tests; its 121 skips are exactly 118 pytest-benchmark rows and three opt-in live HTTP tests, while six profile tests are selected by the extended gate.
-- Dedicated benchmark jobs execute every benchmark row. The release-candidate workflow runs all six profile-marked scientific fixtures, both live Rust kernel-data integrations, and the three live Horizons/NEOCC/Scout/SBDB integration tests after wheel acceptance.
+- Normal CI runs the deterministic Python suite on CPython 3.11-3.14; only the
+  CPython 3.12 row collects coverage. Lint and documentation gates also run on
+  CPython 3.12.
+- The release-candidate workflow first builds and accepts the uniform 16-wheel
+  artifact matrix. Its dependent extended-coverage job runs the six
+  profile-marked scientific fixtures, both live Rust kernel-data integrations,
+  and the live Horizons/NEOCC/Scout/SBDB integration tests on CPython 3.12.
+- Dedicated benchmark jobs execute every benchmark row.
 - No expected xfail remains in the rotation-period confidence suite: every committed standard-candle fixture enforces the strict confidence contract.
 - To inspect skip reasons, run `pdm run test-rust-full -- -rs`.
 

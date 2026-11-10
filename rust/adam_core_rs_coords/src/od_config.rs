@@ -1,6 +1,6 @@
 //! Complete, explicit orbit-determination configuration and profiles.
 //!
-//! This module is the authoritative Core 0.7 configuration boundary.  Python
+//! This module is the authoritative Core 0.8 configuration boundary.  Python
 //! bindings may locate files and marshal paths, but profile expansion,
 //! validation, parsing, transform execution and provenance identity live here.
 

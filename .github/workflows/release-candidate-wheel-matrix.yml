@@ -12,7 +12,7 @@ concurrency:
 
 env:
   PIP_ONLY_BINARY: ":all:"
-  PYTHON_PREVIEW_VERSION: "0.7.0"
+  PYTHON_PREVIEW_VERSION: "0.8.0"
   ADAM_CORE_RELEASE_BUILD: "1"
   ADAM_CORE_BUILD_COMMIT: ${{ github.sha }}
 
