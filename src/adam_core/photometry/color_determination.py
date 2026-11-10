@@ -141,10 +141,12 @@ def estimate_colors(
 ) -> ColorFit:
     """Estimate canonical-filter absolute magnitudes and colors per object.
 
-    This is a thin facade over one fused Rust invocation. Rust owns object
-    grouping and isolation, orbit matching and propagation, observer geometry,
-    validity classification, canonical filter resolution, optional projection,
-    every phase-law fit, clipping, identifiability, covariance, diagnostics,
+    This is a thin facade over the public high-level
+    ``adam_core::estimate_colors`` Rust API through one private IPC adapter.
+    Rust owns object grouping and isolation, orbit matching and propagation,
+    observer geometry, validity classification, canonical filter resolution,
+    optional projection, every phase-law fit, clipping, identifiability,
+    covariance, diagnostics,
     statuses/counts, and final Arrow assembly.
 
     Parameters

@@ -105,41 +105,6 @@ fn perturber_states_record_batch(
         .map_err(|err| PyValueError::new_err(err.to_string()))
 }
 
-pub(crate) fn ensure_spice_backend_from_inputs(
-    kernel_paths: &[String],
-    mpc_obscodes_json: &str,
-) -> PyResult<()> {
-    if kernel_paths.is_empty() {
-        return Err(PyValueError::new_err(
-            "color estimation requires the default SPICE kernel paths",
-        ));
-    }
-    try_initialize_global_kernels(kernel_paths).map_err(global_initialization_err_to_py)?;
-    let needs_obscodes = global_backend()
-        .read()
-        .map_err(|_| lock_err_to_py())?
-        .mpc_obscodes_loaded()
-        == 0;
-    if needs_obscodes {
-        if mpc_obscodes_json.is_empty() {
-            return Err(PyValueError::new_err(
-                "color estimation requires MPC observatory data",
-            ));
-        }
-        let mut backend = match global_backend().try_write() {
-            Ok(backend) => backend,
-            Err(TryLockError::WouldBlock) => return Err(busy_backend_to_py()),
-            Err(TryLockError::Poisoned(_)) => return Err(lock_err_to_py()),
-        };
-        if backend.mpc_obscodes_loaded() == 0 {
-            backend
-                .load_mpc_obscodes(mpc_obscodes_json)
-                .map_err(spice_err_to_py)?;
-        }
-    }
-    Ok(())
-}
-
 pub(crate) fn observer_positions_from_exposures(
     codes: &[String],
     days: &[i64],

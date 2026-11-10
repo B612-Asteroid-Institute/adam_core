@@ -1,22 +1,20 @@
 use crate::coordinate_ops::bench_result;
-use crate::spice::{ensure_spice_backend_from_inputs, observer_positions_from_exposures};
+use crate::spice::observer_positions_from_exposures;
+use adam_core::{estimate_colors, ColorEstimationError, ColorEstimationResources};
 use adam_core_rs_coords::{
-    bandpass_data, color_fit_record_batch, estimate_color_object, fit_absolute_magnitude_grouped,
-    fit_absolute_magnitude_rows, origin_mu_au3_day2, propagate_2body_along_arc,
-    validate_color_config, ColorComposition, ColorEstimatorConfig, ColorFitRow, ColorObservation,
-    ColorPhaseModel, ColorProjection, DataFrame, OrbitBatch, OriginId, SourceCatalogBatch,
-    TimeArray, TimeScale, TryFromNestedRecordBatch,
+    fit_absolute_magnitude_grouped, fit_absolute_magnitude_rows, ColorComposition, ColorPhaseModel,
+    OrbitBatch, SourceCatalogBatch, TryFromNestedRecordBatch,
 };
 use arrow::pyarrow::ToPyArrow;
 use arrow_array::{ArrayRef, Float64Array, Int64Array, LargeStringArray, RecordBatch, StructArray};
 use arrow_schema::{DataType, Field, Fields, Schema};
 use numpy::{IntoPyArray, PyArray1, PyReadonlyArray1, PyReadonlyArray2};
-use pyo3::exceptions::PyValueError;
+use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::PyBytes;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::hint::black_box;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -1355,15 +1353,27 @@ fn benchmark_fit_absolute_magnitude_grouped_numpy(
     })
 }
 
-/// One fused native crossing for canonical-filter-generic color estimation.
+/// Convert mutually exclusive Python transport fields to the typed composition.
+fn color_composition_from_transport(
+    template_id: Option<String>,
+    mix: Option<(f64, f64)>,
+) -> Result<Option<ColorComposition>, &'static str> {
+    match (template_id, mix) {
+        (None, None) => Ok(None),
+        (Some(template), None) => Ok(Some(ColorComposition::Template(template))),
+        (None, Some((weight_c, weight_s))) => Ok(Some(ColorComposition::Mix(weight_c, weight_s))),
+        (Some(_), Some(_)) => {
+            Err("projection requires exactly one composition: template_id or C/S mix")
+        }
+    }
+}
+
+/// Private IPC adapter for public `adam_core::estimate_colors`.
 ///
-/// Inputs are the canonical nested Arrow IPC encodings of `SourceCatalog` and
-/// `Orbits`, installed default SPICE kernel paths, and MPC-obscode JSON. This
-/// same crossing idempotently initializes the process-global observer backend;
-/// invalid or unloadable setup inputs fail the call before object processing.
-/// Rust owns grouping, orbit matching and propagation, observer-state preparation,
-/// geometry, filter resolution/projection, fitting and Arrow assembly. The
-/// returned IPC stream contains exactly one final `ColorFit` record batch.
+/// This boundary only decodes typed inputs/options/resources, calls the public
+/// high-level Rust API once, and encodes its typed `ColorFitBatch`. Setup,
+/// grouping, orbit preparation, geometry, fitting, and result semantics remain
+/// in the publishable `adam_core` crate.
 #[pyfunction]
 #[pyo3(signature = (
     source_catalog_ipc,
@@ -1401,275 +1411,46 @@ fn estimate_colors_fused_ipc<'py>(
         })?;
     let orbits = OrbitBatch::try_from_nested_record_batch(&orbit_batch)
         .map_err(|error| PyValueError::new_err(format!("failed to decode Orbits: {error}")))?;
-    let phase_model = ColorPhaseModel::parse(phi_type)
+    let phi_type = ColorPhaseModel::parse(phi_type)
         .map_err(|error| PyValueError::new_err(error.to_string()))?;
-
-    let projection = match projection {
-        None => {
-            if template_id.is_some() || mix.is_some() {
-                return Err(PyValueError::new_err(
-                    "composition is accepted only with an explicit source-to-target projection",
-                ));
-            }
-            None
-        }
-        Some(mapping) => {
-            let composition = match (template_id, mix) {
-                (Some(template), None) => ColorComposition::Template(template),
-                (None, Some((weight_c, weight_s))) => ColorComposition::Mix(weight_c, weight_s),
-                _ => {
-                    return Err(PyValueError::new_err(
-                        "projection requires exactly one composition: template_id or C/S mix",
-                    ))
-                }
-            };
-            Some(ColorProjection {
-                source_to_target: mapping.into_iter().collect(),
-                composition,
-            })
-        }
-    };
-    let config = ColorEstimatorConfig {
-        phase_model,
-        force_phase_bounds: force_g_bounds,
+    let color_term_composition =
+        color_composition_from_transport(template_id, mix).map_err(PyValueError::new_err)?;
+    let filter_projection = projection.map(|mapping| mapping.into_iter().collect());
+    let spice_kernel_paths = spice_kernel_paths
+        .into_iter()
+        .map(PathBuf::from)
+        .collect::<Vec<_>>();
+    let resources =
+        ColorEstimationResources::new(Path::new(data_dir), &spice_kernel_paths, mpc_obscodes_json);
+    let result = estimate_colors(
+        &source,
+        &orbits,
+        phi_type,
+        force_g_bounds,
+        color_term_composition,
         strict_band_mapping,
-        projection,
-    };
-    let bandpasses = bandpass_data(Path::new(data_dir)).map_err(bandpass_error)?;
-    validate_color_config(bandpasses.as_ref(), &config).map_err(bandpass_error)?;
-    ensure_spice_backend_from_inputs(&spice_kernel_paths, mpc_obscodes_json)?;
-
-    // Unique non-null source object IDs in first-observation order.
-    let mut object_order = Vec::new();
-    let mut source_groups: HashMap<String, Vec<usize>> = HashMap::new();
-    for (row, object_id) in source.object_id.iter().enumerate() {
-        let Some(object_id) = object_id else {
-            continue;
-        };
-        if !source_groups.contains_key(object_id) {
-            object_order.push(object_id.clone());
-        }
-        source_groups
-            .entry(object_id.clone())
-            .or_default()
-            .push(row);
-    }
-    let mut orbit_groups: HashMap<String, Vec<usize>> = HashMap::new();
-    for (row, object_id) in orbits.object_id.iter().enumerate() {
-        if let Some(object_id) = object_id {
-            orbit_groups
-                .entry(object_id.0.clone())
-                .or_default()
-                .push(row);
-        }
-    }
-
-    if orbits.is_empty() {
-        let output = object_order
-            .into_iter()
-            .map(|object_id| {
-                ColorFitRow::terminal(
-                    object_id.clone(),
-                    source_groups[&object_id].len(),
-                    "no_orbit",
-                    "No orbit given for this object",
-                )
-            })
-            .collect::<Vec<_>>();
-        let batch = color_fit_record_batch(&output).map_err(|error| {
-            PyValueError::new_err(format!("failed to assemble ColorFit: {error}"))
-        })?;
-        let bytes = crate::coordinates::write_orbit_ipc(&batch)?;
-        return Ok(PyBytes::new(py, &bytes));
-    }
-
-    let source_times = TimeArray::from_parts(
-        source.time.scale,
-        source.time.days.clone(),
-        source.time.nanos.clone(),
+        filter_projection,
+        &resources,
     )
-    .and_then(|times| times.rescale(TimeScale::Tdb))
-    .map_err(|error| {
-        PyValueError::new_err(format!("cannot convert observation times to TDB: {error}"))
+    .map_err(color_estimation_error_to_py)?;
+    let batch = result.to_record_batch().map_err(|error| {
+        PyValueError::new_err(format!("failed to encode ColorFit result: {error}"))
     })?;
-
-    if orbits.coordinates.frame != DataFrame::Ecliptic {
-        return Err(PyValueError::new_err(format!(
-            "color estimation requires ecliptic orbit coordinates; got {}",
-            orbits.coordinates.frame.as_str()
-        )));
-    }
-    if orbits.coordinates.values.cartesian().is_none() {
-        return Err(PyValueError::new_err(
-            "color estimation requires Cartesian orbits",
-        ));
-    }
-    let orbit_times = orbits
-        .coordinates
-        .times
-        .as_ref()
-        .ok_or_else(|| PyValueError::new_err("color estimation requires orbit epochs"))?
-        .rescale(TimeScale::Tdb)
-        .map_err(|error| {
-            PyValueError::new_err(format!("cannot convert orbit epochs to TDB: {error}"))
-        })?;
-
-    let mut output = Vec::with_capacity(object_order.len());
-    for object_id in object_order {
-        let rows = &source_groups[&object_id];
-        let orbit_rows = orbit_groups
-            .get(&object_id)
-            .map(Vec::as_slice)
-            .unwrap_or(&[]);
-        if orbit_rows.is_empty() {
-            output.push(ColorFitRow::terminal(
-                object_id,
-                rows.len(),
-                "no_orbit",
-                "No orbit given for this object",
-            ));
-            continue;
-        }
-        if orbit_rows.len() != 1 {
-            output.push(ColorFitRow::terminal(
-                object_id,
-                rows.len(),
-                "multiple_orbits",
-                format!("Expected exactly one orbit, got {}", orbit_rows.len()),
-            ));
-            continue;
-        }
-
-        let orbit_row = orbit_rows[0];
-        if orbits
-            .non_gravitational_parameters
-            .as_ref()
-            .is_some_and(|parameters| parameters.row(orbit_row).is_active())
-        {
-            output.push(ColorFitRow::terminal(
-                object_id,
-                rows.len(),
-                "failed",
-                "two-body color estimation does not support active non-gravitational parameters",
-            ));
-            continue;
-        }
-        let prepared = prepare_color_observations(
-            &source,
-            &source_times,
-            &orbits,
-            &orbit_times,
-            orbit_row,
-            rows,
-        );
-        match prepared {
-            Ok(observations) => output.push(estimate_color_object(
-                bandpasses.as_ref(),
-                &object_id,
-                &observations,
-                &config,
-            )),
-            Err(error) => output.push(ColorFitRow::terminal(
-                object_id,
-                rows.len(),
-                "failed",
-                error.to_string(),
-            )),
-        }
-    }
-
-    let batch = color_fit_record_batch(&output)
-        .map_err(|error| PyValueError::new_err(format!("failed to assemble ColorFit: {error}")))?;
     let bytes = crate::coordinates::write_orbit_ipc(&batch)?;
     Ok(PyBytes::new(py, &bytes))
 }
 
-fn prepare_color_observations(
-    source: &SourceCatalogBatch,
-    source_times_tdb: &TimeArray,
-    orbits: &OrbitBatch,
-    orbit_times_tdb: &TimeArray,
-    orbit_row: usize,
-    source_rows: &[usize],
-) -> PyResult<Vec<ColorObservation>> {
-    let states = orbits
-        .coordinates
-        .values
-        .cartesian()
-        .expect("Cartesian representation validated once per fused call");
-    let origin = &orbits.coordinates.origins.origins[orbit_row];
-    let heliocentric = matches!(origin, OriginId::Named(code) if code == "SUN")
-        || matches!(origin, OriginId::Naif(10));
-    if !heliocentric {
-        return Err(PyValueError::new_err(
-            "color estimation requires heliocentric (SUN-origin) orbit coordinates",
-        ));
+fn color_estimation_error_to_py(error: ColorEstimationError) -> PyErr {
+    let message = error.to_string();
+    match error {
+        ColorEstimationError::InvalidConfiguration(_) | ColorEstimationError::Schema { .. } => {
+            PyValueError::new_err(message)
+        }
+        ColorEstimationError::Spice(_)
+        | ColorEstimationError::BackendBusy
+        | ColorEstimationError::BackendPoisoned => PyRuntimeError::new_err(message),
+        _ => PyRuntimeError::new_err(message),
     }
-    let mu = origin_mu_au3_day2(origin)
-        .map_err(|error| PyValueError::new_err(format!("invalid orbit origin: {error}")))?;
-    let epoch = orbit_times_tdb.epochs[orbit_row];
-    let dts = source_rows
-        .iter()
-        .map(|&row| {
-            let target = source_times_tdb.epochs[row];
-            (target.days - epoch.days) as f64
-                + (target.nanos - epoch.nanos) as f64 / adam_core_rs_coords::NANOS_PER_DAY as f64
-        })
-        .collect::<Vec<_>>();
-    let propagated = propagate_2body_along_arc(states[orbit_row], &dts, mu, 1000, 1.0e-14);
-    if propagated
-        .iter()
-        .flat_map(|state| state.iter())
-        .any(|value| !value.is_finite())
-    {
-        return Err(PyValueError::new_err(
-            "two-body propagation produced non-finite state",
-        ));
-    }
-
-    // SourceCatalog.time is already the detection epoch, so duration is zero;
-    // the observer helper performs no midpoint shift and computes states at the
-    // exact source timestamps.
-    let codes = source_rows
-        .iter()
-        .map(|&row| source.observatory_code[row].clone())
-        .collect::<Vec<_>>();
-    let days = source_rows
-        .iter()
-        .map(|&row| source.time.days[row])
-        .collect::<Vec<_>>();
-    let nanos = source_rows
-        .iter()
-        .map(|&row| source.time.nanos[row])
-        .collect::<Vec<_>>();
-    let observer_flat = observer_positions_from_exposures(
-        &codes,
-        &days,
-        &nanos,
-        &vec![0.0; source_rows.len()],
-        source.time.scale.as_str(),
-    )?;
-
-    Ok(source_rows
-        .iter()
-        .enumerate()
-        .map(|(local, &row)| ColorObservation {
-            magnitude: source.mag[row],
-            magnitude_sigma: source.mag_sigma[row],
-            observatory_code: source.observatory_code[row].clone(),
-            reported_filter: source.filter[row].clone(),
-            object_position: [
-                propagated[local][0],
-                propagated[local][1],
-                propagated[local][2],
-            ],
-            observer_position: [
-                observer_flat[3 * local],
-                observer_flat[3 * local + 1],
-                observer_flat[3 * local + 2],
-            ],
-        })
-        .collect())
 }
 
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -1710,4 +1491,22 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
         m
     )?)?;
     Ok(())
+}
+
+#[cfg(test)]
+mod color_adapter_tests {
+    use super::*;
+
+    #[test]
+    fn composition_transport_preserves_template_and_mix_order() {
+        assert_eq!(
+            color_composition_from_transport(Some("C".to_string()), None).unwrap(),
+            Some(ColorComposition::Template("C".to_string()))
+        );
+        assert_eq!(
+            color_composition_from_transport(None, Some((0.4, 0.6))).unwrap(),
+            Some(ColorComposition::Mix(0.4, 0.6))
+        );
+        assert!(color_composition_from_transport(Some("C".to_string()), Some((0.4, 0.6))).is_err());
+    }
 }

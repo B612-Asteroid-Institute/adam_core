@@ -359,9 +359,52 @@ Generic Color and Phase-Law Estimation
 
 ``estimate_colors`` accepts native ``SourceCatalog`` observations and ``Orbits``
 and returns one ``ColorFit`` row for each non-null object ID in first-appearance
-order. The Python API is a single-call facade: Rust owns grouping, propagation,
+order. Python and Rust expose the matching public name ``estimate_colors``.
+The Python API is a single-call facade over public ``adam_core::estimate_colors``;
+the private IPC adapter only decodes typed inputs, calls that API once, and
+encodes its ``ColorFitBatch``. Public Rust owns setup, grouping, propagation,
 geometry, canonical-filter resolution, phase fitting, clipping, covariance,
-diagnostics, and per-object failure isolation.
+diagnostics, and per-object failure isolation. Rust rows expose the
+``ColorFitStatus`` enum; Arrow and Python preserve its stable string values.
+
+Pure-Rust callers obtain bandpasses embedded in the compiled coords crate and
+resolved kernel/MPC data without a Python installation or retained crate-source
+files:
+
+.. code-block:: rust
+
+   use adam_core::kernel_data::Resolver;
+   use adam_core::{
+       estimate_colors,
+       ColorPhaseModel,
+       ResolvedColorEstimationResources,
+   };
+
+   let resolved = ResolvedColorEstimationResources::resolve(
+       &Resolver::from_env(),
+   )?;
+   let resources = resolved.as_resources();
+   let fits = estimate_colors(
+       &observations,
+       &orbits,
+       ColorPhaseModel::Hg12Star,
+       true,
+       None,
+       false,
+       None,
+       &resources,
+   )?;
+   println!("{}", fits.rows[0].status);
+
+These resources initialize shared process state. Embedded bandpass bytes parse
+once in memory, while explicit custom directories cache by path. SPICE kernels
+accumulate in load order; and the first successfully loaded nonempty MPC
+obscodes table remains authoritative. Each estimate holds a SPICE
+read guard for its full workflow. Identical concurrent first calls wait for one
+initializer and then proceed, but callers must initialize the complete resource
+set before concurrent mutation. Until the separately tracked ERFA first-use
+race is corrected, perform one UTC rescale on a single thread before concurrent
+color calls containing UTC times.
 
 By default every resolved canonical filter is an independent fitted intercept.
 There is no implicit LSST projection or asteroid composition:
@@ -429,7 +472,9 @@ coordinates; frame or representation errors fail the call. Heliocentric origin
 is validated per matching orbit, so a non-Sun origin produces an isolated
 ``failed`` row. An empty orbit table produces ``no_orbit`` rows. UTC orbit
 epochs are accepted; active non-gravitational solutions produce isolated failed
-rows.
+rows. Isolated failures use clean Rust-native error text without Python
+exception-class prefixes. Call-level time conversion errors retain their full
+operation context.
 
 Estimating ``H_v`` From Detections
 ----------------------------------

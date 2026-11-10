@@ -183,6 +183,96 @@ def test_production_module_has_no_python_scientific_algorithm() -> None:
     assert source.count("estimate_colors_fused_ipc(") == 1
 
 
+def test_pyo3_adapter_is_one_call_to_public_rust_api() -> None:
+    root = Path(__file__).resolve().parents[4]
+    source = (root / "rust/adam_core_py/src/photometry.rs").read_text()
+    start = source.index("fn estimate_colors_fused_ipc")
+    end = source.index("\npub fn register", start)
+    adapter = source[start:end]
+
+    assert "use adam_core::{estimate_colors," in source
+    assert adapter.count("estimate_colors(") == 1
+    assert """estimate_colors(
+        &source,
+        &orbits,
+        phi_type,
+        force_g_bounds,
+        color_term_composition,
+        strict_band_mapping,
+        filter_projection,
+        &resources,
+    )""" in adapter
+    for forbidden in (
+        "source_groups",
+        "orbit_groups",
+        "propagate_2body",
+        "global_backend",
+        "ColorFitRow::terminal",
+        "ColorFitBatch::new",
+        "estimate_color_object",
+        "observer_positions_from_exposures",
+        "bandpass_data",
+        "try_initialize_global_kernels",
+        ".rows",
+        ".retain(",
+        ".sort",
+        "for ",
+    ):
+        assert forbidden not in adapter
+
+
+def test_public_rust_signature_matches_python_semantics() -> None:
+    root = Path(__file__).resolve().parents[4]
+    source = (root / "rust/adam_core/src/color.rs").read_text()
+    start = source.index("pub fn estimate_colors(")
+    end = source.index(") -> Result<ColorFitBatch", start)
+    signature = source[start:end]
+    rust_parameters = [
+        line.strip().split(":", 1)[0]
+        for line in signature.splitlines()[1:]
+        if ":" in line
+    ]
+    python_parameters = list(inspect.signature(estimate_colors).parameters)
+    assert rust_parameters[:-1] == python_parameters
+    assert rust_parameters[-1] == "resources"
+    assert "observations: &SourceCatalogBatch" in signature
+    assert "orbits: &OrbitBatch" in signature
+    assert "resources: &ColorEstimationResources" in signature
+    exports = (root / "rust/adam_core/src/lib.rs").read_text()
+    assert "pub use color::{" in exports
+    for symbol in (
+        "estimate_colors",
+        "ColorBandpassSource",
+        "ColorEstimationError",
+        "ColorEstimationResources",
+        "ResolvedColorEstimationResources",
+    ):
+        assert symbol in exports
+
+
+def test_python_and_published_rust_bandpass_bundles_are_identical() -> None:
+    root = Path(__file__).resolve().parents[4]
+    python_data = root / "src/adam_core/photometry/bandpasses/data"
+    rust_data = root / "rust/adam_core_rs_coords/data/bandpasses"
+    filenames = sorted(path.name for path in python_data.glob("*.parquet"))
+    assert filenames == [
+        "asteroid_templates.parquet",
+        "bandpass_curves.parquet",
+        "observatory_band_map.parquet",
+        "solar_spectrum.parquet",
+        "template_bandpass_integrals.parquet",
+    ]
+    for filename in filenames:
+        assert (rust_data / filename).read_bytes() == (
+            python_data / filename
+        ).read_bytes()
+
+    loader = (root / "rust/adam_core_rs_coords/src/bandpasses.rs").read_text()
+    assert loader.count('include_bytes!("../data/bandpasses/') == 5
+    assert "pub fn bundled_bandpass_data()" in loader
+    assert "CARGO_MANIFEST_DIR" not in loader
+
+
 def test_color_uses_shared_bandpass_composition_and_explicit_mapping_types() -> None:
     hints = get_type_hints(estimate_colors)
     assert hints["color_term_composition"] == BandpassComposition | None
@@ -346,7 +436,7 @@ def test_native_mode_fits_generic_canonical_filters(filter_id: str) -> None:
     assert row["colors"] == []
 
 
-def test_explicit_projection_requires_identity_edges_and_emits_targets() -> None:
+def test_projection_facade_matches_frozen_direct_rust_goldens() -> None:
     observations, orbits = _fixture()
     bands = observations.filter.to_pylist()
     bands = ["SDSS_g" if band == "g" else band for band in bands]
@@ -371,6 +461,12 @@ def test_explicit_projection_requires_identity_edges_and_emits_targets() -> None
     assert projected["status"] == "ok"
     assert projected["filter_ids"] == ["LSST_g", "LSST_i", "LSST_r"]
     assert projected["num_unsupported_filter"] == 0
+    # Frozen from direct public Rust (bitwise facade parity): native LSST_g H
+    # plus the physical C-template SDSS_g -> LSST_g delta.
+    assert projected["absolute_magnitudes"] == pytest.approx(
+        [20.728124818909933, 20.170046369331104, 20.32369900320434],
+        abs=5.0e-12,
+    )
 
     missing_identity = dict(projection)
     del missing_identity["LSST_i"]
@@ -386,6 +482,11 @@ def test_explicit_projection_requires_identity_edges_and_emits_targets() -> None
     )
     assert "LSST_i" not in partial["filter_ids"]
     assert partial["num_unsupported_filter"] > 0
+    # Pins adapter mix order against the same direct-Rust consumer path.
+    assert partial["absolute_magnitudes"] == pytest.approx(
+        [20.721172158560325, 20.326516038223083], abs=5.0e-12
+    )
+    assert partial["colors"] == pytest.approx([0.39465612033724184], abs=5.0e-12)
     _assert_partition(partial)
 
 
@@ -434,6 +535,27 @@ def test_strict_mapping_accounts_for_generic_fallback() -> None:
     assert loose["num_used"] == strict["num_used"] + 1
     _assert_partition(loose)
     _assert_partition(strict)
+
+
+def test_nonlexical_first_appearance_order_is_preserved() -> None:
+    fixture_order = [COLOR_FIXTURES[2], COLOR_FIXTURES[0], COLOR_FIXTURES[1]]
+    loaded = [np.load(path, allow_pickle=True) for path in fixture_order]
+    try:
+        observations = [_load_fixture_observations(fx) for fx in loaded]
+        orbits = [_load_fixture_orbits(fx) for fx in loaded]
+        expected = [table.object_id[0].as_py() for table in observations]
+        result = estimate_colors(
+            qv.concatenate(observations),
+            qv.concatenate(orbits),
+            "c1c2",
+            force_g_bounds=False,
+        )
+    finally:
+        for fx in loaded:
+            fx.close()
+
+    assert expected != sorted(expected)
+    assert result.object_id.to_pylist() == expected
 
 
 def test_multi_object_order_null_ids_and_orbit_cardinality_isolation() -> None:
@@ -506,6 +628,75 @@ def test_utc_orbit_epochs_and_call_level_frame_validation() -> None:
             orbits.set_column("coordinates", equatorial),
             "c1c2",
         )
+
+
+def test_call_level_time_errors_preserve_exact_context() -> None:
+    observations, orbits = _fixture()
+    ancient_observations = observations.set_column(
+        "time",
+        Timestamp.from_kwargs(
+            days=[-3_000_000] * len(observations),
+            nanos=[0] * len(observations),
+            scale="utc",
+        ),
+    )
+    with pytest.raises(ValueError) as observation_error:
+        estimate_colors(ancient_observations, orbits, "c1c2")
+    assert str(observation_error.value) == (
+        "cannot convert observation times to TDB: invalid record batch: "
+        "eraUtctai failed with ERFA status -1"
+    )
+
+    ancient_epoch = Timestamp.from_kwargs(days=[-3_000_000], nanos=[0], scale="utc")
+    ancient_orbit = orbits.set_column(
+        "coordinates", orbits.coordinates.set_column("time", ancient_epoch)
+    )
+    with pytest.raises(ValueError) as epoch_error:
+        estimate_colors(observations, ancient_orbit, "c1c2")
+    assert str(epoch_error.value) == (
+        "cannot convert orbit epochs to TDB: invalid record batch: "
+        "eraUtctai failed with ERFA status -1"
+    )
+
+
+def test_per_object_errors_are_clean_rust_native_messages() -> None:
+    observations, orbits = _fixture()
+    codes = observations.observatory_code.to_pylist()
+    codes[0] = "ZZZ"
+    unknown_code = observations.set_column(
+        "observatory_code",
+        pa.array(codes, type=observations.observatory_code.type),
+    )
+    row = _row(estimate_colors(unknown_code, orbits, "c1c2"))
+    assert row["status"] == "failed"
+    assert row["error"] == (
+        "ZZZ is not a valid MPC observatory code and was not found in SPICE kernels."
+    )
+
+    coordinates = orbits.coordinates
+    earth = CartesianCoordinates.from_kwargs(
+        x=coordinates.x,
+        y=coordinates.y,
+        z=coordinates.z,
+        vx=coordinates.vx,
+        vy=coordinates.vy,
+        vz=coordinates.vz,
+        time=coordinates.time,
+        origin=Origin.from_kwargs(code=pa.repeat("EARTH", len(coordinates))),
+        frame="ecliptic",
+        covariance=coordinates.covariance,
+    )
+    row = _row(
+        estimate_colors(
+            observations,
+            orbits.set_column("coordinates", earth),
+            "c1c2",
+        )
+    )
+    assert row["status"] == "failed"
+    assert row["error"] == (
+        "color estimation requires heliocentric (SUN-origin) orbit coordinates"
+    )
 
 
 def test_active_nongrav_is_isolated_failure() -> None:

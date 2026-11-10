@@ -1,12 +1,12 @@
 //! Canonical-filter-generic asteroid color estimation.
 //!
-//! This module owns the numerical and Arrow contracts for the fused color
-//! estimator.  The PyO3 boundary supplies typed source/orbit geometry, but all
-//! photometric validity classification, canonical-band resolution, optional
-//! explicit projection, fitting, clipping, identifiability, covariance, status
-//! selection, deterministic ordering, and result assembly happen here.
+//! This module owns the numerical and Arrow contracts used by the public
+//! `adam_core::estimate_colors` workflow. The public umbrella crate owns the
+//! complete batch orchestration and the private PyO3 boundary only decodes and
+//! encodes transport data.
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::fmt;
 use std::sync::Arc;
 
 use arrow_array::{
@@ -29,12 +29,16 @@ const HG12_PHASE_FLOOR: f64 = 1.0e-10;
 /// Supported phase laws for color estimation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ColorPhaseModel {
+    /// Penttilä et al. HG12* one-parameter phase law.
     Hg12Star,
+    /// Simplified Bowell HG one-parameter phase law.
     Hg,
+    /// Quadratic-in-phase two-parameter model.
     C1C2,
 }
 
 impl ColorPhaseModel {
+    /// Parse the exact Python-facing phase-law spelling.
     pub fn parse(value: &str) -> SchemaResult<Self> {
         match value {
             "HG12star" => Ok(Self::Hg12Star),
@@ -65,7 +69,9 @@ impl ColorPhaseModel {
 /// Reflectance composition required by an explicit filter projection.
 #[derive(Debug, Clone, PartialEq)]
 pub enum ColorComposition {
+    /// Identifier of one precomputed asteroid reflectance template.
     Template(String),
+    /// Linear `(weight_C, weight_S)` mixture of the C and S templates.
     Mix(f64, f64),
 }
 
@@ -81,70 +87,179 @@ impl ColorComposition {
 /// Explicit canonical source-filter to canonical target-filter projection.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ColorProjection {
+    /// Complete explicit canonical source-to-target map, including identities.
     pub source_to_target: BTreeMap<String, String>,
+    /// Reflectance composition used for every nonidentity conversion.
     pub composition: ColorComposition,
 }
 
 /// Whole-call estimator options.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ColorEstimatorConfig {
+    /// Phase law shared by all active filter intercepts.
     pub phase_model: ColorPhaseModel,
+    /// Withhold scientific products when HG/HG12* parameters exceed bounds.
     pub force_phase_bounds: bool,
+    /// Disable only generic SDSS/PS1 reported-band fallback mapping.
     pub strict_band_mapping: bool,
+    /// Optional explicit composition-aware canonical-filter projection.
     pub projection: Option<ColorProjection>,
 }
 
 /// One source row after orbit propagation and observer-state preparation.
 ///
-/// Positions are heliocentric ecliptic AU.  Missing positions mean geometry
-/// preparation failed for the object; callers should emit a terminal `failed`
-/// row rather than pass such a row to [`estimate_color_object`].
+/// Positions are heliocentric ecliptic AU. Geometry preparation failures should
+/// produce a terminal [`ColorFitStatus::Failed`] row instead of this type.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ColorObservation {
+    /// Reported apparent magnitude, or null when invalid.
     pub magnitude: Option<f64>,
+    /// Reported one-sigma magnitude uncertainty, or null when invalid.
     pub magnitude_sigma: Option<f64>,
+    /// Observatory code used to prepare the observer position.
     pub observatory_code: String,
+    /// Reported filter before canonical resolution.
     pub reported_filter: Option<String>,
+    /// Heliocentric ecliptic object position in au.
     pub object_position: [f64; 3],
+    /// Heliocentric ecliptic observer position in au.
     pub observer_position: [f64; 3],
 }
 
-/// One final `ColorFit` row.  Option on a list is the top-level Arrow null;
+/// Stable semantic status of one color-fit row.
+#[non_exhaustive]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum ColorFitStatus {
+    /// The fit completed and scientific products are available.
+    Ok,
+    /// No matching orbit was supplied.
+    NoOrbit,
+    /// More than one matching orbit was supplied.
+    MultipleOrbits,
+    /// No valid, supported photometry remained after classification.
+    NoUsablePhotometry,
+    /// Clipping removed too large a fraction of eligible observations.
+    TooManyOutliers,
+    /// The fitted phase parameter is outside the model validity bounds.
+    PhaseParamOutOfBounds,
+    /// Geometry preparation or fitting failed for this object.
+    Failed,
+}
+
+impl ColorFitStatus {
+    /// Return the exact stable string stored in the Arrow `status` column.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Ok => "ok",
+            Self::NoOrbit => "no_orbit",
+            Self::MultipleOrbits => "multiple_orbits",
+            Self::NoUsablePhotometry => "no_usable_photometry",
+            Self::TooManyOutliers => "too_many_outliers",
+            Self::PhaseParamOutOfBounds => "phase_param_out_of_bounds",
+            Self::Failed => "failed",
+        }
+    }
+}
+
+impl fmt::Display for ColorFitStatus {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+/// One final `ColorFit` row. Option on a list is the top-level Arrow null;
 /// floating non-identifiability inside a present list is represented by NaN.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ColorFitRow {
+    /// Input object identifier.
     pub object_id: String,
-    pub status: String,
+    /// Typed row outcome; Arrow transport uses [`ColorFitStatus::as_str`].
+    pub status: ColorFitStatus,
+    /// Human-readable per-object failure detail.
     pub error: Option<String>,
+    /// Byte-wise sorted active canonical filter identifiers.
     pub filter_ids: Option<Vec<String>>,
+    /// Absolute magnitude per active filter.
     pub absolute_magnitudes: Option<Vec<f64>>,
+    /// One-sigma uncertainty per absolute magnitude.
     pub absolute_magnitude_sigmas: Option<Vec<f64>>,
+    /// Number of used observations per active filter.
     pub num_used_by_filter: Option<Vec<i64>>,
+    /// Row-major absolute-magnitude covariance matrix.
     pub magnitude_covariance: Option<Vec<f64>>,
+    /// Left filter identifier for each reported color.
     pub color_lhs_filter_ids: Option<Vec<String>>,
+    /// Right filter identifier for each reported color.
     pub color_rhs_filter_ids: Option<Vec<String>>,
+    /// Color values defined as `H_lhs - H_rhs`.
     pub colors: Option<Vec<f64>>,
+    /// One-sigma uncertainty per color.
     pub color_sigmas: Option<Vec<f64>>,
+    /// Fitted scalar phase parameter for HG/HG12*, when applicable.
     pub phase_param: Option<f64>,
+    /// One-sigma uncertainty of `phase_param`.
     pub phase_param_sigma: Option<f64>,
+    /// Fit chi-square.
     pub chi2: Option<f64>,
+    /// Reduced chi-square.
     pub reduced_chi2: Option<f64>,
+    /// Fit degrees of freedom.
     pub dof: Option<i64>,
+    /// Numerical design-matrix rank.
     pub rank: Option<i64>,
+    /// Number of fitted parameters.
     pub num_params: Option<i64>,
+    /// Whether the nonlinear solver converged.
     pub converged: Option<bool>,
+    /// Number of attributable input observations.
     pub num_obs: Option<i64>,
+    /// Count rejected for invalid magnitude or uncertainty.
     pub num_invalid: Option<i64>,
+    /// Count rejected for null or unsupported filter.
     pub num_unsupported_filter: Option<i64>,
+    /// Count removed by outlier clipping.
     pub num_clipped: Option<i64>,
+    /// Count admitted to the attempted fit.
     pub num_used: Option<i64>,
+}
+
+/// Complete typed result of the high-level Rust color-estimation workflow.
+///
+/// Rows are ordered by first appearance of each non-null observation object ID.
+/// Arrow serialization is a transport adapter over this primary typed result.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ColorFitBatch {
+    /// One result per first-appearing non-null input object identifier.
+    pub rows: Vec<ColorFitRow>,
+}
+
+impl ColorFitBatch {
+    /// Construct a batch from already ordered typed rows.
+    pub fn new(rows: Vec<ColorFitRow>) -> Self {
+        Self { rows }
+    }
+
+    /// Return true when the batch contains no object rows.
+    pub fn is_empty(&self) -> bool {
+        self.rows.is_empty()
+    }
+
+    /// Return the number of object rows.
+    pub fn len(&self) -> usize {
+        self.rows.len()
+    }
+
+    /// Encode this typed batch using the exact public `ColorFit` Arrow schema.
+    pub fn to_record_batch(&self) -> SchemaResult<RecordBatch> {
+        color_fit_record_batch(&self.rows)
+    }
 }
 
 impl ColorFitRow {
     fn base(object_id: impl Into<String>, num_obs: usize) -> Self {
         Self {
             object_id: object_id.into(),
-            status: "ok".to_string(),
+            status: ColorFitStatus::Ok,
             error: None,
             filter_ids: None,
             absolute_magnitudes: None,
@@ -171,15 +286,15 @@ impl ColorFitRow {
         }
     }
 
-    /// Terminal row used when orbit matching or geometry preparation fails.
+    /// Construct a terminal row for orbit matching or geometry preparation failure.
     pub fn terminal(
         object_id: impl Into<String>,
         num_obs: usize,
-        status: &str,
+        status: ColorFitStatus,
         error: impl Into<String>,
     ) -> Self {
         let mut row = Self::base(object_id, num_obs);
-        row.status = status.to_string();
+        row.status = status;
         row.error = Some(error.into());
         row
     }
@@ -282,7 +397,7 @@ pub fn estimate_color_object(
                 return ColorFitRow::terminal(
                     object_id,
                     observations.len(),
-                    "failed",
+                    ColorFitStatus::Failed,
                     format!("filter resolution failed: {error}"),
                 );
             }
@@ -327,7 +442,7 @@ pub fn estimate_color_object(
                             return ColorFitRow::terminal(
                                 object_id,
                                 observations.len(),
-                                "failed",
+                                ColorFitStatus::Failed,
                                 format!("bandpass projection failed: {error}"),
                             );
                         }
@@ -342,7 +457,12 @@ pub fn estimate_color_object(
 
     let classified_count = classified.len();
     let classified_failure = |message: &str| {
-        let mut failed = ColorFitRow::terminal(object_id, observations.len(), "failed", message);
+        let mut failed = ColorFitRow::terminal(
+            object_id,
+            observations.len(),
+            ColorFitStatus::Failed,
+            message,
+        );
         // `num_used` means rows admitted to the attempted scientific fit. Even
         // when geometry prevents a result, this preserves the exhaustive row
         // partition without relabeling valid supported photometry as clipped.
@@ -376,7 +496,7 @@ pub fn estimate_color_object(
     }
 
     if eligible.is_empty() {
-        output.status = "no_usable_photometry".to_string();
+        output.status = ColorFitStatus::NoUsablePhotometry;
         output.error = Some(format!(
             "None of the {} observation(s) has valid, supported photometry",
             observations.len()
@@ -390,7 +510,7 @@ pub fn estimate_color_object(
         Err(FitFailure::TooManyOutliers { included }) => {
             let used = included.iter().filter(|&&value| value).count();
             let clipped = eligible.len() - used;
-            output.status = "too_many_outliers".to_string();
+            output.status = ColorFitStatus::TooManyOutliers;
             output.error = Some(format!(
                 "Outlier rejection removed {clipped} of the {} eligible observation(s); fit is unreliable",
                 eligible.len()
@@ -399,7 +519,7 @@ pub fn estimate_color_object(
             return output;
         }
         Err(FitFailure::Other(error)) => {
-            output.status = "failed".to_string();
+            output.status = ColorFitStatus::Failed;
             output.error = Some(error);
             // Classification completed. With no statistical result, preserve a
             // complete partition by treating every eligible row as used.
@@ -516,7 +636,7 @@ pub fn estimate_color_object(
                 "Fitted {label} = {phase_param:.4} for {object_id} is outside the validity bounds [{low}, {high}]"
             );
             if config.force_phase_bounds {
-                output.status = "phase_param_out_of_bounds".to_string();
+                output.status = ColorFitStatus::PhaseParamOutOfBounds;
                 output.error = Some(message);
                 // filter_ids and counts are intentionally retained; every
                 // scientific product and pair-list is a top-level null.
@@ -1442,12 +1562,9 @@ pub fn color_fit_record_batch(rows: &[ColorFitRow]) -> SchemaResult<RecordBatch>
 mod tests {
     use super::*;
     use arrow_array::Array;
-    use std::path::PathBuf;
 
-    fn data() -> BandpassData {
-        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("../../src/adam_core/photometry/bandpasses/data");
-        BandpassData::load(&path).unwrap()
+    fn data() -> Arc<BandpassData> {
+        crate::bundled_bandpass_data().unwrap()
     }
 
     fn geometry(alpha_deg: f64) -> ([f64; 3], [f64; 3]) {
@@ -1513,7 +1630,7 @@ mod tests {
                 }
             }
             let fit = estimate_color_object(&data, "x", &rows, &config(model));
-            assert_eq!(fit.status, "ok", "{model:?}: {:?}", fit.error);
+            assert_eq!(fit.status, ColorFitStatus::Ok, "{model:?}: {:?}", fit.error);
             assert_eq!(
                 fit.filter_ids.as_ref().unwrap(),
                 &["ATLAS_o", "PS1_y", "SDSS_z"]
@@ -1547,7 +1664,7 @@ mod tests {
         let mut cfg = config(ColorPhaseModel::C1C2);
         cfg.strict_band_mapping = true;
         let fit = estimate_color_object(&data, "x", &rows, &cfg);
-        assert_eq!(fit.status, "no_usable_photometry");
+        assert_eq!(fit.status, ColorFitStatus::NoUsablePhotometry);
         assert_eq!(fit.num_invalid, Some(1));
         assert_eq!(fit.num_unsupported_filter, Some(2));
         assert_eq!(fit.num_clipped, Some(0));
@@ -1568,7 +1685,7 @@ mod tests {
         let mut cfg = config(ColorPhaseModel::C1C2);
         cfg.strict_band_mapping = true;
         let fit = estimate_color_object(&data, "x", &rows, &cfg);
-        assert_eq!(fit.status, "failed");
+        assert_eq!(fit.status, ColorFitStatus::Failed);
         assert_eq!(fit.num_invalid, Some(1));
         assert_eq!(fit.num_unsupported_filter, Some(1));
         assert_eq!(fit.num_clipped, Some(0));
@@ -1609,7 +1726,7 @@ mod tests {
             observation("SDSS_r", 20.0, 17.7, 0.05),
         ];
         let fit = estimate_color_object(&data, "x", &rows, &config(ColorPhaseModel::Hg));
-        assert_eq!(fit.status, "ok");
+        assert_eq!(fit.status, ColorFitStatus::Ok);
         assert!(fit
             .absolute_magnitudes
             .as_ref()
@@ -1637,7 +1754,7 @@ mod tests {
             )
             .collect::<Vec<_>>();
         let fit = estimate_color_object(&data, "x", &rows, &config(ColorPhaseModel::C1C2));
-        assert_eq!(fit.status, "ok", "{fit:?}");
+        assert_eq!(fit.status, ColorFitStatus::Ok, "{fit:?}");
         assert_eq!(fit.rank, Some(2));
         assert!(fit
             .absolute_magnitudes
@@ -1671,7 +1788,7 @@ mod tests {
             .chain([17.5, 17.6, 17.4].map(|magnitude| observation("SDSS_r", 30.0, magnitude, 0.05)))
             .collect::<Vec<_>>();
         let fit = estimate_color_object(&data, "x", &rows, &config(ColorPhaseModel::C1C2));
-        assert_eq!(fit.status, "ok", "{fit:?}");
+        assert_eq!(fit.status, ColorFitStatus::Ok, "{fit:?}");
         assert!(fit.colors.as_ref().unwrap()[0].is_nan());
         assert!(fit.color_sigmas.as_ref().unwrap()[0].is_nan());
     }
@@ -1688,7 +1805,7 @@ mod tests {
             .to_vec();
         rows.push(observation("SDSS_r", 30.0, 17.7 + correction(30.0), 0.05));
         let fit = estimate_color_object(&data, "x", &rows, &config(ColorPhaseModel::C1C2));
-        assert_eq!(fit.status, "ok", "{fit:?}");
+        assert_eq!(fit.status, ColorFitStatus::Ok, "{fit:?}");
         assert_eq!(fit.rank, Some(4));
         assert!((fit.colors.as_ref().unwrap()[0] - 0.5).abs() < 1.0e-10);
         assert!(fit.color_sigmas.as_ref().unwrap()[0].is_nan());
@@ -1700,7 +1817,7 @@ mod tests {
         let rows = [5.0, 15.0, 25.0, 35.0]
             .map(|alpha| observation("ATLAS_c", alpha, 18.0 + 0.01 * alpha, 0.05));
         let fit = estimate_color_object(&data, "x", &rows, &config(ColorPhaseModel::C1C2));
-        assert_eq!(fit.status, "ok");
+        assert_eq!(fit.status, ColorFitStatus::Ok);
         assert_eq!(fit.color_lhs_filter_ids, Some(Vec::new()));
         assert_eq!(fit.color_rhs_filter_ids, Some(Vec::new()));
         assert_eq!(fit.colors, Some(Vec::new()));
@@ -1713,7 +1830,7 @@ mod tests {
         let rows = [5.0, 15.0, 25.0, 35.0]
             .map(|alpha| observation("ATLAS_c", alpha, 18.0 + 0.01 * alpha, 0.05));
         let ok = estimate_color_object(&data, "x", &rows, &config(ColorPhaseModel::C1C2));
-        let failed = ColorFitRow::terminal("y", 2, "no_orbit", "missing");
+        let failed = ColorFitRow::terminal("y", 2, ColorFitStatus::NoOrbit, "missing");
         let batch = color_fit_record_batch(&[ok, failed]).unwrap();
         assert_eq!(batch.schema(), color_fit_schema());
         assert_eq!(batch.num_columns(), 25);
@@ -1787,7 +1904,7 @@ mod tests {
             ));
         }
         let fit = estimate_color_object(&data, "x", &rows, &config(ColorPhaseModel::C1C2));
-        assert_eq!(fit.status, "too_many_outliers", "{fit:?}");
+        assert_eq!(fit.status, ColorFitStatus::TooManyOutliers, "{fit:?}");
         assert!(fit.filter_ids.is_none());
         assert!(fit.absolute_magnitudes.is_none());
         assert_eq!(
@@ -1818,7 +1935,7 @@ mod tests {
                 }
             }
             let fit = estimate_color_object(&data, "x", &rows, &config(model));
-            assert_eq!(fit.status, "ok", "{model:?}: {fit:?}");
+            assert_eq!(fit.status, ColorFitStatus::Ok, "{model:?}: {fit:?}");
             assert_eq!(fit.converged, Some(true), "{model:?}: {fit:?}");
             assert!((fit.colors.as_ref().unwrap()[0] - 0.497).abs() < 1.0e-5);
         }
@@ -1889,7 +2006,7 @@ mod tests {
         let mut cfg = config(ColorPhaseModel::Hg);
         cfg.force_phase_bounds = true;
         let fit = estimate_color_object(&data, "x", &rows, &cfg);
-        assert_eq!(fit.status, "phase_param_out_of_bounds");
+        assert_eq!(fit.status, ColorFitStatus::PhaseParamOutOfBounds);
         assert!(fit.filter_ids.is_some());
         assert!(fit.num_used_by_filter.is_some());
         assert!(fit.absolute_magnitudes.is_none());

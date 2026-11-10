@@ -4,6 +4,35 @@ This file contains notable changes in adam-core
 
 ## [Unreleased]
 
+### Added
+
+- Matching public Python and Rust ``estimate_colors`` APIs for native
+  ``SourceCatalog``/``Orbits`` inputs. Public Rust owns the complete workflow
+  and returns a typed ``ColorFitBatch``; the private PyO3 function only adapts
+  IPC transport. Canonical-filter resolution, optional explicit composition-aware
+  projection, HG12*/HG/c1c2 fitting, clipping, identifiability, covariance,
+  diagnostics, and per-object failures remain Rust-owned. Python only marshals
+  Arrow IPC, validates the exact result schema, and wraps the quivr table.
+
+### Changed
+
+- Rust color-fit rows now expose non-exhaustive typed ``ColorFitStatus`` values
+  while preserving the exact Arrow status strings. ``ColorEstimationError`` is
+  also non-exhaustive. Call-level time/schema failures retain operation context;
+  isolated object errors deliberately use clean Rust-native scientific text
+  without Python ``ValueError:``/``RuntimeError:`` prefixes, and invalid MPC
+  codes no longer repeat the code in a wrapper prefix.
+- Standalone Rust color resources use five bandpass Parquet tables embedded in
+  the compiled ``adam_core_rs_coords`` crate plus the documented
+  ``adam_core_rs_kernel_data::Resolver`` chain for kernels and MPC obscodes.
+  The embedded tables parse once without crate-source/runtime files; explicit
+  custom directories remain path-cached. Identical concurrent first
+  initialization waits and succeeds. Kernels still accumulate process-wide,
+  the first loaded nonempty obscodes table wins, and each estimate holds a
+  SPICE read guard; callers must initialize before concurrent mutation and
+  warm UTC rescaling on one thread until the separately tracked ERFA first-use
+  race is fixed.
+
 ### Fixed
 
 - Hyperbolic Keplerian and cometary conversions preserve signed mean anomaly,
@@ -113,12 +142,6 @@ This file contains notable changes in adam-core
 
 ### Added
 
-- Generic ``ColorFit`` results and a one-call ``estimate_colors`` facade for
-  native ``SourceCatalog``/``Orbits`` inputs. The fused Rust implementation owns
-  canonical-filter resolution, optional explicit composition-aware projection,
-  HG12*/HG/c1c2 fitting, clipping, identifiability, covariance, diagnostics, and
-  per-object failures; Python only marshals Arrow IPC, validates the exact result
-  schema, and wraps the batch as a quivr table.
 - A Rust-authoritative, complete OD configuration boundary: ``OdConfig``,
   stage-specific ``IodRunConfig``, ``RefinementRunConfig``, and
   ``EvaluationConfig``, ordered ``ObservationPipeline`` declarations, strict
