@@ -514,6 +514,94 @@ def test_ADES_to_string_round_trips_mixed_null_numeric_cells():
         assert actual[1] is None
 
 
+def test_ADES_writer_reader_round_trip_preserves_quote_characters():
+    remarks = 'unmatched " and "quoted-looking" text'
+    observations = ADESObservations.from_kwargs(
+        provID=["2024 AB"],
+        obsTime=Timestamp.from_mjd([60434.0], scale="utc"),
+        ra=[180.0],
+        dec=[0.0],
+        stn=["695"],
+        mode=["CCD"],
+        astCat=["Gaia2"],
+        remarks=[remarks],
+    )
+
+    rendered = ADES_to_string(observations, None)
+    assert f"|{remarks}\n" in rendered
+    assert '""' not in rendered
+
+    _contexts, parsed = ADES_string_to_tables(rendered)
+    assert parsed.remarks.to_pylist() == [remarks]
+
+
+@pytest.mark.parametrize(
+    ("remarks", "message"),
+    [
+        ("unrepresentable | separator", r"unrepresentable `\|` delimiter"),
+        ("unrepresentable\nnewline", "unrepresentable physical newline"),
+    ],
+)
+def test_ADES_writer_rejects_unrepresentable_observation_fields(remarks, message):
+    observations = ADESObservations.from_kwargs(
+        provID=["2024 AB"],
+        obsTime=Timestamp.from_mjd([60434.0], scale="utc"),
+        ra=[180.0],
+        dec=[0.0],
+        stn=["695"],
+        mode=["CCD"],
+        astCat=["Gaia2"],
+        remarks=[remarks],
+    )
+
+    with pytest.raises(
+        ValueError,
+        match=rf"field remarks at observation row 1.*{message}",
+    ):
+        ADES_to_string(observations, None)
+
+
+@pytest.mark.parametrize(
+    "prov_id",
+    ["#reserved", "!reserved", "  #reserved", "\t!reserved", " \t #reserved"],
+)
+def test_ADES_writer_reader_path_rejects_reserved_context_markers(prov_id):
+    observations = ADESObservations.from_kwargs(
+        provID=[prov_id],
+        obsTime=Timestamp.from_mjd([60434.0], scale="utc"),
+        ra=[180.0],
+        dec=[0.0],
+        stn=["695"],
+        mode=["CCD"],
+        astCat=["Gaia2"],
+    )
+
+    def writer_reader_round_trip():
+        return ADES_string_to_tables(ADES_to_string(observations, None))
+
+    with pytest.raises(
+        ValueError,
+        match=r"field provID at observation row 1: first field begins with reserved context marker",
+    ):
+        writer_reader_round_trip()
+
+
+def test_ADES_writer_reader_normalizes_safe_leading_identity_whitespace():
+    observations = ADESObservations.from_kwargs(
+        provID=["  2024 AB"],
+        obsTime=Timestamp.from_mjd([60434.0], scale="utc"),
+        ra=[180.0],
+        dec=[0.0],
+        stn=["695"],
+        mode=["CCD"],
+        astCat=["Gaia2"],
+    )
+
+    _contexts, parsed = ADES_string_to_tables(ADES_to_string(observations, None))
+
+    assert parsed.provID.to_pylist() == ["2024 AB"]
+
+
 def test_ADES_to_string_publishes_large_schema_valid_uncertainties():
     observations = ADESObservations.from_kwargs(
         provID=["2024 YR4", "2024 YR4"],
@@ -830,3 +918,243 @@ permID|obsTime|ra|dec|mag|band|stn|mode|astCat|remarks
     assert parsed_observations.ra[0].as_py() == 180.0
     assert parsed_observations.band[0].as_py() == "r"
     assert parsed_observations.remarks[0].as_py() == "First observation"
+
+
+def test_ADES_parser_preserves_literal_quotes_and_identity_names_per_line():
+    ades_string = """# version=2022
+provID|obsTime|ra|dec|stn|mode|astCat|remarks
+2024 AB|2024-01-01T00:00:00.000Z|180.0|0.0|695|CCD|Gaia2|plain provID review
+2024 AC|2024-01-01T00:01:00.000Z|181.0|1.0|695|CCD|Gaia2|"unmatched provID review
+2024 AD|2024-01-01T00:02:00.000Z|182.0|2.0|695|CCD|Gaia2|"quoted-looking provID text"
+"""
+
+    _contexts, observations = ADES_string_to_tables(ades_string)
+
+    assert len(observations) == 3
+    assert observations.provID.to_pylist() == ["2024 AB", "2024 AC", "2024 AD"]
+    assert observations.remarks.to_pylist() == [
+        "plain provID review",
+        '"unmatched provID review',
+        '"quoted-looking provID text"',
+    ]
+
+
+def test_ADES_parser_treats_pipes_inside_quotes_as_field_boundaries():
+    ades_string = """# version=2022
+provID|obsTime|ra|dec|stn|mode|astCat|remarks
+2024 AB|2024-01-01T00:00:00.000Z|180.0|0.0|695|CCD|Gaia2|"follow-up | provID review"
+2024 AC|2024-01-01T00:01:00.000Z|181.0|1.0|695|CCD|Gaia2|not swallowed
+"""
+
+    with pytest.raises(
+        ValueError,
+        match=r"row at line 3 has 9 fields; expected 8.*line 2",
+    ):
+        ADES_string_to_tables(ades_string)
+
+
+def test_ADES_parser_allows_unknown_header_tokens_with_warning(caplog):
+    ades_string = """# version=2022
+provID|obsTime|ra|dec|future_field|stn|mode|astCat
+2024 AB|2024-01-01T00:00:00.000Z|180.0|0.0|future value|695|CCD|Gaia2
+"""
+
+    _contexts, observations = ADES_string_to_tables(ades_string)
+
+    assert len(observations) == 1
+    assert "future_field" in caplog.text
+    assert "unknown ADES columns" in caplog.text
+
+
+def test_ADES_parser_rejects_identity_header_missing_obs_time_explicitly():
+    ades_string = """# version=2022
+provID|ra|dec|stn|mode|astCat
+2024 AB|180.0|0.0|695|CCD|Gaia2
+"""
+
+    with pytest.raises(
+        ValueError,
+        match=r"invalid ADES keyword record at line 2: missing required obsTime column",
+    ) as exc_info:
+        ADES_string_to_tables(ades_string)
+    assert "invalid ISO time" not in str(exc_info.value)
+
+
+def test_ADES_parser_rejects_non_first_identity_as_header_error():
+    ades_string = """# version=2022
+obsTime|provID|ra|dec|stn|mode|astCat
+2024-01-01T00:00:00.000Z|2024 AB|180.0|0.0|695|CCD|Gaia2
+"""
+
+    with pytest.raises(
+        ValueError,
+        match=r"invalid ADES keyword record at line 2: target identity column provID must be the first field",
+    ) as exc_info:
+        ADES_string_to_tables(ades_string)
+    assert "invalid ISO time" not in str(exc_info.value)
+
+
+def test_ADES_context_writer_rejects_physical_newlines():
+    observations = ADESObservations.from_kwargs(
+        provID=["2024 AB"],
+        obsTime=Timestamp.from_mjd([60434.0], scale="utc"),
+        ra=[180.0],
+        dec=[0.0],
+        stn=["695"],
+        mode=["CCD"],
+        astCat=["Gaia2"],
+    )
+    context = ObsContext(
+        observatory=ObservatoryObsContext(mpcCode="695", name="bad\nname"),
+        submitter=SubmitterObsContext(name="Submitter"),
+        observers=["Observer"],
+        measurers=["Measurer"],
+        telescope=TelescopeObsContext(design="Reflector", aperture=1.0, detector="CCD"),
+    )
+
+    with pytest.raises(
+        ValueError,
+        match=r"context field observatory.name.*unrepresentable physical newline",
+    ):
+        ADES_to_string(observations, {"695": context})
+
+
+def test_ADES_context_round_trip_preserves_literal_quotes_and_pipes():
+    observations = ADESObservations.from_kwargs(
+        provID=["2024 AB"],
+        obsTime=Timestamp.from_mjd([60434.0], scale="utc"),
+        ra=[180.0],
+        dec=[0.0],
+        stn=["695"],
+        mode=["CCD"],
+        astCat=["Gaia2"],
+    )
+    context = ObsContext(
+        observatory=ObservatoryObsContext(
+            mpcCode="695", name='unmatched " | observatory'
+        ),
+        submitter=SubmitterObsContext(name='"quoted | submitter"'),
+        observers=['Observer " | literal'],
+        measurers=['"Measurer | literal"'],
+        telescope=TelescopeObsContext(design="Reflector", aperture=1.0, detector="CCD"),
+        comments=['Comment with unmatched " and | separator'],
+    )
+
+    rendered = ADES_to_string(observations, {"695": context})
+    parsed_contexts, parsed_observations = ADES_string_to_tables(rendered)
+
+    assert len(parsed_observations) == 1
+    assert parsed_contexts["695"] == context
+
+
+def test_ADES_parser_accepts_first_line_bom_and_preserves_line_numbers():
+    valid = """\ufeff# version=2022
+
+provID|obsTime|ra|dec|stn|mode|astCat
+2024 AB|2024-01-01T00:00:00.000Z|180.0|0.0|695|CCD|Gaia2
+"""
+    _contexts, observations = ADES_string_to_tables(valid)
+    assert len(observations) == 1
+
+    short = """\ufeff# version=2022
+
+provID|obsTime|ra|dec|stn|mode|astCat|band
+
+2024 AB|2024-01-01T00:00:00.000Z|180.0|0.0|695|CCD|Gaia2
+"""
+    with pytest.raises(
+        ValueError,
+        match=r"row at line 5 has 7 fields; expected 8.*line 3",
+    ):
+        ADES_string_to_tables(short)
+
+
+def test_ADES_parser_writer_round_trip_accepts_crlf_records():
+    crlf = (
+        "# version=2022\r\n"
+        "provID|obsTime|ra|dec|stn|mode|astCat|remarks\r\n"
+        '2024 AB|2024-01-01T00:00:00.000Z|180.0|0.0|695|CCD|Gaia2|literal " quote\r\n'
+    )
+
+    _contexts, parsed = ADES_string_to_tables(crlf)
+    rendered = ADES_to_string(parsed, None, sort=False).replace("\n", "\r\n")
+    _contexts, reparsed = ADES_string_to_tables(rendered)
+
+    assert parsed.table.equals(reparsed.table)
+
+
+def test_ADES_parser_reports_physical_lines_across_blanks():
+    ades_string = """
+# version=2022
+
+provID|obsTime|ra|dec|stn|mode|astCat|band
+
+2024 AB|2024-01-01T00:00:00.000Z|180.0|0.0|695|CCD|Gaia2
+"""
+
+    with pytest.raises(
+        ValueError,
+        match=r"row at line 6 has 7 fields; expected 8.*line 4",
+    ):
+        ADES_string_to_tables(ades_string)
+
+
+@pytest.mark.parametrize(
+    ("row", "actual"),
+    [
+        (
+            "2024 AB|2024-01-01T00:00:00.000Z|180.0|0.0|695|CCD|Gaia2",
+            7,
+        ),
+        (
+            "2024 AB|2024-01-01T00:00:00.000Z|180.0|0.0|695|CCD|Gaia2|r|extra",
+            9,
+        ),
+    ],
+)
+def test_ADES_parser_rejects_wrong_field_counts(row, actual):
+    ades_string = f"""# version=2022
+provID|obsTime|ra|dec|stn|mode|astCat|band
+{row}
+"""
+
+    with pytest.raises(
+        ValueError,
+        match=rf"row at line 3 has {actual} fields; expected 8.*line 2",
+    ):
+        ADES_string_to_tables(ades_string)
+
+
+@pytest.mark.parametrize(
+    "ades_string, line_number",
+    [
+        (
+            """# version=2022
+artSat|obsTime|ra|dec|future_field|stn|mode|astCat
+1998-067A|2024-01-01T00:00:00.000Z|180.0|0.0|future value|695|CCD|Gaia2
+""",
+            2,
+        ),
+        (
+            """# version=2022
+provID|obsTime|ra|dec|stn|mode|astCat
+2024 AB|2024-01-01T00:00:00.000Z|180.0|0.0|695|CCD|Gaia2
+artSat|obsTime|ra|dec|stn|mode|astCat
+1998-067A|2024-01-01T00:01:00.000Z|181.0|1.0|695|CCD|Gaia2
+""",
+            4,
+        ),
+        (
+            """# version=2022
+artSat|ra|dec|stn|mode|astCat
+""",
+            2,
+        ),
+    ],
+)
+def test_ADES_parser_rejects_unsupported_artsat_identity(ades_string, line_number):
+    with pytest.raises(
+        ValueError,
+        match=rf"unsupported ADES identity column artSat.*line {line_number}",
+    ):
+        ADES_string_to_tables(ades_string)
