@@ -1,0 +1,21 @@
+adam\_core.orbit\_determination.algorithms package
+==================================================
+
+.. automodule:: adam_core.orbit_determination.algorithms
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
+Submodules
+----------
+
+.. toctree::
+   :maxdepth: 4
+
+   adam_core.orbit_determination.algorithms.fitting
+   adam_core.orbit_determination.algorithms.gauss
+   adam_core.orbit_determination.algorithms.gibbs
+   adam_core.orbit_determination.algorithms.herrick_gibbs
+   adam_core.orbit_determination.algorithms.iod
+   adam_core.orbit_determination.algorithms.outliers
+   adam_core.orbit_determination.algorithms.rejection

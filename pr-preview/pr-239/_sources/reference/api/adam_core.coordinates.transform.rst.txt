@@ -1,0 +1,7 @@
+adam\_core.coordinates.transform module
+=======================================
+
+.. automodule:: adam_core.coordinates.transform
+   :members:
+   :show-inheritance:
+   :undoc-members:
