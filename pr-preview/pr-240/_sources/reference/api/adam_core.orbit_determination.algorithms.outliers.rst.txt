@@ -1,0 +1,7 @@
+adam\_core.orbit\_determination.algorithms.outliers module
+==========================================================
+
+.. automodule:: adam_core.orbit_determination.algorithms.outliers
+   :members:
+   :show-inheritance:
+   :undoc-members:
