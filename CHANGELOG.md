@@ -4,6 +4,14 @@ This file contains notable changes in adam-core
 
 ## [Unreleased]
 
+### Fixed
+
+- Hyperbolic Keplerian and cometary conversions preserve signed mean anomaly,
+  preventing pre-perihelion states such as C/2022 E3 from receiving an
+  elliptic 2π wrap and converting to implausibly distant Cartesian states.
+  For inbound hyperbolic states, public `calc_mean_anomaly` now returns the
+  negative, signed value instead of a value wrapped into `[0, 2π)`.
+
 ## [0.8.0] - 2026-11-10
 
 ### Added

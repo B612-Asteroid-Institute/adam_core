@@ -99,19 +99,21 @@ non-gravitational solution store only the 6x6 block.
   element basis (cometary and Keplerian respectively), converted to canonical
   units, and the ordinary coordinate transform carries it to Cartesian.
 
+Hyperbolic element conversions preserve signed, non-periodic mean anomaly:
+pre-perihelion states have negative mean anomaly and post-perihelion states
+have positive mean anomaly. This includes near-parabolic hyperbolic SBDB
+solutions such as C/2022 E3 (issue #210).
+
 Current limits:
 
+- Exact-parabolic (``e == 1``), extremely near-parabolic, and large-magnitude
+  (``|M|``) anomaly solving retain legacy formulas and iteration
+  initialization. This
+  correction is limited to preserving signed anomaly for convergent
+  hyperbolic inputs; broader solver hardening remains follow-up work.
 - NEOCC non-grav solutions are decoded only for the Yarkovsky model
   (``AMRAT``/``A2``); the ``AMRAT`` dimension is marginalized out with a
   warning and other models are degraded to value-free rows with a warning.
-- Near-parabolic orbits (e close to 1, e.g. C/2022 E3) currently convert to
-  wildly wrong Cartesian states through the pre-existing
-  cometary-to-Cartesian defect tracked in `issue #210
-  <https://github.com/B612-Asteroid-Institute/adam_core/issues/210>`_. Until
-  that is fixed, element-based SBDB/NEOCC imports of such objects cannot be
-  propagated meaningfully. Validation of a provider's non-gravitational force
-  model from Cartesian starting states does not validate this element-
-  conversion path.
 
 Two-Body Note
 -------------
