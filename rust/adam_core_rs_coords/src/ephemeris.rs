@@ -766,7 +766,11 @@ fn generate_ephemeris_2body_grouped_single_thread(
     }
 }
 
-/// Batched state-only ephemeris. Rayon-parallel over rows.
+/// Batched state-only ephemeris.
+///
+/// Calls without consecutive repeated orbit-state/parameter rows are
+/// Rayon-parallel. Calls with a repeated row use the grouped warm-start kernel
+/// at every Rayon width so its output is independent of pool size.
 ///
 /// Returns `(spherical_flat [N*6], light_time [N], aberrated_flat [N*6])`.
 /// Rows whose LT Newton fails to converge emit NaN in `light_time[i]`; the
@@ -800,54 +804,55 @@ pub fn generate_ephemeris_2body_flat6(
     let mut lt_out = vec![0.0_f64; n];
     let mut aberrated_out = vec![0.0_f64; n * 6];
 
+    if has_consecutive_repeated_orbits(orbits_flat, mus, n) {
+        generate_ephemeris_2body_grouped_single_thread(
+            orbits_flat,
+            observer_states_flat,
+            mus,
+            lt_tol,
+            max_iter,
+            tol,
+            stellar_aberration,
+            max_lt_iter,
+            &mut sph_out,
+            &mut lt_out,
+            &mut aberrated_out,
+        );
+        return (sph_out, lt_out, aberrated_out);
+    }
+
     if rayon_is_single_threaded() {
-        if has_consecutive_repeated_orbits(orbits_flat, mus, n) {
-            generate_ephemeris_2body_grouped_single_thread(
-                orbits_flat,
-                observer_states_flat,
-                mus,
+        for i in 0..n {
+            let base = i * 6;
+            let orbit: [f64; 6] = [
+                orbits_flat[base],
+                orbits_flat[base + 1],
+                orbits_flat[base + 2],
+                orbits_flat[base + 3],
+                orbits_flat[base + 4],
+                orbits_flat[base + 5],
+            ];
+            let observer: [f64; 6] = [
+                observer_states_flat[base],
+                observer_states_flat[base + 1],
+                observer_states_flat[base + 2],
+                observer_states_flat[base + 3],
+                observer_states_flat[base + 4],
+                observer_states_flat[base + 5],
+            ];
+            let (sph, lt, aberrated) = generate_ephemeris_2body_row::<f64>(
+                orbit,
+                observer,
+                mus[i],
                 lt_tol,
                 max_iter,
                 tol,
                 stellar_aberration,
                 max_lt_iter,
-                &mut sph_out,
-                &mut lt_out,
-                &mut aberrated_out,
             );
-        } else {
-            for i in 0..n {
-                let base = i * 6;
-                let orbit: [f64; 6] = [
-                    orbits_flat[base],
-                    orbits_flat[base + 1],
-                    orbits_flat[base + 2],
-                    orbits_flat[base + 3],
-                    orbits_flat[base + 4],
-                    orbits_flat[base + 5],
-                ];
-                let observer: [f64; 6] = [
-                    observer_states_flat[base],
-                    observer_states_flat[base + 1],
-                    observer_states_flat[base + 2],
-                    observer_states_flat[base + 3],
-                    observer_states_flat[base + 4],
-                    observer_states_flat[base + 5],
-                ];
-                let (sph, lt, aberrated) = generate_ephemeris_2body_row::<f64>(
-                    orbit,
-                    observer,
-                    mus[i],
-                    lt_tol,
-                    max_iter,
-                    tol,
-                    stellar_aberration,
-                    max_lt_iter,
-                );
-                sph_out[base..base + 6].copy_from_slice(&sph);
-                lt_out[i] = lt;
-                aberrated_out[base..base + 6].copy_from_slice(&aberrated);
-            }
+            sph_out[base..base + 6].copy_from_slice(&sph);
+            lt_out[i] = lt;
+            aberrated_out[base..base + 6].copy_from_slice(&aberrated);
         }
         return (sph_out, lt_out, aberrated_out);
     }
@@ -1156,30 +1161,289 @@ mod tests {
 
     #[test]
     fn batched_matches_per_row() {
-        let orbits = [sample_orbit(), sample_orbit()].concat();
-        let observers = [sample_observer(), sample_observer()].concat();
+        let mut second_orbit = sample_orbit();
+        second_orbit[0] += 0.01;
+        let orbit_rows = [sample_orbit(), second_orbit];
+        let observer_rows = [sample_observer(), sample_observer()];
+        let orbits = orbit_rows.concat();
+        let observers = observer_rows.concat();
         let mus = [MU_SUN, MU_SUN];
         let (sph_b, lt_b, aberrated_b) = generate_ephemeris_2body_flat6(
             &orbits, &observers, &mus, 1e-14, 1000, 1e-15, false, 10,
         );
-        let (sph_r, lt_r, aberrated_r) = generate_ephemeris_2body_row::<f64>(
-            sample_orbit(),
-            sample_observer(),
-            MU_SUN,
-            1e-14,
+        for (row, (orbit, observer)) in orbit_rows.iter().zip(&observer_rows).enumerate() {
+            let (sph_r, lt_r, aberrated_r) = generate_ephemeris_2body_row::<f64>(
+                *orbit, *observer, MU_SUN, 1e-14, 1000, 1e-15, false, 10,
+            );
+            for i in 0..6 {
+                assert!((sph_b[row * 6 + i] - sph_r[i]).abs() < 1e-15);
+                assert!((aberrated_b[row * 6 + i] - aberrated_r[i]).abs() < 1e-15);
+            }
+            assert!((lt_b[row] - lt_r).abs() < 1e-15);
+        }
+    }
+
+    #[test]
+    fn repeated_orbit_duplicate_epoch_dispatch_uses_sensitive_grouped_reference() {
+        fn from_bits<const N: usize>(bits: [u64; N]) -> [f64; N] {
+            bits.map(f64::from_bits)
+        }
+
+        fn bits_equal(
+            left: &(Vec<f64>, Vec<f64>, Vec<f64>),
+            right: &(Vec<f64>, Vec<f64>, Vec<f64>),
+        ) -> bool {
+            let slices_equal = |left: &[f64], right: &[f64]| {
+                left.len() == right.len()
+                    && left
+                        .iter()
+                        .zip(right)
+                        .all(|(left, right)| left.to_bits() == right.to_bits())
+            };
+            slices_equal(&left.0, &right.0)
+                && slices_equal(&left.1, &right.1)
+                && slices_equal(&left.2, &right.2)
+        }
+
+        // Fixed exact-bit fixture selected because the grouped warm-start and
+        // independent-row kernels differ. Four orbit states each have four
+        // distinct observer rows, and every observer row is duplicated.
+        let orbit_rows = [
+            from_bits([
+                4_612_298_644_520_272_454,
+                13_831_106_550_983_398_893,
+                4_586_065_271_128_183_696,
+                4_573_296_926_892_295_594,
+                4_575_167_611_931_306_722,
+                4_564_652_652_070_651_186,
+            ]),
+            from_bits([
+                4_605_335_576_386_611_304,
+                13_827_252_379_778_936_449,
+                4_595_993_559_503_392_964,
+                4_576_311_406_697_218_682,
+                4_578_593_240_056_658_134,
+                4_566_717_980_800_815_906,
+            ]),
+            from_bits([
+                4_613_082_452_054_334_779,
+                13_836_213_144_255_369_318,
+                4_585_099_117_445_237_360,
+                4_573_285_343_998_963_163,
+                4_576_049_021_620_706_508,
+                4_563_951_074_681_787_788,
+            ]),
+            from_bits([
+                4_598_830_337_242_163_789,
+                4_615_718_643_707_269_108,
+                4_595_429_087_403_722_514,
+                13_799_499_227_067_954_616,
+                4_563_049_017_646_884_528,
+                13_776_857_692_631_315_884,
+            ]),
+        ];
+        let observer_rows = [
+            from_bits([
+                4_605_073_253_388_993_367,
+                13_827_339_213_539_529_538,
+                13_769_501_010_635_770_036,
+                4_577_529_408_200_190_067,
+                4_578_746_977_436_217_060,
+                0,
+            ]),
+            from_bits([
+                4_606_808_547_644_197_970,
+                13_822_179_913_912_264_294,
+                13_768_644_550_052_752_987,
+                4_572_304_014_012_935_433,
+                4_580_409_005_194_070_359,
+                0,
+            ]),
+            from_bits([
+                4_606_930_109_442_184_871,
+                13_821_007_917_614_276_881,
+                13_769_550_641_119_292_793,
+                4_571_310_732_555_801_637,
+                4_580_475_912_807_682_350,
+                0,
+            ]),
+            from_bits([
+                4_606_515_012_374_141_267,
+                4_600_476_763_262_824_113,
+                13_763_884_555_877_503_642,
+                13_797_513_160_802_544_699,
+                4_580_247_443_381_431_150,
+                0,
+            ]),
+            from_bits([
+                4_605_711_673_221_878_858,
+                13_826_479_953_876_588_993,
+                13_760_900_216_528_020_880,
+                4_576_583_535_163_225_115,
+                4_579_449_749_988_257_408,
+                0,
+            ]),
+            from_bits([
+                4_606_482_856_794_719_335,
+                13_824_004_346_895_442_596,
+                13_765_506_261_951_012_720,
+                4_574_312_349_840_818_107,
+                4_580_229_744_950_517_319,
+                0,
+            ]),
+            from_bits([
+                4_607_142_398_979_257_113,
+                13_814_821_530_137_863_055,
+                13_770_088_908_409_573_948,
+                4_565_111_830_838_952_441,
+                4_580_592_756_968_886_912,
+                0,
+            ]),
+            from_bits([
+                4_607_160_773_231_413_308,
+                13_813_029_017_538_825_522,
+                4_540_186_371_663_994_082,
+                4_563_138_632_969_931_924,
+                4_580_602_870_157_273_681,
+                0,
+            ]),
+            from_bits([
+                4_602_429_365_828_289_484,
+                13_829_418_413_243_674_175,
+                13_767_306_766_373_849_560,
+                4_579_818_191_234_512_484,
+                4_575_973_885_130_128_554,
+                0,
+            ]),
+            from_bits([
+                4_607_081_826_702_754_324,
+                13_817_909_582_050_879_671,
+                4_543_481_804_561_211_174,
+                4_568_057_195_542_362_186,
+                4_580_559_417_987_899_777,
+                0,
+            ]),
+            from_bits([
+                4_606_619_300_158_105_009,
+                13_823_313_310_995_574_397,
+                4_532_524_410_035_845_648,
+                4_573_551_657_522_243_194,
+                4_580_304_843_377_724_794,
+                0,
+            ]),
+            from_bits([
+                4_605_534_874_683_595_471,
+                4_603_368_014_039_536_767,
+                13_765_062_643_140_884_674,
+                13_800_241_886_815_111_042,
+                4_579_255_130_157_315_056,
+                0,
+            ]),
+            from_bits([
+                4_601_764_799_649_029_756,
+                4_606_222_253_090_287_786,
+                4_544_374_589_625_028_327,
+                13_803_383_833_162_177_764,
+                4_575_558_994_401_704_063,
+                0,
+            ]),
+            from_bits([
+                13_823_524_862_710_316_907,
+                4_606_579_273_972_342_992,
+                13_766_466_609_576_661_585,
+                13_803_654_849_819_857_187,
+                13_797_156_570_504_607_557,
+                0,
+            ]),
+            from_bits([
+                13_825_648_274_353_707_010,
+                4_606_088_485_463_068_155,
+                4_528_890_623_640_417_280,
+                13_803_236_581_758_134_394,
+                13_799_261_640_152_425_563,
+                0,
+            ]),
+            from_bits([
+                13_826_515_316_527_001_177,
+                4_605_688_409_080_329_198,
+                4_546_745_772_324_300_779,
+                13_802_796_177_676_015_350,
+                13_799_994_499_223_574_655,
+                0,
+            ]),
+        ];
+        let mu = f64::from_bits(4_554_094_240_418_704_357);
+        let mut orbits = Vec::with_capacity(32 * 6);
+        let mut observers = Vec::with_capacity(32 * 6);
+        let mut mus = Vec::with_capacity(32);
+        for (orbit, orbit_observers) in orbit_rows.iter().zip(observer_rows.chunks_exact(4)) {
+            for observer in orbit_observers {
+                for _ in 0..2 {
+                    orbits.extend_from_slice(orbit);
+                    observers.extend_from_slice(observer);
+                    mus.push(mu);
+                }
+            }
+        }
+        assert_eq!(mus.len(), 32);
+
+        let mut grouped_spherical = vec![0.0; orbits.len()];
+        let mut grouped_light_time = vec![0.0; mus.len()];
+        let mut grouped_aberrated = vec![0.0; orbits.len()];
+        generate_ephemeris_2body_grouped_single_thread(
+            &orbits,
+            &observers,
+            &mus,
+            1e-12,
             1000,
             1e-15,
             false,
             10,
+            &mut grouped_spherical,
+            &mut grouped_light_time,
+            &mut grouped_aberrated,
         );
-        for i in 0..6 {
-            assert!((sph_b[i] - sph_r[i]).abs() < 1e-15);
-            assert!((sph_b[6 + i] - sph_r[i]).abs() < 1e-15);
-            assert!((aberrated_b[i] - aberrated_r[i]).abs() < 1e-15);
-            assert!((aberrated_b[6 + i] - aberrated_r[i]).abs() < 1e-15);
+        let grouped = (grouped_spherical, grouped_light_time, grouped_aberrated);
+
+        let mut independent_spherical = Vec::with_capacity(orbits.len());
+        let mut independent_light_time = Vec::with_capacity(mus.len());
+        let mut independent_aberrated = Vec::with_capacity(orbits.len());
+        for (row, &mu) in mus.iter().enumerate() {
+            let base = row * 6;
+            let orbit = orbits[base..base + 6].try_into().expect("orbit row");
+            let observer = observers[base..base + 6].try_into().expect("observer row");
+            let (spherical, light_time, aberrated) = generate_ephemeris_2body_row::<f64>(
+                orbit, observer, mu, 1e-12, 1000, 1e-15, false, 10,
+            );
+            independent_spherical.extend_from_slice(&spherical);
+            independent_light_time.push(light_time);
+            independent_aberrated.extend_from_slice(&aberrated);
         }
-        assert!((lt_b[0] - lt_r).abs() < 1e-15);
-        assert!((lt_b[1] - lt_r).abs() < 1e-15);
+        let independent = (
+            independent_spherical,
+            independent_light_time,
+            independent_aberrated,
+        );
+        assert!(
+            !bits_equal(&grouped, &independent),
+            "fixture must distinguish grouped warm-start from independent rows",
+        );
+
+        for threads in [1, 2, 4, 8] {
+            let pool = rayon::ThreadPoolBuilder::new()
+                .num_threads(threads)
+                .build()
+                .expect("ephemeris test pool");
+            let dispatched = pool.install(|| {
+                generate_ephemeris_2body_flat6(
+                    &orbits, &observers, &mus, 1e-12, 1000, 1e-15, false, 10,
+                )
+            });
+            assert!(
+                bits_equal(&dispatched, &grouped),
+                "{threads}-thread dispatch must preserve grouped-reference bits",
+            );
+        }
     }
 
     #[test]

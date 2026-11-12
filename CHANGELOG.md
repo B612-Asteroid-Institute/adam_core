@@ -24,6 +24,13 @@ This file contains notable changes in adam-core
   with field/row context, rejects first identity fields whose leading-trimmed
   value starts with reserved context marker `#` or `!`, and rejects physical
   newlines in context values.
+- Canonical OD workflows report exact internal CMC2003 fit-covariance refusal
+  as ordered, typed ``cmc_covariance_unavailable`` group failures so independent
+  siblings continue; backend, protocol, runtime, and other invocation-level
+  failures remain fatal and atomic.
+- Repeated-state two-body ephemeris calls select the grouped light-time and
+  spherical kernel from input data alone, preserving serial-reference bits for
+  duplicate epochs across Rayon pool sizes.
 
 ## [0.8.0] - 2026-11-10
 
