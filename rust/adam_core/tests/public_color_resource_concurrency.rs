@@ -58,8 +58,7 @@ fn identical_concurrent_first_resource_initialization_waits_and_succeeds() {
     let kernel_paths =
         vec![Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/data/minimal_lsk.tls")];
     let obscodes = r#"{"500":{"Longitude":0.0,"cos":0.0,"sin":0.0,"Name":"Geocentric"}}"#;
-    let resources =
-        ColorEstimationResources::bundled(kernel_paths.clone(), obscodes.to_string());
+    let resources = ColorEstimationResources::bundled(kernel_paths.clone(), obscodes.to_string());
     let barrier = Arc::new(Barrier::new(8));
 
     std::thread::scope(|scope| {

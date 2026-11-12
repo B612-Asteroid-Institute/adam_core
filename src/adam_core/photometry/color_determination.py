@@ -1,8 +1,8 @@
 """Canonical-filter-generic asteroid color estimation.
 
 The public facade in this module intentionally owns no scientific computation.
-It marshals native ADAM tables and configuration into one fused Rust call,
-validates the exact returned Arrow schema, and wraps that batch as a quivr table.
+It marshals native ADAM tables and configuration through one private IPC adapter
+that delegates to the public Rust API, then validates the exact Arrow result.
 """
 
 from __future__ import annotations

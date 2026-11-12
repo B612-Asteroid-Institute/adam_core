@@ -10,9 +10,7 @@ use adam_core::coords::{
     SourceCatalogBatch, TimeArray, TimeColumn, TimeScale,
 };
 use adam_core::kernel_data::Resolver;
-use adam_core::{
-    estimate_colors, ColorEstimationResources, ColorFitStatus, ColorPhaseModel,
-};
+use adam_core::{estimate_colors, ColorEstimationResources, ColorFitStatus, ColorPhaseModel};
 
 fn synthetic_observations() -> SourceCatalogBatch {
     let n = 8;

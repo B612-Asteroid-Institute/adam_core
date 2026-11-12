@@ -188,8 +188,7 @@ fn empty_orbits() -> OrbitBatch {
 fn test_resources() -> ColorEstimationResources {
     ColorEstimationResources::bundled(
         vec![sample_lsk_path()],
-        r#"{"500":{"Longitude":0.0,"cos":0.0,"sin":0.0,"Name":"Geocentric"}}"#
-            .to_string(),
+        r#"{"500":{"Longitude":0.0,"cos":0.0,"sin":0.0,"Name":"Geocentric"}}"#.to_string(),
     )
 }
 
@@ -197,8 +196,7 @@ fn test_resources() -> ColorEstimationResources {
 fn public_estimate_colors_owns_high_level_projection_contract() {
     let observations = empty_source_catalog();
     let orbits = empty_orbits();
-    let resources =
-        ColorEstimationResources::new(PathBuf::from("."), vec![], String::new());
+    let resources = ColorEstimationResources::new(PathBuf::from("."), vec![], String::new());
 
     let error = estimate_colors(
         &observations,

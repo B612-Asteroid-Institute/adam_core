@@ -715,7 +715,7 @@ def test_status_list_and_scalar_nullability() -> None:
     assert all(none[name] is None for name in LIST_FIELDS)
 
 
-def test_fresh_process_facade_initializes_spice_inside_fused_call() -> None:
+def test_fresh_process_facade_initializes_spice_inside_ipc_adapter_call() -> None:
     code = textwrap.dedent("""
         from adam_core import _rust_native
         from adam_core.photometry.color_determination import estimate_colors
