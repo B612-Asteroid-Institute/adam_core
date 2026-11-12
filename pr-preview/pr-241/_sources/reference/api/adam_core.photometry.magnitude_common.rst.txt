@@ -1,0 +1,7 @@
+adam\_core.photometry.magnitude\_common module
+==============================================
+
+.. automodule:: adam_core.photometry.magnitude_common
+   :members:
+   :show-inheritance:
+   :undoc-members:
