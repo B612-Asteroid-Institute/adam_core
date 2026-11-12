@@ -78,9 +78,6 @@ jax = [
 legacy-sbdb = [
     { name = "astroquery" },
 ]
-mpc = [
-    { name = "mpcq", marker = "python_full_version < '3.13'" },
-]
 oem = [
     { name = "oem" },
 ]
@@ -161,7 +158,6 @@ requires-dist = [
     { name = "matplotlib", marker = "extra == 'docs'", specifier = ">=3.10.1" },
     { name = "matplotlib", marker = "extra == 'plots'", specifier = ">=3.10.1" },
     { name = "mpc-obscodes" },
-    { name = "mpcq", marker = "python_full_version < '3.13' and extra == 'mpc'", specifier = ">=0.4.0" },
     { name = "myst-nb", marker = "extra == 'docs'", specifier = ">=1.3.0" },
     { name = "naif-de440" },
     { name = "naif-earth-itrf93" },
@@ -185,7 +181,7 @@ requires-dist = [
     { name = "sphinx-copybutton", marker = "extra == 'docs'", specifier = ">=0.5.2" },
     { name = "sphinx-sitemap", marker = "extra == 'docs'", specifier = ">=2.8.0" },
 ]
-provides-extras = ["astropy", "docs", "healpix", "jax", "legacy-sbdb", "mpc", "oem", "plots"]
+provides-extras = ["astropy", "docs", "healpix", "jax", "legacy-sbdb", "oem", "plots"]
 
 [package.metadata.requires-dev]
 build = [

@@ -376,14 +376,13 @@ files:
    use adam_core::kernel_data::Resolver;
    use adam_core::{
        estimate_colors,
+       ColorEstimationResources,
        ColorPhaseModel,
-       ResolvedColorEstimationResources,
    };
 
-   let resolved = ResolvedColorEstimationResources::resolve(
+   let resources = ColorEstimationResources::resolve(
        &Resolver::from_env(),
    )?;
-   let resources = resolved.as_resources();
    let fits = estimate_colors(
        &observations,
        &orbits,

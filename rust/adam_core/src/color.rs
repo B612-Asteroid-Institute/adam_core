@@ -7,7 +7,7 @@
 
 use std::collections::{BTreeMap, HashMap};
 use std::fmt;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::{Mutex, RwLockReadGuard, TryLockError};
 
 use adam_core_rs_coords::{
@@ -24,17 +24,13 @@ use adam_core_rs_spice::{
 };
 use thiserror::Error;
 
-/// Source of canonical bandpass data for [`estimate_colors`].
-#[non_exhaustive]
-#[derive(Debug, Clone, Copy)]
-pub enum ColorBandpassSource<'a> {
-    /// Five Parquet tables embedded in the compiled `adam_core_rs_coords` crate.
+#[derive(Debug, Clone)]
+enum ColorBandpassSource {
     Bundled,
-    /// Explicit directory containing the five canonical Parquet tables.
-    Directory(&'a Path),
+    Directory(PathBuf),
 }
 
-/// Explicit borrowed runtime resources required by [`estimate_colors`].
+/// Owned runtime resources required by [`estimate_colors`].
 ///
 /// Resources initialize process-global caches. Kernel paths accumulate and are
 /// never unloaded by this API; the first successfully loaded nonempty MPC
@@ -42,17 +38,14 @@ pub enum ColorBandpassSource<'a> {
 /// and explicit directories cache by path. A SPICE read guard is held for the
 /// whole estimate, so callers must complete any resource mutation before
 /// concurrent science.
-#[derive(Clone, Copy)]
-pub struct ColorEstimationResources<'a> {
-    /// Embedded or explicit-directory canonical bandpass source.
-    pub bandpass_source: ColorBandpassSource<'a>,
-    /// Ordered SPICE kernel paths to add idempotently to the global backend.
-    pub spice_kernel_paths: &'a [PathBuf],
-    /// MPC extended-observatory JSON used only when no table is loaded yet.
-    pub mpc_obscodes_json: &'a str,
+#[derive(Clone)]
+pub struct ColorEstimationResources {
+    bandpass_source: ColorBandpassSource,
+    spice_kernel_paths: Vec<PathBuf>,
+    mpc_obscodes_json: String,
 }
 
-impl fmt::Debug for ColorEstimationResources<'_> {
+impl fmt::Debug for ColorEstimationResources {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("ColorEstimationResources")
             .field("bandpass_source", &self.bandpass_source)
@@ -62,12 +55,12 @@ impl fmt::Debug for ColorEstimationResources<'_> {
     }
 }
 
-impl<'a> ColorEstimationResources<'a> {
-    /// Borrow explicitly supplied bandpass, SPICE-kernel, and MPC resources.
-    pub const fn new(
-        bandpass_data_dir: &'a Path,
-        spice_kernel_paths: &'a [PathBuf],
-        mpc_obscodes_json: &'a str,
+impl ColorEstimationResources {
+    /// Construct resources backed by an explicit bandpass-data directory.
+    pub fn new(
+        bandpass_data_dir: PathBuf,
+        spice_kernel_paths: Vec<PathBuf>,
+        mpc_obscodes_json: String,
     ) -> Self {
         Self {
             bandpass_source: ColorBandpassSource::Directory(bandpass_data_dir),
@@ -76,49 +69,24 @@ impl<'a> ColorEstimationResources<'a> {
         }
     }
 
-    /// Borrow embedded bandpasses plus explicitly supplied SPICE/MPC resources.
-    pub const fn bundled(spice_kernel_paths: &'a [PathBuf], mpc_obscodes_json: &'a str) -> Self {
+    /// Construct resources backed by the embedded canonical bandpass tables.
+    pub fn bundled(spice_kernel_paths: Vec<PathBuf>, mpc_obscodes_json: String) -> Self {
         Self {
             bandpass_source: ColorBandpassSource::Bundled,
             spice_kernel_paths,
             mpc_obscodes_json,
         }
     }
-}
 
-/// Owned SPICE/MPC resources resolved for standalone Rust color estimation.
-#[derive(Clone)]
-pub struct ResolvedColorEstimationResources {
-    spice_kernel_paths: Vec<PathBuf>,
-    mpc_obscodes_json: String,
-}
-
-impl fmt::Debug for ResolvedColorEstimationResources {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("ResolvedColorEstimationResources")
-            .field("bandpass_source", &"bundled")
-            .field("spice_kernel_paths", &self.spice_kernel_paths)
-            .field("mpc_obscodes_json_bytes", &self.mpc_obscodes_json.len())
-            .finish()
-    }
-}
-
-impl ResolvedColorEstimationResources {
-    /// Resolve default kernels and MPC obscodes with `adam_core_rs_kernel_data`.
+    /// Resolve embedded bandpasses, default kernels, and MPC obscodes.
     ///
-    /// Canonical bandpasses come from bytes embedded in `adam_core_rs_coords`;
-    /// kernels and obscodes follow [`KernelDataResolver`]'s documented override,
+    /// Kernels and obscodes follow [`KernelDataResolver`]'s documented override,
     /// installed-Python, cache, and checksummed-download chain.
     pub fn resolve(resolver: &KernelDataResolver) -> Result<Self, KernelDataError> {
-        Ok(Self {
-            spice_kernel_paths: resolver.default_spice_kernel_paths()?,
-            mpc_obscodes_json: resolver.obscodes_json()?,
-        })
-    }
-
-    /// Borrow these owned values for one or more [`estimate_colors`] calls.
-    pub fn as_resources(&self) -> ColorEstimationResources<'_> {
-        ColorEstimationResources::bundled(&self.spice_kernel_paths, &self.mpc_obscodes_json)
+        Ok(Self::bundled(
+            resolver.default_spice_kernel_paths()?,
+            resolver.obscodes_json()?,
+        ))
     }
 }
 
@@ -172,9 +140,8 @@ static COLOR_RESOURCE_INITIALIZATION: Mutex<()> = Mutex::new(());
 /// `adam_core.photometry.estimate_colors`. The semantic arguments have the same
 /// order and meaning. The final `resources` argument supplies the installed
 /// data that Python resolves implicitly from its environment. Standalone users
-/// can obtain those resources with [`ResolvedColorEstimationResources::resolve`]
-/// and [`crate::kernel_data::Resolver::from_env`]; see
-/// `examples/color_estimation.rs`.
+/// can obtain those resources with [`ColorEstimationResources::resolve`] and
+/// [`crate::kernel_data::Resolver::from_env`]; see `examples/color_estimation.rs`.
 ///
 /// # Process-global resource policy
 ///
@@ -198,12 +165,11 @@ static COLOR_RESOURCE_INITIALIZATION: Mutex<()> = Mutex::new(());
 /// ```no_run
 /// use adam_core::coords::{OrbitBatch, SourceCatalogBatch};
 /// use adam_core::kernel_data::Resolver;
-/// use adam_core::{estimate_colors, ColorPhaseModel, ResolvedColorEstimationResources};
+/// use adam_core::{estimate_colors, ColorEstimationResources, ColorPhaseModel};
 /// # fn load_inputs() -> (SourceCatalogBatch, OrbitBatch) { todo!() }
 /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
 /// let (observations, orbits) = load_inputs();
-/// let resolved = ResolvedColorEstimationResources::resolve(&Resolver::from_env())?;
-/// let resources = resolved.as_resources();
+/// let resources = ColorEstimationResources::resolve(&Resolver::from_env())?;
 /// let fits = estimate_colors(
 ///     &observations,
 ///     &orbits,
@@ -229,7 +195,7 @@ pub fn estimate_colors(
     color_term_composition: Option<ColorComposition>,
     strict_band_mapping: bool,
     filter_projection: Option<BTreeMap<String, String>>,
-    resources: &ColorEstimationResources<'_>,
+    resources: &ColorEstimationResources,
 ) -> Result<ColorFitBatch, ColorEstimationError> {
     observations
         .validate()
@@ -262,7 +228,7 @@ pub fn estimate_colors(
         strict_band_mapping,
         projection,
     };
-    let bandpasses = match resources.bandpass_source {
+    let bandpasses = match &resources.bandpass_source {
         ColorBandpassSource::Bundled => bundled_bandpass_data(),
         ColorBandpassSource::Directory(data_dir) => bandpass_data(data_dir),
     }
@@ -425,7 +391,7 @@ fn isolated_error_message(error: ColorEstimationError) -> String {
 }
 
 fn initialize_resources(
-    resources: &ColorEstimationResources<'_>,
+    resources: &ColorEstimationResources,
 ) -> Result<RwLockReadGuard<'static, AdamCoreSpiceBackend>, ColorEstimationError> {
     if resources.spice_kernel_paths.is_empty() {
         return Err(ColorEstimationError::InvalidConfiguration(
@@ -440,7 +406,7 @@ fn initialize_resources(
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
 
-    try_initialize_global_kernels(resources.spice_kernel_paths).map_err(|error| match error {
+    try_initialize_global_kernels(&resources.spice_kernel_paths).map_err(|error| match error {
         GlobalKernelInitializationError::Busy => ColorEstimationError::BackendBusy,
         GlobalKernelInitializationError::Poisoned => ColorEstimationError::BackendPoisoned,
         GlobalKernelInitializationError::Backend(error) => ColorEstimationError::Spice(error),
@@ -463,7 +429,7 @@ fn initialize_resources(
             Err(TryLockError::Poisoned(_)) => return Err(ColorEstimationError::BackendPoisoned),
         };
         if backend.mpc_obscodes_loaded() == 0 {
-            backend.load_mpc_obscodes(resources.mpc_obscodes_json)?;
+            backend.load_mpc_obscodes(&resources.mpc_obscodes_json)?;
         }
     }
 

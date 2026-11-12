@@ -11,7 +11,7 @@ use adam_core::coords::{
 };
 use adam_core::kernel_data::Resolver;
 use adam_core::{
-    estimate_colors, ColorFitStatus, ColorPhaseModel, ResolvedColorEstimationResources,
+    estimate_colors, ColorEstimationResources, ColorFitStatus, ColorPhaseModel,
 };
 
 fn synthetic_observations() -> SourceCatalogBatch {
@@ -74,8 +74,7 @@ fn synthetic_orbit() -> Result<OrbitBatch, Box<dyn Error>> {
 
 fn main() -> Result<(), Box<dyn Error>> {
     let resolver = Resolver::from_env();
-    let resolved = ResolvedColorEstimationResources::resolve(&resolver)?;
-    let resources = resolved.as_resources();
+    let resources = ColorEstimationResources::resolve(&resolver)?;
 
     let fits = estimate_colors(
         &synthetic_observations(),

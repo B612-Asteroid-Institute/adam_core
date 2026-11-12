@@ -185,11 +185,20 @@ fn empty_orbits() -> OrbitBatch {
     OrbitBatch::new(vec![], vec![], coordinates).unwrap()
 }
 
+fn test_resources() -> ColorEstimationResources {
+    ColorEstimationResources::bundled(
+        vec![sample_lsk_path()],
+        r#"{"500":{"Longitude":0.0,"cos":0.0,"sin":0.0,"Name":"Geocentric"}}"#
+            .to_string(),
+    )
+}
+
 #[test]
 fn public_estimate_colors_owns_high_level_projection_contract() {
     let observations = empty_source_catalog();
     let orbits = empty_orbits();
-    let resources = ColorEstimationResources::new(Path::new("."), &[], "");
+    let resources =
+        ColorEstimationResources::new(PathBuf::from("."), vec![], String::new());
 
     let error = estimate_colors(
         &observations,
@@ -217,11 +226,7 @@ fn public_estimate_colors_owns_high_level_projection_contract() {
 fn public_estimate_colors_returns_typed_empty_orbit_result() {
     let observations = one_source_catalog();
     let orbits = empty_orbits();
-    let kernel_paths = vec![sample_lsk_path()];
-    let resources = ColorEstimationResources::bundled(
-        &kernel_paths,
-        r#"{"500":{"Longitude":0.0,"cos":0.0,"sin":0.0,"Name":"Geocentric"}}"#,
-    );
+    let resources = test_resources();
     let debug = format!("{resources:?}");
     assert!(debug.contains("mpc_obscodes_json_bytes"));
     assert!(!debug.contains("Longitude"));
@@ -250,11 +255,7 @@ fn public_estimate_colors_returns_typed_empty_orbit_result() {
 #[test]
 fn public_estimate_colors_preserves_nonlexical_first_appearance_order() {
     let observations = source_catalog_for_objects(&["zeta", "alpha", "zeta", "mu"]);
-    let kernel_paths = vec![sample_lsk_path()];
-    let resources = ColorEstimationResources::bundled(
-        &kernel_paths,
-        r#"{"500":{"Longitude":0.0,"cos":0.0,"sin":0.0,"Name":"Geocentric"}}"#,
-    );
+    let resources = test_resources();
 
     let result = estimate_colors(
         &observations,
@@ -287,11 +288,7 @@ fn public_estimate_colors_preserves_nonlexical_first_appearance_order() {
 fn public_estimate_colors_real_fit_matches_frozen_sun_observer_golden() {
     let observations = fit_source_catalog("SUN");
     let orbits = one_orbit(OriginId::from_code("SUN"));
-    let kernel_paths = vec![sample_lsk_path()];
-    let resources = ColorEstimationResources::bundled(
-        &kernel_paths,
-        r#"{"500":{"Longitude":0.0,"cos":0.0,"sin":0.0,"Name":"Geocentric"}}"#,
-    );
+    let resources = test_resources();
 
     let result = estimate_colors(
         &observations,
@@ -325,11 +322,7 @@ fn public_estimate_colors_real_fit_matches_frozen_sun_observer_golden() {
 
 #[test]
 fn public_estimate_colors_pins_clean_per_object_errors() {
-    let kernel_paths = vec![sample_lsk_path()];
-    let resources = ColorEstimationResources::bundled(
-        &kernel_paths,
-        r#"{"500":{"Longitude":0.0,"cos":0.0,"sin":0.0,"Name":"Geocentric"}}"#,
-    );
+    let resources = test_resources();
 
     let unknown_code = estimate_colors(
         &fit_source_catalog("ZZZ"),
@@ -370,11 +363,7 @@ fn public_estimate_colors_pins_clean_per_object_errors() {
 fn public_estimate_colors_preserves_time_conversion_context() {
     let mut observations = fit_source_catalog("SUN");
     observations.time = TimeColumn::new(TimeScale::Utc, vec![-3_000_000; 8], vec![0; 8]);
-    let kernel_paths = vec![sample_lsk_path()];
-    let resources = ColorEstimationResources::bundled(
-        &kernel_paths,
-        r#"{"500":{"Longitude":0.0,"cos":0.0,"sin":0.0,"Name":"Geocentric"}}"#,
-    );
+    let resources = test_resources();
 
     let error = estimate_colors(
         &observations,
@@ -417,7 +406,7 @@ fn public_estimate_colors_preserves_time_conversion_context() {
 fn public_estimate_colors_signature_accepts_python_aligned_options() {
     let observations = empty_source_catalog();
     let orbits = empty_orbits();
-    let resources = ColorEstimationResources::bundled(&[], "");
+    let resources = ColorEstimationResources::bundled(vec![], String::new());
     let mapping = BTreeMap::from([("LSST_g".to_string(), "LSST_g".to_string())]);
 
     let error = estimate_colors(

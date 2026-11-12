@@ -22,8 +22,9 @@ This file contains notable changes in adam-core
   isolated object errors deliberately use clean Rust-native scientific text
   without Python ``ValueError:``/``RuntimeError:`` prefixes, and invalid MPC
   codes no longer repeat the code in a wrapper prefix.
-- Standalone Rust color resources use five bandpass Parquet tables embedded in
-  the compiled ``adam_core_rs_coords`` crate plus the documented
+- One owned ``ColorEstimationResources`` context supplies either explicit
+  directory-backed data or five bandpass Parquet tables embedded in the
+  compiled ``adam_core_rs_coords`` crate plus the documented
   ``adam_core_rs_kernel_data::Resolver`` chain for kernels and MPC obscodes.
   The embedded tables parse once without crate-source/runtime files; explicit
   custom directories remain path-cached. Identical concurrent first

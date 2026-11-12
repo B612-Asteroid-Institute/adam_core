@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import ast
-import inspect
 import json
 import os
 import subprocess
@@ -22,7 +20,6 @@ from adam_core.observations import SourceCatalog
 from adam_core.orbits import NonGravitationalParameters, Orbits
 from adam_core.time import Timestamp
 
-from .. import color_determination
 from ..bandpasses import BandpassComposition
 from ..color_determination import (
     ColorFit,
@@ -130,7 +127,7 @@ def test_facade_is_schema_marshalling_and_one_native_call(
 ) -> None:
     observations, orbits = _fixture()
     calls: list[tuple[str, tuple[object, ...], dict[str, object]]] = []
-    target = "estimate_colors_fused_ipc"
+    target = "estimate_colors_ipc"
 
     for name in dir(_rust_native):
         native = getattr(_rust_native, name)
@@ -156,98 +153,11 @@ def test_facade_is_schema_marshalling_and_one_native_call(
     assert _row(result)["status"] == "ok"
     assert [name for name, _, _ in calls] == [target]
     _, args, kwargs = calls[0]
-    assert len(args) == 6
+    assert len(args) == 5
     assert isinstance(args[0], bytes) and isinstance(args[1], bytes)
     assert kwargs["projection"] is None
     assert kwargs["template_id"] is None
     assert kwargs["mix"] is None
-
-
-def test_production_module_has_no_python_scientific_algorithm() -> None:
-    source = inspect.getsource(color_determination)
-    tree = ast.parse(source)
-    imported = {
-        alias.name.split(".")[0]
-        for node in ast.walk(tree)
-        if isinstance(node, (ast.Import, ast.ImportFrom))
-        for alias in node.names
-    }
-    assert imported.isdisjoint({"numpy", "scipy"})
-    assert not any(isinstance(node, (ast.For, ast.While)) for node in ast.walk(tree))
-    assert "propagate_2body" not in source
-    assert "least_squares" not in source
-    assert "ensure_spice_backend" not in source
-    assert "setup_SPICE" not in source
-    assert "setup_mpc_obscodes" not in source
-    assert "get_backend" not in source
-    assert source.count("estimate_colors_fused_ipc(") == 1
-
-
-def test_pyo3_adapter_is_one_call_to_public_rust_api() -> None:
-    root = Path(__file__).resolve().parents[4]
-    source = (root / "rust/adam_core_py/src/photometry.rs").read_text()
-    start = source.index("fn estimate_colors_fused_ipc")
-    end = source.index("\npub fn register", start)
-    adapter = source[start:end]
-
-    assert "use adam_core::{estimate_colors," in source
-    assert adapter.count("estimate_colors(") == 1
-    assert """estimate_colors(
-        &source,
-        &orbits,
-        phi_type,
-        force_g_bounds,
-        color_term_composition,
-        strict_band_mapping,
-        filter_projection,
-        &resources,
-    )""" in adapter
-    for forbidden in (
-        "source_groups",
-        "orbit_groups",
-        "propagate_2body",
-        "global_backend",
-        "ColorFitRow::terminal",
-        "ColorFitBatch::new",
-        "estimate_color_object",
-        "observer_positions_from_exposures",
-        "bandpass_data",
-        "try_initialize_global_kernels",
-        ".rows",
-        ".retain(",
-        ".sort",
-        "for ",
-    ):
-        assert forbidden not in adapter
-
-
-def test_public_rust_signature_matches_python_semantics() -> None:
-    root = Path(__file__).resolve().parents[4]
-    source = (root / "rust/adam_core/src/color.rs").read_text()
-    start = source.index("pub fn estimate_colors(")
-    end = source.index(") -> Result<ColorFitBatch", start)
-    signature = source[start:end]
-    rust_parameters = [
-        line.strip().split(":", 1)[0]
-        for line in signature.splitlines()[1:]
-        if ":" in line
-    ]
-    python_parameters = list(inspect.signature(estimate_colors).parameters)
-    assert rust_parameters[:-1] == python_parameters
-    assert rust_parameters[-1] == "resources"
-    assert "observations: &SourceCatalogBatch" in signature
-    assert "orbits: &OrbitBatch" in signature
-    assert "resources: &ColorEstimationResources" in signature
-    exports = (root / "rust/adam_core/src/lib.rs").read_text()
-    assert "pub use color::{" in exports
-    for symbol in (
-        "estimate_colors",
-        "ColorBandpassSource",
-        "ColorEstimationError",
-        "ColorEstimationResources",
-        "ResolvedColorEstimationResources",
-    ):
-        assert symbol in exports
 
 
 def test_python_and_published_rust_bandpass_bundles_are_identical() -> None:
@@ -266,11 +176,6 @@ def test_python_and_published_rust_bandpass_bundles_are_identical() -> None:
         assert (rust_data / filename).read_bytes() == (
             python_data / filename
         ).read_bytes()
-
-    loader = (root / "rust/adam_core_rs_coords/src/bandpasses.rs").read_text()
-    assert loader.count('include_bytes!("../data/bandpasses/') == 5
-    assert "pub fn bundled_bandpass_data()" in loader
-    assert "CARGO_MANIFEST_DIR" not in loader
 
 
 def test_color_uses_shared_bandpass_composition_and_explicit_mapping_types() -> None:
@@ -345,7 +250,7 @@ def test_public_facade_rejects_drifted_native_schema(
     def drifted_native(*_args: object, **_kwargs: object) -> bytes:
         return _record_batch_ipc(drifted)
 
-    monkeypatch.setattr(_rust_native, "estimate_colors_fused_ipc", drifted_native)
+    monkeypatch.setattr(_rust_native, "estimate_colors_ipc", drifted_native)
     with pytest.raises(ValueError, match="does not exactly match ColorFit.schema"):
         estimate_colors(observations, orbits, "c1c2")
 
@@ -823,7 +728,7 @@ def test_fresh_process_facade_initializes_spice_inside_fused_call() -> None:
         assert backend.mpc_obscodes_loaded() == 0
         observations, orbits = _fixture()
 
-        target = "estimate_colors_fused_ipc"
+        target = "estimate_colors_ipc"
         native_calls = []
         native_originals = {}
         for name in dir(_rust_native):

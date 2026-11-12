@@ -1378,7 +1378,6 @@ fn color_composition_from_transport(
 #[pyo3(signature = (
     source_catalog_ipc,
     orbits_ipc,
-    data_dir,
     spice_kernel_paths,
     mpc_obscodes_json,
     phi_type,
@@ -1389,11 +1388,10 @@ fn color_composition_from_transport(
     mix=None
 ))]
 #[allow(clippy::too_many_arguments)]
-fn estimate_colors_fused_ipc<'py>(
+fn estimate_colors_ipc<'py>(
     py: Python<'py>,
     source_catalog_ipc: &Bound<'py, PyBytes>,
     orbits_ipc: &Bound<'py, PyBytes>,
-    data_dir: &str,
     spice_kernel_paths: Vec<String>,
     mpc_obscodes_json: &str,
     phi_type: &str,
@@ -1421,7 +1419,7 @@ fn estimate_colors_fused_ipc<'py>(
         .map(PathBuf::from)
         .collect::<Vec<_>>();
     let resources =
-        ColorEstimationResources::new(Path::new(data_dir), &spice_kernel_paths, mpc_obscodes_json);
+        ColorEstimationResources::bundled(spice_kernel_paths, mpc_obscodes_json.to_string());
     let result = estimate_colors(
         &source,
         &orbits,
@@ -1454,7 +1452,7 @@ fn color_estimation_error_to_py(error: ColorEstimationError) -> PyErr {
 }
 
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
-    m.add_function(wrap_pyfunction!(estimate_colors_fused_ipc, m)?)?;
+    m.add_function(wrap_pyfunction!(estimate_colors_ipc, m)?)?;
     m.add_function(wrap_pyfunction!(fit_absolute_magnitude_rows_numpy, m)?)?;
     m.add_function(wrap_pyfunction!(fit_absolute_magnitude_grouped_numpy, m)?)?;
     m.add_function(wrap_pyfunction!(calculate_phase_angle_numpy, m)?)?;

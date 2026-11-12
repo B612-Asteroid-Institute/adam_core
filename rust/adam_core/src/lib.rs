@@ -46,10 +46,7 @@ pub use od::{evaluate_orbits, refine, run_iod, run_od};
 
 /// Canonical, batch-native color-estimation workflow.
 pub mod color;
-pub use color::{
-    estimate_colors, ColorBandpassSource, ColorEstimationError, ColorEstimationResources,
-    ResolvedColorEstimationResources,
-};
+pub use color::{estimate_colors, ColorEstimationError, ColorEstimationResources};
 
 pub use adam_core_rs_coords::{
     estimate_rotation_period, estimate_rotation_period_best_apparition,

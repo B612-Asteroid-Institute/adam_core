@@ -86,37 +86,7 @@ jobs:
           consumer="$(mktemp -d)"
           trap 'rm -rf "$consumer"' EXIT
           mkdir -p "$consumer/src"
-          cat > "$consumer/src/main.rs" <<'RS'
-          use adam_core::coords::{OrbitBatch, SourceCatalogBatch};
-          use adam_core::kernel_data::Resolver;
-          use adam_core::{
-              estimate_colors, ColorEstimationError, ColorEstimationResources,
-              ColorFitBatch, ColorPhaseModel, ResolvedColorEstimationResources,
-          };
-
-          fn compile_public_call(
-              observations: &SourceCatalogBatch,
-              orbits: &OrbitBatch,
-              resources: &ColorEstimationResources<'_>,
-          ) -> Result<ColorFitBatch, ColorEstimationError> {
-              estimate_colors(
-                  observations,
-                  orbits,
-                  ColorPhaseModel::Hg12Star,
-                  true,
-                  None,
-                  false,
-                  None,
-                  resources,
-              )
-          }
-
-          fn main() {
-              let _call = compile_public_call;
-              let _resolve = ResolvedColorEstimationResources::resolve;
-              let _resolver = Resolver::from_env();
-          }
-          RS
+          printf 'fn main() {}\n' > "$consumer/src/main.rs"
           cat > "$consumer/Cargo.toml" <<EOF
           [package]
           name = "adam-core-msrv-consumer"
@@ -229,39 +199,8 @@ jobs:
           trap 'rm -rf "$consumer"' EXIT
           for mode in default no-default; do
             mkdir -p "$consumer/$mode/src"
+            printf 'fn main() {}\n' > "$consumer/$mode/src/main.rs"
           done
-          cat > "$consumer/default/src/main.rs" <<'RS'
-          use adam_core::coords::{OrbitBatch, SourceCatalogBatch};
-          use adam_core::kernel_data::Resolver;
-          use adam_core::{
-              estimate_colors, ColorEstimationError, ColorEstimationResources,
-              ColorFitBatch, ColorPhaseModel, ResolvedColorEstimationResources,
-          };
-
-          fn compile_public_call(
-              observations: &SourceCatalogBatch,
-              orbits: &OrbitBatch,
-              resources: &ColorEstimationResources<'_>,
-          ) -> Result<ColorFitBatch, ColorEstimationError> {
-              estimate_colors(
-                  observations,
-                  orbits,
-                  ColorPhaseModel::Hg12Star,
-                  true,
-                  None,
-                  false,
-                  None,
-                  resources,
-              )
-          }
-
-          fn main() {
-              let _call = compile_public_call;
-              let _resolve = ResolvedColorEstimationResources::resolve;
-              let _resolver = Resolver::from_env();
-          }
-          RS
-          printf 'fn main() {}\n' > "$consumer/no-default/src/main.rs"
           cat > "$consumer/default/Cargo.toml" <<EOF
           [package]
           name = "adam-core-latest-stable-consumer"

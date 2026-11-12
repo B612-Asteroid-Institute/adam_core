@@ -21,7 +21,7 @@ from ..orbits import Orbits
 from ..orbits.arrow_bridge import orbits_to_ipc
 from ..utils.spice import DEFAULT_KERNELS
 from .bandpasses import BandpassComposition
-from .bandpasses.api import _composition_args, _data_dir_str
+from .bandpasses.api import _composition_args
 
 
 class ColorFit(qv.Table):
@@ -108,7 +108,7 @@ def _color_fit_from_native_batch(record_batch: pa.RecordBatch) -> ColorFit:
 
 @lru_cache(maxsize=1)
 def _mpc_obscodes_json() -> str:
-    """Read immutable installed observatory data for fused native setup."""
+    """Read immutable installed observatory data for native setup."""
     from mpc_obscodes import mpc_obscodes
 
     return Path(mpc_obscodes).read_text(encoding="utf-8")
@@ -211,10 +211,9 @@ def estimate_colors(
     if color_term_composition is not None:
         template_id, mix = _composition_args(color_term_composition)
 
-    raw = _rust_native.estimate_colors_fused_ipc(
+    raw = _rust_native.estimate_colors_ipc(
         observations_to_ipc(observations),
         orbits_to_ipc(orbits),
-        _data_dir_str(),
         list(map(str, DEFAULT_KERNELS)),
         _mpc_obscodes_json(),
         phi_type,

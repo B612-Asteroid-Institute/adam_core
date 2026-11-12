@@ -12,13 +12,13 @@
     "plotting_policy": "plotting/display may remain Python; all other symbols require review"
   },
   "summary": {
-    "symbols": 751,
+    "symbols": 750,
     "by_kind": {
       "class": 124,
       "classmethod": 42,
       "constant": 101,
       "constructor": 5,
-      "function": 239,
+      "function": 238,
       "method": 152,
       "property": 88
     },
@@ -31,7 +31,7 @@
       "observers": 19,
       "orbit_determination": 109,
       "orbits": 116,
-      "photometry": 73,
+      "photometry": 72,
       "propagator": 8,
       "time": 38,
       "utils": 71
@@ -40,7 +40,7 @@
       "compatibility_data_or_external_generic": 223,
       "mixed_rust_python_gap": 96,
       "plotting_exemption_candidate": 16,
-      "python_gap_or_external_boundary": 265,
+      "python_gap_or_external_boundary": 264,
       "rust_veneer_candidate_see_domain_audit": 151
     },
     "plotting_exemption_candidates": 16,
@@ -49,7 +49,7 @@
   "frozen_updated_upstream_reconciliation": {
     "commit": "757c09fca86adf9e3d5899952db3d379e09413f6",
     "upstream_symbols": 600,
-    "current_symbols": 751,
+    "current_symbols": 750,
     "upstream_only_symbols": 22,
     "all_upstream_only_symbols_classified": true,
     "disposition": "The listed upstream implementation helpers are intentionally retired; their useful public workflows are Rust-backed or are explicit provider boundaries in the referenced domain audit.",
@@ -16662,34 +16662,6 @@
       "audit_document": "migration/public_surface/photometry_constants.md"
     },
     {
-      "id": "adam_core.photometry.hg12star:hg12star_correction",
-      "module": "adam_core.photometry.hg12star",
-      "qualname": "hg12star_correction",
-      "name": "hg12star_correction",
-      "kind": "function",
-      "domain": "photometry",
-      "source": "src/adam_core/photometry/hg12star.py",
-      "line": 153,
-      "explicit_export": null,
-      "plotting_exemption_candidate": false,
-      "signals": {
-        "plotting": false,
-        "rust_reference": false,
-        "python_loop": true,
-        "numpy_reference": true,
-        "pyarrow_reference": false,
-        "quivr_reference": false,
-        "external_io_reference": false
-      },
-      "review_status": "domain_audited",
-      "implementation_class": "python_gap_or_external_boundary",
-      "rust_entrypoint": null,
-      "parity_coverage": "see_domain_audit",
-      "native_timing": "missing_or_not_applicable_see_domain_audit",
-      "tracking_issue": "personal-cmy.37.6",
-      "audit_document": "migration/public_surface/photometry_constants.md"
-    },
-    {
       "id": "adam_core.photometry.lightcurve:reduced_magnitude",
       "module": "adam_core.photometry.lightcurve",
       "qualname": "reduced_magnitude",
@@ -16921,7 +16893,7 @@
       "kind": "function",
       "domain": "photometry",
       "source": "src/adam_core/photometry/magnitude_common.py",
-      "line": 127,
+      "line": 92,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -16949,7 +16921,7 @@
       "kind": "function",
       "domain": "photometry",
       "source": "src/adam_core/photometry/magnitude_common.py",
-      "line": 178,
+      "line": 143,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -16977,7 +16949,7 @@
       "kind": "function",
       "domain": "photometry",
       "source": "src/adam_core/photometry/magnitude_common.py",
-      "line": 147,
+      "line": 112,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -17005,7 +16977,7 @@
       "kind": "function",
       "domain": "photometry",
       "source": "src/adam_core/photometry/magnitude_common.py",
-      "line": 167,
+      "line": 132,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -17033,7 +17005,7 @@
       "kind": "function",
       "domain": "photometry",
       "source": "src/adam_core/photometry/magnitude_common.py",
-      "line": 88,
+      "line": 53,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -17061,7 +17033,7 @@
       "kind": "function",
       "domain": "photometry",
       "source": "src/adam_core/photometry/magnitude_common.py",
-      "line": 112,
+      "line": 77,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -17089,7 +17061,7 @@
       "kind": "function",
       "domain": "photometry",
       "source": "src/adam_core/photometry/magnitude_common.py",
-      "line": 47,
+      "line": 36,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
