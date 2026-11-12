@@ -1,7 +1,0 @@
-adam\_core.photometry.hg12star module
-=====================================
-
-.. automodule:: adam_core.photometry.hg12star
-   :members:
-   :show-inheritance:
-   :undoc-members:

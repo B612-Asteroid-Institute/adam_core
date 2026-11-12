@@ -357,7 +357,6 @@
 </li>
 <li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.photometry.absolute_magnitude.html">adam_core.photometry.absolute_magnitude module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.photometry.color_determination.html">adam_core.photometry.color_determination module</a></li>
-<li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.photometry.hg12star.html">adam_core.photometry.hg12star module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.photometry.lightcurve.html">adam_core.photometry.lightcurve module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.photometry.magnitude.html">adam_core.photometry.magnitude module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.photometry.magnitude_common.html">adam_core.photometry.magnitude_common module</a></li>
@@ -856,14 +855,13 @@ files:</p>
 <div class="highlight-rust notranslate"><div class="highlight"><pre><span></span><span class="k">use</span><span class="w"> </span><span class="n">adam_core</span><span class="p">::</span><span class="n">kernel_data</span><span class="p">::</span><span class="n">Resolver</span><span class="p">;</span>
 <span class="k">use</span><span class="w"> </span><span class="n">adam_core</span><span class="p">::{</span>
 <span class="w">    </span><span class="n">estimate_colors</span><span class="p">,</span>
+<span class="w">    </span><span class="n">ColorEstimationResources</span><span class="p">,</span>
 <span class="w">    </span><span class="n">ColorPhaseModel</span><span class="p">,</span>
-<span class="w">    </span><span class="n">ResolvedColorEstimationResources</span><span class="p">,</span>
 <span class="p">};</span>
 
-<span class="kd">let</span><span class="w"> </span><span class="n">resolved</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">ResolvedColorEstimationResources</span><span class="p">::</span><span class="n">resolve</span><span class="p">(</span>
+<span class="kd">let</span><span class="w"> </span><span class="n">resources</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">ColorEstimationResources</span><span class="p">::</span><span class="n">resolve</span><span class="p">(</span>
 <span class="w">    </span><span class="o">&amp;</span><span class="n">Resolver</span><span class="p">::</span><span class="n">from_env</span><span class="p">(),</span>
 <span class="p">)</span><span class="o">?</span><span class="p">;</span>
-<span class="kd">let</span><span class="w"> </span><span class="n">resources</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">resolved</span><span class="p">.</span><span class="n">as_resources</span><span class="p">();</span>
 <span class="kd">let</span><span class="w"> </span><span class="n">fits</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">estimate_colors</span><span class="p">(</span>
 <span class="w">    </span><span class="o">&amp;</span><span class="n">observations</span><span class="p">,</span>
 <span class="w">    </span><span class="o">&amp;</span><span class="n">orbits</span><span class="p">,</span>
@@ -1061,7 +1059,7 @@ production light-curve generation.</p></li>
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-11-10</div>
+              Last updated on 2026-11-12</div>
           </div>
           <div class="right-details">
             

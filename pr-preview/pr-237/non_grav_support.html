@@ -357,7 +357,6 @@
 </li>
 <li class="toctree-l5"><a class="reference internal" href="reference/api/adam_core.photometry.absolute_magnitude.html">adam_core.photometry.absolute_magnitude module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="reference/api/adam_core.photometry.color_determination.html">adam_core.photometry.color_determination module</a></li>
-<li class="toctree-l5"><a class="reference internal" href="reference/api/adam_core.photometry.hg12star.html">adam_core.photometry.hg12star module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="reference/api/adam_core.photometry.lightcurve.html">adam_core.photometry.lightcurve module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="reference/api/adam_core.photometry.magnitude.html">adam_core.photometry.magnitude module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="reference/api/adam_core.photometry.magnitude_common.html">adam_core.photometry.magnitude_common module</a></li>
@@ -550,18 +549,20 @@ rebuild the full matrix from the variants.</p></li>
 element basis (cometary and Keplerian respectively), converted to canonical
 units, and the ordinary coordinate transform carries it to Cartesian.</p></li>
 </ul>
+<p>Hyperbolic element conversions preserve signed, non-periodic mean anomaly:
+pre-perihelion states have negative mean anomaly and post-perihelion states
+have positive mean anomaly. This includes near-parabolic hyperbolic SBDB
+solutions such as C/2022 E3 (issue #210).</p>
 <p>Current limits:</p>
 <ul class="simple">
+<li><p>Exact-parabolic (<code class="docutils literal notranslate"><span class="pre">e</span> <span class="pre">==</span> <span class="pre">1</span></code>), extremely near-parabolic, and large-magnitude
+(<code class="docutils literal notranslate"><span class="pre">|M|</span></code>) anomaly solving retain legacy formulas and iteration
+initialization. This
+correction is limited to preserving signed anomaly for convergent
+hyperbolic inputs; broader solver hardening remains follow-up work.</p></li>
 <li><p>NEOCC non-grav solutions are decoded only for the Yarkovsky model
 (<code class="docutils literal notranslate"><span class="pre">AMRAT</span></code>/<code class="docutils literal notranslate"><span class="pre">A2</span></code>); the <code class="docutils literal notranslate"><span class="pre">AMRAT</span></code> dimension is marginalized out with a
 warning and other models are degraded to value-free rows with a warning.</p></li>
-<li><p>Near-parabolic orbits (e close to 1, e.g. C/2022 E3) currently convert to
-wildly wrong Cartesian states through the pre-existing
-cometary-to-Cartesian defect tracked in <a class="reference external" href="https://github.com/B612-Asteroid-Institute/adam_core/issues/210">issue #210</a>. Until
-that is fixed, element-based SBDB/NEOCC imports of such objects cannot be
-propagated meaningfully. Validation of a provider’s non-gravitational force
-model from Cartesian starting states does not validate this element-
-conversion path.</p></li>
 </ul>
 </section>
 <section id="two-body-note">
@@ -618,7 +619,7 @@ evidence, and limits.</p>
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-11-10</div>
+              Last updated on 2026-11-12</div>
           </div>
           <div class="right-details">
             

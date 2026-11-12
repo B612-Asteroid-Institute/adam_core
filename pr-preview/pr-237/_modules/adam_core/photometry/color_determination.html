@@ -356,7 +356,6 @@
 </li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.photometry.absolute_magnitude.html">adam_core.photometry.absolute_magnitude module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.photometry.color_determination.html">adam_core.photometry.color_determination module</a></li>
-<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.photometry.hg12star.html">adam_core.photometry.hg12star module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.photometry.lightcurve.html">adam_core.photometry.lightcurve module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.photometry.magnitude.html">adam_core.photometry.magnitude module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.photometry.magnitude_common.html">adam_core.photometry.magnitude_common module</a></li>
@@ -443,8 +442,8 @@
 <span></span><span class="sd">"""Canonical-filter-generic asteroid color estimation.</span>
 
 <span class="sd">The public facade in this module intentionally owns no scientific computation.</span>
-<span class="sd">It marshals native ADAM tables and configuration into one fused Rust call,</span>
-<span class="sd">validates the exact returned Arrow schema, and wraps that batch as a quivr table.</span>
+<span class="sd">It marshals native ADAM tables and configuration through one private IPC adapter</span>
+<span class="sd">that delegates to the public Rust API, then validates the exact Arrow result.</span>
 <span class="sd">"""</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
@@ -463,7 +462,7 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">..orbits.arrow_bridge</span><span class="w"> </span><span class="kn">import</span> <span class="n">orbits_to_ipc</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..utils.spice</span><span class="w"> </span><span class="kn">import</span> <span class="n">DEFAULT_KERNELS</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.bandpasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">BandpassComposition</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">.bandpasses.api</span><span class="w"> </span><span class="kn">import</span> <span class="n">_composition_args</span><span class="p">,</span> <span class="n">_data_dir_str</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.bandpasses.api</span><span class="w"> </span><span class="kn">import</span> <span class="n">_composition_args</span>
 
 
 <div class="viewcode-block" id="ColorFit">
@@ -553,7 +552,7 @@
 
 <span class="nd">@lru_cache</span><span class="p">(</span><span class="n">maxsize</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">_mpc_obscodes_json</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""Read immutable installed observatory data for fused native setup."""</span>
+<span class="w">    </span><span class="sd">"""Read immutable installed observatory data for native setup."""</span>
     <span class="kn">from</span><span class="w"> </span><span class="nn">mpc_obscodes</span><span class="w"> </span><span class="kn">import</span> <span class="n">mpc_obscodes</span>
 
     <span class="k">return</span> <span class="n">Path</span><span class="p">(</span><span class="n">mpc_obscodes</span><span class="p">)</span><span class="o">.</span><span class="n">read_text</span><span class="p">(</span><span class="n">encoding</span><span class="o">=</span><span class="s2">"utf-8"</span><span class="p">)</span>
@@ -658,10 +657,9 @@
     <span class="k">if</span> <span class="n">color_term_composition</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
         <span class="n">template_id</span><span class="p">,</span> <span class="n">mix</span> <span class="o">=</span> <span class="n">_composition_args</span><span class="p">(</span><span class="n">color_term_composition</span><span class="p">)</span>
 
-    <span class="n">raw</span> <span class="o">=</span> <span class="n">_rust_native</span><span class="o">.</span><span class="n">estimate_colors_fused_ipc</span><span class="p">(</span>
+    <span class="n">raw</span> <span class="o">=</span> <span class="n">_rust_native</span><span class="o">.</span><span class="n">estimate_colors_ipc</span><span class="p">(</span>
         <span class="n">observations_to_ipc</span><span class="p">(</span><span class="n">observations</span><span class="p">),</span>
         <span class="n">orbits_to_ipc</span><span class="p">(</span><span class="n">orbits</span><span class="p">),</span>
-        <span class="n">_data_dir_str</span><span class="p">(),</span>
         <span class="nb">list</span><span class="p">(</span><span class="nb">map</span><span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="n">DEFAULT_KERNELS</span><span class="p">)),</span>
         <span class="n">_mpc_obscodes_json</span><span class="p">(),</span>
         <span class="n">phi_type</span><span class="p">,</span>
@@ -691,7 +689,7 @@
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-11-10</div>
+              Last updated on 2026-11-12</div>
           </div>
           <div class="right-details">
             

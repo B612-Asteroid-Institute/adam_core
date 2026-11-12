@@ -3,7 +3,7 @@
   <head><meta charset="utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <meta name="color-scheme" content="light dark"><meta name="viewport" content="width=device-width, initial-scale=1" />
-<link rel="index" title="Index" href="../../genindex.html"><link rel="search" title="Search" href="../../search.html"><link rel="next" title="adam_core.photometry.hg12star module" href="adam_core.photometry.hg12star.html"><link rel="prev" title="adam_core.photometry.absolute_magnitude module" href="adam_core.photometry.absolute_magnitude.html">
+<link rel="index" title="Index" href="../../genindex.html"><link rel="search" title="Search" href="../../search.html"><link rel="next" title="adam_core.photometry.lightcurve module" href="adam_core.photometry.lightcurve.html"><link rel="prev" title="adam_core.photometry.absolute_magnitude module" href="adam_core.photometry.absolute_magnitude.html">
         <link rel="canonical" href="https://adam-core.readthedocs.io/en/latest/reference/api/adam_core.photometry.color_determination.html">
 
     <!-- Generated with Sphinx 8.2.3 and Furo 2025.12.19 -->
@@ -357,7 +357,6 @@
 </li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.photometry.absolute_magnitude.html">adam_core.photometry.absolute_magnitude module</a></li>
 <li class="toctree-l5 current current-page"><a class="current reference internal" href="#">adam_core.photometry.color_determination module</a></li>
-<li class="toctree-l5"><a class="reference internal" href="adam_core.photometry.hg12star.html">adam_core.photometry.hg12star module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.photometry.lightcurve.html">adam_core.photometry.lightcurve module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.photometry.magnitude.html">adam_core.photometry.magnitude module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.photometry.magnitude_common.html">adam_core.photometry.magnitude_common module</a></li>
@@ -454,8 +453,8 @@
 <span id="adam-core-photometry-color-determination-module"></span><h1>adam_core.photometry.color_determination module<a class="headerlink" href="#module-adam_core.photometry.color_determination" title="Link to this heading">¶</a></h1>
 <p>Canonical-filter-generic asteroid color estimation.</p>
 <p>The public facade in this module intentionally owns no scientific computation.
-It marshals native ADAM tables and configuration into one fused Rust call,
-validates the exact returned Arrow schema, and wraps that batch as a quivr table.</p>
+It marshals native ADAM tables and configuration through one private IPC adapter
+that delegates to the public Rust API, then validates the exact Arrow result.</p>
 <dl class="py class">
 <dt class="sig sig-object py" id="adam_core.photometry.color_determination.ColorFit">
 <em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">adam_core.photometry.color_determination.</span></span><span class="sig-name descname"><span class="pre">ColorFit</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">table</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://arrow.apache.org/docs/python/generated/pyarrow.Table.html#pyarrow.Table" title="(in Apache Arrow v26.0.1)"><span class="pre">Table</span></a></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><span class="pre">int</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><span class="pre">float</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/adam_core/photometry/color_determination.html#ColorFit"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.photometry.color_determination.ColorFit" title="Link to this definition">¶</a></dt>
@@ -850,12 +849,12 @@ Failures after classification retain an exact count partition, where
       <footer>
         
         <div class="related-pages">
-          <a class="next-page" href="adam_core.photometry.hg12star.html">
+          <a class="next-page" href="adam_core.photometry.lightcurve.html">
               <div class="page-info">
                 <div class="context">
                   <span>Next</span>
                 </div>
-                <div class="title">adam_core.photometry.hg12star module</div>
+                <div class="title">adam_core.photometry.lightcurve module</div>
               </div>
               <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
             </a>
@@ -880,7 +879,7 @@ Failures after classification retain an exact count partition, where
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-11-10</div>
+              Last updated on 2026-11-12</div>
           </div>
           <div class="right-details">
             

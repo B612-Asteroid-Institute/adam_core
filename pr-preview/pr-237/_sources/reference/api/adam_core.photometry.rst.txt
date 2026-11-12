@@ -23,7 +23,6 @@ Submodules
 
    adam_core.photometry.absolute_magnitude
    adam_core.photometry.color_determination
-   adam_core.photometry.hg12star
    adam_core.photometry.lightcurve
    adam_core.photometry.magnitude
    adam_core.photometry.magnitude_common
