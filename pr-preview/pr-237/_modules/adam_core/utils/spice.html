@@ -461,14 +461,18 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">.bounded_lru</span><span class="w"> </span><span class="kn">import</span> <span class="n">bounded_lru_get</span><span class="p">,</span> <span class="n">bounded_lru_put</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.spice_backend</span><span class="w"> </span><span class="kn">import</span> <span class="n">get_backend</span>
 
-<span class="n">DEFAULT_KERNELS</span> <span class="o">=</span> <span class="p">[</span>
-    <span class="n">leapseconds</span><span class="p">,</span>
+<span class="c1"># Observer-state evaluation receives TDB epochs already rescaled by ERFA. It</span>
+<span class="c1"># therefore needs the planetary ephemeris and Earth orientation/frame kernels,</span>
+<span class="c1"># but not the SPICE leapseconds kernel used by generic SPICE APIs.</span>
+<span class="n">OBSERVER_GEOMETRY_KERNELS</span> <span class="o">=</span> <span class="p">[</span>
     <span class="n">de440</span><span class="p">,</span>
     <span class="n">eop_predict</span><span class="p">,</span>
     <span class="n">eop_historical</span><span class="p">,</span>
     <span class="n">eop_high_prec</span><span class="p">,</span>
     <span class="n">earth_itrf93</span><span class="p">,</span>
 <span class="p">]</span>
+
+<span class="n">DEFAULT_KERNELS</span> <span class="o">=</span> <span class="p">[</span><span class="n">leapseconds</span><span class="p">,</span> <span class="o">*</span><span class="n">OBSERVER_GEOMETRY_KERNELS</span><span class="p">]</span>
 
 
 <span class="n">J2000_TDB_JD</span> <span class="o">=</span> <span class="mf">2451545.0</span>

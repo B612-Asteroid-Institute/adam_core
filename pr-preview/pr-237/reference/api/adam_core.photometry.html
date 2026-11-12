@@ -1251,7 +1251,10 @@ Rust owns object grouping and isolation, orbit matching and propagation,
 observer geometry, validity classification, canonical filter resolution,
 optional projection, every phase-law fit, clipping, identifiability,
 covariance, diagnostics,
-statuses/counts, and final Arrow assembly.</p>
+statuses/counts, and final Arrow assembly. Observer resources are acquired
+lazily only when objects reach geometry preparation. The supplied kernel
+subset is DE440, EOP predict/historical/high-precision, and ITRF93; ERFA
+converts UTC to TDB first, so color estimation does not load TLS.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
@@ -1297,9 +1300,10 @@ Failures after classification retain an exact count partition, where
 </dd>
 <dt class="field-even">Raises<span class="colon">:</span></dt>
 <dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#ValueError" title="(in Python v3.15)"><strong>ValueError</strong></a> – If whole-call configuration, projection/composition pairing, the
-    nonempty orbit table’s frame/representation/epochs, native setup, IPC,
-    or returned schema is invalid. A matching orbit with a non-heliocentric
-    origin is instead isolated as an object-level <code class="docutils literal notranslate"><span class="pre">failed</span></code> row.</p>
+    nonempty orbit table’s frame/representation/epochs, observer-geometry
+    setup, IPC, or returned schema is invalid. A matching orbit with a
+    non-heliocentric origin is instead isolated as an object-level
+    <code class="docutils literal notranslate"><span class="pre">failed</span></code> row.</p>
 </dd>
 </dl>
 </dd></dl>

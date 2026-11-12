@@ -460,7 +460,7 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">..observations.arrow_bridge</span><span class="w"> </span><span class="kn">import</span> <span class="n">observations_to_ipc</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..orbits</span><span class="w"> </span><span class="kn">import</span> <span class="n">Orbits</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..orbits.arrow_bridge</span><span class="w"> </span><span class="kn">import</span> <span class="n">orbits_to_ipc</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">..utils.spice</span><span class="w"> </span><span class="kn">import</span> <span class="n">DEFAULT_KERNELS</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">..utils.spice</span><span class="w"> </span><span class="kn">import</span> <span class="n">OBSERVER_GEOMETRY_KERNELS</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.bandpasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">BandpassComposition</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.bandpasses.api</span><span class="w"> </span><span class="kn">import</span> <span class="n">_composition_args</span>
 
@@ -593,7 +593,10 @@
 <span class="sd">    observer geometry, validity classification, canonical filter resolution,</span>
 <span class="sd">    optional projection, every phase-law fit, clipping, identifiability,</span>
 <span class="sd">    covariance, diagnostics,</span>
-<span class="sd">    statuses/counts, and final Arrow assembly.</span>
+<span class="sd">    statuses/counts, and final Arrow assembly. Observer resources are acquired</span>
+<span class="sd">    lazily only when objects reach geometry preparation. The supplied kernel</span>
+<span class="sd">    subset is DE440, EOP predict/historical/high-precision, and ITRF93; ERFA</span>
+<span class="sd">    converts UTC to TDB first, so color estimation does not load TLS.</span>
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
@@ -646,9 +649,10 @@
 <span class="sd">    ------</span>
 <span class="sd">    ValueError</span>
 <span class="sd">        If whole-call configuration, projection/composition pairing, the</span>
-<span class="sd">        nonempty orbit table's frame/representation/epochs, native setup, IPC,</span>
-<span class="sd">        or returned schema is invalid. A matching orbit with a non-heliocentric</span>
-<span class="sd">        origin is instead isolated as an object-level ``failed`` row.</span>
+<span class="sd">        nonempty orbit table's frame/representation/epochs, observer-geometry</span>
+<span class="sd">        setup, IPC, or returned schema is invalid. A matching orbit with a</span>
+<span class="sd">        non-heliocentric origin is instead isolated as an object-level</span>
+<span class="sd">        ``failed`` row.</span>
 <span class="sd">    """</span>
     <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core</span><span class="w"> </span><span class="kn">import</span> <span class="n">_rust_native</span>
 
@@ -660,7 +664,7 @@
     <span class="n">raw</span> <span class="o">=</span> <span class="n">_rust_native</span><span class="o">.</span><span class="n">estimate_colors_ipc</span><span class="p">(</span>
         <span class="n">observations_to_ipc</span><span class="p">(</span><span class="n">observations</span><span class="p">),</span>
         <span class="n">orbits_to_ipc</span><span class="p">(</span><span class="n">orbits</span><span class="p">),</span>
-        <span class="nb">list</span><span class="p">(</span><span class="nb">map</span><span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="n">DEFAULT_KERNELS</span><span class="p">)),</span>
+        <span class="nb">list</span><span class="p">(</span><span class="nb">map</span><span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="n">OBSERVER_GEOMETRY_KERNELS</span><span class="p">)),</span>
         <span class="n">_mpc_obscodes_json</span><span class="p">(),</span>
         <span class="n">phi_type</span><span class="p">,</span>
         <span class="n">force_g_bounds</span><span class="o">=</span><span class="n">force_g_bounds</span><span class="p">,</span>

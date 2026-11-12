@@ -368,8 +368,8 @@ diagnostics, and per-object failure isolation. Rust rows expose the
 ``ColorFitStatus`` enum; Arrow and Python preserve its stable string values.
 
 Pure-Rust callers obtain bandpasses embedded in the compiled coords crate and
-resolved kernel/MPC data without a Python installation or retained crate-source
-files:
+resolved observer-geometry/MPC data without a Python installation or retained
+crate-source files:
 
 .. code-block:: rust
 
@@ -395,15 +395,21 @@ files:
    )?;
    println!("{}", fits.rows[0].status);
 
-These resources initialize shared process state. Embedded bandpass bytes parse
-once in memory, while explicit custom directories cache by path. SPICE kernels
-accumulate in load order; and the first successfully loaded nonempty MPC
-obscodes table remains authoritative. Each estimate holds a SPICE
-read guard for its full workflow. Identical concurrent first calls wait for one
-initializer and then proceed, but callers must initialize the complete resource
-set before concurrent mutation. Until the separately tracked ERFA first-use
-race is corrected, perform one UTC rescale on a single thread before concurrent
-color calls containing UTC times.
+These resources initialize shared process state lazily. Embedded bandpass bytes
+parse once in memory, while explicit custom directories cache by path. Empty
+orbit batches and objects isolated before observer geometry do not initialize
+SPICE or MPC obscodes. The first object requiring observer states loads only
+DE440, EOP predict/historical/high-precision, and the ITRF93 frame kernel;
+UTC-to-TDB conversion is already ERFA-owned, so color estimation does not load a
+leapseconds/TLS kernel. Kernels accumulate in load order, and the first
+successfully loaded nonempty MPC obscodes table remains authoritative. The
+estimate holds its SPICE read guard from first observer preparation through all
+remaining objects. Identical concurrent first calls wait for one initializer
+and then proceed, but callers must initialize the complete observer-geometry
+resource set before concurrent mutation. A later generic ``setup_SPICE()`` may
+still add TLS, so call it before starting concurrent color or SPICE science.
+Until the separately tracked ERFA first-use race is corrected, perform one UTC
+rescale on a single thread before concurrent color calls containing UTC times.
 
 By default every resolved canonical filter is an independent fitted intercept.
 There is no implicit LSST projection or asteroid composition:
