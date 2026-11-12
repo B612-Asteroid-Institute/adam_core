@@ -594,9 +594,12 @@
 <span class="sd">    optional projection, every phase-law fit, clipping, identifiability,</span>
 <span class="sd">    covariance, diagnostics,</span>
 <span class="sd">    statuses/counts, and final Arrow assembly. Observer resources are acquired</span>
-<span class="sd">    lazily only when objects reach geometry preparation. The supplied kernel</span>
-<span class="sd">    subset is DE440, EOP predict/historical/high-precision, and ITRF93; ERFA</span>
-<span class="sd">    converts UTC to TDB first, so color estimation does not load TLS.</span>
+<span class="sd">    lazily only when objects reach geometry preparation. Observer geometry uses</span>
+<span class="sd">    the same DE440, EOP predict/historical/high-precision, and ITRF93 kernels as</span>
+<span class="sd">    before; lazy setup only drops incidental TLS. Rust first applies the shared</span>
+<span class="sd">    ``TimeArray::rescale(TimeScale::Tdb)`` policy (ERFA/erfars UTC↔TAI plus</span>
+<span class="sd">    project-local TAI↔TT and TT↔TDB), so SPICE receives TDB epochs and does</span>
+<span class="sd">    not consume an LSK on this path. Generic SPICE defaults remain unchanged.</span>
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
