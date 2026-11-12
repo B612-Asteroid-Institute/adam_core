@@ -117,8 +117,11 @@ pub const DEFAULT_SPICE_KERNEL_IDS: &[&str] = &[
     "earth_itrf93",
 ];
 
-/// Kernels required for observer-state geometry after ERFA has converted input
-/// times to TDB. The SPICE leapseconds kernel is intentionally excluded.
+/// The same five observer-geometry kernels present in the generic default.
+///
+/// Color supplies TDB epochs through its shared time-rescaling policy, so this
+/// subset excludes only the incidental SPICE leapseconds kernel. Generic
+/// [`DEFAULT_SPICE_KERNEL_IDS`] remains unchanged.
 pub const OBSERVER_GEOMETRY_KERNEL_IDS: &[&str] = &[
     "de440",
     "eop_predict",
@@ -305,8 +308,9 @@ impl Resolver {
 
     /// Resolve the observer-geometry subset in furnsh order.
     ///
-    /// Color estimation converts UTC to TDB through ERFA before querying
-    /// observer states, so this subset intentionally excludes leapseconds/TLS.
+    /// Color's shared time-rescaling path supplies TDB epochs before observer
+    /// queries. It uses ERFA/erfars for UTC↔TAI and project-local TAI↔TT and
+    /// TT↔TDB handling, so SPICE does not consume leapseconds/TLS here.
     pub fn observer_geometry_kernel_paths(&self) -> Result<Vec<PathBuf>, KernelDataError> {
         OBSERVER_GEOMETRY_KERNEL_IDS
             .iter()

@@ -398,10 +398,14 @@ crate-source files:
 These resources initialize shared process state lazily. Embedded bandpass bytes
 parse once in memory, while explicit custom directories cache by path. Empty
 orbit batches and objects isolated before observer geometry do not initialize
-SPICE or MPC obscodes. The first object requiring observer states loads only
-DE440, EOP predict/historical/high-precision, and the ITRF93 frame kernel;
-UTC-to-TDB conversion is already ERFA-owned, so color estimation does not load a
-leapseconds/TLS kernel. Kernels accumulate in load order, and the first
+SPICE or MPC obscodes. Observer geometry still uses DE440, EOP
+predict/historical/high-precision, and the ITRF93 frame kernel: the same five
+geometry dependencies that the old eager generic six-kernel setup furnished.
+The lazy path omits only its incidental TLS. Color first calls the shared
+``TimeArray::rescale(TimeScale::Tdb)`` path; that established policy uses
+ERFA/erfars for UTC↔TAI while retaining project-local TAI↔TT and TT↔TDB
+handling. Observer evaluation therefore receives TDB epochs, so SPICE does not
+consume an LSK for this path. Kernels accumulate in load order, and the first
 successfully loaded nonempty MPC obscodes table remains authoritative. The
 estimate holds its SPICE read guard from first observer preparation through all
 remaining objects. Identical concurrent first calls wait for one initializer

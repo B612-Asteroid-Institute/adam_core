@@ -148,9 +148,12 @@ def estimate_colors(
     optional projection, every phase-law fit, clipping, identifiability,
     covariance, diagnostics,
     statuses/counts, and final Arrow assembly. Observer resources are acquired
-    lazily only when objects reach geometry preparation. The supplied kernel
-    subset is DE440, EOP predict/historical/high-precision, and ITRF93; ERFA
-    converts UTC to TDB first, so color estimation does not load TLS.
+    lazily only when objects reach geometry preparation. Observer geometry uses
+    the same DE440, EOP predict/historical/high-precision, and ITRF93 kernels as
+    before; lazy setup only drops incidental TLS. Rust first applies the shared
+    ``TimeArray::rescale(TimeScale::Tdb)`` policy (ERFA/erfars UTC↔TAI plus
+    project-local TAI↔TT and TT↔TDB), so SPICE receives TDB epochs and does
+    not consume an LSK on this path. Generic SPICE defaults remain unchanged.
 
     Parameters
     ----------

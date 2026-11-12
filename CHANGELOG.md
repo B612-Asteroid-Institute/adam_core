@@ -26,10 +26,16 @@ This file contains notable changes in adam-core
   directory-backed data or five bandpass Parquet tables embedded in the
   compiled ``adam_core_rs_coords`` crate plus the documented
   ``adam_core_rs_kernel_data::Resolver`` chain for observer-geometry kernels
-  and MPC obscodes. The color subset is DE440, all three EOP kernels, and the
-  ITRF93 frame kernel; ERFA converts UTC to TDB first, so no leapseconds/TLS
-  kernel is loaded. The embedded tables parse once without crate-source/runtime
-  files; explicit custom directories remain path-cached. SPICE/obscodes setup
+  and MPC obscodes. The geometry dependencies remain DE440, all three EOP
+  kernels, and the ITRF93 frame kernel: the same five previously furnished with
+  the generic six-kernel default, now without its incidental TLS. Color first
+  uses the shared ``TimeArray::rescale(TimeScale::Tdb)`` path, whose established
+  policy uses ERFA/erfars for UTC↔TAI and project-local TAI↔TT and
+  TT↔TDB conversions. Observer evaluation therefore receives TDB epochs, so
+  SPICE does not consume an LSK on this path. Generic SPICE defaults remain
+  unchanged. The embedded tables parse once without
+  crate-source/runtime files; explicit custom directories remain path-cached.
+  SPICE/obscodes setup
   is lazy until an object reaches observer geometry, and identical concurrent
   first initialization waits and succeeds. Kernels still accumulate
   process-wide, the first loaded nonempty obscodes table wins, and the read

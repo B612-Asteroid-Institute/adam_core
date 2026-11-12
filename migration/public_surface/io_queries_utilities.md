@@ -261,10 +261,13 @@ paths and passes the complete ordered set through one typed Rust initializer;
 reports no sites. Rust owns validation, load order, deduplication, and
 process-global state, so neither initializer exposes a no-op `force` control.
 `OBSERVER_GEOMETRY_KERNELS` is the ordered five-kernel specialization used by
-color estimation after ERFA converts times to TDB: DE440, the predict,
-historical, and high-precision EOP kernels, and the ITRF93 frame kernel. It
-excludes leapseconds/TLS without changing generic `DEFAULT_KERNELS` or
-`setup_SPICE()`. The color workflow's lazy acquisition contract is documented
+color after the shared `TimeArray::rescale(TimeScale::Tdb)` policy has produced
+TDB epochs. That policy uses ERFA/erfars for UTC↔TAI and project-local
+TAI↔TT and TT↔TDB handling. The subset is DE440, the predict, historical,
+and high-precision EOP kernels, and the ITRF93 frame kernel: the same geometry
+dependencies previously loaded by the eager generic six-kernel setup, excluding
+only incidental TLS. Generic `DEFAULT_KERNELS` and `setup_SPICE()` are unchanged.
+The color workflow's lazy acquisition contract is documented
 in `photometry_constants.md`. Fixed-kernel integration tests validate adam-core
 wiring while leaving CSPICE oracle breadth to spicekit.
 

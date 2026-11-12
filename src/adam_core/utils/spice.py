@@ -20,9 +20,11 @@ from ..time import Timestamp
 from .bounded_lru import bounded_lru_get, bounded_lru_put
 from .spice_backend import get_backend
 
-# Observer-state evaluation receives TDB epochs already rescaled by ERFA. It
-# therefore needs the planetary ephemeris and Earth orientation/frame kernels,
-# but not the SPICE leapseconds kernel used by generic SPICE APIs.
+# Color reaches observer evaluation after the shared time-rescaling policy has
+# produced TDB epochs (ERFA/erfars UTC↔TAI plus project-local TAI↔TT and
+# TT↔TDB handling). Geometry still uses the same five kernels from the old
+# eager generic default; only its incidental SPICE leapseconds kernel is omitted.
+# DEFAULT_KERNELS and generic setup_SPICE() behavior remain unchanged.
 OBSERVER_GEOMETRY_KERNELS = [
     de440,
     eop_predict,

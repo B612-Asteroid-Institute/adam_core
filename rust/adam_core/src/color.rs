@@ -155,10 +155,15 @@ static COLOR_RESOURCE_INITIALIZATION: Mutex<()> = Mutex::new(());
 /// Embedded bandpasses are parsed once from compiled bytes; explicit directory
 /// bandpasses are cached by path. Batch/configuration validation, empty-orbit
 /// isolation, and per-object failures before observer geometry do not initialize
-/// SPICE. The first object that reaches observer-state preparation initializes
-/// the DE440, EOP predict/historical/high-precision, and ITRF93 frame kernels;
-/// UTC-to-TDB conversion is ERFA-owned, so no leapseconds/TLS kernel is needed.
-/// Kernel paths accumulate in load order and are not unloaded. The first
+/// SPICE. Observer geometry still uses DE440, EOP
+/// predict/historical/high-precision, and ITRF93: the same five dependencies
+/// previously furnished eagerly with the generic six-kernel default. Lazy setup
+/// omits only its incidental TLS. Color first calls the shared
+/// [`TimeArray::rescale`] path with [`TimeScale::Tdb`]. That established policy
+/// uses ERFA/erfars for UTC↔TAI and project-local TAI↔TT and TT↔TDB handling.
+/// Observer evaluation therefore receives TDB epochs, so SPICE does not consume
+/// an LSK on this path. Generic SPICE defaults remain unchanged. Kernel paths
+/// accumulate in load order and are not unloaded. The first
 /// successfully loaded nonempty MPC obscodes table is retained, so later JSON
 /// arguments are ignored. Once initialized, the estimate holds the global SPICE
 /// read guard until every remaining object is complete. Identical concurrent
