@@ -502,6 +502,30 @@ def test_sbdb_complete_product_has_rust_owned_timing() -> None:
     assert np.all(samples > 0.0)
 
 
+def test_c2022_e3_recorded_payload_converts_to_physical_preperihelion_state() -> None:
+    payload = _load_sbdb_fixture_payload("C_2022_E3_phys.json")
+    orbits = _orbits_from_sbdb_payloads(["C/2022 E3"], [payload])
+
+    # Independent reference: JPL Horizons C/2022 E3, source JPL#82,
+    # Sun center (DE441), JD 2459873.5 TDB, geometric vectors in the J2000
+    # ecliptic frame and AU-D units (Horizons API, 2026-11-10):
+    # https://ssd.jpl.nasa.gov/api/horizons.api
+    horizons_state = np.array(
+        [
+            -1.860700831657873e-1,
+            -7.098312947206076e-1,
+            1.549882327926310,
+            -7.712229663917785e-3,
+            1.585906203592981e-2,
+            -5.849336545320489e-3,
+        ]
+    )
+    actual = orbits.coordinates.values[0]
+    np.testing.assert_allclose(actual[:3], horizons_state[:3], rtol=0.0, atol=1e-10)
+    np.testing.assert_allclose(actual[3:], horizons_state[3:], rtol=0.0, atol=2e-12)
+    assert np.dot(actual[:3], actual[3:]) < 0.0
+
+
 def test_real_sbdb_payloads_parse_without_error() -> None:
     # Parse every *_phys.json in testdata; ensures real API response shapes don't break us.
     sbdb_dir = os.path.join(os.path.dirname(__file__), "testdata", "sbdb")

@@ -147,7 +147,7 @@ fn clamp_unit<T: Scalar>(x: T) -> T {
     x.max(T::from_f64(-1.0)).min(T::from_f64(1.0))
 }
 
-fn calc_mean_anomaly<T: Scalar>(nu: T, e: T) -> T {
+pub(crate) fn calc_mean_anomaly<T: Scalar>(nu: T, e: T) -> T {
     let two_pi = two_pi::<T>();
     let nu_norm = if nu.re() >= TWO_PI_F64 {
         nu - two_pi
@@ -166,12 +166,11 @@ fn calc_mean_anomaly<T: Scalar>(nu: T, e: T) -> T {
         }
     } else if e.re() > 1.0 {
         let hyp = two * (((e - one) / (e + one)).sqrt() * (nu_norm / two).tan()).atanh();
-        let m = e * hyp.sinh() - hyp;
-        if m.re() < 0.0 {
-            m + two_pi
-        } else {
-            m
-        }
+        // Hyperbolic mean anomaly is signed and non-periodic. Inbound states
+        // use true anomaly in (pi, 2pi), which produces H < 0 and therefore
+        // M < 0; applying the elliptic 2pi wrap moves them to a different,
+        // unphysical point on the open conic.
+        e * hyp.sinh() - hyp
     } else {
         let d = (nu_norm / two).atan();
         let m = d + d * d * d / T::from_f64(3.0);
@@ -399,9 +398,8 @@ pub fn cartesian_to_cometary6<T: Scalar>(v: &[T; 6], t0: T, mu: T) -> [T; 6] {
 }
 
 /// Converts Cometary (q, e, i in degrees, raan in degrees, ap in degrees, tp)
-/// to Cartesian matching
-/// legacy JAX path: the mean anomaly is wrapped via the same branch as the legacy
-/// `jnp.where(dtp > 0, 2π - dtp*n, -dtp*n)` rule.
+/// to Cartesian. Elliptic/parabolic inputs retain the legacy wrapped branch;
+/// hyperbolic inputs use the signed, non-periodic `M = (t0 - tp) * n`.
 pub fn cometary_to_cartesian6<T: Scalar>(
     v: &[T; 6],
     t0: T,
@@ -421,7 +419,11 @@ pub fn cometary_to_cartesian6<T: Scalar>(
     let n = (mu / a.abs().powi(3)).sqrt();
     let dtp = tp - t0;
     let two_pi = two_pi::<T>();
-    let m_rad = if dtp.re() > 0.0 {
+    let m_rad = if e.re() > 1.0 {
+        // Hyperbolic mean anomaly is non-periodic: negative before perihelion
+        // and positive after perihelion.
+        -(dtp * n)
+    } else if dtp.re() > 0.0 {
         two_pi - dtp * n
     } else {
         -(dtp * n)
@@ -569,6 +571,106 @@ mod tests {
                 let expected = if i == j { 1.0 } else { 0.0 };
                 approx(bi.du[j], expected, 1e-4);
             }
+        }
+    }
+
+    #[test]
+    fn hyperbolic_keplerian_roundtrips_preserve_mean_anomaly_sign() {
+        let mu = 2.95912208284120e-04_f64;
+        for mean_anomaly in [-10.0, 10.0] {
+            let kep = [
+                -1.272345007428081,
+                1.201133796102373,
+                20.0,
+                45.0,
+                30.0,
+                mean_anomaly,
+            ];
+            let cart = keplerian_to_cartesian6::<f64>(&kep, mu, 100, 1e-15);
+            assert!(cart.iter().all(|value| value.is_finite()));
+            let back = cartesian_to_keplerian6::<f64>(&cart, mu);
+            for index in 0..5 {
+                approx(back[index], kep[index], 1e-10);
+            }
+            approx(back[5], mean_anomaly, 1e-10);
+            assert_eq!(back[5].is_sign_negative(), mean_anomaly.is_sign_negative());
+        }
+    }
+
+    #[test]
+    fn hyperbolic_cometary_roundtrips_preserve_perihelion_side() {
+        let mu = 2.95912208284120e-04_f64;
+        let tp = 59_000.0;
+        for t0 in [tp - 100.0, tp + 100.0] {
+            let com = [0.2559115812959117, 1.201133796102373, 20.0, 45.0, 30.0, tp];
+            let cart = cometary_to_cartesian6::<f64>(&com, t0, mu, 100, 1e-15);
+            assert!(cart.iter().all(|value| value.is_finite()));
+            let back = cartesian_to_cometary6::<f64>(&cart, t0, mu);
+            for index in 0..6 {
+                approx(back[index], com[index], 1e-9);
+            }
+            let kep = cartesian_to_keplerian6::<f64>(&cart, mu);
+            assert_eq!(kep[5].is_sign_negative(), t0 < tp);
+        }
+    }
+
+    #[test]
+    fn c2022_e3_preperihelion_state_is_physical_and_roundtrips() {
+        let mu = 2.95912208284120e-04_f64;
+        let t0 = 59_873.0;
+        let tp = 59_956.7851988296;
+        let com = [
+            1.11224437022534,
+            1.000301905819192,
+            109.169480756749,
+            302.5550197168474,
+            145.81492879,
+            tp,
+        ];
+        let cart = cometary_to_cartesian6::<f64>(&com, t0, mu, 100, 1e-15);
+        assert!(cart.iter().all(|value| value.is_finite()));
+        // Independent reference: JPL Horizons C/2022 E3, source JPL#82,
+        // Sun center (DE441), JD 2459873.5 TDB, geometric vectors in the
+        // J2000 ecliptic frame and AU-D units (Horizons API, 2026-11-10):
+        // https://ssd.jpl.nasa.gov/api/horizons.api
+        let horizons_state = [
+            -1.860700831657873e-1,
+            -7.098312947206076e-1,
+            1.549_882_327_926_31,
+            -7.712229663917785e-3,
+            1.585906203592981e-2,
+            -5.849336545320489e-3,
+        ];
+        for index in 0..3 {
+            // The SBDB fixture rounds the angular elements; 1e-10 au is
+            // about 15 m and bounds the resulting component differences.
+            approx(cart[index], horizons_state[index], 1e-10);
+        }
+        for index in 3..6 {
+            // 2e-12 au/day is about 3.5 micrometers/second.
+            approx(cart[index], horizons_state[index], 2e-12);
+        }
+        assert!(dot3([cart[0], cart[1], cart[2]], [cart[3], cart[4], cart[5]]) < 0.0);
+
+        let back_com = cartesian_to_cometary6::<f64>(&cart, t0, mu);
+        approx(back_com[0], com[0], 1e-10);
+        approx(back_com[1], com[1], 1e-12);
+        approx(back_com[5], tp, 1e-9);
+
+        let back_kep = cartesian_to_keplerian6::<f64>(&cart, mu);
+        approx(back_kep[5], -0.0003692991264304336, 1e-9);
+        assert!(back_kep[5] < 0.0);
+        let kep = [
+            -3684.077283445997,
+            com[1],
+            com[2],
+            com[3],
+            com[4],
+            -0.0003692991264304336,
+        ];
+        let cart_from_kep = keplerian_to_cartesian6::<f64>(&kep, mu, 100, 1e-15);
+        for index in 0..6 {
+            approx(cart_from_kep[index], cart[index], 1e-10);
         }
     }
 

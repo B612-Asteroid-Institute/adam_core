@@ -6,6 +6,11 @@ This file contains notable changes in adam-core
 
 ### Fixed
 
+- Hyperbolic Keplerian and cometary conversions preserve signed mean anomaly,
+  preventing pre-perihelion states such as C/2022 E3 from receiving an
+  elliptic 2π wrap and converting to implausibly distant Cartesian states.
+  For inbound hyperbolic states, public `calc_mean_anomaly` now returns the
+  negative, signed value instead of a value wrapped into `[0, 2π)`.
 - ADES PSV parsing handles a UTF-8 BOM on the first physical line, recognizes
   keyword-record candidates structurally, preserves warnings for unknown
   columns, and reports missing `obsTime`, non-first identity columns, and
