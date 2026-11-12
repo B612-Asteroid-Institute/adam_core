@@ -2,7 +2,10 @@
 (bead personal-cmy.20): every supported quivr observation table crosses to the
 Rust batch and back losslessly (values bit-exact, time scales preserved)."""
 
+import pyarrow as pa
 import pytest
+
+from adam_core import _rust_native
 
 from ...time import Timestamp
 from ..ades import ADESObservations
@@ -144,6 +147,16 @@ def test_source_catalog_round_trip_with_null_exposure_time():
     round_tripped = _assert_round_trip(catalog)
     assert round_tripped.astcat.to_pylist() == ["Gaia2", None]
     assert round_tripped.photcat.to_pylist() == [None, "Gaia3"]
+
+
+def test_ipc_bridge_rejects_multiple_record_batches():
+    batch = pa.record_batch({"value": pa.array([1], type=pa.int64())})
+    sink = pa.BufferOutputStream()
+    with pa.ipc.new_stream(sink, batch.schema) as writer:
+        writer.write_batch(batch)
+        writer.write_batch(batch)
+    with pytest.raises(ValueError, match="exactly one record batch"):
+        _rust_native.observations_nested_ipc_round_trip(sink.getvalue().to_pybytes())
 
 
 def test_unsupported_table_raises():

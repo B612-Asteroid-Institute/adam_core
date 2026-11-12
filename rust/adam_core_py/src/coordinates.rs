@@ -1395,11 +1395,21 @@ pub(crate) fn read_orbit_ipc(bytes: &[u8]) -> PyResult<RecordBatch> {
     let mut reader = StreamReader::try_new(bytes, None)
         .map_err(|err| PyValueError::new_err(format!("invalid Arrow IPC stream: {err}")))?;
     let schema = reader.schema();
-    match reader.next() {
-        Some(batch) => batch
-            .map_err(|err| PyValueError::new_err(format!("failed to read Arrow IPC batch: {err}"))),
-        None => Ok(RecordBatch::new_empty(schema)),
+    let batch = match reader.next() {
+        Some(batch) => batch.map_err(|err| {
+            PyValueError::new_err(format!("failed to read Arrow IPC batch: {err}"))
+        })?,
+        None => RecordBatch::new_empty(schema),
+    };
+    if let Some(extra) = reader.next() {
+        extra.map_err(|err| {
+            PyValueError::new_err(format!("failed to read extra Arrow IPC batch: {err}"))
+        })?;
+        return Err(PyValueError::new_err(
+            "Arrow IPC input must contain exactly one record batch",
+        ));
     }
+    Ok(batch)
 }
 
 pub(crate) fn write_orbit_ipc(batch: &RecordBatch) -> PyResult<Vec<u8>> {

@@ -27,6 +27,14 @@ deterministic discovery chain, per kernel:
 Set `ADAM_CORE_KERNEL_OFFLINE=1` to forbid tier 4 (resolution fails instead of
 downloading).
 
+`Resolver::default_spice_kernel_paths()` retains the generic six-kernel
+`setup_SPICE()` set. `Resolver::observer_geometry_kernel_paths()` resolves the
+same DE440, EOP predict/historical/high-precision, and ITRF93 frame kernels that
+observer geometry already used under the generic default, excluding only its
+incidental TLS. Color supplies TDB epochs through the shared time-rescaling
+policy, which uses ERFA/erfars for UTC↔TAI and project-local TAI↔TT and
+TT↔TDB handling; SPICE therefore does not consume an LSK on that path.
+
 Provenance: the manifest in `src/lib.rs` pins each wheel's version, URL, and
 SHA-256 exactly as published on PyPI; update all three together when bumping a
 data package version.

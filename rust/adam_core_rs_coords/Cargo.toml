@@ -27,6 +27,7 @@ serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order", "float_roundtrip"] }
 statrs = "0.18"
 nalgebra = "0.33"
+faer = { version = "0.22", default-features = false, features = ["std", "linalg", "rayon"] }
 sha2 = "0.10"
 bytes = "1"
 num-complex = "0.4"

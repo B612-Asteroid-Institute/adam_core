@@ -5,8 +5,9 @@ This guide covers the full ``adam_core`` photometry stack:
 
 1. geometric phase-angle and V-band magnitude primitives
 2. bandpass-aware magnitude prediction and conversion
-3. inverse fitting of ``H_v`` from detections
-4. light-curve construction from nominal and variant ephemerides
+3. generic multi-filter color and phase-law estimation
+4. inverse fitting of ``H_v`` from detections
+5. light-curve construction from nominal and variant ephemerides
 
 Photometry Model and Data Requirements
 --------------------------------------
@@ -353,6 +354,137 @@ For validation and debugging, inspect the packaged curves/maps/integrals tables.
    neo_int = get_integrals("NEO", ids)
    custom_mix = compute_mix_integrals(0.7, 0.3, ids)
 
+Generic Color and Phase-Law Estimation
+--------------------------------------
+
+``estimate_colors`` accepts native ``SourceCatalog`` observations and ``Orbits``
+and returns one ``ColorFit`` row for each non-null object ID in first-appearance
+order. Python and Rust expose the matching public name ``estimate_colors``.
+The Python API is a single-call facade over public ``adam_core::estimate_colors``;
+the private IPC adapter only decodes typed inputs, calls that API once, and
+encodes its ``ColorFitBatch``. Public Rust owns setup, grouping, propagation,
+geometry, canonical-filter resolution, phase fitting, clipping, covariance,
+diagnostics, and per-object failure isolation. Rust rows expose the
+``ColorFitStatus`` enum; Arrow and Python preserve its stable string values.
+
+Pure-Rust callers obtain bandpasses embedded in the compiled coords crate and
+resolved observer-geometry/MPC data without a Python installation or retained
+crate-source files:
+
+.. code-block:: rust
+
+   use adam_core::kernel_data::Resolver;
+   use adam_core::{
+       estimate_colors,
+       ColorEstimationResources,
+       ColorPhaseModel,
+   };
+
+   let resources = ColorEstimationResources::resolve(
+       &Resolver::from_env(),
+   )?;
+   let fits = estimate_colors(
+       &observations,
+       &orbits,
+       ColorPhaseModel::Hg12Star,
+       true,
+       None,
+       false,
+       None,
+       &resources,
+   )?;
+   println!("{}", fits.rows[0].status);
+
+These resources initialize shared process state lazily. Embedded bandpass bytes
+parse once in memory, while explicit custom directories cache by path. Empty
+orbit batches and objects isolated before observer geometry do not initialize
+SPICE or MPC obscodes. Observer geometry still uses DE440, EOP
+predict/historical/high-precision, and the ITRF93 frame kernel: the same five
+geometry dependencies that the old eager generic six-kernel setup furnished.
+The lazy path omits only its incidental TLS. Color first calls the shared
+``TimeArray::rescale(TimeScale::Tdb)`` path; that established policy uses
+ERFA/erfars for UTC↔TAI while retaining project-local TAI↔TT and TT↔TDB
+handling. Observer evaluation therefore receives TDB epochs, so SPICE does not
+consume an LSK for this path. Kernels accumulate in load order, and the first
+successfully loaded nonempty MPC obscodes table remains authoritative. The
+estimate holds its SPICE read guard from first observer preparation through all
+remaining objects. Identical concurrent first calls wait for one initializer
+and then proceed, but callers must initialize the complete observer-geometry
+resource set before concurrent mutation. A later generic ``setup_SPICE()`` may
+still add TLS, so call it before starting concurrent color or SPICE science.
+Until the separately tracked ERFA first-use race is corrected, perform one UTC
+rescale on a single thread before concurrent color calls containing UTC times.
+
+By default every resolved canonical filter is an independent fitted intercept.
+There is no implicit LSST projection or asteroid composition:
+
+.. code-block:: python
+
+   from adam_core.photometry import estimate_colors
+
+   fits = estimate_colors(
+       observations=source_catalog,
+       orbits=orbits,
+       phi_type="HG12star",  # also "HG" or "c1c2"
+       force_g_bounds=True,
+       strict_band_mapping=False,
+   )
+
+   row = fits.table.to_pylist()[0]
+   print(row["filter_ids"])
+   print(row["absolute_magnitudes"])
+   print(list(zip(
+       row["color_lhs_filter_ids"],
+       row["color_rhs_filter_ids"],
+       row["colors"],
+       strict=True,
+   )))
+
+``filter_ids`` is byte-wise sorted. ``absolute_magnitudes``,
+``absolute_magnitude_sigmas``, and ``num_used_by_filter`` align with it;
+``magnitude_covariance`` is its row-major ``N*N`` covariance. Color lists contain
+all ``lhs < rhs`` pairs with orientation ``H_lhs - H_rhs``. List children are
+never Arrow null: non-identifiable floating-point products are NaN instead.
+
+Composition-dependent projection is opt-in and complete. Supply both the shared
+``BandpassComposition`` and an explicit mapping for every source filter that may
+participate, including identity mappings. Unlisted filters remain attributable
+but count as unsupported:
+
+.. code-block:: python
+
+   fits = estimate_colors(
+       source_catalog,
+       orbits,
+       "HG12star",
+       color_term_composition="C",
+       filter_projection={
+           "ATLAS_c": "LSST_g",
+           "ATLAS_o": "LSST_r",
+           "LSST_g": "LSST_g",  # explicit identity edge
+           "LSST_r": "LSST_r",
+       },
+   )
+
+Statuses are ``ok``, ``no_orbit``, ``multiple_orbits``,
+``no_usable_photometry``, ``too_many_outliers``,
+``phase_param_out_of_bounds``, and ``failed``. Null/invalid photometry and
+unresolved filters do not abort the batch. Once row classification occurred,
+counts obey
+``num_obs = num_invalid + num_unsupported_filter + num_clipped + num_used``.
+``no_orbit`` and ``multiple_orbits`` have ``num_obs`` but null classification
+counts. On attempted-fit failures, ``num_used`` means rows admitted to that fit.
+A forced out-of-bounds phase parameter retains filter IDs, per-filter counts,
+and scalar diagnostics but nulls scientific products; terminal failures null
+all list fields. A nonempty orbit table must use Cartesian ``ecliptic``
+coordinates; frame or representation errors fail the call. Heliocentric origin
+is validated per matching orbit, so a non-Sun origin produces an isolated
+``failed`` row. An empty orbit table produces ``no_orbit`` rows. UTC orbit
+epochs are accepted; active non-gravitational solutions produce isolated failed
+rows. Isolated failures use clean Rust-native error text without Python
+exception-class prefixes. Call-level time conversion errors retain their full
+operation context.
+
 Estimating ``H_v`` From Detections
 ----------------------------------
 
@@ -415,6 +547,7 @@ When to Use
 * ``generate_ephemeris(..., predict_magnitudes=True, predict_phase_angle=True)``:
   production light-curve generation.
 * ``predict_magnitudes`` + bandpass mapping: survey/filter-aware prediction.
+* ``estimate_colors``: generic canonical-filter colors and shared phase-law fits.
 * ``estimate_absolute_magnitude_*``: calibrating ``H_v`` from detection history.
 * ``VariantEphemeris.collapse_by_object_id``: uncertainty-aware light curves.
 

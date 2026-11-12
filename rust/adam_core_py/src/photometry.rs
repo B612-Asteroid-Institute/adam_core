@@ -1,15 +1,20 @@
 use crate::coordinate_ops::bench_result;
 use crate::spice::observer_positions_from_exposures;
-use adam_core_rs_coords::{fit_absolute_magnitude_grouped, fit_absolute_magnitude_rows};
+use adam_core::{estimate_colors, ColorEstimationError, ColorEstimationResources};
+use adam_core_rs_coords::{
+    fit_absolute_magnitude_grouped, fit_absolute_magnitude_rows, ColorComposition, ColorPhaseModel,
+    OrbitBatch, SourceCatalogBatch, TryFromNestedRecordBatch,
+};
 use arrow::pyarrow::ToPyArrow;
 use arrow_array::{ArrayRef, Float64Array, Int64Array, LargeStringArray, RecordBatch, StructArray};
 use arrow_schema::{DataType, Field, Fields, Schema};
 use numpy::{IntoPyArray, PyArray1, PyReadonlyArray1, PyReadonlyArray2};
-use pyo3::exceptions::PyValueError;
+use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
+use pyo3::types::PyBytes;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::hint::black_box;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -1348,7 +1353,108 @@ fn benchmark_fit_absolute_magnitude_grouped_numpy(
     })
 }
 
+/// Convert mutually exclusive Python transport fields to the typed composition.
+fn color_composition_from_transport(
+    template_id: Option<String>,
+    mix: Option<(f64, f64)>,
+) -> Result<Option<ColorComposition>, &'static str> {
+    match (template_id, mix) {
+        (None, None) => Ok(None),
+        (Some(template), None) => Ok(Some(ColorComposition::Template(template))),
+        (None, Some((weight_c, weight_s))) => Ok(Some(ColorComposition::Mix(weight_c, weight_s))),
+        (Some(_), Some(_)) => {
+            Err("projection requires exactly one composition: template_id or C/S mix")
+        }
+    }
+}
+
+/// Private IPC adapter for public `adam_core::estimate_colors`.
+///
+/// This boundary only decodes typed inputs/options/resources, calls the public
+/// high-level Rust API once, and encodes its typed `ColorFitBatch`. Setup,
+/// grouping, orbit preparation, geometry, fitting, and result semantics remain
+/// in the publishable `adam_core` crate.
+#[pyfunction]
+#[pyo3(signature = (
+    source_catalog_ipc,
+    orbits_ipc,
+    observer_geometry_kernel_paths,
+    mpc_obscodes_json,
+    phi_type,
+    force_g_bounds=true,
+    strict_band_mapping=false,
+    projection=None,
+    template_id=None,
+    mix=None
+))]
+#[allow(clippy::too_many_arguments)]
+fn estimate_colors_ipc<'py>(
+    py: Python<'py>,
+    source_catalog_ipc: &Bound<'py, PyBytes>,
+    orbits_ipc: &Bound<'py, PyBytes>,
+    observer_geometry_kernel_paths: Vec<String>,
+    mpc_obscodes_json: &str,
+    phi_type: &str,
+    force_g_bounds: bool,
+    strict_band_mapping: bool,
+    projection: Option<HashMap<String, String>>,
+    template_id: Option<String>,
+    mix: Option<(f64, f64)>,
+) -> PyResult<Bound<'py, PyBytes>> {
+    let source_batch = crate::coordinates::read_orbit_ipc(source_catalog_ipc.as_bytes())?;
+    let orbit_batch = crate::coordinates::read_orbit_ipc(orbits_ipc.as_bytes())?;
+    let source =
+        SourceCatalogBatch::try_from_nested_record_batch(&source_batch).map_err(|error| {
+            PyValueError::new_err(format!("failed to decode SourceCatalog: {error}"))
+        })?;
+    let orbits = OrbitBatch::try_from_nested_record_batch(&orbit_batch)
+        .map_err(|error| PyValueError::new_err(format!("failed to decode Orbits: {error}")))?;
+    let phi_type = ColorPhaseModel::parse(phi_type)
+        .map_err(|error| PyValueError::new_err(error.to_string()))?;
+    let color_term_composition =
+        color_composition_from_transport(template_id, mix).map_err(PyValueError::new_err)?;
+    let filter_projection = projection.map(|mapping| mapping.into_iter().collect());
+    let observer_geometry_kernel_paths = observer_geometry_kernel_paths
+        .into_iter()
+        .map(PathBuf::from)
+        .collect::<Vec<_>>();
+    let resources = ColorEstimationResources::bundled(
+        observer_geometry_kernel_paths,
+        mpc_obscodes_json.to_string(),
+    );
+    let result = estimate_colors(
+        &source,
+        &orbits,
+        phi_type,
+        force_g_bounds,
+        color_term_composition,
+        strict_band_mapping,
+        filter_projection,
+        &resources,
+    )
+    .map_err(color_estimation_error_to_py)?;
+    let batch = result.to_record_batch().map_err(|error| {
+        PyValueError::new_err(format!("failed to encode ColorFit result: {error}"))
+    })?;
+    let bytes = crate::coordinates::write_orbit_ipc(&batch)?;
+    Ok(PyBytes::new(py, &bytes))
+}
+
+fn color_estimation_error_to_py(error: ColorEstimationError) -> PyErr {
+    let message = error.to_string();
+    match error {
+        ColorEstimationError::InvalidConfiguration(_) | ColorEstimationError::Schema { .. } => {
+            PyValueError::new_err(message)
+        }
+        ColorEstimationError::Spice(_)
+        | ColorEstimationError::BackendBusy
+        | ColorEstimationError::BackendPoisoned => PyRuntimeError::new_err(message),
+        _ => PyRuntimeError::new_err(message),
+    }
+}
+
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_function(wrap_pyfunction!(estimate_colors_ipc, m)?)?;
     m.add_function(wrap_pyfunction!(fit_absolute_magnitude_rows_numpy, m)?)?;
     m.add_function(wrap_pyfunction!(fit_absolute_magnitude_grouped_numpy, m)?)?;
     m.add_function(wrap_pyfunction!(calculate_phase_angle_numpy, m)?)?;
@@ -1385,4 +1491,22 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
         m
     )?)?;
     Ok(())
+}
+
+#[cfg(test)]
+mod color_adapter_tests {
+    use super::*;
+
+    #[test]
+    fn composition_transport_preserves_template_and_mix_order() {
+        assert_eq!(
+            color_composition_from_transport(Some("C".to_string()), None).unwrap(),
+            Some(ColorComposition::Template("C".to_string()))
+        );
+        assert_eq!(
+            color_composition_from_transport(None, Some((0.4, 0.6))).unwrap(),
+            Some(ColorComposition::Mix(0.4, 0.6))
+        );
+        assert!(color_composition_from_transport(Some("C".to_string()), Some((0.4, 0.6))).is_err());
+    }
 }

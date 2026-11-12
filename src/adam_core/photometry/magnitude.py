@@ -16,8 +16,8 @@ from ..coordinates.cartesian import CartesianCoordinates
 from ..coordinates.origin import OriginCodes
 from ..observations.exposures import Exposures
 from ..observers.observers import Observers
+from .bandpasses import BandpassComposition
 from .bandpasses.api import _composition_args, _data_dir_str
-from .magnitude_common import BandpassComposition
 
 _DEFAULT_EXPOSURES_OBSERVERS = Exposures.observers
 
@@ -143,6 +143,39 @@ def calculate_phase_angle(
 
     rust_out = rust_calculate_phase_angle_numpy(object_pos, observer_pos)
     return np.ascontiguousarray(rust_out, dtype=np.float64)
+
+
+def observing_geometry(
+    object_coords: CartesianCoordinates,
+    observers: Observers,
+) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64], npt.NDArray[np.float64]]:
+    """
+    Per-observation observing geometry: heliocentric distance, observer distance,
+    and solar phase angle.
+
+    Both inputs must be heliocentric (origin = SUN) and paired row-for-row;
+    the phase angle is delegated to `calculate_phase_angle`, which validates the
+    geometry (finite, r > 0, delta > 0).
+
+    Parameters
+    ----------
+    object_coords
+        Object Cartesian coordinates in AU.
+    observers
+        Observer states, aligned with ``object_coords``.
+
+    Returns
+    -------
+    r_au, delta_au, phase_angle_deg
+        Heliocentric distance (AU), observer distance (AU), and solar phase angle
+        (degrees) for each paired row.
+    """
+    object_pos = np.asarray(object_coords.r, dtype=np.float64)
+    observer_pos = np.asarray(observers.coordinates.r, dtype=np.float64)
+    r_au = np.linalg.norm(object_pos, axis=1)
+    delta_au = np.linalg.norm(object_pos - observer_pos, axis=1)
+    phase_angle_deg = calculate_phase_angle(object_coords, observers)
+    return r_au, delta_au, phase_angle_deg
 
 
 def convert_magnitude(

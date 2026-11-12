@@ -21,8 +21,8 @@ pub use ades_io::{ades_angular_covariance_flat, ades_string_to_observations, ade
 
 pub mod bandpasses;
 pub use bandpasses::{
-    bandpass_data, clear_custom_templates, read_bandpass_parquet_batches, register_custom_template,
-    BandpassData,
+    bandpass_data, bundled_bandpass_data, clear_custom_templates, read_bandpass_parquet_batches,
+    register_custom_template, BandpassData,
 };
 
 pub mod healpix;
@@ -204,6 +204,15 @@ pub use translation::{
 
 pub mod abs_mag;
 pub use abs_mag::{fit_absolute_magnitude_grouped, fit_absolute_magnitude_rows, AbsMagFit};
+
+pub(crate) mod trust_region;
+
+pub mod color_estimation;
+pub use color_estimation::{
+    color_fit_record_batch, color_fit_schema, estimate_color_object, validate_color_config,
+    ColorComposition, ColorEstimatorConfig, ColorFitBatch, ColorFitRow, ColorFitStatus,
+    ColorObservation, ColorPhaseModel, ColorProjection,
+};
 
 pub mod spherical_resid;
 pub use spherical_resid::{

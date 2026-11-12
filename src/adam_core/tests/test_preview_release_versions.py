@@ -592,7 +592,7 @@ def test_kernel_data_constrains_icu_for_clean_rust_1_87_consumers() -> None:
         coords_dependencies = tomllib.load(source)["dependencies"]
     with (ROOT / "rust/adam_core_rs_spice/Cargo.toml").open("rb") as source:
         spice_dependencies = tomllib.load(source)["dependencies"]
-    assert "faer" not in coords_dependencies
+    assert coords_dependencies["faer"] == spice_dependencies["faer"]
     assert spice_dependencies["faer"] == {
         "version": "0.22",
         "default-features": False,

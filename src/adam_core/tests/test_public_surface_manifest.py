@@ -13,6 +13,17 @@ def test_public_surface_manifest_is_complete_and_current() -> None:
     assert committed == expected
 
 
+def test_color_estimation_remains_a_loop_free_rust_veneer() -> None:
+    symbol = next(
+        symbol
+        for symbol in collect()["symbols"]
+        if symbol["id"] == "adam_core.photometry.color_determination:estimate_colors"
+    )
+    assert symbol["signals"]["python_loop"] is False
+    assert symbol["implementation_class"] == "rust_veneer_candidate_see_domain_audit"
+    assert symbol["native_timing"] == "see_domain_audit"
+
+
 def test_frozen_updated_upstream_retirements_are_classified() -> None:
     reconciliation = collect()["frozen_updated_upstream_reconciliation"]
     assert reconciliation["commit"] == "757c09fca86adf9e3d5899952db3d379e09413f6"

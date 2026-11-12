@@ -825,13 +825,15 @@ def _rust_msrv_dependency_failures() -> list[str]:
     spice_manifest = tomllib.loads(
         (REPO_ROOT / "rust/adam_core_rs_spice/Cargo.toml").read_text(encoding="utf-8")
     )
-    if "faer" in coords_manifest.get("dependencies", {}):
-        failures.append("coords manifest must not retain its unused faer dependency")
     expected_faer = {
         "version": "0.22",
         "default-features": False,
         "features": ["std", "linalg", "rayon"],
     }
+    if coords_manifest.get("dependencies", {}).get("faer") != expected_faer:
+        failures.append(
+            "coords manifest faer dependency must use std+linalg+rayon without defaults"
+        )
     if spice_manifest.get("dependencies", {}).get("faer") != expected_faer:
         failures.append(
             "spice manifest faer dependency must use std+linalg+rayon without defaults"

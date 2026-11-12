@@ -185,6 +185,13 @@ jobs:
         run: cargo clippy --workspace --all-targets -- -D warnings
       - name: Rust tests
         run: cargo test --workspace
+      - name: Rust real-resource color tests
+        run: |
+          set -euo pipefail
+          export ADAM_CORE_KERNEL_PYTHON
+          ADAM_CORE_KERNEL_PYTHON="$(pdm run python -c 'import sys; print(sys.executable)')"
+          cargo test -p adam_core --test public_color_api -- --ignored --test-threads=1
+          cargo test -p adam_core --test public_color_resource_concurrency -- --ignored --test-threads=1
       - name: Build Rust wheel in a fresh declared-tool environment
         run: pdm run release-build-environment-check --out dist
       - name: Verify native wheel artifact

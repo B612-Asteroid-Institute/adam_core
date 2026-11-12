@@ -10,6 +10,9 @@
 //! standalone batch construction, persisted handoff, composition, evaluation,
 //! failure-continuation and relational-relabel scenarios, and
 //! `examples/od_external_provider.rs` for the ABI-v2 ownership boundary.
+//!
+//! Canonical color estimation is available at the crate root through
+//! [`estimate_colors`], the same high-level API wrapped by Python.
 
 pub use adam_core_rs_autodiff as autodiff;
 pub use adam_core_rs_coords as coords;
@@ -41,8 +44,12 @@ pub const fn build_identity() -> BuildIdentity {
 pub mod od;
 pub use od::{evaluate_orbits, refine, run_iod, run_od};
 
+/// Canonical, batch-native color-estimation workflow.
+pub mod color;
+pub use color::{estimate_colors, ColorEstimationError, ColorEstimationResources};
+
 pub use adam_core_rs_coords::{
     estimate_rotation_period, estimate_rotation_period_best_apparition,
-    estimate_rotation_period_grouped, RotationPeriodConfig, RotationPeriodEstimate,
-    RotationPeriodInput,
+    estimate_rotation_period_grouped, ColorComposition, ColorFitBatch, ColorFitRow, ColorFitStatus,
+    ColorPhaseModel, RotationPeriodConfig, RotationPeriodEstimate, RotationPeriodInput,
 };

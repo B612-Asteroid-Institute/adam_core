@@ -16,11 +16,21 @@
 
 use crate::types::{SchemaError, SchemaResult};
 use arrow_array::{Array, Float64Array, LargeListArray, LargeStringArray, ListArray, StringArray};
+use bytes::Bytes;
 use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 use std::collections::{BTreeSet, HashMap};
 use std::fs::File;
 use std::path::Path;
 use std::sync::{Arc, Mutex, OnceLock};
+
+const BUNDLED_BANDPASS_CURVES: &[u8] = include_bytes!("../data/bandpasses/bandpass_curves.parquet");
+const BUNDLED_OBSERVATORY_BAND_MAP: &[u8] =
+    include_bytes!("../data/bandpasses/observatory_band_map.parquet");
+const BUNDLED_ASTEROID_TEMPLATES: &[u8] =
+    include_bytes!("../data/bandpasses/asteroid_templates.parquet");
+const BUNDLED_TEMPLATE_INTEGRALS: &[u8] =
+    include_bytes!("../data/bandpasses/template_bandpass_integrals.parquet");
+const BUNDLED_SOLAR_SPECTRUM: &[u8] = include_bytes!("../data/bandpasses/solar_spectrum.parquet");
 
 fn invalid(message: String) -> SchemaError {
     SchemaError::InvalidRecordBatch(message)
@@ -76,6 +86,19 @@ fn trapezoid(y: &[f64], x: &[f64]) -> f64 {
 }
 
 // --- parquet loading ---------------------------------------------------------------
+
+fn read_bandpass_parquet_bytes(
+    bytes: &'static [u8],
+    label: &str,
+) -> SchemaResult<Vec<arrow_array::RecordBatch>> {
+    let reader = ParquetRecordBatchReaderBuilder::try_new(Bytes::from_static(bytes))
+        .map_err(|err| invalid(format!("failed to read bundled {label}: {err}")))?
+        .build()
+        .map_err(|err| invalid(format!("failed to read bundled {label}: {err}")))?;
+    reader
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|err| invalid(format!("failed to read bundled {label}: {err}")))
+}
 
 pub fn read_bandpass_parquet_batches(path: &Path) -> SchemaResult<Vec<arrow_array::RecordBatch>> {
     let file = File::open(path)
@@ -175,15 +198,53 @@ pub struct BandpassData {
 
 impl BandpassData {
     pub fn load(data_dir: &Path) -> SchemaResult<Self> {
-        let curves_batches =
-            read_bandpass_parquet_batches(&data_dir.join("bandpass_curves.parquet"))?;
+        Self::from_batches(
+            read_bandpass_parquet_batches(&data_dir.join("bandpass_curves.parquet"))?,
+            read_bandpass_parquet_batches(&data_dir.join("observatory_band_map.parquet"))?,
+            read_bandpass_parquet_batches(&data_dir.join("template_bandpass_integrals.parquet"))?,
+            read_bandpass_parquet_batches(&data_dir.join("solar_spectrum.parquet"))?,
+        )
+    }
+
+    fn load_bundled() -> SchemaResult<Self> {
+        let templates =
+            read_bandpass_parquet_bytes(BUNDLED_ASTEROID_TEMPLATES, "asteroid_templates.parquet")?;
+        let template_ids = string_column(&templates, "template_id")?;
+        let template_wavelengths = f64_list_column(&templates, "wavelength_nm")?;
+        let template_reflectances = f64_list_column(&templates, "reflectance")?;
+        if template_ids.len() != template_wavelengths.len()
+            || template_ids.len() != template_reflectances.len()
+        {
+            return Err(invalid(
+                "bundled asteroid template columns have inconsistent lengths".to_string(),
+            ));
+        }
+
+        Self::from_batches(
+            read_bandpass_parquet_bytes(BUNDLED_BANDPASS_CURVES, "bandpass_curves.parquet")?,
+            read_bandpass_parquet_bytes(
+                BUNDLED_OBSERVATORY_BAND_MAP,
+                "observatory_band_map.parquet",
+            )?,
+            read_bandpass_parquet_bytes(
+                BUNDLED_TEMPLATE_INTEGRALS,
+                "template_bandpass_integrals.parquet",
+            )?,
+            read_bandpass_parquet_bytes(BUNDLED_SOLAR_SPECTRUM, "solar_spectrum.parquet")?,
+        )
+    }
+
+    fn from_batches(
+        curves_batches: Vec<arrow_array::RecordBatch>,
+        map_batches: Vec<arrow_array::RecordBatch>,
+        integral_batches: Vec<arrow_array::RecordBatch>,
+        solar_batches: Vec<arrow_array::RecordBatch>,
+    ) -> SchemaResult<Self> {
         let filter_ids = string_column(&curves_batches, "filter_id")?;
         let wavelengths = f64_list_column(&curves_batches, "wavelength_nm")?;
         let throughputs = f64_list_column(&curves_batches, "throughput")?;
         let curves: Vec<(Vec<f64>, Vec<f64>)> = wavelengths.into_iter().zip(throughputs).collect();
 
-        let map_batches =
-            read_bandpass_parquet_batches(&data_dir.join("observatory_band_map.parquet"))?;
         let map_keys = string_column(&map_batches, "key")?;
         let map_filters = string_column(&map_batches, "filter_id")?;
         // pc.index_in returns the FIRST match; keep the first mapping per key.
@@ -192,8 +253,6 @@ impl BandpassData {
             band_map.entry(key).or_insert(filter_id);
         }
 
-        let integral_batches =
-            read_bandpass_parquet_batches(&data_dir.join("template_bandpass_integrals.parquet"))?;
         let template_ids = string_column(&integral_batches, "template_id")?;
         let integral_filters = string_column(&integral_batches, "filter_id")?;
         let integral_values = f64_column(&integral_batches, "integral_photon")?;
@@ -208,8 +267,6 @@ impl BandpassData {
                 .or_insert(value);
         }
 
-        let solar_batches =
-            read_bandpass_parquet_batches(&data_dir.join("solar_spectrum.parquet"))?;
         let solar_wl = f64_column(&solar_batches, "wavelength_nm")?;
         let solar_flux = f64_column(&solar_batches, "flux")?;
 
@@ -788,6 +845,17 @@ pub fn clear_custom_templates() {
     custom.integrals.clear();
 }
 
+/// Return the process-cached canonical bandpass data embedded in this crate.
+///
+/// All five published Parquet tables are compiled with `include_bytes!`; this
+/// loader never opens crate-source or deployment-time data files.
+pub fn bundled_bandpass_data() -> SchemaResult<Arc<BandpassData>> {
+    static BUNDLED: OnceLock<SchemaResult<Arc<BandpassData>>> = OnceLock::new();
+    BUNDLED
+        .get_or_init(|| BandpassData::load_bundled().map(Arc::new))
+        .clone()
+}
+
 /// Process-wide cache of loaded bandpass data keyed by data directory.
 pub fn bandpass_data(data_dir: &Path) -> SchemaResult<Arc<BandpassData>> {
     static REGISTRY: OnceLock<Mutex<HashMap<String, Arc<BandpassData>>>> = OnceLock::new();
@@ -807,6 +875,15 @@ pub fn bandpass_data(data_dir: &Path) -> SchemaResult<Arc<BandpassData>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn bundled_data_is_embedded_and_process_cached() {
+        let first = bundled_bandpass_data().unwrap();
+        let second = bundled_bandpass_data().unwrap();
+        assert!(Arc::ptr_eq(&first, &second));
+        assert!(first.filter_ids.len() >= 40);
+        assert!(first.filter_ids.iter().any(|filter| filter == "LSST_g"));
+    }
 
     #[test]
     fn np_interp_zero_fill_matches_numpy_semantics() {

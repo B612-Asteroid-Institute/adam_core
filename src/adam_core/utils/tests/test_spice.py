@@ -8,6 +8,7 @@ from ...coordinates.origin import OriginCodes
 from ...time import Timestamp
 from ..spice import (
     DEFAULT_KERNELS,
+    OBSERVER_GEOMETRY_KERNELS,
     _jd_tdb_to_et,
     clear_spkez_cache,
     get_perturber_state,
@@ -27,6 +28,14 @@ JWST_KERNEL_PATH = JWST_KERNEL_DIR / "jwst_horizons_20200101_20240101_v01.bsp"
 # JWST kernel time range (from filename)
 JWST_START_TIME = Timestamp.from_mjd(np.array([58849.0]), scale="tdb")  # 2020-01-01
 JWST_END_TIME = Timestamp.from_mjd(np.array([60314.0]), scale="tdb")  # 2024-01-01
+
+
+def test_observer_geometry_kernel_subset_excludes_tls():
+    assert OBSERVER_GEOMETRY_KERNELS == DEFAULT_KERNELS[1:]
+    assert len(OBSERVER_GEOMETRY_KERNELS) == 5
+    assert all(
+        Path(path).suffix.lower() != ".tls" for path in OBSERVER_GEOMETRY_KERNELS
+    )
 
 
 def test_setup_spice_delegates_kernel_set_in_one_rust_call(monkeypatch):

@@ -20,14 +20,20 @@ from ..time import Timestamp
 from .bounded_lru import bounded_lru_get, bounded_lru_put
 from .spice_backend import get_backend
 
-DEFAULT_KERNELS = [
-    leapseconds,
+# Color reaches observer evaluation after the shared time-rescaling policy has
+# produced TDB epochs (ERFA/erfars UTC↔TAI plus project-local TAI↔TT and
+# TT↔TDB handling). Geometry still uses the same five kernels from the old
+# eager generic default; only its incidental SPICE leapseconds kernel is omitted.
+# DEFAULT_KERNELS and generic setup_SPICE() behavior remain unchanged.
+OBSERVER_GEOMETRY_KERNELS = [
     de440,
     eop_predict,
     eop_historical,
     eop_high_prec,
     earth_itrf93,
 ]
+
+DEFAULT_KERNELS = [leapseconds, *OBSERVER_GEOMETRY_KERNELS]
 
 
 J2000_TDB_JD = 2451545.0

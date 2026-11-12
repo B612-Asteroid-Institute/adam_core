@@ -1,14 +1,13 @@
 from __future__ import annotations
 
 from functools import lru_cache
-from typing import TypeAlias, Union
 
 import numpy as np
 import numpy.typing as npt
 import pyarrow as pa
 
 from .bandpasses.api import assert_filter_ids_have_curves  # noqa: F401
-from .bandpasses.api import _composition_args, _data_dir_str
+from .bandpasses.api import BandpassComposition, _composition_args, _data_dir_str
 from .bandpasses.api import compute_mix_integrals as _compute_bandpass_mix_integrals
 from .bandpasses.api import get_integrals as _get_bandpass_integrals
 
@@ -16,13 +15,22 @@ from .bandpasses.api import get_integrals as _get_bandpass_integrals
 # the Rust/NumPy path and receive NumPy arrays.
 JAX_CHUNK_SIZE = 8192
 
-BandpassComposition: TypeAlias = Union[str, tuple[float, float]]
-
 # IAU two-parameter (H, G) phase-function coefficients (Bowell et al. 1989).  Defined
 # once here so the NumPy and JAX implementations below cannot drift apart.
 _HG_PHI1_SCALE, _HG_PHI1_EXP = 3.33, 0.63
 _HG_PHI2_SCALE, _HG_PHI2_EXP = 1.87, 1.22
 _HG_PHASE_FLOOR = 1.0e-12
+
+
+def _hg_phase_basis(
+    alpha_deg: npt.NDArray[np.float64] | float,
+) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
+    """The two IAU basis functions ``phi_i = exp(-A_i * tan(alpha/2) ** B_i)``."""
+    alpha_rad = np.radians(np.asarray(alpha_deg, dtype=np.float64))
+    tan_half = np.tan(0.5 * alpha_rad)
+    phi1 = np.exp(-_HG_PHI1_SCALE * np.power(tan_half, _HG_PHI1_EXP))
+    phi2 = np.exp(-_HG_PHI2_SCALE * np.power(tan_half, _HG_PHI2_EXP))
+    return phi1, phi2
 
 
 def hg_phase_correction(
@@ -36,10 +44,7 @@ def hg_phase_correction(
     ``phi_i = exp(-A_i * tan(alpha/2) ** B_i)``.  Zero at opposition (alpha = 0) and
     positive (fainter) for larger phase angles.  NumPy implementation for CPU callers.
     """
-    alpha_rad = np.radians(np.asarray(alpha_deg, dtype=np.float64))
-    tan_half = np.tan(0.5 * alpha_rad)
-    phi1 = np.exp(-_HG_PHI1_SCALE * np.power(tan_half, _HG_PHI1_EXP))
-    phi2 = np.exp(-_HG_PHI2_SCALE * np.power(tan_half, _HG_PHI2_EXP))
+    phi1, phi2 = _hg_phase_basis(alpha_deg)
     phase = np.clip((1.0 - G) * phi1 + G * phi2, _HG_PHASE_FLOOR, None)
     return -2.5 * np.log10(phase)
 

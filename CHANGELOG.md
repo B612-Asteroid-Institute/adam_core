@@ -4,6 +4,45 @@ This file contains notable changes in adam-core
 
 ## [Unreleased]
 
+### Added
+
+- Matching public Python and Rust ``estimate_colors`` APIs for native
+  ``SourceCatalog``/``Orbits`` inputs. Public Rust owns the complete workflow
+  and returns a typed ``ColorFitBatch``; the private PyO3 function only adapts
+  IPC transport. Canonical-filter resolution, optional explicit composition-aware
+  projection, HG12*/HG/c1c2 fitting, clipping, identifiability, covariance,
+  diagnostics, and per-object failures remain Rust-owned. Python only marshals
+  Arrow IPC, validates the exact result schema, and wraps the quivr table.
+
+### Changed
+
+- Rust color-fit rows now expose non-exhaustive typed ``ColorFitStatus`` values
+  while preserving the exact Arrow status strings. ``ColorEstimationError`` is
+  also non-exhaustive. Call-level time/schema failures retain operation context;
+  isolated object errors deliberately use clean Rust-native scientific text
+  without Python ``ValueError:``/``RuntimeError:`` prefixes, and invalid MPC
+  codes no longer repeat the code in a wrapper prefix.
+- One owned ``ColorEstimationResources`` context supplies either explicit
+  directory-backed data or five bandpass Parquet tables embedded in the
+  compiled ``adam_core_rs_coords`` crate plus the documented
+  ``adam_core_rs_kernel_data::Resolver`` chain for observer-geometry kernels
+  and MPC obscodes. The geometry dependencies remain DE440, all three EOP
+  kernels, and the ITRF93 frame kernel: the same five previously furnished with
+  the generic six-kernel default, now without its incidental TLS. Color first
+  uses the shared ``TimeArray::rescale(TimeScale::Tdb)`` path, whose established
+  policy uses ERFA/erfars for UTC↔TAI and project-local TAI↔TT and
+  TT↔TDB conversions. Observer evaluation therefore receives TDB epochs, so
+  SPICE does not consume an LSK on this path. Generic SPICE defaults remain
+  unchanged. The embedded tables parse once without
+  crate-source/runtime files; explicit custom directories remain path-cached.
+  SPICE/obscodes setup
+  is lazy until an object reaches observer geometry, and identical concurrent
+  first initialization waits and succeeds. Kernels still accumulate
+  process-wide, the first loaded nonempty obscodes table wins, and the read
+  guard is retained through remaining science; callers must initialize before
+  concurrent mutation and warm UTC rescaling on one thread until the separately
+  tracked ERFA first-use race is fixed.
+
 ### Fixed
 
 - Hyperbolic Keplerian and cometary conversions preserve signed mean anomaly,
