@@ -260,8 +260,13 @@ paths and passes the complete ordered set through one typed Rust initializer;
 `setup_mpc_obscodes()` likewise loads package data only when the Rust backend
 reports no sites. Rust owns validation, load order, deduplication, and
 process-global state, so neither initializer exposes a no-op `force` control.
-Fixed-kernel integration tests validate adam-core wiring while leaving CSPICE
-oracle breadth to spicekit.
+`OBSERVER_GEOMETRY_KERNELS` is the ordered five-kernel specialization used by
+color estimation after ERFA converts times to TDB: DE440, the predict,
+historical, and high-precision EOP kernels, and the ITRF93 frame kernel. It
+excludes leapseconds/TLS without changing generic `DEFAULT_KERNELS` or
+`setup_SPICE()`. The color workflow's lazy acquisition contract is documented
+in `photometry_constants.md`. Fixed-kernel integration tests validate adam-core
+wiring while leaving CSPICE oracle breadth to spicekit.
 
 ### Generic utilities and execution
 

@@ -27,6 +27,12 @@ deterministic discovery chain, per kernel:
 Set `ADAM_CORE_KERNEL_OFFLINE=1` to forbid tier 4 (resolution fails instead of
 downloading).
 
+`Resolver::default_spice_kernel_paths()` retains the generic six-kernel
+`setup_SPICE()` set. `Resolver::observer_geometry_kernel_paths()` resolves the
+DE440, EOP predict/historical/high-precision, and ITRF93 frame kernels used for
+observer states after ERFA has converted times to TDB; that typed subset
+intentionally excludes the leapseconds/TLS kernel.
+
 Provenance: the manifest in `src/lib.rs` pins each wheel's version, URL, and
 SHA-256 exactly as published on PyPI; update all three together when bumping a
 data package version.

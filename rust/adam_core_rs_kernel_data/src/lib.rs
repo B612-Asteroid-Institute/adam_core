@@ -117,6 +117,16 @@ pub const DEFAULT_SPICE_KERNEL_IDS: &[&str] = &[
     "earth_itrf93",
 ];
 
+/// Kernels required for observer-state geometry after ERFA has converted input
+/// times to TDB. The SPICE leapseconds kernel is intentionally excluded.
+pub const OBSERVER_GEOMETRY_KERNEL_IDS: &[&str] = &[
+    "de440",
+    "eop_predict",
+    "eop_historical",
+    "eop_high_prec",
+    "earth_itrf93",
+];
+
 #[derive(Debug)]
 pub enum KernelDataError {
     UnknownKernel(String),
@@ -288,6 +298,17 @@ impl Resolver {
     /// The six `DEFAULT_KERNELS` paths in `setup_SPICE` order.
     pub fn default_spice_kernel_paths(&self) -> Result<Vec<PathBuf>, KernelDataError> {
         DEFAULT_SPICE_KERNEL_IDS
+            .iter()
+            .map(|id| self.resolve(id))
+            .collect()
+    }
+
+    /// Resolve the observer-geometry subset in furnsh order.
+    ///
+    /// Color estimation converts UTC to TDB through ERFA before querying
+    /// observer states, so this subset intentionally excludes leapseconds/TLS.
+    pub fn observer_geometry_kernel_paths(&self) -> Result<Vec<PathBuf>, KernelDataError> {
+        OBSERVER_GEOMETRY_KERNEL_IDS
             .iter()
             .map(|id| self.resolve(id))
             .collect()
@@ -569,6 +590,25 @@ mod tests {
         for id in DEFAULT_SPICE_KERNEL_IDS {
             assert!(KERNEL_SPECS.iter().any(|spec| spec.id == *id));
         }
+        for id in OBSERVER_GEOMETRY_KERNEL_IDS {
+            assert!(KERNEL_SPECS.iter().any(|spec| spec.id == *id));
+        }
+        assert!(!OBSERVER_GEOMETRY_KERNEL_IDS.contains(&"leapseconds"));
+    }
+
+    #[test]
+    fn observer_geometry_subset_excludes_leapseconds() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut overrides = HashMap::new();
+        let mut expected = Vec::new();
+        for id in OBSERVER_GEOMETRY_KERNEL_IDS {
+            let path = dir.path().join(format!("{id}.kernel"));
+            std::fs::write(&path, id.as_bytes()).unwrap();
+            overrides.insert((*id).to_string(), path.clone());
+            expected.push(path);
+        }
+        let resolver = Resolver::new(overrides, PythonProbe::Disabled, None, true);
+        assert_eq!(resolver.observer_geometry_kernel_paths().unwrap(), expected);
     }
 
     #[test]

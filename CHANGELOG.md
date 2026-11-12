@@ -25,14 +25,17 @@ This file contains notable changes in adam-core
 - One owned ``ColorEstimationResources`` context supplies either explicit
   directory-backed data or five bandpass Parquet tables embedded in the
   compiled ``adam_core_rs_coords`` crate plus the documented
-  ``adam_core_rs_kernel_data::Resolver`` chain for kernels and MPC obscodes.
-  The embedded tables parse once without crate-source/runtime files; explicit
-  custom directories remain path-cached. Identical concurrent first
-  initialization waits and succeeds. Kernels still accumulate process-wide,
-  the first loaded nonempty obscodes table wins, and each estimate holds a
-  SPICE read guard; callers must initialize before concurrent mutation and
-  warm UTC rescaling on one thread until the separately tracked ERFA first-use
-  race is fixed.
+  ``adam_core_rs_kernel_data::Resolver`` chain for observer-geometry kernels
+  and MPC obscodes. The color subset is DE440, all three EOP kernels, and the
+  ITRF93 frame kernel; ERFA converts UTC to TDB first, so no leapseconds/TLS
+  kernel is loaded. The embedded tables parse once without crate-source/runtime
+  files; explicit custom directories remain path-cached. SPICE/obscodes setup
+  is lazy until an object reaches observer geometry, and identical concurrent
+  first initialization waits and succeeds. Kernels still accumulate
+  process-wide, the first loaded nonempty obscodes table wins, and the read
+  guard is retained through remaining science; callers must initialize before
+  concurrent mutation and warm UTC rescaling on one thread until the separately
+  tracked ERFA first-use race is fixed.
 
 ### Fixed
 

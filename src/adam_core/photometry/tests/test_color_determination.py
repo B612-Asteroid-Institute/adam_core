@@ -19,6 +19,7 @@ from adam_core.coordinates import CartesianCoordinates, CometaryCoordinates, Ori
 from adam_core.observations import SourceCatalog
 from adam_core.orbits import NonGravitationalParameters, Orbits
 from adam_core.time import Timestamp
+from adam_core.utils.spice import OBSERVER_GEOMETRY_KERNELS
 
 from ..bandpasses import BandpassComposition
 from ..color_determination import (
@@ -155,6 +156,7 @@ def test_facade_is_schema_marshalling_and_one_native_call(
     _, args, kwargs = calls[0]
     assert len(args) == 5
     assert isinstance(args[0], bytes) and isinstance(args[1], bytes)
+    assert args[2] == list(map(str, OBSERVER_GEOMETRY_KERNELS))
     assert kwargs["projection"] is None
     assert kwargs["template_id"] is None
     assert kwargs["mix"] is None
@@ -715,18 +717,23 @@ def test_status_list_and_scalar_nullability() -> None:
     assert all(none[name] is None for name in LIST_FIELDS)
 
 
-def test_fresh_process_facade_initializes_spice_inside_ipc_adapter_call() -> None:
+def test_fresh_process_facade_lazily_initializes_observer_geometry_subset() -> None:
     code = textwrap.dedent("""
+        import pyarrow as pa
+
         from adam_core import _rust_native
         from adam_core.photometry.color_determination import estimate_colors
         from adam_core.photometry.tests.test_color_determination import _fixture
-        from adam_core.utils.spice import DEFAULT_KERNELS
+        from adam_core.utils.spice import OBSERVER_GEOMETRY_KERNELS
         from adam_core.utils.spice_backend import get_backend
 
         backend = get_backend()
-        assert backend.registered_kernels() == []
-        assert backend.mpc_obscodes_loaded() == 0
+        inspect_registered_kernels = backend.registered_kernels
+        inspect_mpc_obscodes_loaded = backend.mpc_obscodes_loaded
+        assert inspect_registered_kernels() == []
+        assert inspect_mpc_obscodes_loaded() == 0
         observations, orbits = _fixture()
+        empty_orbits = orbits.apply_mask(pa.array([False] * len(orbits)))
 
         target = "estimate_colors_ipc"
         native_calls = []
@@ -762,6 +769,13 @@ def test_fresh_process_facade_initializes_spice_inside_ipc_adapter_call() -> Non
             setattr(backend, name, blocked_backend_call)
 
         try:
+            empty_result = estimate_colors(
+                observations, empty_orbits, "c1c2", force_g_bounds=False
+            )
+            assert empty_result.status.to_pylist() == ["no_orbit"]
+            assert inspect_registered_kernels() == []
+            assert inspect_mpc_obscodes_loaded() == 0
+
             result = estimate_colors(
                 observations, orbits, "c1c2", force_g_bounds=False
             )
@@ -772,10 +786,12 @@ def test_fresh_process_facade_initializes_spice_inside_ipc_adapter_call() -> Non
                 delattr(backend, name)
 
         assert result.status.to_pylist() == ["ok"]
-        assert native_calls == [target]
+        assert native_calls == [target, target]
         assert backend_calls == []
-        assert len(backend.registered_kernels()) == len(DEFAULT_KERNELS)
-        assert backend.mpc_obscodes_loaded() > 0
+        assert inspect_registered_kernels() == list(
+            map(str, OBSERVER_GEOMETRY_KERNELS)
+        )
+        assert inspect_mpc_obscodes_loaded() > 0
         """)
     environment = dict(os.environ)
     environment["ADAM_CORE_REQUIRE_RUST_BACKEND"] = "1"

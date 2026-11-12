@@ -32,16 +32,17 @@ enum ColorBandpassSource {
 
 /// Owned runtime resources required by [`estimate_colors`].
 ///
-/// Resources initialize process-global caches. Kernel paths accumulate and are
-/// never unloaded by this API; the first successfully loaded nonempty MPC
-/// obscodes table remains authoritative; the embedded bundle is parsed once;
-/// and explicit directories cache by path. A SPICE read guard is held for the
-/// whole estimate, so callers must complete any resource mutation before
-/// concurrent science.
+/// Bandpass resources are validated for every call. Observer-geometry kernels
+/// and MPC obscodes initialize lazily only when an object reaches observer-state
+/// preparation. Kernel paths accumulate and are never unloaded by this API; the
+/// first successfully loaded nonempty obscodes table remains authoritative; the
+/// embedded bundle is parsed once; and explicit directories cache by path. Once
+/// acquired, the SPICE read guard is held through the rest of the estimate, so
+/// callers must complete resource mutation before concurrent science.
 #[derive(Clone)]
 pub struct ColorEstimationResources {
     bandpass_source: ColorBandpassSource,
-    spice_kernel_paths: Vec<PathBuf>,
+    observer_geometry_kernel_paths: Vec<PathBuf>,
     mpc_obscodes_json: String,
 }
 
@@ -49,7 +50,10 @@ impl fmt::Debug for ColorEstimationResources {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("ColorEstimationResources")
             .field("bandpass_source", &self.bandpass_source)
-            .field("spice_kernel_paths", &self.spice_kernel_paths)
+            .field(
+                "observer_geometry_kernel_paths",
+                &self.observer_geometry_kernel_paths,
+            )
             .field("mpc_obscodes_json_bytes", &self.mpc_obscodes_json.len())
             .finish()
     }
@@ -59,32 +63,35 @@ impl ColorEstimationResources {
     /// Construct resources backed by an explicit bandpass-data directory.
     pub fn new(
         bandpass_data_dir: PathBuf,
-        spice_kernel_paths: Vec<PathBuf>,
+        observer_geometry_kernel_paths: Vec<PathBuf>,
         mpc_obscodes_json: String,
     ) -> Self {
         Self {
             bandpass_source: ColorBandpassSource::Directory(bandpass_data_dir),
-            spice_kernel_paths,
+            observer_geometry_kernel_paths,
             mpc_obscodes_json,
         }
     }
 
     /// Construct resources backed by the embedded canonical bandpass tables.
-    pub fn bundled(spice_kernel_paths: Vec<PathBuf>, mpc_obscodes_json: String) -> Self {
+    pub fn bundled(
+        observer_geometry_kernel_paths: Vec<PathBuf>,
+        mpc_obscodes_json: String,
+    ) -> Self {
         Self {
             bandpass_source: ColorBandpassSource::Bundled,
-            spice_kernel_paths,
+            observer_geometry_kernel_paths,
             mpc_obscodes_json,
         }
     }
 
-    /// Resolve embedded bandpasses, default kernels, and MPC obscodes.
+    /// Resolve embedded bandpasses, observer-geometry kernels, and MPC obscodes.
     ///
     /// Kernels and obscodes follow [`KernelDataResolver`]'s documented override,
     /// installed-Python, cache, and checksummed-download chain.
     pub fn resolve(resolver: &KernelDataResolver) -> Result<Self, KernelDataError> {
         Ok(Self::bundled(
-            resolver.default_spice_kernel_paths()?,
+            resolver.observer_geometry_kernel_paths()?,
             resolver.obscodes_json()?,
         ))
     }
@@ -146,16 +153,23 @@ static COLOR_RESOURCE_INITIALIZATION: Mutex<()> = Mutex::new(());
 /// # Process-global resource policy
 ///
 /// Embedded bandpasses are parsed once from compiled bytes; explicit directory
-/// bandpasses are cached by path. SPICE kernel paths accumulate in load order
-/// and are not unloaded. The first successfully loaded nonempty
-/// MPC obscodes table is retained, so later JSON arguments are ignored. An
-/// estimate holds the global SPICE read guard until every object is complete.
-/// Identical concurrent first calls serialize resource initialization and then
-/// proceed together; adding different resources while any science call holds a
-/// read guard returns [`ColorEstimationError::BackendBusy`]. Initialize the full
-/// resource set before concurrent work. Until the separately tracked ERFA
-/// first-use race is fixed, applications must also perform one UTC time rescale
-/// on a single thread before concurrent calls that contain UTC times.
+/// bandpasses are cached by path. Batch/configuration validation, empty-orbit
+/// isolation, and per-object failures before observer geometry do not initialize
+/// SPICE. The first object that reaches observer-state preparation initializes
+/// the DE440, EOP predict/historical/high-precision, and ITRF93 frame kernels;
+/// UTC-to-TDB conversion is ERFA-owned, so no leapseconds/TLS kernel is needed.
+/// Kernel paths accumulate in load order and are not unloaded. The first
+/// successfully loaded nonempty MPC obscodes table is retained, so later JSON
+/// arguments are ignored. Once initialized, the estimate holds the global SPICE
+/// read guard until every remaining object is complete. Identical concurrent
+/// first calls serialize initialization and then proceed together; adding
+/// different resources while any science call holds a read guard returns
+/// [`ColorEstimationError::BackendBusy`]. Initialize the full observer-geometry
+/// resource set before concurrent science. A later generic `setup_SPICE()` may
+/// add TLS, so it must also complete before concurrent readers. Until the
+/// separately tracked ERFA first-use race is fixed, applications must perform
+/// one UTC time rescale on a single thread before concurrent calls that contain
+/// UTC times.
 ///
 /// Per-object failure strings are Rust-native scientific messages and never
 /// contain Python exception-class prefixes.
@@ -236,7 +250,6 @@ pub fn estimate_colors(
     validate_color_config(bandpasses.as_ref(), &config).map_err(|error| {
         ColorEstimationError::configuration("invalid color configuration", error)
     })?;
-    let backend = initialize_resources(resources)?;
 
     let mut object_order = Vec::new();
     let mut source_groups: HashMap<String, Vec<usize>> = HashMap::new();
@@ -314,6 +327,7 @@ pub fn estimate_colors(
         })?;
 
     let mut output = Vec::with_capacity(object_order.len());
+    let mut backend: Option<RwLockReadGuard<'static, AdamCoreSpiceBackend>> = None;
     for object_id in object_order {
         let rows = &source_groups[&object_id];
         let orbit_rows = orbit_groups
@@ -354,14 +368,32 @@ pub fn estimate_colors(
             continue;
         }
 
+        let propagated =
+            match propagate_color_object(&source_times, orbits, &orbit_times, orbit_row, rows) {
+                Ok(propagated) => propagated,
+                Err(error) => {
+                    output.push(ColorFitRow::terminal(
+                        object_id,
+                        rows.len(),
+                        ColorFitStatus::Failed,
+                        isolated_error_message(error),
+                    ));
+                    continue;
+                }
+            };
+
+        if backend.is_none() {
+            backend = Some(initialize_resources(resources)?);
+        }
+        let backend_ref = backend
+            .as_deref()
+            .expect("SPICE backend initialized before observer-state preparation");
         match prepare_color_observations(
             observations,
             &source_times,
-            orbits,
-            &orbit_times,
-            orbit_row,
             rows,
-            &backend,
+            &propagated,
+            backend_ref,
         ) {
             Ok(prepared) => output.push(estimate_color_object(
                 bandpasses.as_ref(),
@@ -393,9 +425,9 @@ fn isolated_error_message(error: ColorEstimationError) -> String {
 fn initialize_resources(
     resources: &ColorEstimationResources,
 ) -> Result<RwLockReadGuard<'static, AdamCoreSpiceBackend>, ColorEstimationError> {
-    if resources.spice_kernel_paths.is_empty() {
+    if resources.observer_geometry_kernel_paths.is_empty() {
         return Err(ColorEstimationError::InvalidConfiguration(
-            "color estimation requires the default SPICE kernel paths".to_string(),
+            "color estimation requires observer-geometry SPICE kernel paths".to_string(),
         ));
     }
     // Serialize only the initialization phase. Identical concurrent first
@@ -406,10 +438,12 @@ fn initialize_resources(
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
 
-    try_initialize_global_kernels(&resources.spice_kernel_paths).map_err(|error| match error {
-        GlobalKernelInitializationError::Busy => ColorEstimationError::BackendBusy,
-        GlobalKernelInitializationError::Poisoned => ColorEstimationError::BackendPoisoned,
-        GlobalKernelInitializationError::Backend(error) => ColorEstimationError::Spice(error),
+    try_initialize_global_kernels(&resources.observer_geometry_kernel_paths).map_err(|error| {
+        match error {
+            GlobalKernelInitializationError::Busy => ColorEstimationError::BackendBusy,
+            GlobalKernelInitializationError::Poisoned => ColorEstimationError::BackendPoisoned,
+            GlobalKernelInitializationError::Backend(error) => ColorEstimationError::Spice(error),
+        }
     })?;
 
     let needs_obscodes = global_backend()
@@ -438,16 +472,13 @@ fn initialize_resources(
         .map_err(|_| ColorEstimationError::BackendPoisoned)
 }
 
-#[allow(clippy::too_many_arguments)]
-fn prepare_color_observations(
-    source: &SourceCatalogBatch,
+fn propagate_color_object(
     source_times_tdb: &TimeArray,
     orbits: &OrbitBatch,
     orbit_times_tdb: &TimeArray,
     orbit_row: usize,
     source_rows: &[usize],
-    backend: &AdamCoreSpiceBackend,
-) -> Result<Vec<ColorObservation>, ColorEstimationError> {
+) -> Result<Vec<[f64; 6]>, ColorEstimationError> {
     let states = orbits
         .coordinates
         .values
@@ -483,7 +514,16 @@ fn prepare_color_observations(
             "two-body propagation produced non-finite state".to_string(),
         ));
     }
+    Ok(propagated)
+}
 
+fn prepare_color_observations(
+    source: &SourceCatalogBatch,
+    source_times_tdb: &TimeArray,
+    source_rows: &[usize],
+    propagated: &[[f64; 6]],
+    backend: &AdamCoreSpiceBackend,
+) -> Result<Vec<ColorObservation>, ColorEstimationError> {
     let mut unique_codes = Vec::<String>::new();
     let mut code_slots = HashMap::<String, usize>::new();
     let mut slots = Vec::with_capacity(source_rows.len());

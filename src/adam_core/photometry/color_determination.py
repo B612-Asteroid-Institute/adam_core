@@ -19,7 +19,7 @@ from ..observations import SourceCatalog
 from ..observations.arrow_bridge import observations_to_ipc
 from ..orbits import Orbits
 from ..orbits.arrow_bridge import orbits_to_ipc
-from ..utils.spice import DEFAULT_KERNELS
+from ..utils.spice import OBSERVER_GEOMETRY_KERNELS
 from .bandpasses import BandpassComposition
 from .bandpasses.api import _composition_args
 
@@ -147,7 +147,10 @@ def estimate_colors(
     observer geometry, validity classification, canonical filter resolution,
     optional projection, every phase-law fit, clipping, identifiability,
     covariance, diagnostics,
-    statuses/counts, and final Arrow assembly.
+    statuses/counts, and final Arrow assembly. Observer resources are acquired
+    lazily only when objects reach geometry preparation. The supplied kernel
+    subset is DE440, EOP predict/historical/high-precision, and ITRF93; ERFA
+    converts UTC to TDB first, so color estimation does not load TLS.
 
     Parameters
     ----------
@@ -200,9 +203,10 @@ def estimate_colors(
     ------
     ValueError
         If whole-call configuration, projection/composition pairing, the
-        nonempty orbit table's frame/representation/epochs, native setup, IPC,
-        or returned schema is invalid. A matching orbit with a non-heliocentric
-        origin is instead isolated as an object-level ``failed`` row.
+        nonempty orbit table's frame/representation/epochs, observer-geometry
+        setup, IPC, or returned schema is invalid. A matching orbit with a
+        non-heliocentric origin is instead isolated as an object-level
+        ``failed`` row.
     """
     from adam_core import _rust_native
 
@@ -214,7 +218,7 @@ def estimate_colors(
     raw = _rust_native.estimate_colors_ipc(
         observations_to_ipc(observations),
         orbits_to_ipc(orbits),
-        list(map(str, DEFAULT_KERNELS)),
+        list(map(str, OBSERVER_GEOMETRY_KERNELS)),
         _mpc_obscodes_json(),
         phi_type,
         force_g_bounds=force_g_bounds,

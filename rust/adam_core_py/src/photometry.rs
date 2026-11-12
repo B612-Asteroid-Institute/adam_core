@@ -1378,7 +1378,7 @@ fn color_composition_from_transport(
 #[pyo3(signature = (
     source_catalog_ipc,
     orbits_ipc,
-    spice_kernel_paths,
+    observer_geometry_kernel_paths,
     mpc_obscodes_json,
     phi_type,
     force_g_bounds=true,
@@ -1392,7 +1392,7 @@ fn estimate_colors_ipc<'py>(
     py: Python<'py>,
     source_catalog_ipc: &Bound<'py, PyBytes>,
     orbits_ipc: &Bound<'py, PyBytes>,
-    spice_kernel_paths: Vec<String>,
+    observer_geometry_kernel_paths: Vec<String>,
     mpc_obscodes_json: &str,
     phi_type: &str,
     force_g_bounds: bool,
@@ -1414,12 +1414,14 @@ fn estimate_colors_ipc<'py>(
     let color_term_composition =
         color_composition_from_transport(template_id, mix).map_err(PyValueError::new_err)?;
     let filter_projection = projection.map(|mapping| mapping.into_iter().collect());
-    let spice_kernel_paths = spice_kernel_paths
+    let observer_geometry_kernel_paths = observer_geometry_kernel_paths
         .into_iter()
         .map(PathBuf::from)
         .collect::<Vec<_>>();
-    let resources =
-        ColorEstimationResources::bundled(spice_kernel_paths, mpc_obscodes_json.to_string());
+    let resources = ColorEstimationResources::bundled(
+        observer_geometry_kernel_paths,
+        mpc_obscodes_json.to_string(),
+    );
     let result = estimate_colors(
         &source,
         &orbits,

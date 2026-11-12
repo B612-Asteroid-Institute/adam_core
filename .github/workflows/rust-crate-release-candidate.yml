@@ -45,6 +45,8 @@ jobs:
           cargo fmt --all -- --check
           cargo clippy --workspace --all-targets -- -D warnings
           cargo test --workspace
+          cargo test -p adam_core --test public_color_api -- --ignored --test-threads=1
+          cargo test -p adam_core --test public_color_resource_concurrency -- --ignored --test-threads=1
           RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps
       - name: Package and verify crates once in publication order
         run: |

@@ -12,11 +12,11 @@
     "plotting_policy": "plotting/display may remain Python; all other symbols require review"
   },
   "summary": {
-    "symbols": 750,
+    "symbols": 751,
     "by_kind": {
       "class": 124,
       "classmethod": 42,
-      "constant": 101,
+      "constant": 102,
       "constructor": 5,
       "function": 238,
       "method": 152,
@@ -34,10 +34,10 @@
       "photometry": 72,
       "propagator": 8,
       "time": 38,
-      "utils": 71
+      "utils": 72
     },
     "by_implementation_class": {
-      "compatibility_data_or_external_generic": 223,
+      "compatibility_data_or_external_generic": 224,
       "mixed_rust_python_gap": 96,
       "plotting_exemption_candidate": 16,
       "python_gap_or_external_boundary": 264,
@@ -49,7 +49,7 @@
   "frozen_updated_upstream_reconciliation": {
     "commit": "757c09fca86adf9e3d5899952db3d379e09413f6",
     "upstream_symbols": 600,
-    "current_symbols": 750,
+    "current_symbols": 751,
     "upstream_only_symbols": 22,
     "all_upstream_only_symbols_classified": true,
     "disposition": "The listed upstream implementation helpers are intentionally retired; their useful public workflows are Rust-backed or are explicit provider boundaries in the referenced domain audit.",
@@ -20113,7 +20113,7 @@
       "kind": "constant",
       "domain": "utils",
       "source": "src/adam_core/utils/spice.py",
-      "line": 23,
+      "line": 34,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -20141,7 +20141,35 @@
       "kind": "constant",
       "domain": "utils",
       "source": "src/adam_core/utils/spice.py",
-      "line": 33,
+      "line": 37,
+      "explicit_export": null,
+      "plotting_exemption_candidate": false,
+      "signals": {
+        "plotting": false,
+        "rust_reference": false,
+        "python_loop": false,
+        "numpy_reference": false,
+        "pyarrow_reference": false,
+        "quivr_reference": false,
+        "external_io_reference": false
+      },
+      "review_status": "domain_audited",
+      "implementation_class": "compatibility_data_or_external_generic",
+      "rust_entrypoint": null,
+      "parity_coverage": "compatibility_or_schema_see_domain_audit",
+      "native_timing": "not_applicable_data_or_generic",
+      "tracking_issue": "personal-cmy.37.4",
+      "audit_document": "migration/public_surface/io_queries_utilities.md"
+    },
+    {
+      "id": "adam_core.utils.spice:OBSERVER_GEOMETRY_KERNELS",
+      "module": "adam_core.utils.spice",
+      "qualname": "OBSERVER_GEOMETRY_KERNELS",
+      "name": "OBSERVER_GEOMETRY_KERNELS",
+      "kind": "constant",
+      "domain": "utils",
+      "source": "src/adam_core/utils/spice.py",
+      "line": 26,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -20169,7 +20197,7 @@
       "kind": "function",
       "domain": "utils",
       "source": "src/adam_core/utils/spice.py",
-      "line": 89,
+      "line": 93,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -20197,7 +20225,7 @@
       "kind": "function",
       "domain": "utils",
       "source": "src/adam_core/utils/spice.py",
-      "line": 179,
+      "line": 183,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -20225,7 +20253,7 @@
       "kind": "function",
       "domain": "utils",
       "source": "src/adam_core/utils/spice.py",
-      "line": 422,
+      "line": 426,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -20253,7 +20281,7 @@
       "kind": "function",
       "domain": "utils",
       "source": "src/adam_core/utils/spice.py",
-      "line": 382,
+      "line": 386,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -20281,7 +20309,7 @@
       "kind": "function",
       "domain": "utils",
       "source": "src/adam_core/utils/spice.py",
-      "line": 394,
+      "line": 398,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -20309,7 +20337,7 @@
       "kind": "function",
       "domain": "utils",
       "source": "src/adam_core/utils/spice.py",
-      "line": 125,
+      "line": 129,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -20337,7 +20365,7 @@
       "kind": "function",
       "domain": "utils",
       "source": "src/adam_core/utils/spice.py",
-      "line": 160,
+      "line": 164,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -20365,7 +20393,7 @@
       "kind": "function",
       "domain": "utils",
       "source": "src/adam_core/utils/spice.py",
-      "line": 408,
+      "line": 412,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {

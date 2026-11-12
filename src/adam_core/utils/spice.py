@@ -20,14 +20,18 @@ from ..time import Timestamp
 from .bounded_lru import bounded_lru_get, bounded_lru_put
 from .spice_backend import get_backend
 
-DEFAULT_KERNELS = [
-    leapseconds,
+# Observer-state evaluation receives TDB epochs already rescaled by ERFA. It
+# therefore needs the planetary ephemeris and Earth orientation/frame kernels,
+# but not the SPICE leapseconds kernel used by generic SPICE APIs.
+OBSERVER_GEOMETRY_KERNELS = [
     de440,
     eop_predict,
     eop_historical,
     eop_high_prec,
     earth_itrf93,
 ]
+
+DEFAULT_KERNELS = [leapseconds, *OBSERVER_GEOMETRY_KERNELS]
 
 
 J2000_TDB_JD = 2451545.0

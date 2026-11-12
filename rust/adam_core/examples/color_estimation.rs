@@ -1,7 +1,7 @@
 //! Standalone use of the high-level public color-estimation API.
 //!
 //! This example is compile-checked but not run by doctests because resolving
-//! default kernels may download the pinned kernel wheels on first use.
+//! observer-geometry kernels may download the pinned kernel wheels on first use.
 
 use std::error::Error;
 

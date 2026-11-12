@@ -1,10 +1,12 @@
 use std::collections::BTreeMap;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
+use std::sync::OnceLock;
 
 use adam_core::coords::{
     CoordinateBatch, DataFrame, ObjectId, OrbitBatch, OrbitId, OriginArray, OriginId,
     SourceCatalogBatch, TimeArray, TimeColumn, TimeScale,
 };
+use adam_core::kernel_data::Resolver;
 use adam_core::{
     estimate_colors, ColorComposition, ColorEstimationError, ColorEstimationResources,
     ColorFitStatus, ColorPhaseModel,
@@ -169,10 +171,6 @@ fn one_orbit(origin: OriginId) -> OrbitBatch {
     .unwrap()
 }
 
-fn sample_lsk_path() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/data/minimal_lsk.tls")
-}
-
 fn empty_orbits() -> OrbitBatch {
     let coordinates = CoordinateBatch::cartesian(
         vec![],
@@ -185,11 +183,17 @@ fn empty_orbits() -> OrbitBatch {
     OrbitBatch::new(vec![], vec![], coordinates).unwrap()
 }
 
-fn test_resources() -> ColorEstimationResources {
-    ColorEstimationResources::bundled(
-        vec![sample_lsk_path()],
-        r#"{"500":{"Longitude":0.0,"cos":0.0,"sin":0.0,"Name":"Geocentric"}}"#.to_string(),
-    )
+fn no_geometry_resources() -> ColorEstimationResources {
+    ColorEstimationResources::bundled(vec![], String::new())
+}
+
+static REAL_GEOMETRY_RESOURCES: OnceLock<ColorEstimationResources> = OnceLock::new();
+
+fn real_geometry_resources() -> &'static ColorEstimationResources {
+    REAL_GEOMETRY_RESOURCES.get_or_init(|| {
+        ColorEstimationResources::resolve(&Resolver::from_env())
+            .expect("observer-geometry kernels and MPC obscodes must resolve")
+    })
 }
 
 #[test]
@@ -224,10 +228,10 @@ fn public_estimate_colors_owns_high_level_projection_contract() {
 fn public_estimate_colors_returns_typed_empty_orbit_result() {
     let observations = one_source_catalog();
     let orbits = empty_orbits();
-    let resources = test_resources();
+    let resources = no_geometry_resources();
     let debug = format!("{resources:?}");
+    assert!(debug.contains("observer_geometry_kernel_paths"));
     assert!(debug.contains("mpc_obscodes_json_bytes"));
-    assert!(!debug.contains("Longitude"));
 
     let result = estimate_colors(
         &observations,
@@ -253,7 +257,7 @@ fn public_estimate_colors_returns_typed_empty_orbit_result() {
 #[test]
 fn public_estimate_colors_preserves_nonlexical_first_appearance_order() {
     let observations = source_catalog_for_objects(&["zeta", "alpha", "zeta", "mu"]);
-    let resources = test_resources();
+    let resources = no_geometry_resources();
 
     let result = estimate_colors(
         &observations,
@@ -283,10 +287,31 @@ fn public_estimate_colors_preserves_nonlexical_first_appearance_order() {
 }
 
 #[test]
+fn public_estimate_colors_requires_observer_geometry_resources_only_when_needed() {
+    let error = estimate_colors(
+        &fit_source_catalog("SUN"),
+        &one_orbit(OriginId::from_code("SUN")),
+        ColorPhaseModel::C1C2,
+        false,
+        None,
+        false,
+        None,
+        &no_geometry_resources(),
+    )
+    .unwrap_err();
+
+    assert_eq!(
+        error.to_string(),
+        "color estimation requires observer-geometry SPICE kernel paths"
+    );
+}
+
+#[test]
+#[ignore = "requires resolvable real observer-geometry kernels and MPC obscodes (installed Python, cache, or network)"]
 fn public_estimate_colors_real_fit_matches_frozen_sun_observer_golden() {
     let observations = fit_source_catalog("SUN");
     let orbits = one_orbit(OriginId::from_code("SUN"));
-    let resources = test_resources();
+    let resources = real_geometry_resources();
 
     let result = estimate_colors(
         &observations,
@@ -296,7 +321,7 @@ fn public_estimate_colors_real_fit_matches_frozen_sun_observer_golden() {
         None,
         false,
         None,
-        &resources,
+        resources,
     )
     .unwrap();
     let row = &result.rows[0];
@@ -319,9 +344,8 @@ fn public_estimate_colors_real_fit_matches_frozen_sun_observer_golden() {
 }
 
 #[test]
-fn public_estimate_colors_pins_clean_per_object_errors() {
-    let resources = test_resources();
-
+#[ignore = "requires resolvable real observer-geometry kernels and MPC obscodes (installed Python, cache, or network)"]
+fn public_estimate_colors_pins_clean_unknown_observatory_error() {
     let unknown_code = estimate_colors(
         &fit_source_catalog("ZZZ"),
         &one_orbit(OriginId::from_code("SUN")),
@@ -330,7 +354,7 @@ fn public_estimate_colors_pins_clean_per_object_errors() {
         None,
         false,
         None,
-        &resources,
+        real_geometry_resources(),
     )
     .unwrap();
     assert_eq!(unknown_code.rows[0].status, ColorFitStatus::Failed);
@@ -338,7 +362,10 @@ fn public_estimate_colors_pins_clean_per_object_errors() {
         unknown_code.rows[0].error.as_deref(),
         Some("ZZZ is not a valid MPC observatory code and was not found in SPICE kernels.")
     );
+}
 
+#[test]
+fn public_estimate_colors_rejects_non_heliocentric_before_resources() {
     let non_heliocentric = estimate_colors(
         &fit_source_catalog("SUN"),
         &one_orbit(OriginId::from_code("EARTH")),
@@ -347,7 +374,7 @@ fn public_estimate_colors_pins_clean_per_object_errors() {
         None,
         false,
         None,
-        &resources,
+        &no_geometry_resources(),
     )
     .unwrap();
     assert_eq!(non_heliocentric.rows[0].status, ColorFitStatus::Failed);
@@ -361,7 +388,7 @@ fn public_estimate_colors_pins_clean_per_object_errors() {
 fn public_estimate_colors_preserves_time_conversion_context() {
     let mut observations = fit_source_catalog("SUN");
     observations.time = TimeColumn::new(TimeScale::Utc, vec![-3_000_000; 8], vec![0; 8]);
-    let resources = test_resources();
+    let resources = no_geometry_resources();
 
     let error = estimate_colors(
         &observations,
@@ -407,7 +434,7 @@ fn public_estimate_colors_signature_accepts_python_aligned_options() {
     let resources = ColorEstimationResources::bundled(vec![], String::new());
     let mapping = BTreeMap::from([("LSST_g".to_string(), "LSST_g".to_string())]);
 
-    let error = estimate_colors(
+    let result = estimate_colors(
         &observations,
         &orbits,
         ColorPhaseModel::Hg12Star,
@@ -417,12 +444,9 @@ fn public_estimate_colors_signature_accepts_python_aligned_options() {
         Some(mapping),
         &resources,
     )
-    .unwrap_err();
+    .unwrap();
 
-    // Configuration reaches resource validation through the public API; no
-    // Python or private IPC type participates in the call.
-    assert_eq!(
-        error.to_string(),
-        "color estimation requires the default SPICE kernel paths"
-    );
+    // Valid configuration and empty input do not acquire observer resources;
+    // no Python or private IPC type participates in the call.
+    assert!(result.is_empty());
 }
