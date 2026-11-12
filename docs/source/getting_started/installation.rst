@@ -16,7 +16,7 @@ Use ``pip`` for user/runtime installs:
 Supported Native Wheels
 -----------------------
 
-The native release matrix supports CPython 3.11, 3.12, and 3.13 on:
+The native release matrix supports CPython 3.11, 3.12, 3.13, and 3.14 on:
 
 * manylinux 2.17+ x86-64;
 * manylinux 2.17+ AArch64;
@@ -25,6 +25,8 @@ The native release matrix supports CPython 3.11, 3.12, and 3.13 on:
 
 Windows and musllinux wheels are not current release targets. A source build
 on an unlisted platform is not a substitute for an accepted release artifact.
+The historical optional ``jax`` extra follows upstream JAX/JAXLIB wheel
+availability and is not part of the standard CPython support or release gate.
 
 These wheels are built once, installed and exercised by the clean-room
 acceptance suite, and only those exact tested files are eligible for

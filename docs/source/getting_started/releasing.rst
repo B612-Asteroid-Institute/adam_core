@@ -5,36 +5,41 @@ Artifact policy
 ---------------
 
 Release artifacts are built once and tested as artifacts. The release-candidate
-workflow builds one wheel for each supported Python/platform pair, installs
-those exact files in isolated binary-only environments, runs ``pip check``,
-proves offline installed-package kernel discovery without duplicate cache
-files, and exercises public SBDB, observer, ephemeris, and
-propagation-provider workflows.
-Publication jobs download those accepted artifacts by workflow run ID; they do
-not rebuild wheels or crates.
+workflow builds one Core wheel for each supported Python/platform pair and
+installs those exact files in fresh environments. Every cell runs the same
+Core-owned acceptance: runner architecture, exact wheel count and platform tag,
+``pip check``, installed distribution/Python/native identity, exact native build
+commit, and one native numerical smoke. The workflow only supplies explicit
+arguments to ``run_core_wheel_acceptance.py``, which invokes a copied
+``core_wheel_smoke.py`` outside the source tree; it does not embed test
+programs. Publication jobs download those accepted artifacts by
+workflow run ID; they do not rebuild wheels or crates. Downstream projects
+validate their own Core compatibility in their repositories.
 
-The supported matrix is CPython 3.11-3.13 on manylinux 2.17 x86-64 and AArch64
-and macOS Apple silicon and Intel (12 wheels per distribution). The workflow
-checks runner architecture, exact wheel count, runtime/distribution version
-equality, native members, and platform tags. Windows and musllinux are not
-current release targets.
+The supported Core matrix is CPython 3.11-3.14 on manylinux 2.17 x86-64 and
+AArch64 and macOS Apple silicon and Intel (16 Core wheels). Windows and
+musllinux are not current release targets.
 
 Stable release line
 -------------------
 
-The current published baseline is ``adam-core==0.6.1``. The next source
-candidate is the breaking ``adam-core==0.7.0`` release for Python and ``0.7.0``
-for all six public Rust crates. Released ``0.6.1`` does not implement the
-propagation-only v2 provider contract and is not compatible with this source
-line. Release ``0.6.1`` remains the immutable Rust 1.87 packaging repair that
-replaced the yanked pre-9 ``zip`` line with ``rawzip`` plus ``flate2``. Neither
-``v0.6.0`` nor ``v0.6.1`` may be moved or reused; ``v0.7.0`` is created only at
-the separately approved stable-publication boundary.
+The current published baseline is ``adam-core==0.7.0``, released on
+2026-11-06 as 12 CPython 3.11-3.13 PyPI wheels and six public Rust crates built
+against Arrow 54. Its files, crate versions, and ``v0.7.0`` tag are immutable
+and must not be overwritten, deleted for replacement, or moved. Version 0.8.0
+adds CPython 3.14 and aligns the Python package, the unpublished
+``adam_core_py`` wheel implementation crate, and all six public Rust crates.
+This 0.x minor release is required because public Arrow types move from Arrow 54
+to Arrow 58 and the Rust OD surface has breaking changes. The 0.8.0 changelog
+and expected ``v0.8.0`` tag use the release date 2026-11-10.
 
-All internal public Rust dependencies use exact ``=0.7.0`` requirements.
-``adam_core_py`` is also versioned ``0.7.0`` but remains an unpublished wheel
-implementation crate. Rust 1.87 is the authoritative MSRV; latest stable is
-compatibility-only. The Python wheel contains the Python veneer and compiled
+Once published, 0.8.0 files, versions, and its tag have the same immutable
+policy. A correction after publication requires a new version and new tag; a
+publisher must never replace accepted bytes under an existing filename or crate
+version.
+
+Rust 1.87 remains the authoritative MSRV; latest stable is compatibility-only.
+The Python wheel contains the Python veneer and compiled
 ``adam_core._rust_native`` extension, so Python consumers do not install the
 component crates directly.
 
@@ -68,19 +73,17 @@ Release order
 Stable promotion remains separately approval-gated and proceeds in dependency
 order:
 
-#. prepare and review an exact propagation-only v2 reference-provider source
-   revision for dependent acceptance. The current workflow names this required
-   operational input ``adam_assist_ref`` and requires a full commit SHA; that
-   revision is evidence for the Core candidate, not a Core dependency or
-   publication candidate;
-#. accept the exact Core ``0.7.0`` six-crate set and 12-wheel matrix, including
-   the separately built provider compatibility lane;
-#. publish and verify the six Core crates in dependency order;
+#. accept the exact 0.8.0 source candidate with aligned Python/Rust versions
+   and stable publication guards;
+#. accept the exact 16-wheel Core matrix with the same Core-owned checks on
+   CPython 3.11-3.14;
+#. publish and verify the aligned six-crate Rust 0.8.0 set in dependency order;
 #. publish and verify the exact Core Python wheel set; and
 #. run clean no-lock Cargo 1.87/latest-stable and clean pip/current-uv smoke
    tests from registry-only environments.
 
-Provider publication and compatibility policy belong to each provider's own
-release process. A tag, GitHub release, protected-environment change,
-crates.io upload, or PyPI upload is a human approval boundary and is never
-performed as part of Core source preparation.
+After Core 0.8 is public, use the manual exact-ref workflow with the reviewed
+Assist candidate. Provider publication and compatibility policy belong to each
+provider's own release process. A tag, GitHub release, protected-environment
+change, crates.io upload, or PyPI upload is a human approval boundary and is
+never performed as part of Core source preparation.

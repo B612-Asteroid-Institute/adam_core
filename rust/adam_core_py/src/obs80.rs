@@ -28,8 +28,8 @@ fn parse_optical_obs80_arrow<'py>(
     raw: &str,
     strict: bool,
     file: bool,
-) -> PyResult<PyObject> {
-    let batch = py.allow_threads(|| parse_batch(raw, strict, file))?;
+) -> PyResult<Bound<'py, PyAny>> {
+    let batch = py.detach(|| parse_batch(raw, strict, file))?;
     batch
         .to_pyarrow(py)
         .map_err(|error| value_error(error.to_string()))

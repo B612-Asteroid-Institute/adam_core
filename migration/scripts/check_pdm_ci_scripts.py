@@ -8,6 +8,7 @@ live Rust-vs-legacy benchmark flags/artifacts.
 
 from __future__ import annotations
 
+import json
 import re
 import shlex
 import subprocess
@@ -489,6 +490,88 @@ def _release_matrix_cell(text: str, cell: str) -> tuple[str, ...] | None:
     return tuple(line.strip() for line in block.splitlines() if line.strip())
 
 
+def _release_matrix_contract_failures(artifact_acceptance: str) -> list[str]:
+    failures: list[str] = []
+    matrix_marker = "\n      matrix:\n"
+    steps_marker = "\n    steps:\n"
+    if (
+        artifact_acceptance.count(matrix_marker) != 1
+        or artifact_acceptance.count(steps_marker) != 1
+    ):
+        return ["artifact acceptance must define one matrix and one steps list"]
+
+    matrix = artifact_acceptance.split(matrix_marker, 1)[1].split(steps_marker, 1)[0]
+    axes = re.findall(r"^        ([A-Za-z0-9_-]+):", matrix, flags=re.MULTILINE)
+    if axes != ["python-version", "platform"]:
+        failures.append(
+            "artifact acceptance matrix must contain only python-version and "
+            f"platform axes, found {axes!r}"
+        )
+
+    version_matches = re.findall(
+        r"^        python-version:\s*(\[.*\])\s*$", matrix, flags=re.MULTILINE
+    )
+    versions: object = None
+    if len(version_matches) == 1:
+        try:
+            versions = json.loads(version_matches[0])
+        except json.JSONDecodeError:
+            pass
+    expected_versions = ["3.11", "3.12", "3.13", "3.14"]
+    if versions != expected_versions:
+        failures.append(
+            "artifact acceptance matrix must contain exactly CPython "
+            f"{expected_versions!r}, found {versions!r}"
+        )
+
+    platforms = re.findall(r"^          - name:\s*(\S+)\s*$", matrix, re.MULTILINE)
+    expected_platforms = {
+        "manylinux-x86_64",
+        "manylinux-aarch64",
+        "macos-arm64",
+        "macos-x86_64",
+    }
+    if len(platforms) != 4 or set(platforms) != expected_platforms:
+        failures.append(
+            "artifact acceptance matrix must contain exactly four supported "
+            f"platforms, found {platforms!r}"
+        )
+    return failures
+
+
+def _release_artifact_steps(artifact_acceptance: str) -> list[dict[str, str]]:
+    """Read top-level step fields from the canonical release workflow shape."""
+
+    steps_marker = "\n    steps:\n"
+    if artifact_acceptance.count(steps_marker) != 1:
+        return []
+    steps_source = artifact_acceptance.split(steps_marker, 1)[1]
+    steps: list[dict[str, str]] = []
+    current: dict[str, str] | None = None
+    active_field: str | None = None
+    key_pattern = r"(['\"]?)([A-Za-z0-9_-]+)\1\s*:\s*(.*)$"
+    for line in steps_source.splitlines():
+        step_match = re.match(r"^      - " + key_pattern, line)
+        if step_match:
+            if current is not None:
+                steps.append(current)
+            current = {step_match.group(2): step_match.group(3)}
+            active_field = step_match.group(2)
+            continue
+        if current is None:
+            continue
+        field_match = re.match(r"^        " + key_pattern, line)
+        if field_match:
+            active_field = field_match.group(2)
+            current[active_field] = field_match.group(3)
+            continue
+        if active_field is not None and (line.startswith("          ") or not line):
+            current[active_field] += "\n" + line.strip()
+    if current is not None:
+        steps.append(current)
+    return steps
+
+
 def _release_workflow_failures(project: dict[str, Any]) -> list[str]:
     failures: list[str] = []
     build_tools = project.get("dependency-groups", {}).get("build")
@@ -513,6 +596,19 @@ def _release_workflow_failures(project: dict[str, Any]) -> list[str]:
                 f"{declaration!r} once before jobs"
             )
 
+    for forbidden in (
+        "adam_assist_ref:",
+        "ADAM_ASSIST_REF",
+        "Checkout adam-assist candidate",
+        "Build adam-assist",
+        "Prepare compatible ASSIST lock",
+        "pairing-cargo-config.toml",
+    ):
+        if forbidden in text:
+            failures.append(
+                "Core release acceptance must not own downstream Assist work: "
+                f"found {forbidden!r}"
+            )
     artifact_marker = "\n  artifact-acceptance:\n"
     extended_marker = "\n  extended-coverage:\n"
     if text.count(artifact_marker) != 1 or text.count(extended_marker) != 1:
@@ -524,6 +620,87 @@ def _release_workflow_failures(project: dict[str, Any]) -> list[str]:
         artifact_acceptance = text.split(artifact_marker, 1)[1].split(
             extended_marker, 1
         )[0]
+        failures.extend(_release_matrix_contract_failures(artifact_acceptance))
+        steps = _release_artifact_steps(artifact_acceptance)
+        python_condition = re.compile(
+            r"matrix\s*(?:\.\s*python-version|\[\s*['\"]python-version['\"]\s*\])"
+        )
+        for step in steps:
+            condition = step.get("if", "")
+            if python_condition.search(condition):
+                failures.append(
+                    "artifact acceptance step "
+                    f"{step.get('name', '<unnamed>')!r} must not use "
+                    "matrix.python-version in an if condition"
+                )
+
+        inline_python = re.compile(
+            r"(?<![A-Za-z0-9_])python(?:\d+(?:\.\d+)*)?\s+"
+            r"(?:-(?=\s|$)|-c(?=\s|$|['\"]))"
+        )
+        for step in steps:
+            run = step.get("run", "")
+            if "<<" in run or inline_python.search(run):
+                failures.append(
+                    "artifact acceptance run blocks must not embed shell heredocs "
+                    "or inline Python programs"
+                )
+                break
+
+        core_steps = [
+            step for step in steps if step.get("name") == "Run Core wheel acceptance"
+        ]
+        if len(core_steps) != 1:
+            failures.append(
+                "artifact acceptance must contain exactly one unconditional "
+                "Core wheel acceptance step"
+            )
+        else:
+            core_step = core_steps[0]
+            if "if" in core_step:
+                failures.append("Core wheel acceptance step must be unconditional")
+            normalized_run = " ".join(core_step.get("run", "").split())
+            required_arguments = (
+                "python migration/scripts/run_core_wheel_acceptance.py",
+                '--python "$(command -v python)"',
+                '--wheelhouse "$GITHUB_WORKSPACE/wheelhouse"',
+                '--workspace "$RUNNER_TEMP/acceptance"',
+                '--report "$RUNNER_TEMP/acceptance-report.json"',
+                '--expected-python "${{ matrix.python-version }}"',
+                '--expected-version "$PYTHON_PREVIEW_VERSION"',
+                '--expected-commit "$GITHUB_SHA"',
+                '--expected-system "${{ matrix.platform.system }}"',
+                '--expected-wheel-tag "${{ matrix.platform.wheel_tag }}"',
+            )
+            for argument in required_arguments:
+                if normalized_run.count(argument) != 1:
+                    failures.append(
+                        "Core wheel acceptance must invoke the repository runner "
+                        f"with {argument!r} exactly once"
+                    )
+
+        inspector_steps = [
+            step
+            for step in steps
+            if step.get("name") == "Inspect adam-core wheel contents"
+        ]
+        if len(inspector_steps) != 1:
+            failures.append(
+                "artifact acceptance must contain one wheel-content inspection step"
+            )
+        else:
+            inspector_step = inspector_steps[0]
+            if "if" in inspector_step:
+                failures.append("wheel-content inspection step must be unconditional")
+            normalized_run = " ".join(inspector_step.get("run", "").split())
+            if (
+                "python migration/scripts/check_wheel_artifacts.py"
+                not in normalized_run
+            ):
+                failures.append(
+                    "wheel-content inspection must call check_wheel_artifacts.py"
+                )
+
         extended_coverage = text.split(extended_marker, 1)[1]
         extended_header, separator, _ = extended_coverage.partition("\n    steps:\n")
         if not separator:
@@ -706,9 +883,9 @@ def _tier1_exact_ref_failures() -> list[str]:
         '[[ "$ADAM_ASSIST_REF" =~ ^[0-9a-f]{40}$ ]]',
         'test "$(git -C dependent rev-parse HEAD)" = "$ADAM_ASSIST_REF"',
         "Validate requested dependent revision syntax",
-        "Verify dependent declares Core 0.7 compatibility",
+        "Verify dependent declares Core 0.8 compatibility",
         "pdm run python - <<'PY'",
-        'Version("0.7.0") in core[0].specifier',
+        'Version("0.8.0") in core[0].specifier',
     ):
         if required not in text:
             failures.append(f"Tier-1 exact-ref workflow is missing {required!r}")
@@ -724,7 +901,7 @@ def _tier1_exact_ref_failures() -> list[str]:
         "syntax": "Validate requested dependent revision syntax",
         "checkout": "Checkout requested dependent revision",
         "revision": "Verify exact dependent revision",
-        "metadata": "Verify dependent declares Core 0.7 compatibility",
+        "metadata": "Verify dependent declares Core 0.8 compatibility",
     }
     positions = {key: text.find(value) for key, value in step_names.items()}
     if all(position >= 0 for position in positions.values()):
@@ -757,17 +934,6 @@ def _tier1_exact_ref_failures() -> list[str]:
             "Tier-1 workflow must not claim a frozen Assist version is compatible"
         )
 
-    release = RELEASE_WORKFLOW.read_text(encoding="utf-8")
-    for required in (
-        "adam_assist_ref:",
-        "ADAM_ASSIST_REF: ${{ inputs.adam_assist_ref }}",
-        "ref: ${{ env.ADAM_ASSIST_REF }}",
-        '[[ "$ADAM_ASSIST_REF" =~ ^[0-9a-f]{40}$ ]]',
-    ):
-        if required not in release:
-            failures.append(
-                f"release-candidate exact-ref matrix lost required contract {required!r}"
-            )
     return failures
 
 

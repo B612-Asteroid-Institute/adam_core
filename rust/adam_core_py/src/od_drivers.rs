@@ -103,14 +103,14 @@ struct FitSettings {
     propagator: TwoBodyPropagator,
 }
 
-fn setting<'py, T: FromPyObject<'py>>(
+fn setting<'py, T: FromPyObjectOwned<'py>>(
     settings: Option<&Bound<'py, PyDict>>,
     key: &str,
     default: T,
 ) -> PyResult<T> {
     match settings {
         Some(dict) => match dict.get_item(key)? {
-            Some(value) if !value.is_none() => value.extract::<T>(),
+            Some(value) if !value.is_none() => value.extract::<T>().map_err(Into::into),
             _ => Ok(default),
         },
         None => Ok(default),
@@ -313,51 +313,59 @@ impl PySource {
         // remain deferred until Rust has completed all static validation and
         // prepared-input construction. Private low-level callers may still
         // pass a descriptor or raw capsule directly.
-        let resolved = if object.is_callable() && object.downcast::<PyTuple>().is_err() {
+        let resolved = if object.is_callable() && object.cast::<PyTuple>().is_err() {
             object.call0()?
         } else {
             object.clone()
         };
-        let (capsule_object, expected_identity) =
-            if let Ok(descriptor) = resolved.downcast::<PyTuple>() {
-                if descriptor.len() != 4 {
-                    return Err(PyValueError::new_err(
-                        "native propagator descriptor must be (capsule, name, version, two_body)",
-                    ));
-                }
-                (
-                    descriptor.get_item(0)?,
-                    Some((
-                        descriptor.get_item(1)?.extract::<String>()?,
-                        descriptor.get_item(2)?.extract::<String>()?,
-                        descriptor.get_item(3)?.extract::<bool>()?,
-                    )),
-                )
-            } else {
-                // The raw capsule form remains available to the private low-level
-                // bindings; adam-core's Python dispatch always supplies identity.
-                (resolved, None)
-            };
+        let (capsule_object, expected_identity) = if let Ok(descriptor) = resolved.cast::<PyTuple>()
+        {
+            if descriptor.len() != 4 {
+                return Err(PyValueError::new_err(
+                    "native propagator descriptor must be (capsule, name, version, two_body)",
+                ));
+            }
+            (
+                descriptor.get_item(0)?,
+                Some((
+                    descriptor.get_item(1)?.extract::<String>()?,
+                    descriptor.get_item(2)?.extract::<String>()?,
+                    descriptor.get_item(3)?.extract::<bool>()?,
+                )),
+            )
+        } else {
+            // The raw capsule form remains available to the private low-level
+            // bindings; adam-core's Python dispatch always supplies identity.
+            (resolved, None)
+        };
         let capsule_object = if capsule_object.is_callable() {
             capsule_object.call0()?
         } else {
             capsule_object
         };
-        let capsule = capsule_object.downcast::<PyCapsule>().map_err(|_| {
+        let capsule = capsule_object.cast::<PyCapsule>().map_err(|_| {
             PyValueError::new_err(format!(
                 "orbit determination requires a native {EXTERNAL_PROPAGATOR_CAPSULE:?} capsule"
             ))
         })?;
         let name = capsule
             .name()?
-            .map(|name| name.to_string_lossy().into_owned())
+            .map(|name| {
+                // SAFETY: the capsule remains bound and no Python code runs while
+                // this borrowed name is converted immediately to an owned string.
+                unsafe { name.as_cstr() }.to_string_lossy().into_owned()
+            })
             .unwrap_or_default();
         if name != EXTERNAL_PROPAGATOR_CAPSULE {
             return Err(PyValueError::new_err(format!(
                 "expected a {EXTERNAL_PROPAGATOR_CAPSULE:?} capsule, got {name:?}"
             )));
         }
-        let raw = capsule.pointer() as *const ExternalPropagatorV2;
+        let expected_name =
+            std::ffi::CString::new(EXTERNAL_PROPAGATOR_CAPSULE).expect("capsule name has no NUL");
+        let raw = capsule
+            .pointer_checked(Some(expected_name.as_c_str()))?
+            .as_ptr() as *const ExternalPropagatorV2;
         // SAFETY: a capsule of this name holds an `ExternalPropagatorV2`
         // whose context lives as long as the capsule, retained by `_capsule`.
         let propagator = unsafe { ExternalPropagator::from_raw(raw) }.map_err(od_error)?;
@@ -472,7 +480,7 @@ fn run_with_predictor<R: Send, E: DriverError>(
         None => two_body_provider_metadata(&settings.propagator),
     };
     let output = py
-        .allow_threads(|| {
+        .detach(|| {
             if let Some(source) = &source {
                 driver(&external_predictor(&source.propagator, settings), &metadata)
             } else {
@@ -519,7 +527,7 @@ impl ProviderSource for PyCanonicalProviderSource {
             &'provider OdPropagator<'provider>,
         ) -> Result<R, OdBatchError>,
     ) -> Result<R, OdBatchError> {
-        let source = match Python::with_gil(|py| {
+        let source = match Python::attach(|py| {
             self.propagator
                 .as_ref()
                 .map(|value| PySource::new(value.bind(py)))
@@ -545,7 +553,7 @@ fn run_canonical_workflow<R: Send>(
     source: &PyCanonicalProviderSource,
     workflow: impl FnOnce() -> Result<R, OdBatchError> + Send,
 ) -> PyResult<R> {
-    let result = py.allow_threads(workflow);
+    let result = py.detach(workflow);
     if let Some(error) = source.take_resolution_error() {
         return Err(error);
     }
@@ -2229,7 +2237,7 @@ fn benchmark_od_fit_ipc<'py>(
     .map_err(od_error)?;
 
     let (samples, correctness) = py
-        .allow_threads(|| {
+        .detach(|| {
             let two_body = PropagatorPredictor {
                 propagator: &settings.propagator,
                 options: &settings.options,

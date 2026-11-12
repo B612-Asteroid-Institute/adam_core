@@ -1,9 +1,9 @@
 # Dynamics, missions, OD, IOD, and impacts public-surface disposition
 
-Updated 2026-08-12 against frozen updated-upstream main
-`757c09fca86adf9e3d5899952db3d379e09413f6`. The complete 747-symbol inventory
-and all frozen-upstream-only retirement classifications are in `manifest.json`;
-the 44-row parity registry is only a benchmark subset.
+The 747-symbol inventory was captured on 2026-08-12 from updated-upstream main
+`757c09fca86adf9e3d5899952db3d379e09413f6`; its retirement classifications
+remain in `manifest.json`, and the 44-row parity registry is only a benchmark
+subset. The Core 0.7 to 0.8 migration guidance was updated on 2026-11-10.
 
 ## Scalar and batch dynamics
 
@@ -43,21 +43,19 @@ local paths by semantic slot, marshals tables, and assembles result tables.
 | `fit_least_squares`, `iterative_fit`, `cmc2003_fit_detailed` | Core-owned Rust numerical algorithms; propagation providers expose only the negotiated capsule | native solver/covariance/rejection tests |
 | canonical batch `run_iod`, `run_od`, `refine`, `evaluate_orbits` | Rust-owned deterministic Associations/FittedOrbitMembers grouping and typed failures; Python only marshals and assembles the three direct result tables | native planner/workflow, public-surface, and migration contract tests |
 
-## Rust 0.8 OD API migration
+## Rust 0.7 to 0.8 OD API migration
 
-The additional public-surface cleanup below targets 0.8.0. It corrects a stale
-compatibility implication in the unreleased development documentation; it does
-not rewrite the published 0.7.0 release or artifact history. The exact advanced
-surface is `prepare_observations`, `solve_prepared_iod`,
-`refine_prepared_orbit`, and `PreparedObservations` under
-`adam_core::od::algorithms`. Direct
-`adam_core_rs_coords::od::algorithms` users receive the same two focused-kernel
-renames and the removal of `run_od_with_predictors` and
-`ConfiguredRunOdOutput`; the six Core-only stage-support removals below never
-existed on that direct path.
+Core 0.8 narrows the advanced one-group numerical surface to
+`prepare_observations`, `solve_prepared_iod`, `refine_prepared_orbit`, and
+`PreparedObservations` under `adam_core::od::algorithms`. The first function
+prepares one observation group; the latter two are the renamed focused IOD and
+refinement kernels, not new canonical workflows. Direct
+`adam_core_rs_coords::od::algorithms` users receive those two renames and the
+removal of `run_od_with_predictors` and `ConfiguredRunOdOutput`; the six
+Core-only stage-support removals below never existed on that direct path.
 
-The exhaustive public Rust ``ObservationTransform`` enum also gains four
-variants in 0.8.0: ``Vfc2017AstrometricUncertaintyFloor``,
+The exhaustive public Rust ``ObservationTransform`` enum gains four variants
+in 0.8.0: ``Vfc2017AstrometricUncertaintyFloor``,
 ``Vfc2017AstrometricUncertaintyReplace``,
 ``PerformanceWeightedCovarianceScaling``, and
 ``MeasuredBiasAstrometricUncertaintyFloor``. Downstream exhaustive matches

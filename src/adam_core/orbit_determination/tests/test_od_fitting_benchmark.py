@@ -55,20 +55,20 @@ def test_od_benchmark_artifact_binds_build_provider_and_timing_policy(
     monkeypatch.setattr(
         benchmark._rust_native,
         "build_identity",
-        lambda: ("0.7.0", "a" * 40),
+        lambda: ("0.8.0", "a" * 40),
     )
     monkeypatch.setattr(
         benchmark._rust_native,
         "native_provider_metadata",
         lambda propagator, settings: {
             "name": "adam_core.two_body",
-            "version": "0.7.0",
+            "version": "0.8.0",
             "configuration_fingerprint": "b" * 64,
             "data_fingerprint": "c" * 64,
         },
     )
-    monkeypatch.setattr(benchmark.adam_core, "__version__", "0.7.0")
-    monkeypatch.setattr(benchmark.metadata, "version", lambda name: "0.7.0")
+    monkeypatch.setattr(benchmark.adam_core, "__version__", "0.8.0")
+    monkeypatch.setattr(benchmark.metadata, "version", lambda name: "0.8.0")
     monkeypatch.setattr(
         benchmark,
         "_installed_artifact_identity",
@@ -170,9 +170,9 @@ def test_od_benchmark_rejects_identity_mismatch_before_work(
     monkeypatch.setattr(
         benchmark._rust_native,
         "build_identity",
-        lambda: ("0.7.0", "a" * 40),
+        lambda: ("0.8.0", "a" * 40),
     )
-    monkeypatch.setattr(benchmark.adam_core, "__version__", "0.7.0")
+    monkeypatch.setattr(benchmark.adam_core, "__version__", "0.8.0")
     monkeypatch.setattr(benchmark.metadata, "version", lambda name: "9.9.9")
     monkeypatch.setattr(
         benchmark._rust_native,

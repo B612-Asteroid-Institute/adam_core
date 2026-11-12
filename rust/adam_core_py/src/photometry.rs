@@ -801,8 +801,8 @@ fn fit_output_batch(output: FittedMagnitudeGroups, g: f64, grouped: bool) -> PyR
 #[pyfunction]
 #[pyo3(signature = (data_dir, magnitude, magnitude_sigma, object_pos, detection_exposure_ids, exposure_ids, exposure_codes, exposure_bands, exposure_days, exposure_nanos, exposure_duration, time_scale, g, strict_band_mapping, template_id=None, mix=None, object_ids=None))]
 #[allow(clippy::too_many_arguments)]
-fn fit_absolute_magnitude_complete_numpy(
-    py: Python<'_>,
+fn fit_absolute_magnitude_complete_numpy<'py>(
+    py: Python<'py>,
     data_dir: &str,
     magnitude: PyReadonlyArray1<'_, f64>,
     magnitude_sigma: PyReadonlyArray1<'_, f64>,
@@ -820,7 +820,7 @@ fn fit_absolute_magnitude_complete_numpy(
     template_id: Option<String>,
     mix: Option<(f64, f64)>,
     object_ids: Option<Vec<Option<String>>>,
-) -> PyResult<PyObject> {
+) -> PyResult<Bound<'py, PyAny>> {
     let grouped = object_ids.is_some();
     let object = object_pos.as_array();
     let magnitude = magnitude.as_array();

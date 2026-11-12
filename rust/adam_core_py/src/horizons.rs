@@ -523,9 +523,9 @@ fn query_horizons_arrow<'py>(
     aberrations: &str,
     id_type: Option<String>,
     recorded_responses: Option<Vec<String>>,
-) -> PyResult<PyObject> {
+) -> PyResult<Bound<'py, PyAny>> {
     let times = input_times(time_batch, time_scale)?;
-    let orbits = py.allow_threads(|| {
+    let orbits = py.detach(|| {
         query_orbits(
             &object_ids,
             times,
@@ -551,7 +551,7 @@ fn query_horizons_ephemeris_arrow<'py>(
     observer_batch: &Bound<'py, PyAny>,
     time_scale: &str,
     recorded_responses: Option<Vec<String>>,
-) -> PyResult<PyObject> {
+) -> PyResult<Bound<'py, PyAny>> {
     let batch = RecordBatch::from_pyarrow_bound(observer_batch)
         .map_err(|err| value_error(format!("invalid observer query batch: {err}")))?;
     let codes = batch
@@ -562,9 +562,8 @@ fn query_horizons_ephemeris_arrow<'py>(
         .map(|row| codes.value(row).to_string())
         .collect();
     let times = input_times(observer_batch, time_scale)?;
-    let output = py.allow_threads(|| {
-        query_ephemeris(&object_ids, &codes, times, recorded_responses.as_deref())
-    })?;
+    let output =
+        py.detach(|| query_ephemeris(&object_ids, &codes, times, recorded_responses.as_deref()))?;
     output
         .to_pyarrow(py)
         .map_err(|err| value_error(err.to_string()))

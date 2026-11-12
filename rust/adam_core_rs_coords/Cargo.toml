@@ -1,6 +1,6 @@
 [package]
 name = "adam_core_rs_coords"
-version = "0.7.0"
+version = "0.8.0"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
@@ -10,13 +10,17 @@ description = "Rust-native coordinates, dynamics, photometry, and table workflow
 
 [dependencies]
 rayon = "1.11"
-arrow-array = "54"
-arrow-buffer = "54"
-arrow-schema = "54"
-parquet = { version = "54", default-features = false, features = ["arrow", "snap", "zstd"] }
+arrow-array = "58"
+arrow-buffer = "58"
+arrow-schema = "58"
+parquet = { version = "58", default-features = false, features = ["arrow", "snap", "zstd"] }
+# thrift 0.23 accepts any uuid 1.x release, but uuid 1.27+ raises its MSRV
+# above this workspace's Rust 1.87 contract. Keep clean consumer resolution on
+# the newest reviewed Rust-1.87-compatible release.
+uuid = "=1.26.1"
 erfars = "0.2"
-adam_core_rs_autodiff = { version = "=0.7.0", path = "../adam_core_rs_autodiff" }
-adam_core_rs_orbit_determination = { version = "=0.7.0", path = "../adam_core_rs_orbit_determination" }
+adam_core_rs_autodiff = { version = "=0.8.0", path = "../adam_core_rs_autodiff" }
+adam_core_rs_orbit_determination = { version = "=0.8.0", path = "../adam_core_rs_orbit_determination" }
 # JSON marshalling for the ObsContext render/parse boundary (bead
 # personal-cmy.26); preserve_order keeps Python dict insertion order.
 serde = { version = "1", features = ["derive"] }

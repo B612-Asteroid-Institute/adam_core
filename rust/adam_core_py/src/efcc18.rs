@@ -85,7 +85,7 @@ fn healpix_ang2pix_lonlat_numpy<'py>(
 #[pyfunction]
 fn efcc18_parse_bias_dat<'py>(py: Python<'py>, text: &str) -> PyResult<Bound<'py, PyArray3<f32>>> {
     let table = py
-        .allow_threads(|| Efcc18BiasTable::parse_bias_dat(text))
+        .detach(|| Efcc18BiasTable::parse_bias_dat(text))
         .map_err(value_error)?;
     ndarray::Array3::from_shape_vec(
         (EFCC18_N_TILES, EFCC18_N_CATALOGS, EFCC18_N_COMPONENTS),

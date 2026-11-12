@@ -6,14 +6,17 @@ checkout (no Rust work) via
 The Rust-dispatched public ``ADES_to_string`` / ``ADES_string_to_tables`` must
 reproduce the legacy behavior except for intentional ADES corrections: missing
 optional numerics serialize as empty PSV fields rather than ``nan``; numeric
-``nan`` tokens parse as null before validation; and ``rmsRA``/``rmsDec`` reduce
-fixed-point precision only as needed to fit ``PosDecimalTypeW7``."""
+``nan`` tokens parse as null before validation; PSV rows use literal separators
+with strict field counts and no quoting; and ``rmsRA``/``rmsDec`` reduce
+fixed-point precision only as needed to fit ``PosDecimalTypeW7``. For broad
+writer/parser parity, the fixture's deliberately unrepresentable pipe remark is
+replaced with representable text and legacy CSV quote syntax is normalized to
+literal quote text; strict delimiter rejection is tested separately."""
 
-import csv
-import io
 import json
 import math
 from dataclasses import asdict
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -61,6 +64,44 @@ WRITER_COLUMNS = {
     "exp",
     "remarks",
 }
+REPRESENTABLE_PIPE_REMARK = "remark / with / pipes"
+PARSED_COLUMNS = (
+    "permID",
+    "provID",
+    "trkSub",
+    "obsSubID",
+    "rmsTime",
+    "ra",
+    "dec",
+    "rmsRACosDec",
+    "rmsDec",
+    "rmsCorr",
+    "mag",
+    "rmsMag",
+    "band",
+    "stn",
+    "mode",
+    "astCat",
+    "photCat",
+    "logSNR",
+    "seeing",
+    "exp",
+    "remarks",
+)
+FLOAT_COLUMNS = {
+    "rmsTime",
+    "ra",
+    "dec",
+    "rmsRACosDec",
+    "rmsDec",
+    "rmsCorr",
+    "mag",
+    "rmsMag",
+    "logSNR",
+    "seeing",
+    "exp",
+}
+
 OPTIONAL_NUMERIC_COLUMNS = {
     "rmsTime",
     "rmsRA",
@@ -82,10 +123,76 @@ def _bounded_fixed(value: str, precision: int, max_width: int) -> str:
     return f"{float(value):.0f}"
 
 
+def _representable_ades_string(ades_string: str) -> str:
+    """Replace legacy CSV-only fixture cells with literal representable PSV text."""
+    return ades_string.replace(
+        '|"remark|with|pipes"', f"|{REPRESENTABLE_PIPE_REMARK}"
+    ).replace('|"remark with ""quotes"""', '|remark with "quotes"')
+
+
+def _representable_remark(value: str | None) -> str | None:
+    if value == "remark|with|pipes":
+        return REPRESENTABLE_PIPE_REMARK
+    return value
+
+
+def _reference_flat_from_representable_ades(ades_string: str) -> dict:
+    """Independently flatten literal PSV wire values for all supported fields."""
+    columns = {column: [] for column in PARSED_COLUMNS}
+    time_values: list[str] = []
+    headers: list[str] | None = None
+
+    for raw_line in ades_string.splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith(("#", "!")):
+            continue
+        fields = line.split("|")
+        header_tokens = [field.strip() for field in fields]
+        if header_tokens[0] in {"permID", "provID", "trkSub", "artSat"}:
+            assert "obsTime" in header_tokens
+            headers = header_tokens
+            continue
+
+        assert headers is not None
+        assert len(fields) == len(headers)
+        row = dict(zip(headers, fields))
+        obs_time = row["obsTime"].strip()
+        assert obs_time.endswith("Z")
+        time_values.append(obs_time)
+
+        for column in PARSED_COLUMNS:
+            wire_column = "rmsRA" if column == "rmsRACosDec" else column
+            value = row.get(wire_column)
+            if value is None or not value.strip():
+                columns[column].append(None)
+            elif column in FLOAT_COLUMNS:
+                number = float(value.strip())
+                columns[column].append(None if math.isnan(number) else number)
+            elif column == "remarks":
+                columns[column].append(value)
+            else:
+                columns[column].append(value.strip())
+
+    epoch = datetime(1858, 11, 17, tzinfo=UTC)
+    days: list[int] = []
+    nanos: list[int] = []
+    for value in time_values:
+        parsed = datetime.fromisoformat(value[:-1]).replace(tzinfo=UTC)
+        delta = parsed - epoch
+        days.append(delta.days)
+        nanos.append((delta.seconds * 1_000_000 + delta.microseconds) * 1_000)
+
+    return {
+        **columns,
+        "obsTime": {"days": days, "nanos": nanos, "scale": "utc"},
+    }
+
+
 def normalize_legacy_writer_output(
     ades_string: str, *, columns_precision: dict[str, int]
 ) -> str:
-    """Apply intentional ADES null and bounded-RMS corrections to legacy output."""
+    """Apply intentional no-quoting, null, and bounded-RMS corrections."""
+    ades_string = _representable_ades_string(ades_string)
     output = []
     headers = None
     for raw_line in ades_string.splitlines(keepends=True):
@@ -99,7 +206,7 @@ def normalize_legacy_writer_output(
             output.append(raw_line)
             continue
 
-        fields = next(csv.reader([line], delimiter="|", quotechar='"'))
+        fields = line.split("|")
         if (
             fields
             and fields[0] in {"permID", "provID", "trkSub"}
@@ -108,12 +215,13 @@ def normalize_legacy_writer_output(
             headers = fields
             output.append(raw_line)
             continue
-        if headers is None or len(fields) != len(headers):
+        if headers is None or len(fields) < len(headers):
             output.append(raw_line)
             continue
 
         corrected = []
-        for header, value in zip(headers, fields):
+        for index, value in enumerate(fields):
+            header = headers[index] if index < len(headers) else None
             if header in OPTIONAL_NUMERIC_COLUMNS and value == "nan":
                 value = ""
             if value and header in {"rmsRA", "rmsDec"}:
@@ -128,14 +236,7 @@ def normalize_legacy_writer_output(
             output.append(raw_line)
             continue
 
-        rendered = io.StringIO()
-        csv.writer(
-            rendered,
-            delimiter="|",
-            quotechar='"',
-            lineterminator="",
-        ).writerow(corrected)
-        output.append(rendered.getvalue() + ending)
+        output.append("|".join(corrected) + ending)
     return "".join(output)
 
 
@@ -164,8 +265,12 @@ def build_contexts(spec: dict) -> dict[str, ObsContext]:
     return contexts
 
 
-def observations_from_flat(flat: dict) -> ADESObservations:
+def observations_from_flat(
+    flat: dict, *, make_representable: bool = False
+) -> ADESObservations:
     kwargs = {column: values for column, values in flat.items() if column != "obsTime"}
+    if make_representable:
+        kwargs["remarks"] = [_representable_remark(value) for value in flat["remarks"]]
     kwargs["obsTime"] = Timestamp.from_kwargs(
         days=flat["obsTime"]["days"],
         nanos=flat["obsTime"]["nanos"],
@@ -197,10 +302,12 @@ def test_fixture_exists():
     )
 
 
-def test_writer_matches_legacy_fixture_except_documented_ades_corrections(fixture):
+def test_writer_matches_representable_legacy_fixture(fixture):
     contexts = build_contexts(fixture["context_spec"])
     for panel in fixture["panels"]:
-        observations = observations_from_flat(panel["observations"])
+        observations = observations_from_flat(
+            panel["observations"], make_representable=True
+        )
         kwargs = dict(panel["options"]) if panel["options"] else {}
         actual = ADES_to_string(observations, contexts, **kwargs)
         columns_precision = kwargs.get(
@@ -214,49 +321,63 @@ def test_writer_matches_legacy_fixture_except_documented_ades_corrections(fixtur
         assert actual == expected, panel["name"]
 
 
-def test_parser_matches_legacy_fixture(fixture):
-    for panel in fixture["panels"] + fixture["raw_strings"]:
-        if "parse_error_type" in panel["parsed"]:
-            # The frozen legacy reader parsed writer-emitted ``nan`` tokens as
-            # float NaNs and then failed quivr validation. The corrected Rust
-            # reader treats those missing optional numerics as null.
-            parsed_contexts, parsed_observations = ADES_string_to_tables(
-                panel["ades_string"]
-            )
-            assert len(parsed_observations) == len(panel["observations"]["permID"])
-            assert set(parsed_contexts) == set(panel["observations"]["stn"])
-            for column in (
-                "rmsTime",
-                "rmsRACosDec",
-                "rmsDec",
-                "rmsCorr",
-                "mag",
-                "rmsMag",
-                "logSNR",
-                "seeing",
-                "exp",
-            ):
-                expected = panel["observations"][column]
-                expected_missing = sum(
-                    value is None or (isinstance(value, float) and math.isnan(value))
-                    for value in expected
-                )
-                actual = parsed_observations.table.column(column).to_pylist()
-                assert sum(value is None for value in actual) == expected_missing
-                assert not any(
-                    isinstance(value, float) and math.isnan(value) for value in actual
-                )
-            continue
-        parsed_contexts, parsed_observations = ADES_string_to_tables(
-            panel["ades_string"]
-        )
-        assert_flat_equal(
-            parsed_observations, panel["parsed"]["observations"], panel["name"]
-        )
+def test_parser_matches_all_representable_legacy_fixture_values(fixture):
+    expected_contexts = build_contexts(fixture["context_spec"])
+    validated_panel_rows = 0
+
+    for panel in fixture["panels"]:
+        representable_ades = _representable_ades_string(panel["ades_string"])
+        parsed_contexts, parsed_observations = ADES_string_to_tables(representable_ades)
+        expected_flat = _reference_flat_from_representable_ades(representable_ades)
+
+        assert len(parsed_observations) == len(panel["observations"]["permID"])
+        assert_flat_equal(parsed_observations, expected_flat, panel["name"])
+
+        expected_codes = set(panel["observations"]["stn"])
+        actual_context_values = {
+            code: asdict(context) for code, context in parsed_contexts.items()
+        }
+        expected_context_values = {
+            code: asdict(expected_contexts[code]) for code in expected_codes
+        }
+        assert actual_context_values == expected_context_values, panel["name"]
+        validated_panel_rows += len(parsed_observations)
+
+    for panel in fixture["raw_strings"]:
+        representable_ades = _representable_ades_string(panel["ades_string"])
+        parsed_contexts, parsed_observations = ADES_string_to_tables(representable_ades)
+        expected_flat = _reference_flat_from_representable_ades(representable_ades)
+        assert_flat_equal(parsed_observations, expected_flat, panel["name"])
         actual_contexts = {
             code: asdict(context) for code, context in parsed_contexts.items()
         }
         assert actual_contexts == panel["parsed"]["contexts"], panel["name"]
+
+    expected_panel_rows = sum(
+        len(panel["observations"]["permID"]) for panel in fixture["panels"]
+    )
+    assert validated_panel_rows == expected_panel_rows == 388
+    assert (
+        sum(len(panel["observations"]["permID"]) == 68 for panel in fixture["panels"])
+        == 2
+    )
+
+
+def test_parser_full_value_parity_detects_late_panel_mutation(fixture):
+    panel = next(
+        panel for panel in fixture["panels"] if panel["name"] == "seed4_custom_high"
+    )
+    representable_ades = _representable_ades_string(panel["ades_string"])
+    _contexts, parsed_observations = ADES_string_to_tables(representable_ades)
+    expected = _reference_flat_from_representable_ades(representable_ades)
+    assert len(expected["ra"]) == 68
+
+    mutated = dict(expected)
+    mutated["ra"] = list(expected["ra"])
+    mutated["ra"][-1] += 1.0
+
+    with pytest.raises(AssertionError, match=r"late-panel-mutation:ra\[67\]"):
+        assert_flat_equal(parsed_observations, mutated, "late-panel-mutation")
 
 
 def test_fused_ades_native_timing(fixture):
@@ -264,7 +385,9 @@ def test_fused_ades_native_timing(fixture):
     from adam_core.observations.arrow_bridge import observations_to_ipc
 
     panel = fixture["panels"][0]
-    observations = observations_from_flat(panel["observations"])
+    observations = observations_from_flat(
+        panel["observations"], make_representable=True
+    )
     contexts = build_contexts(fixture["context_spec"])
     contexts_json = {
         code: json.dumps(asdict(context)) for code, context in contexts.items()
@@ -296,7 +419,7 @@ def test_fused_ades_native_timing(fixture):
         1,
     )
     parser_samples = _rust_native.benchmark_ades_string_to_tables_fused(
-        panel["ades_string"], 2, 2, 1
+        _representable_ades_string(panel["ades_string"]), 2, 2, 1
     )
     assert all(sample > 0.0 for trial in writer_samples for sample in trial)
     assert all(sample > 0.0 for trial in parser_samples for sample in trial)
@@ -332,7 +455,9 @@ def test_error_messages_match_legacy_fixture(fixture):
     # Panels are seeded, so seed 11/n 32 from the generator is reproduced by
     # reusing a stored panel that contains V00 rows instead.
     panel = fixture["panels"][0]
-    observations = observations_from_flat(panel["observations"])
+    observations = observations_from_flat(
+        panel["observations"], make_representable=True
+    )
     assert "V00" in observations.stn.to_pylist()
     with pytest.raises(ValueError) as exc_info:
         ADES_to_string(observations, contexts)

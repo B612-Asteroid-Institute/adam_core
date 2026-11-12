@@ -204,7 +204,7 @@ fn rotation_period_estimate<'py>(
         claim_doubled_fold,
     );
     let estimate = py
-        .allow_threads(|| estimate_rotation_period(&input, &config))
+        .detach(|| estimate_rotation_period(&input, &config))
         .map_err(PyValueError::new_err)?;
     estimate_to_dict(py, estimate)
 }
@@ -272,7 +272,7 @@ fn rotation_period_estimate_grouped<'py>(
         claim_doubled_fold,
     );
     let estimates = py
-        .allow_threads(|| estimate_rotation_period_grouped(&input, &object_ids, &config))
+        .detach(|| estimate_rotation_period_grouped(&input, &object_ids, &config))
         .map_err(PyValueError::new_err)?;
     let output = PyList::empty(py);
     for (object_id, estimate) in estimates {
@@ -344,9 +344,7 @@ fn rotation_period_estimate_best_apparition<'py>(
         claim_doubled_fold,
     );
     let (estimate, _, _) = py
-        .allow_threads(|| {
-            estimate_rotation_period_best_apparition(&input, &config, apparition_gap_days)
-        })
+        .detach(|| estimate_rotation_period_best_apparition(&input, &config, apparition_gap_days))
         .map_err(PyValueError::new_err)?;
     estimate_to_dict(py, estimate)
 }
@@ -419,7 +417,7 @@ fn benchmark_rotation_period_native(
         auto_session_bic_improvement,
         claim_doubled_fold,
     );
-    py.allow_threads(|| {
+    py.detach(|| {
         estimate_rotation_period(&input, &config).map_err(PyValueError::new_err)?;
         let mut trial_samples = Vec::with_capacity(trials);
         for _ in 0..trials {

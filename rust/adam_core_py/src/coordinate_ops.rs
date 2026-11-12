@@ -1543,7 +1543,7 @@ fn sample_coordinate_variants_numpy<'py>(
     }
     let method = parse_sampling_method(method)?;
     let (samples, weights, weights_cov, source_rows) = py
-        .allow_threads(|| {
+        .detach(|| {
             sample_coordinate_covariances_flat(
                 &means,
                 &covariances,

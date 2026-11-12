@@ -675,8 +675,8 @@ fn build_solar_spectrum_arrow<'py>(
     out_dir: &str,
     timeout_s: u64,
     payload: Option<Vec<u8>>,
-) -> PyResult<PyObject> {
-    let batch = py.allow_threads(|| solar_batch(payload.as_deref(), timeout_s))?;
+) -> PyResult<Bound<'py, PyAny>> {
+    let batch = py.detach(|| solar_batch(payload.as_deref(), timeout_s))?;
     write_atomic(&batch, &output_path(out_dir, "solar_spectrum.parquet"))?;
     batch
         .to_pyarrow(py)
@@ -691,8 +691,8 @@ fn build_bandpass_curves_arrow<'py>(
     specs: Vec<(String, String, String, String)>,
     timeout_s: u64,
     payloads: Option<Vec<Vec<u8>>>,
-) -> PyResult<PyObject> {
-    let batch = py.allow_threads(|| curves_batch(&specs, timeout_s, payloads.as_deref()))?;
+) -> PyResult<Bound<'py, PyAny>> {
+    let batch = py.detach(|| curves_batch(&specs, timeout_s, payloads.as_deref()))?;
     write_atomic(&batch, &output_path(out_dir, "bandpass_curves.parquet"))?;
     batch
         .to_pyarrow(py)
@@ -700,8 +700,11 @@ fn build_bandpass_curves_arrow<'py>(
 }
 
 #[pyfunction]
-fn build_observatory_band_map_arrow<'py>(py: Python<'py>, out_dir: &str) -> PyResult<PyObject> {
-    let batch = py.allow_threads(band_map_batch)?;
+fn build_observatory_band_map_arrow<'py>(
+    py: Python<'py>,
+    out_dir: &str,
+) -> PyResult<Bound<'py, PyAny>> {
+    let batch = py.detach(band_map_batch)?;
     write_atomic(
         &batch,
         &output_path(out_dir, "observatory_band_map.parquet"),
@@ -715,8 +718,8 @@ fn build_observatory_band_map_arrow<'py>(py: Python<'py>, out_dir: &str) -> PyRe
 fn build_template_bandpass_integrals_arrow<'py>(
     py: Python<'py>,
     out_dir: &str,
-) -> PyResult<PyObject> {
-    let batch = py.allow_threads(|| integral_batch(out_dir))?;
+) -> PyResult<Bound<'py, PyAny>> {
+    let batch = py.detach(|| integral_batch(out_dir))?;
     write_atomic(
         &batch,
         &output_path(out_dir, "template_bandpass_integrals.parquet"),
@@ -727,8 +730,11 @@ fn build_template_bandpass_integrals_arrow<'py>(
 }
 
 #[pyfunction]
-fn build_asteroid_templates_arrow<'py>(py: Python<'py>, out_dir: &str) -> PyResult<PyObject> {
-    let batch = py.allow_threads(template_batch)?;
+fn build_asteroid_templates_arrow<'py>(
+    py: Python<'py>,
+    out_dir: &str,
+) -> PyResult<Bound<'py, PyAny>> {
+    let batch = py.detach(template_batch)?;
     write_atomic(&batch, &output_path(out_dir, "asteroid_templates.parquet"))?;
     batch
         .to_pyarrow(py)

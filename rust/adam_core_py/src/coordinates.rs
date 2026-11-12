@@ -848,7 +848,7 @@ fn rotate_cartesian_covariance_numpy<'py>(
         .as_slice()
         .ok_or_else(|| PyValueError::new_err("covariances must be contiguous"))?;
     let (output, near_zero) = py
-        .allow_threads(|| {
+        .detach(|| {
             rotate_cartesian_covariance_flat(
                 covariances,
                 dimension,
@@ -1580,11 +1580,11 @@ fn sample_orbit_variants_arrow<'py>(
     beta: f64,
     kappa: f64,
     include_nongrav: bool,
-) -> PyResult<PyObject> {
+) -> PyResult<Bound<'py, PyAny>> {
     let orbits = RecordBatch::from_pyarrow_bound(orbit_batch)
         .map_err(|err| PyValueError::new_err(format!("invalid Orbits RecordBatch: {err}")))?;
     let output = py
-        .allow_threads(|| {
+        .detach(|| {
             sample_orbit_variants_record_batch(
                 &orbits,
                 method,
@@ -1792,9 +1792,7 @@ fn orbits_propagate_typed_ipc<'py>(
         .map_err(|err| PyValueError::new_err(format!("invalid propagator config: {err}")))?;
     let batch = read_orbit_ipc(ipc_bytes.as_bytes())?;
     let output = py
-        .allow_threads(|| {
-            propagate_typed_record_batch(&batch, is_variants, &times, options, &propagator)
-        })
+        .detach(|| propagate_typed_record_batch(&batch, is_variants, &times, options, &propagator))
         .map_err(PyValueError::new_err)?;
     let bytes = write_orbit_ipc(&output.batch)?;
     Ok((PyBytes::new(py, &bytes), output.validity))
@@ -1916,7 +1914,7 @@ fn propagate_orbits_typed_arrow<'py>(
     tol: f64,
     chunk_size: Option<usize>,
     thread_limit: Option<usize>,
-) -> PyResult<(PyObject, Vec<bool>)> {
+) -> PyResult<(Bound<'py, PyAny>, Vec<bool>)> {
     let input = RecordBatch::from_pyarrow_bound(orbit_batch)
         .map_err(|err| PyValueError::new_err(format!("invalid orbit RecordBatch: {err}")))?;
     let targets = RecordBatch::from_pyarrow_bound(target_time_batch)
@@ -1935,9 +1933,7 @@ fn propagate_orbits_typed_arrow<'py>(
     let propagator = TwoBodyPropagator::new(TwoBodyPropagatorConfig { max_iter, tol })
         .map_err(|err| PyValueError::new_err(format!("invalid propagator config: {err}")))?;
     let output = py
-        .allow_threads(|| {
-            propagate_typed_record_batch(&input, is_variants, &times, options, &propagator)
-        })
+        .detach(|| propagate_typed_record_batch(&input, is_variants, &times, options, &propagator))
         .map_err(PyValueError::new_err)?;
     let batch = output.batch.to_pyarrow(py).map_err(|err| {
         PyRuntimeError::new_err(format!("failed to export propagated RecordBatch: {err}"))
@@ -1960,13 +1956,13 @@ fn propagate_orbits_arrow<'py>(
     tol: f64,
     chunk_size: Option<usize>,
     thread_limit: Option<usize>,
-) -> PyResult<PyObject> {
+) -> PyResult<Bound<'py, PyAny>> {
     let orbits = RecordBatch::from_pyarrow_bound(orbit_batch)
         .map_err(|err| PyValueError::new_err(format!("invalid Orbits RecordBatch: {err}")))?;
     let targets = RecordBatch::from_pyarrow_bound(target_time_batch)
         .map_err(|err| PyValueError::new_err(format!("invalid target time RecordBatch: {err}")))?;
     let output = py
-        .allow_threads(|| {
+        .detach(|| {
             propagate_orbits_record_batch(
                 &orbits,
                 &targets,
@@ -2190,13 +2186,13 @@ fn generate_ephemeris_arrow<'py>(
     predict_phase_angle: bool,
     chunk_size: Option<usize>,
     thread_limit: Option<usize>,
-) -> PyResult<PyObject> {
+) -> PyResult<Bound<'py, PyAny>> {
     let orbits = RecordBatch::from_pyarrow_bound(orbit_batch)
         .map_err(|err| PyValueError::new_err(format!("invalid Orbits RecordBatch: {err}")))?;
     let observers = RecordBatch::from_pyarrow_bound(observer_batch)
         .map_err(|err| PyValueError::new_err(format!("invalid Observers RecordBatch: {err}")))?;
     let output = py
-        .allow_threads(|| {
+        .detach(|| {
             generate_ephemeris_record_batch(
                 &orbits,
                 &observers,
@@ -2289,7 +2285,7 @@ fn benchmark_generate_ephemeris_arrow(
 fn orbits_nested_round_trip_arrow<'py>(
     py: Python<'py>,
     batch: &Bound<'py, PyAny>,
-) -> PyResult<PyObject> {
+) -> PyResult<Bound<'py, PyAny>> {
     let record_batch = RecordBatch::from_pyarrow_bound(batch)
         .map_err(|err| PyValueError::new_err(format!("invalid pyarrow RecordBatch: {err}")))?;
     let orbits = DataOrbitBatch::try_from_nested_record_batch(&record_batch)
@@ -2327,7 +2323,7 @@ fn coordinate_covariance_values_are_all_nan_arrow(batch: &Bound<'_, PyAny>) -> P
 fn coordinate_covariance_values_to_six_arrow<'py>(
     py: Python<'py>,
     batch: &Bound<'py, PyAny>,
-) -> PyResult<PyObject> {
+) -> PyResult<Bound<'py, PyAny>> {
     let record_batch = RecordBatch::from_pyarrow_bound(batch)
         .map_err(|err| PyValueError::new_err(format!("invalid covariance RecordBatch: {err}")))?;
     let values = record_batch
@@ -4236,7 +4232,7 @@ fn bandpasses_load_table<'py>(
     py: Python<'py>,
     data_dir: &str,
     filename: &str,
-) -> PyResult<Vec<PyObject>> {
+) -> PyResult<Vec<Bound<'py, PyAny>>> {
     let allowed = [
         "bandpass_curves.parquet",
         "observatory_band_map.parquet",
@@ -4571,7 +4567,7 @@ fn bandpasses_convert_magnitude_arrow<'py>(
     let target: Vec<&str> = target.iter().map(|value| value.unwrap()).collect();
     let composition = normalize_bandpass_composition(template_id, mix)?;
     let data = bandpass_data_for(data_dir)?;
-    let output = py.allow_threads(|| {
+    let output = py.detach(|| {
         convert_magnitudes_for_bandpasses(
             data.as_ref(),
             magnitudes.values(),
@@ -5214,7 +5210,7 @@ fn ensure_input_origin_and_frame_arrow<'py>(
     input_origins: Vec<String>,
     result_orbit_ids: Vec<String>,
     frame_out: &str,
-) -> PyResult<Option<(PyObject, Bound<'py, PyArray1<u32>>)>> {
+) -> PyResult<Option<(Bound<'py, PyAny>, Bound<'py, PyArray1<u32>>)>> {
     let coordinates = RecordBatch::from_pyarrow_bound(coordinate_batch)
         .map_err(|err| PyValueError::new_err(format!("invalid coordinate RecordBatch: {err}")))?;
     ensure_input_origin_and_frame(
@@ -5355,7 +5351,7 @@ fn departure_spherical_coordinates_arrow<'py>(
     vx: PyReadonlyArray1<'py, f64>,
     vy: PyReadonlyArray1<'py, f64>,
     vz: PyReadonlyArray1<'py, f64>,
-) -> PyResult<PyObject> {
+) -> PyResult<Bound<'py, PyAny>> {
     let output = departure_spherical_coordinates(
         departure_origin,
         days.as_slice()?,
@@ -5421,7 +5417,7 @@ fn prepare_orbit_propagation_arrow<'py>(
     step_size: f64,
     propagation_origin: &str,
 ) -> PyResult<(
-    PyObject,
+    Bound<'py, PyAny>,
     Bound<'py, PyArray1<i64>>,
     Bound<'py, PyArray1<i64>>,
 )> {
@@ -5481,7 +5477,7 @@ fn transform_coordinates_arrow<'py>(
     f: f64,
     max_iter: usize,
     tol: f64,
-) -> PyResult<Option<PyObject>> {
+) -> PyResult<Option<Bound<'py, PyAny>>> {
     let record_batch = RecordBatch::from_pyarrow_bound(batch)
         .map_err(|err| PyValueError::new_err(format!("invalid pyarrow RecordBatch: {err}")))?;
     let config = TransformArrowConfig {
@@ -5781,7 +5777,7 @@ fn residuals_calculate_arrow<'py>(
     observed_batch: &Bound<'py, PyAny>,
     predicted_batch: &Bound<'py, PyAny>,
     use_predicted_covariance: bool,
-) -> PyResult<(PyObject, bool)> {
+) -> PyResult<(Bound<'py, PyAny>, bool)> {
     let observed = RecordBatch::from_pyarrow_bound(observed_batch).map_err(|err| {
         PyValueError::new_err(format!("invalid observed coordinates RecordBatch: {err}"))
     })?;
@@ -5789,7 +5785,7 @@ fn residuals_calculate_arrow<'py>(
         PyValueError::new_err(format!("invalid predicted coordinates RecordBatch: {err}"))
     })?;
     let (batch, had_off_diagonal_nan) = py
-        .allow_threads(|| {
+        .detach(|| {
             residuals_calculate_record_batch(&observed, &predicted, use_predicted_covariance)
         })
         .map_err(PyValueError::new_err)?;
@@ -5957,11 +5953,11 @@ fn calculate_perturber_moids_arrow<'py>(
     py: Python<'py>,
     orbit_batch: &Bound<'py, PyAny>,
     perturber_codes: Vec<String>,
-) -> PyResult<PyObject> {
+) -> PyResult<Bound<'py, PyAny>> {
     let orbits = RecordBatch::from_pyarrow_bound(orbit_batch)
         .map_err(|err| PyValueError::new_err(format!("invalid Orbits RecordBatch: {err}")))?;
     let output = py
-        .allow_threads(|| perturber_moids_record_batch(&orbits, &perturber_codes))
+        .detach(|| perturber_moids_record_batch(&orbits, &perturber_codes))
         .map_err(PyValueError::new_err)?;
     output
         .to_pyarrow(py)
@@ -6422,10 +6418,10 @@ fn lambert_solution_orbit_arrow<'py>(
     py: Python<'py>,
     batch: &Bound<'py, PyAny>,
     accessor: &str,
-) -> PyResult<PyObject> {
+) -> PyResult<Bound<'py, PyAny>> {
     let batch = RecordBatch::from_pyarrow_bound(batch)
         .map_err(|err| PyValueError::new_err(format!("invalid LambertSolutions batch: {err}")))?;
-    py.allow_threads(|| lambert_solution_orbit_record_batch(&batch, accessor))
+    py.detach(|| lambert_solution_orbit_record_batch(&batch, accessor))
         .map_err(PyValueError::new_err)?
         .to_pyarrow(py)
         .map_err(|err| PyRuntimeError::new_err(format!("failed to export OrbitBatch: {err}")))
@@ -6474,7 +6470,7 @@ fn generate_porkchop_data_arrow<'py>(
     prograde: bool,
     max_iter: u32,
     tol: f64,
-) -> PyResult<PyObject> {
+) -> PyResult<Bound<'py, PyAny>> {
     let departure = RecordBatch::from_pyarrow_bound(departure_batch).map_err(|err| {
         PyValueError::new_err(format!("invalid departure Orbits RecordBatch: {err}"))
     })?;
@@ -6482,7 +6478,7 @@ fn generate_porkchop_data_arrow<'py>(
         PyValueError::new_err(format!("invalid arrival Orbits RecordBatch: {err}"))
     })?;
     let output = py
-        .allow_threads(|| {
+        .detach(|| {
             porkchop_record_batch(
                 &departure,
                 &arrival,
@@ -6828,10 +6824,10 @@ fn group_observers_by_code_record_batch(
 fn group_observers_by_code_arrow<'py>(
     py: Python<'py>,
     observer_batch: &Bound<'py, PyAny>,
-) -> PyResult<Vec<(String, PyObject)>> {
+) -> PyResult<Vec<(String, Bound<'py, PyAny>)>> {
     let batch = RecordBatch::from_pyarrow_bound(observer_batch)
         .map_err(|err| PyValueError::new_err(format!("invalid Observers RecordBatch: {err}")))?;
-    py.allow_threads(|| group_observers_by_code_record_batch(&batch))
+    py.detach(|| group_observers_by_code_record_batch(&batch))
         .map_err(PyValueError::new_err)?
         .into_iter()
         .map(|(code, grouped)| {
@@ -7131,18 +7127,18 @@ fn collapse_variant_orbits_by_object_id_record_batch(
 }
 
 #[pyfunction]
-fn collapse_variant_orbits_arrow(
-    py: Python<'_>,
+fn collapse_variant_orbits_arrow<'py>(
+    py: Python<'py>,
     orbit_batch: &Bound<'_, PyAny>,
     variant_batch: &Bound<'_, PyAny>,
-) -> PyResult<PyObject> {
+) -> PyResult<Bound<'py, PyAny>> {
     let orbits = RecordBatch::from_pyarrow_bound(orbit_batch)
         .map_err(|err| PyValueError::new_err(format!("invalid Orbits RecordBatch: {err}")))?;
     let variants = RecordBatch::from_pyarrow_bound(variant_batch).map_err(|err| {
         PyValueError::new_err(format!("invalid VariantOrbits RecordBatch: {err}"))
     })?;
     let output = py
-        .allow_threads(|| collapse_variant_orbits_record_batch(&orbits, &variants))
+        .detach(|| collapse_variant_orbits_record_batch(&orbits, &variants))
         .map_err(PyValueError::new_err)?;
     output
         .to_pyarrow(py)
@@ -7150,16 +7146,16 @@ fn collapse_variant_orbits_arrow(
 }
 
 #[pyfunction]
-fn collapse_variant_orbits_by_object_id_arrow(
-    py: Python<'_>,
+fn collapse_variant_orbits_by_object_id_arrow<'py>(
+    py: Python<'py>,
     variant_batch: &Bound<'_, PyAny>,
     orbit_ids: Vec<String>,
-) -> PyResult<PyObject> {
+) -> PyResult<Bound<'py, PyAny>> {
     let variants = RecordBatch::from_pyarrow_bound(variant_batch).map_err(|err| {
         PyValueError::new_err(format!("invalid VariantOrbits RecordBatch: {err}"))
     })?;
     let output = py
-        .allow_threads(|| collapse_variant_orbits_by_object_id_record_batch(&variants, &orbit_ids))
+        .detach(|| collapse_variant_orbits_by_object_id_record_batch(&variants, &orbit_ids))
         .map_err(PyValueError::new_err)?;
     output
         .to_pyarrow(py)
@@ -7262,10 +7258,10 @@ fn dynamical_class_record_batch(batch: &RecordBatch) -> Result<Vec<String>, Stri
 fn group_by_orbit_id_arrow<'py>(
     py: Python<'py>,
     orbit_batch: &Bound<'py, PyAny>,
-) -> PyResult<Vec<(String, PyObject)>> {
+) -> PyResult<Vec<(String, Bound<'py, PyAny>)>> {
     let batch = RecordBatch::from_pyarrow_bound(orbit_batch)
         .map_err(|err| PyValueError::new_err(format!("invalid Orbits RecordBatch: {err}")))?;
-    py.allow_threads(|| group_by_orbit_id_record_batch(&batch))
+    py.detach(|| group_by_orbit_id_record_batch(&batch))
         .map_err(PyValueError::new_err)?
         .into_iter()
         .map(|(id, grouped)| {

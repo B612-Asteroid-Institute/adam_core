@@ -194,7 +194,7 @@ pub fn collapse_variant_ephemeris_covariances_numpy<'py>(
         variant_aberrated.as_ref(),
     )?;
     let rows = inputs.orbit_keys.len();
-    let (covariances, aberrated) = py.allow_threads(|| collapse_covariances(&inputs));
+    let (covariances, aberrated) = py.detach(|| collapse_covariances(&inputs));
     let to_array = |values: Vec<f64>| {
         ndarray::Array2::from_shape_vec((rows, 36), values)
             .map_err(|err| PyValueError::new_err(err.to_string()))
@@ -538,7 +538,7 @@ pub fn collapse_variant_ephemeris_by_object_numpy<'py>(
         aberrated_values.as_ref(),
         light_times.as_ref(),
     )?;
-    let output = py.allow_threads(|| collapse_grouped(&inputs));
+    let output = py.detach(|| collapse_grouped(&inputs));
     let n_groups = output.group_starts.len();
     let means = ndarray::Array2::from_shape_vec((n_groups, 6), output.means)
         .map_err(|err| PyValueError::new_err(err.to_string()))?;

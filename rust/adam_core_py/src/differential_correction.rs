@@ -193,7 +193,7 @@ fn whitened_2body_model_angles_numpy<'py>(
     )?;
     let config = TwoBodyModelConfig::default();
     let angles = py
-        .allow_threads(|| whitened_2body_model_angles(state, epoch_mjd_tdb, &terms, &config))
+        .detach(|| whitened_2body_model_angles(state, epoch_mjd_tdb, &terms, &config))
         .map_err(value_error)?;
     Ok(angles.into_pyarray(py))
 }
@@ -230,7 +230,7 @@ fn whitened_2body_jacobian_numpy<'py>(
     )?;
     let config = TwoBodyModelConfig::default();
     let jacobian = py
-        .allow_threads(|| whitened_2body_jacobian(state, epoch_mjd_tdb, &terms, &config))
+        .detach(|| whitened_2body_jacobian(state, epoch_mjd_tdb, &terms, &config))
         .map_err(value_error)?;
     let rows = 2 * terms.len();
     ndarray::Array2::from_shape_vec((rows, 6), jacobian)

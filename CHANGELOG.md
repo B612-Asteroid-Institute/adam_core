@@ -4,6 +4,113 @@ This file contains notable changes in adam-core
 
 ## [Unreleased]
 
+### Fixed
+
+- Hyperbolic Keplerian and cometary conversions preserve signed mean anomaly,
+  preventing pre-perihelion states such as C/2022 E3 from receiving an
+  elliptic 2π wrap and converting to implausibly distant Cartesian states.
+  For inbound hyperbolic states, public `calc_mean_anomaly` now returns the
+  negative, signed value instead of a value wrapped into `[0, 2π)`.
+- ADES PSV parsing handles a UTF-8 BOM on the first physical line, recognizes
+  keyword-record candidates structurally, preserves warnings for unknown
+  columns, and reports missing `obsTime`, non-first identity columns, and
+  unsupported `artSat` identities as explicit header errors. Data before any
+  keyword record fails explicitly; short or long rows fail at their physical
+  boundary with exact line/count context instead of being silently dropped or
+  synthesized.
+- ADES PSV reading and writing use literal `|` separators with no quoting or
+  multiline-record semantics. Quote characters round-trip verbatim; the writer
+  rejects fields containing an unrepresentable delimiter or physical newline
+  with field/row context, rejects first identity fields whose leading-trimmed
+  value starts with reserved context marker `#` or `!`, and rejects physical
+  newlines in context values.
+- Canonical OD workflows report exact internal CMC2003 fit-covariance refusal
+  as ordered, typed ``cmc_covariance_unavailable`` group failures so independent
+  siblings continue; backend, protocol, runtime, and other invocation-level
+  failures remain fatal and atomic.
+- Repeated-state two-body ephemeris calls select the grouped light-time and
+  spherical kernel from input data alone, preserving serial-reference bits for
+  duplicate epochs across Rayon pool sizes.
+
+## [0.8.0] - 2026-11-10
+
+### Added
+
+- Added per-axis VFC2017 uncertainty floor and replacement, performance-weighted
+  covariance scaling, and measured-bias uncertainty flooring as typed optional
+  transforms in the ordered observation pipeline.
+- Canonical OD batches can execute independent groups concurrently on Rayon's
+  shared pool while preserving deterministic product, failure, and fatal-error
+  ordering.
+
+### Changed
+
+- Native Python bindings use PyO3/NumPy 0.28 and Arrow/Parquet 58. Standard
+  wheels, CI, and release validation now cover CPython 3.11-3.14 on all existing
+  manylinux and macOS targets. Optional JAX availability remains outside the
+  standard support gate.
+- Python ``calculate_perturber_moids`` removes the ignored ``chunk_size`` and
+  ``max_processes`` arguments and requires explicit ``setup_SPICE()``
+  initialization. ``setup_SPICE`` and ``setup_mpc_obscodes`` remove the
+  ineffective ``force`` argument; repeated setup remains idempotent from the
+  Rust backend's actual state.
+- NumPy, PyO3, Rust, SPICE-backed, and benchmark MOID entry points remove the
+  obsolete ``max_iter`` and ``xtol`` controls. MOID iteration and convergence
+  policy are owned by the global solver.
+- SPICE kernel initialization is one typed Rust-owned operation. The
+  process-global backend now uses an ``RwLock``; canonical OD holds a shared
+  read guard across each non-empty invocation. Runtime kernel/site mutation,
+  including missing-path initialization, fails immediately while scientific
+  readers are active, while setup of an already-registered exact path remains
+  an idempotent read-side no-op. Rust consumers migrate immutable queries from
+  ``.lock()`` to ``.read()`` and perform initialization-only mutation under
+  ``.write()`` before concurrent work; runtime mutation uses ``.try_write()``
+  and fails instead of waiting behind readers.
+- The public Rust OD expert surface is limited to ``prepare_observations``,
+  ``solve_prepared_iod``, ``refine_prepared_orbit``, and
+  ``PreparedObservations``. The 0.7 to 0.8 migration is:
+  - ``run_iod_with_predictor`` is renamed to ``solve_prepared_iod``;
+  - ``refine_with_predictor`` is renamed to ``refine_prepared_orbit``;
+  - ``run_od_with_predictors`` and ``ConfiguredRunOdOutput`` are removed; use
+    canonical ``adam_core::run_od``;
+  - ``external_provider_metadata`` is replaced by
+    ``ProviderMetadata::from_external_propagator``;
+  - ``ErfaTimeProvider`` is replaced by a caller-owned ``TimeScaleProvider``
+    implementation, which may delegate to ``TimeArray::rescale``;
+  - ``GlobalSpiceTranslation`` is replaced by a
+    ``global_backend().read()`` guard passed as the translation provider;
+  - ``CanonicalStageSettings`` and ``canonical_stage_settings`` are internal;
+    canonical callers pass typed stage configuration; and
+  - ``two_body_provider_metadata`` is internal; canonical callers read actual
+    identities from ``OdBatchResult::providers()``.
+- The exhaustive public ``ObservationTransform`` enum adds
+  ``Vfc2017AstrometricUncertaintyFloor``,
+  ``Vfc2017AstrometricUncertaintyReplace``,
+  ``PerformanceWeightedCovarianceScaling``, and
+  ``MeasuredBiasAstrometricUncertaintyFloor``.
+- Removed the redundant private legacy differential-correction and full-OD
+  implementations and their parity-oracle tests. Canonical workflow numerical
+  behavior and provider/request contracts are unchanged.
+
+### Fixed
+
+- MOID calculations use the pure-Rust global Baluev-Mikryukov/DISTLINK
+  critical-point solver through scalar, batch, and SPICE-backed paths, with
+  deterministic witnesses and row-specific typed failures instead of the old
+  NaN compatibility result.
+
+### Compatibility
+
+- **Python:** ``adam-core==0.8.0`` supports CPython 3.11-3.14. Callers must
+  remove the retired MOID/setup arguments and initialize SPICE explicitly before
+  perturber-MOID calls.
+- **Rust:** all six public crates advance together to 0.8.0 with exact internal
+  requirements and Rust 1.87 as the MSRV. The Arrow 54 to Arrow 58 transition,
+  OD migration map, exhaustive-enum additions, and backend synchronization
+  change are source-breaking for direct Rust consumers.
+
+## [0.7.0] - 2026-11-06
+
 ### Added
 
 - A Rust-authoritative, complete OD configuration boundary: ``OdConfig``,
@@ -12,20 +119,14 @@ This file contains notable changes in adam-core
   semantic resource bindings, immutable path-free profiles, and canonical
   configuration fingerprints/provenance.
 - Closed native observation transforms for filling missing astrometric
-  uncertainty; per-axis VFC2017 uncertainty floor (with explicit missing-value
-  behavior) and replacement; EFCC18 catalog-bias correction; station/band
-  residual covariance adjustment; chi2-per-observation performance weighting;
-  measured-bias uncertainty flooring; and nightly batch deweighting. VFC2017
-  floor preserves supplied cross terms, while replacement sets both angular
-  cross entries to +0.0 because its lookup has no correlation. Resource content
-  identity, size, schema, and structure are validated before a bound pipeline
-  can execute.
-- Advanced one-group Rust numerical kernels under
-  ``adam_core::od::algorithms``: ``prepare_observations``,
-  ``solve_prepared_iod``, and ``refine_prepared_orbit``. They support custom
-  native predictors and focused research while the four canonical workflows
-  remain the only public batching, provenance, continuation, and failure-policy
-  routes.
+  uncertainty, EFCC18 catalog-bias correction, station/band residual covariance
+  adjustment, and nightly batch deweighting. Resource content identity, size,
+  schema, and structure are validated before a bound pipeline can execute.
+- Predictor-level Rust composition under ``adam_core_rs_coords::od::algorithms``:
+  ``prepare_observations``, ``run_iod_with_predictor``,
+  ``refine_with_predictor``, and ``run_od_with_predictors``. The configured
+  composition prepares one coordinate batch and gives that same batch to IOD
+  and refinement.
 - Rust-owned bounded deterministic IOD/search/correction/ranging, whitened and
   robust differential correction, covariance validation, worst-residual and
   CMC2003 rejection, and propagation-only native provider ABI v2.
@@ -49,52 +150,6 @@ This file contains notable changes in adam-core
 
 ### Changed
 
-- Removed the redundant private legacy differential-correction and full-OD
-  implementations and their parity-oracle tests. Independent ``run_iod`` and
-  ``refine`` APIs and prepared-stage kernels remain authoritative; canonical
-  workflow numerical behavior and provider/request contracts are unchanged.
-- Optional observation policies use typed VFC2017, performance-weighted, and
-  measured-bias-floor declarations in an ordered ``ObservationPipeline``;
-  deliberate no-transformation identity uses ``ObservationPipeline::as_supplied()``
-  / ``ObservationPipeline.as_supplied()``. Resource paths remain separate exact
-  ``ResourceBindings`` inputs and are excluded from configuration identity and
-  provenance.
-- MOID APIs now expose only algorithm-owned controls: Python
-  ``calculate_perturber_moids`` no longer accepts ignored ``chunk_size`` or
-  ``max_processes``, and NumPy/PyO3/Rust/SPICE/benchmark MOID entry points no
-  longer accept ignored ``max_iter`` or ``xtol``. The canonical Rust scalar and
-  batch functions return typed errors; the old NaN compatibility surface and
-  helper exports were removed.
-- SPICE kernel paths now cross Python in one typed initialization call. Rust
-  owns path validation, parsing, load order, deduplication, and process-global
-  ``KernelPool`` state. Perturber-MOID calls require this backend to be
-  initialized explicitly rather than invoking Python-owned setup internally.
-  The no-op ``force`` controls were removed from ``setup_SPICE`` and
-  ``setup_mpc_obscodes``.
-- Canonical Rust and Python OD batches now execute independent association or
-  orbit/member groups concurrently on Rayon's shared pool. Indexed collection
-  preserves first-appearance product and failure order, exact ``run_od``
-  composition, and invocation-wide fatal-error behavior; inner propagation and
-  coordinate kernels share the same pool in ordinary Rust composition rather
-  than creating per-group thread pools. A fatal group lowers a stage-local
-  cancellation bound without interrupting already-running work; lower indices
-  remain eligible to establish earlier precedence, and every stage is a barrier.
-  Each non-empty canonical invocation acquires one shared read guard on the
-  initialized process-global SPICE backend before group scheduling; workers read
-  that backend directly, and ``run_od`` holds the same guard across IOD and
-  refinement. Other scientific readers remain concurrent. Kernel mutation is an
-  initialization-only operation and Python mutators fail clearly while readers
-  are active rather than queueing a writer; repeated initialization with exact
-  paths that are already registered remains an idempotent read-side no-op. SPICE
-  kernel-pool resolution also
-  stays serial when invoked from a Rayon worker to protect non-OD callers that
-  hold an exclusive lock across a query.
-- The public Rust ``global_backend()`` synchronization type intentionally changes
-  from ``&Mutex<AdamCoreSpiceBackend>`` to
-  ``&RwLock<AdamCoreSpiceBackend>``. Rust consumers migrate immutable queries
-  from ``.lock()`` to ``.read()`` and initialization/kernel mutation to
-  ``.write()``. The bounded SPKEZ result cache now uses a narrow interior mutex,
-  so cache use does not require exclusive ownership of the kernel pool or maps.
 - Python OD code is a typed declaration, resource-binding, Arrow-marshalling,
   and result-assembly boundary. Numerical expert functions live under
   ``adam_core.orbit_determination.algorithms``; propagators contribute only
@@ -106,7 +161,7 @@ This file contains notable changes in adam-core
   ``jpl-debias-2018==2023.3.1.1`` and the public helper resolves only its
   exported ``bias_dat`` path; Rust still validates the exact file identity and
   structure. Standalone Rust remains explicit-path-only.
-- The unreleased ``ASTEROID_INSTITUTE_OD_V1`` definition now pins the current
+- The ``ASTEROID_INSTITUTE_OD_V1`` definition pins the current
   space-observatory-inclusive station tables (1,126 residual-covariance rows
   and 2,480 uncertainty-fill rows). ``CORE_OD_V1`` is unchanged. Deployment
   and distribution details for separately supplied licensed resources remain
@@ -129,33 +184,6 @@ This file contains notable changes in adam-core
   identity and capability metadata, stable per-row failure codes, optional
   dynamics-consistent STMs, and complete physical/non-gravitational parameter
   transport. The provisional v1 layout is rejected.
-- **Breaking Rust API targeted for 0.8.0:** ``adam_core::od::algorithms`` is
-  limited to ``prepare_observations``, ``solve_prepared_iod``,
-  ``refine_prepared_orbit``, and ``PreparedObservations``. This additional
-  cleanup corrects a stale compatibility implication without changing the
-  published 0.7.0 release or artifact history:
-  - ``run_iod_with_predictor`` becomes ``solve_prepared_iod`` and
-    ``refine_with_predictor`` becomes ``refine_prepared_orbit``;
-  - ``run_od_with_predictors`` and ``ConfiguredRunOdOutput`` are removed in
-    favor of canonical ``run_od``;
-  - ``external_provider_metadata`` becomes
-    ``ProviderMetadata::from_external_propagator`` for metadata-only ABI-v2
-    identity/provenance validation;
-  - the public ``ErfaTimeProvider`` helper is replaced by a caller-owned
-    ``TimeScaleProvider`` that may delegate to ``TimeArray::rescale``;
-  - the public ``GlobalSpiceTranslation`` wrapper is replaced by a direct
-    ``global_backend().read()`` guard passed as the translation provider; and
-  - ``CanonicalStageSettings``, ``canonical_stage_settings``, and
-    ``two_body_provider_metadata`` are internal. Canonical callers use typed
-    workflow configuration and ``OdBatchResult::providers()``; advanced callers
-    own their predictor options and provider services.
-- **Breaking Rust API targeted for 0.8.0:** the exhaustive public
-  ``ObservationTransform`` enum adds
-  ``Vfc2017AstrometricUncertaintyFloor``,
-  ``Vfc2017AstrometricUncertaintyReplace``,
-  ``PerformanceWeightedCovarianceScaling``, and
-  ``MeasuredBiasAstrometricUncertaintyFloor``. Downstream exhaustive matches
-  written against 0.7.0 must handle these variants when migrating to 0.8.0.
 - **Breaking Rust API:** ``PropagationError`` adds ``RowFailure`` and
   ``CmcCovarianceUnavailable``. Exhaustive downstream matches must handle
   candidate-local numerical failures and fail-closed CMC covariance refusal.
@@ -163,16 +191,6 @@ This file contains notable changes in adam-core
 
 ### Fixed
 
-- Canonical OD workflows report exact internal CMC2003 fit-covariance refusal
-  as ordered, typed ``cmc_covariance_unavailable`` group failures so independent
-  siblings continue; backend, protocol, runtime, and other invocation-level
-  failures remain fatal and atomic.
-- Repeated-state two-body ephemeris calls select the grouped light-time and
-  spherical kernel from input data alone, preserving serial-reference bits for
-  duplicate epochs across Rayon pool sizes.
-- MOID uses the pure-Rust global Baluev-Mikryukov/DISTLINK critical-point
-  solver through every scalar, batch, and SPICE-backed path, with deterministic
-  witnesses and row-specific typed failures.
 - Canonical OD configuration JSON now preserves every finite ``f64`` bit
   across Python construction, Rust parsing, persisted provenance, and later
   validation. Configuration identity is validated before observation-pipeline
@@ -270,9 +288,8 @@ This file contains notable changes in adam-core
   the complete propagation-only ABI-v2 identity and provenance fingerprints.
   Invalid input/configuration/resource/provider contracts fail atomically;
   safely isolated scientific failures continue as typed group failures.
-- These changes are intentionally source-breaking for the removed Python and
-  Rust OD surfaces. They target adam-core 0.7.0; no merge, publication, release,
-  or cross-package compatibility claim is implied by this unreleased entry.
+- These changes are source-breaking for the removed Python and Rust OD
+  surfaces and define the adam-core 0.7.0 boundary.
 
 ## [0.6.1] - 2026-10-16
 

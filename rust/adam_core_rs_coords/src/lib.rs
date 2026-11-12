@@ -41,7 +41,7 @@ mod od_algorithms;
 mod od_batch;
 mod od_config;
 
-/// Rust-owned Core 0.7 orbit-determination configuration boundary.
+/// Rust-owned Core 0.8 orbit-determination configuration boundary.
 pub mod od {
     pub use crate::od_batch::{
         plan_associations, plan_orbit_members, AssociationGroup, OrbitMemberGroup,
@@ -1603,32 +1603,15 @@ fn clamp_unit(x: f64) -> f64 {
     x.clamp(-1.0, 1.0)
 }
 
+/// Convert true anomaly to mean anomaly.
+///
+/// Elliptic and parabolic results retain the historical `[0, 2pi)` wrap;
+/// the exact-parabolic formula remains legacy compatibility behavior.
+/// Hyperbolic mean anomaly is signed and non-periodic, so inbound states
+/// return a negative value.
 pub fn calc_mean_anomaly(nu: f64, e: f64) -> f64 {
     let nu_norm = if nu >= TWO_PI { nu % TWO_PI } else { nu };
-    if e < 1.0 {
-        let ecc_anomaly = ((1.0 - e * e).sqrt() * nu_norm.sin()).atan2(e + nu_norm.cos());
-        let mut mean = ecc_anomaly - e * ecc_anomaly.sin();
-        if mean < 0.0 {
-            mean += TWO_PI;
-        }
-        return mean;
-    }
-
-    if e > 1.0 {
-        let hyp_anomaly = 2.0 * (((e - 1.0) / (e + 1.0)).sqrt() * (nu_norm / 2.0).tan()).atanh();
-        let mut mean = e * hyp_anomaly.sinh() - hyp_anomaly;
-        if mean < 0.0 {
-            mean += TWO_PI;
-        }
-        return mean;
-    }
-
-    let d = (nu_norm / 2.0).atan();
-    let mut mean = d + (d * d * d / 3.0);
-    if mean < 0.0 {
-        mean += TWO_PI;
-    }
-    mean
+    generic::calc_mean_anomaly(nu_norm, e)
 }
 
 pub fn solve_barker(m: f64) -> f64 {
@@ -2001,9 +1984,69 @@ mod orbital_public_tests {
     }
 
     #[test]
-    fn public_anomaly_helpers_are_finite_and_normalized() {
+    fn public_hyperbolic_transforms_preserve_perihelion_side() {
+        let mu = 2.95912208284120e-04_f64;
+        let tp = 59_000.0;
+        let cometary = vec![
+            0.2559115812959117,
+            1.201133796102373,
+            20.0,
+            45.0,
+            30.0,
+            tp,
+            0.2559115812959117,
+            1.201133796102373,
+            20.0,
+            45.0,
+            30.0,
+            tp,
+        ];
+        let epochs = [tp - 100.0, tp + 100.0];
+        let mus = [mu, mu];
+        let cart = cometary_to_cartesian_flat6(&cometary, &epochs, &mus, 100, 1e-15);
+        let back = cartesian_to_cometary_flat6(&cart, &epochs, &mus);
+        for (actual, expected) in back.iter().zip(&cometary) {
+            approx(*actual, *expected, 1e-9);
+        }
+
+        let keplerian = vec![
+            -1.272345007428081,
+            1.201133796102373,
+            20.0,
+            45.0,
+            30.0,
+            -10.0,
+            -1.272345007428081,
+            1.201133796102373,
+            20.0,
+            45.0,
+            30.0,
+            10.0,
+        ];
+        let cart = keplerian_to_cartesian_flat6(&keplerian, &mus, 100, 1e-15);
+        let back = cartesian_to_keplerian_flat6(&cart, &epochs, &mus);
+        approx(back[8], -10.0, 1e-10);
+        approx(back[13 + 8], 10.0, 1e-10);
+    }
+
+    #[test]
+    fn public_anomaly_helpers_preserve_signed_hyperbolic_and_legacy_behavior() {
         let mean = calc_mean_anomaly(0.5, 0.2);
         assert!((0.0..TWO_PI).contains(&mean));
+        assert!(calc_mean_anomaly(TWO_PI - 0.5, 0.2) > std::f64::consts::PI);
+        // Pin the historical exact-parabolic atan formula for compatibility;
+        // this is not an assertion that the formula is the correct convention.
+        let legacy_parabolic_d = ((TWO_PI - 0.5) / 2.0).atan();
+        approx(
+            calc_mean_anomaly(TWO_PI - 0.5, 1.0),
+            legacy_parabolic_d + legacy_parabolic_d.powi(3) / 3.0,
+            1e-15,
+        );
+        approx(
+            calc_mean_anomaly(TWO_PI - 0.5, 1.2),
+            -calc_mean_anomaly(0.5, 1.2),
+            1e-15,
+        );
 
         let parabolic_nu = solve_barker(0.1);
         assert!(parabolic_nu.is_finite());
@@ -2011,8 +2054,9 @@ mod orbital_public_tests {
         let elliptical_nu = solve_kepler_true_anomaly(0.2, 0.1, 100, 1e-15);
         assert!((0.0..TWO_PI).contains(&elliptical_nu));
 
-        let hyperbolic_nu = solve_kepler_true_anomaly(1.2, 0.1, 100, 1e-15);
+        let hyperbolic_nu = solve_kepler_true_anomaly(1.2, -0.1, 100, 1e-15);
         assert!(hyperbolic_nu.is_finite());
+        assert!(hyperbolic_nu > std::f64::consts::PI);
     }
 }
 
