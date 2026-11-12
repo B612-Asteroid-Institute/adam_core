@@ -16,11 +16,13 @@
 //!   missing optional numeric values render as empty PSV fields, as required by
 //!   the ADES specification;
 //! * remaining float columns follow pandas `to_csv(float_format="%.16f",
-//!   na_rep="")`; strings render empty for null; fields containing the `|`
-//!   separator, quotes, or newlines get pandas QUOTE_MINIMAL quoting;
-//! * the parser mirrors `_data_dict_to_table`: `|`-split blocks headed by
-//!   lines containing permID/provID/trkSub, empty/whitespace cells and numeric
-//!   NaN tokens -> null, numeric/string column coercion with stripping (remarks
+//!   na_rep="")`; strings render empty for null; quote characters are literal,
+//!   while unrepresentable `|` separators or physical newlines fail loudly;
+//! * the parser mirrors `_data_dict_to_table`: each physical line is split
+//!   literally on `|` (ADES PSV has no quoting), blocks are headed by structural
+//!   keyword records whose first field is an ADES target identity, row/header
+//!   field counts must match exactly, empty/whitespace cells and numeric NaN
+//!   tokens -> null, numeric/string column coercion with stripping (remarks
 //!   unstripped),
 //!   trailing-character removal from obsTime (legacy `t[:-1]`), ERFA `dtf2d`
 //!   plus the exact `Timestamp.from_astropy` divmod/round arithmetic, and
@@ -116,14 +118,32 @@ fn python_fixed_bounded(value: f64, precision: usize, max_width: usize) -> Strin
     python_fixed(value, 0)
 }
 
-/// pandas QUOTE_MINIMAL for `sep='|'`: quote when the field contains the
-/// separator, the quote character, or a newline; double inner quotes.
-fn csv_quote(field: &str) -> String {
-    if field.contains('|') || field.contains('"') || field.contains('\n') || field.contains('\r') {
-        format!("\"{}\"", field.replace('"', "\"\""))
+/// Validate one rendered observation field for literal ADES PSV output.
+/// ADES has no quoting or multiline records, so separators and physical
+/// newlines cannot be represented. Quote characters are ordinary text.
+fn validate_psv_field(field: String, name: &str, source_row: usize) -> SchemaResult<String> {
+    let problem = if field.contains('|') {
+        Some("the unrepresentable `|` delimiter")
+    } else if field.contains('\n') || field.contains('\r') {
+        Some("an unrepresentable physical newline")
     } else {
-        field.to_string()
+        None
+    };
+    if let Some(problem) = problem {
+        return Err(invalid(format!(
+            "cannot serialize ADES PSV field {name} at observation row {source_row}: value contains {problem}"
+        )));
     }
+    Ok(field)
+}
+
+fn validate_psv_row_start(field: &str, name: &str, source_row: usize) -> SchemaResult<()> {
+    if matches!(field.trim_start().chars().next(), Some('#' | '!')) {
+        return Err(invalid(format!(
+            "cannot serialize ADES PSV field {name} at observation row {source_row}: first field begins with reserved context marker `#` or `!` after leading whitespace"
+        )));
+    }
+    Ok(())
 }
 
 fn is_na(value: &Option<f64>) -> bool {
@@ -200,7 +220,8 @@ impl RenderedColumn {
 }
 
 /// Render `ADES_to_string`, preserving the legacy layout except that missing
-/// optional numerics use ADES-standard empty PSV fields.
+/// optional numerics use ADES-standard empty PSV fields and PSV cells are
+/// emitted literally: quotes are preserved, while delimiters/newlines fail.
 ///
 /// `contexts` maps observatory codes to their pre-rendered `ObsContext`
 /// blocks (`ObsContext.to_string()` output, newline-terminated) -- the
@@ -382,18 +403,19 @@ pub fn ades_to_string(
         let header: Vec<String> = kept
             .iter()
             .map(|(name, _)| {
-                let name = if *name == "rmsRACosDec" {
+                if *name == "rmsRACosDec" {
                     "rmsRA"
                 } else {
                     name
-                };
-                csv_quote(name)
+                }
+                .to_string()
             })
             .collect();
         out.push_str(&header.join("|"));
         out.push('\n');
 
-        for row in 0..indices.len() {
+        for (row, &source_index) in indices.iter().enumerate() {
+            let source_row = source_index + 1;
             let cells: Vec<String> = kept
                 .iter()
                 .map(|(name, column)| {
@@ -404,9 +426,21 @@ pub fn ades_to_string(
                         "rmsRACosDec" | "rmsDec" => Some(7),
                         _ => None,
                     };
-                    csv_quote(&column.render_cell(row, precision, max_width))
+                    let wire_name = if *name == "rmsRACosDec" {
+                        "rmsRA"
+                    } else {
+                        name
+                    };
+                    validate_psv_field(
+                        column.render_cell(row, precision, max_width),
+                        wire_name,
+                        source_row,
+                    )
                 })
-                .collect();
+                .collect::<SchemaResult<_>>()?;
+            if let (Some(cell), Some(name)) = (cells.first(), header.first()) {
+                validate_psv_row_start(cell, name, source_row)?;
+            }
             out.push_str(&cells.join("|"));
             out.push('\n');
         }
@@ -486,18 +520,73 @@ fn timestamp_from_isot_utc(isot: &str) -> SchemaResult<(i64, i64)> {
 struct BlockData {
     headers: Vec<String>,
     rows: Vec<Vec<Option<String>>>,
+    header_line: usize,
 }
 
 impl BlockData {
     fn column(&self, name: &str) -> Option<Vec<Option<String>>> {
         let index = self.headers.iter().position(|header| header == name)?;
-        Some(
-            self.rows
-                .iter()
-                .map(|row| row.get(index).cloned().flatten())
-                .collect(),
-        )
+        Some(self.rows.iter().map(|row| row[index].clone()).collect())
     }
+}
+
+const ADES_IDENTITY_COLUMNS: [&str; 4] = ["permID", "provID", "trkSub", "artSat"];
+
+/// Enumerate trimmed physical lines without filtering blanks. Both metadata
+/// and observation parsing use this path so quotes can never join records and
+/// diagnostics retain the original one-based line numbers.
+fn ades_physical_lines(ades_string: &str) -> impl Iterator<Item = (usize, &str)> {
+    ades_string.lines().enumerate().map(|(index, line)| {
+        let line = line.trim();
+        let line = if index == 0 {
+            line.strip_prefix('\u{feff}').unwrap_or(line).trim_start()
+        } else {
+            line
+        };
+        (index + 1, line)
+    })
+}
+
+/// Recognize an ADES keyword-record candidate from exact tokens: either a
+/// target identity in the first field, or an exact `obsTime` marker with an
+/// identity elsewhere. Unknown columns are deliberately allowed and reported
+/// later, preserving the legacy warning. Missing `obsTime`, non-first identity,
+/// and unsupported `artSat` fail here rather than being misread as data.
+fn parse_keyword_record(fields: &[&str], line_number: usize) -> SchemaResult<Option<Vec<String>>> {
+    let headers: Vec<String> = fields
+        .iter()
+        .map(|header| header.trim().to_string())
+        .collect();
+    let identity_position = headers
+        .iter()
+        .position(|header| ADES_IDENTITY_COLUMNS.contains(&header.as_str()));
+    let has_obs_time = headers.iter().any(|header| header == "obsTime");
+    let first_is_identity = headers
+        .first()
+        .is_some_and(|header| ADES_IDENTITY_COLUMNS.contains(&header.as_str()));
+    if !(first_is_identity || (has_obs_time && identity_position.is_some())) {
+        return Ok(None);
+    }
+
+    let identity_position = identity_position.expect("header candidate has an identity");
+    let identity = &headers[identity_position];
+    if identity_position != 0 {
+        return Err(invalid(format!(
+            "invalid ADES keyword record at line {line_number}: target identity column {identity} must be the first field (found at field {})",
+            identity_position + 1
+        )));
+    }
+    if headers.iter().any(|header| header == "artSat") {
+        return Err(invalid(format!(
+            "unsupported ADES identity column artSat in keyword record at line {line_number}; adam-core does not yet represent artificial-satellite target identities"
+        )));
+    }
+    if !has_obs_time {
+        return Err(invalid(format!(
+            "invalid ADES keyword record at line {line_number}: missing required obsTime column"
+        )));
+    }
+    Ok(Some(headers))
 }
 
 /// Parse the observation blocks of an ADES string into an
@@ -506,49 +595,52 @@ impl BlockData {
 pub fn ades_string_to_observations(
     ades_string: &str,
 ) -> SchemaResult<(AdesObservationBatch, Vec<String>)> {
-    let lines: Vec<&str> = ades_string
-        .split('\n')
-        .map(|line| line.trim())
-        .filter(|line| !line.is_empty())
-        .collect();
-
     let mut blocks: Vec<BlockData> = Vec::new();
     let mut current: Option<BlockData> = None;
-    for line in &lines {
-        if line.starts_with('#') || line.starts_with('!') {
+    for (line_number, line) in ades_physical_lines(ades_string) {
+        // ADES reserves physical lines beginning `#`/`!` for context syntax;
+        // the writer rejects observation rows that would begin either marker.
+        if line.is_empty() || line.starts_with('#') || line.starts_with('!') {
             continue;
         }
-        if line.contains("permID") || line.contains("provID") || line.contains("trkSub") {
+        // ADES PSV has no quoting or multiline records. Quotes are ordinary
+        // value characters and every `|` is a field boundary.
+        let fields: Vec<&str> = line.split('|').collect();
+        if let Some(headers) = parse_keyword_record(&fields, line_number)? {
             if let Some(block) = current.take() {
                 blocks.push(block);
             }
             current = Some(BlockData {
-                headers: line
-                    .split('|')
-                    .map(|header| header.trim().to_string())
-                    .collect(),
+                headers,
                 rows: Vec::new(),
+                header_line: line_number,
             });
             continue;
         }
-        if let Some(block) = &mut current {
-            let values: Vec<&str> = line.split('|').collect();
-            // zip semantics: pair headers with values up to the shorter length,
-            // then normalize empty/whitespace-only cells to null.
-            let row: Vec<Option<String>> = block
-                .headers
-                .iter()
-                .zip(values.iter())
-                .map(|(_, value)| {
-                    if value.is_empty() || value.chars().all(char::is_whitespace) {
-                        None
-                    } else {
-                        Some((*value).to_string())
-                    }
-                })
-                .collect();
-            block.rows.push(row);
+        let block = current.as_mut().ok_or_else(|| {
+            invalid(format!(
+                "ADES PSV data row at line {line_number} appears before a keyword record"
+            ))
+        })?;
+        if fields.len() != block.headers.len() {
+            return Err(invalid(format!(
+                "ADES PSV row at line {line_number} has {} fields; expected {} from keyword record at line {}",
+                fields.len(),
+                block.headers.len(),
+                block.header_line
+            )));
         }
+        let row: Vec<Option<String>> = fields
+            .into_iter()
+            .map(|value| {
+                if value.is_empty() || value.chars().all(char::is_whitespace) {
+                    None
+                } else {
+                    Some(value.to_string())
+                }
+            })
+            .collect();
+        block.rows.push(row);
     }
     if let Some(block) = current.take() {
         blocks.push(block);
@@ -757,7 +849,8 @@ pub fn obs_context_to_string(context_json: &str) -> SchemaResult<String> {
                 lines.push(format!("# {key}"));
                 for (field, field_value) in section {
                     if !field_value.is_null() {
-                        lines.push(format!("! {field} {}", json_scalar_str(field_value)));
+                        let value = context_scalar_str(field_value, &format!("{key}.{field}"))?;
+                        lines.push(format!("! {field} {value}"));
                     }
                 }
             }
@@ -769,17 +862,20 @@ pub fn obs_context_to_string(context_json: &str) -> SchemaResult<String> {
                     lines.push(format!("# {key}"));
                     if let serde_json::Value::Array(names) = value {
                         for name in names {
-                            lines.push(format!("! name {}", json_scalar_str(name)));
+                            let value = context_scalar_str(name, &format!("{key}.name"))?;
+                            lines.push(format!("! name {value}"));
                         }
                     }
                 } else if key == "fundingSource" {
-                    lines.push(format!("# fundingSource {}", json_scalar_str(value)));
+                    let value = context_scalar_str(value, "fundingSource")?;
+                    lines.push(format!("# fundingSource {value}"));
                 } else if key == "comments" {
                     if let serde_json::Value::Array(comments) = value {
                         if !comments.is_empty() {
                             lines.push("# comment".to_string());
                             for comment in comments {
-                                lines.push(format!("! line {}", json_scalar_str(comment)));
+                                let value = context_scalar_str(comment, "comment.line")?;
+                                lines.push(format!("! line {value}"));
                             }
                         }
                     }
@@ -788,6 +884,16 @@ pub fn obs_context_to_string(context_json: &str) -> SchemaResult<String> {
         }
     }
     Ok(format!("{}\n", lines.join("\n")))
+}
+
+fn context_scalar_str(value: &serde_json::Value, field: &str) -> SchemaResult<String> {
+    let rendered = json_scalar_str(value);
+    if rendered.contains('\n') || rendered.contains('\r') {
+        return Err(invalid(format!(
+            "cannot serialize ADES context field {field}: value contains an unrepresentable physical newline"
+        )));
+    }
+    Ok(rendered)
 }
 
 fn json_scalar_str(value: &serde_json::Value) -> String {
@@ -825,18 +931,15 @@ fn json_scalar_str(value: &serde_json::Value) -> String {
 pub fn ades_parse_obs_contexts(ades_string: &str) -> SchemaResult<String> {
     use serde_json::{Map, Value};
 
-    let lines: Vec<&str> = ades_string
-        .split('\n')
-        .map(|line| line.trim())
-        .filter(|line| !line.is_empty())
-        .collect();
-
     let mut contexts: Vec<(Option<String>, Map<String, Value>)> = Vec::new();
     let mut current: Map<String, Value> = Map::new();
     let mut current_code: Option<String> = None;
     let mut current_section_key: Option<String> = None;
 
-    for line in lines {
+    for (_line_number, line) in ades_physical_lines(ades_string) {
+        if line.is_empty() {
+            continue;
+        }
         if let Some(rest) = line.strip_prefix('#') {
             let rest = rest.trim();
             if rest.starts_with("version") {
@@ -1017,10 +1120,31 @@ mod tests {
     }
 
     #[test]
-    fn csv_quote_matches_pandas_minimal() {
-        assert_eq!(csv_quote("plain"), "plain");
-        assert_eq!(csv_quote("with|pipe"), "\"with|pipe\"");
-        assert_eq!(csv_quote("with \"quote\""), "\"with \"\"quote\"\"\"");
+    fn psv_writer_preserves_quotes_and_rejects_unrepresentable_cells() {
+        assert_eq!(
+            validate_psv_field("with \"quote\"".to_string(), "remarks", 7).unwrap(),
+            "with \"quote\""
+        );
+        let pipe = validate_psv_field("with|pipe".to_string(), "remarks", 7).unwrap_err();
+        assert!(pipe
+            .to_string()
+            .contains("field remarks at observation row 7"));
+        assert!(pipe.to_string().contains("unrepresentable `|` delimiter"));
+        let newline = validate_psv_field("two\nlines".to_string(), "remarks", 8).unwrap_err();
+        assert!(newline
+            .to_string()
+            .contains("field remarks at observation row 8"));
+        assert!(newline
+            .to_string()
+            .contains("unrepresentable physical newline"));
+
+        for value in ["#reserved", "  #reserved", "\t!reserved"] {
+            let error = validate_psv_row_start(value, "provID", 9).unwrap_err();
+            let message = error.to_string();
+            assert!(message.contains("field provID at observation row 9"));
+            assert!(message.contains("reserved context marker"));
+        }
+        validate_psv_row_start("  2024 AB", "provID", 9).unwrap();
     }
 
     #[test]
@@ -1050,5 +1174,206 @@ permID|obsTime|ra|dec|stn|mode|astCat\n\
         let error = ades_string_to_observations(ades).unwrap_err();
 
         assert!(error.to_string().contains("ra must not be empty"));
+    }
+
+    #[test]
+    fn parser_preserves_literal_quotes_and_identity_names_without_joining_lines() {
+        let ades = "# version=2022\n\
+provID|obsTime|ra|dec|stn|mode|astCat|remarks\n\
+2024 AB|2024-01-01T00:00:00.000Z|180.0|0.0|695|CCD|Gaia2|\"unmatched provID review\n\
+2024 AC|2024-01-01T00:01:00.000Z|181.0|1.0|695|CCD|Gaia2|\"quoted-looking provID text\"\n";
+
+        let (observations, unknown_columns) = ades_string_to_observations(ades).unwrap();
+
+        assert!(unknown_columns.is_empty());
+        assert_eq!(observations.len(), 2);
+        assert_eq!(
+            observations.prov_id,
+            vec![Some("2024 AB".to_string()), Some("2024 AC".to_string())]
+        );
+        assert_eq!(
+            observations.remarks,
+            vec![
+                Some("\"unmatched provID review".to_string()),
+                Some("\"quoted-looking provID text\"".to_string()),
+            ]
+        );
+    }
+
+    #[test]
+    fn parser_treats_pipes_inside_quoted_looking_text_as_literal_boundaries() {
+        let ades = "# version=2022\n\
+provID|obsTime|ra|dec|stn|mode|astCat|remarks\n\
+2024 AB|2024-01-01T00:00:00.000Z|180.0|0.0|695|CCD|Gaia2|\"follow-up | provID review\"\n\
+2024 AC|2024-01-01T00:01:00.000Z|181.0|1.0|695|CCD|Gaia2|not swallowed\n";
+
+        let error = ades_string_to_observations(ades).unwrap_err();
+        let message = error.to_string();
+        assert!(message.contains("row at line 3 has 9 fields"), "{message}");
+        assert!(
+            message.contains("expected 8 from keyword record at line 2"),
+            "{message}"
+        );
+    }
+
+    #[test]
+    fn parser_allows_unknown_header_tokens_and_reports_them() {
+        let ades = "# version=2022\n\
+provID|obsTime|ra|dec|future_field|stn|mode|astCat\n\
+2024 AB|2024-01-01T00:00:00.000Z|180.0|0.0|future value|695|CCD|Gaia2\n";
+
+        let (observations, unknown_columns) = ades_string_to_observations(ades).unwrap();
+
+        assert_eq!(observations.len(), 1);
+        assert_eq!(unknown_columns, vec!["future_field"]);
+    }
+
+    #[test]
+    fn parser_rejects_identity_headers_missing_obs_time_explicitly() {
+        let missing_obs_time = "# version=2022\n\
+provID|ra|dec|stn|mode|astCat\n\
+2024 AB|180.0|0.0|695|CCD|Gaia2\n";
+        let error = ades_string_to_observations(missing_obs_time).unwrap_err();
+        let message = error.to_string();
+        assert!(message.contains("invalid ADES keyword record at line 2"));
+        assert!(message.contains("missing required obsTime column"));
+        assert!(!message.contains("invalid ISO time"));
+
+        let unsupported = "# version=2022\n\
+artSat|ra|dec|stn|mode|astCat\n";
+        let error = ades_string_to_observations(unsupported).unwrap_err();
+        assert!(error
+            .to_string()
+            .contains("unsupported ADES identity column artSat"));
+    }
+
+    #[test]
+    fn parser_rejects_non_first_identity_as_an_invalid_keyword_record() {
+        let ades = "# version=2022\n\
+obsTime|provID|ra|dec|stn|mode|astCat\n\
+2024-01-01T00:00:00.000Z|2024 AB|180.0|0.0|695|CCD|Gaia2\n";
+
+        let error = ades_string_to_observations(ades).unwrap_err();
+        let message = error.to_string();
+        assert!(message.contains("invalid ADES keyword record at line 2"));
+        assert!(message.contains("target identity column provID must be the first field"));
+        assert!(!message.contains("invalid ISO time"));
+    }
+
+    #[test]
+    fn parser_accepts_first_line_bom_without_changing_line_numbers() {
+        let valid = "\u{feff}# version=2022\n\nprovID|obsTime|ra|dec|stn|mode|astCat\n2024 AB|2024-01-01T00:00:00.000Z|180.0|0.0|695|CCD|Gaia2\n";
+        let (observations, _) = ades_string_to_observations(valid).unwrap();
+        assert_eq!(observations.len(), 1);
+
+        let short = "\u{feff}# version=2022\n\nprovID|obsTime|ra|dec|stn|mode|astCat|band\n\n2024 AB|2024-01-01T00:00:00.000Z|180.0|0.0|695|CCD|Gaia2\n";
+        let error = ades_string_to_observations(short).unwrap_err();
+        let message = error.to_string();
+        assert!(message.contains("row at line 5 has 7 fields"), "{message}");
+        assert!(
+            message.contains("expected 8 from keyword record at line 3"),
+            "{message}"
+        );
+    }
+
+    #[test]
+    fn parser_reports_original_lines_across_blank_records() {
+        let ades = "\n# version=2022\n\nprovID|obsTime|ra|dec|stn|mode|astCat|band\n\n2024 AB|2024-01-01T00:00:00.000Z|180.0|0.0|695|CCD|Gaia2\n";
+
+        let error = ades_string_to_observations(ades).unwrap_err();
+        let message = error.to_string();
+        assert!(message.contains("row at line 6 has 7 fields"), "{message}");
+        assert!(
+            message.contains("expected 8 from keyword record at line 4"),
+            "{message}"
+        );
+    }
+
+    #[test]
+    fn parser_rejects_short_and_long_rows_at_the_row_boundary() {
+        let header = "provID|obsTime|ra|dec|stn|mode|astCat|band";
+        for (row, actual) in [
+            (
+                "2024 AB|2024-01-01T00:00:00.000Z|180.0|0.0|695|CCD|Gaia2",
+                7,
+            ),
+            (
+                "2024 AB|2024-01-01T00:00:00.000Z|180.0|0.0|695|CCD|Gaia2|r|extra",
+                9,
+            ),
+        ] {
+            let ades = format!("# version=2022\n{header}\n{row}\n");
+            let error = ades_string_to_observations(&ades).unwrap_err();
+            let message = error.to_string();
+            assert!(message.contains("row at line 3"), "{message}");
+            assert!(
+                message.contains(&format!("has {actual} fields")),
+                "{message}"
+            );
+            assert!(
+                message.contains("expected 8 from keyword record at line 2"),
+                "{message}"
+            );
+        }
+    }
+
+    #[test]
+    fn parser_rejects_unsupported_artsat_identity_explicitly() {
+        let art_sat = "# version=2022\n\
+artSat|obsTime|ra|dec|future_field|stn|mode|astCat\n\
+1998-067A|2024-01-01T00:00:00.000Z|180.0|0.0|future value|695|CCD|Gaia2\n";
+        let error = ades_string_to_observations(art_sat).unwrap_err();
+        let message = error.to_string();
+        assert!(message.contains("unsupported ADES identity column artSat"));
+        assert!(message.contains("keyword record at line 2"));
+
+        let after_supported_block = "# version=2022\n\
+provID|obsTime|ra|dec|stn|mode|astCat\n\
+2024 AB|2024-01-01T00:00:00.000Z|180.0|0.0|695|CCD|Gaia2\n\
+artSat|obsTime|ra|dec|stn|mode|astCat\n\
+1998-067A|2024-01-01T00:01:00.000Z|181.0|1.0|695|CCD|Gaia2\n";
+        let error = ades_string_to_observations(after_supported_block).unwrap_err();
+        let message = error.to_string();
+        assert!(message.contains("unsupported ADES identity column artSat"));
+        assert!(message.contains("keyword record at line 4"));
+        assert!(!message.contains("ISO time"));
+    }
+
+    #[test]
+    fn context_writer_rejects_physical_newlines() {
+        let context = r#"{"observatory":{"mpcCode":"695","name":"bad\nname"}}"#;
+        let error = obs_context_to_string(context).unwrap_err();
+        let message = error.to_string();
+        assert!(message.contains("context field observatory.name"));
+        assert!(message.contains("unrepresentable physical newline"));
+    }
+
+    #[test]
+    fn context_parser_preserves_quotes_and_pipes_on_physical_lines() {
+        let ades = "# version=2022\n\
+# observatory\n\
+! mpcCode 695\n\
+! name unmatched \" | observatory\n\
+# submitter\n\
+! name \"quoted | submitter\"\n\
+provID|obsTime|ra|dec|stn|mode|astCat|remarks\n\
+2024 AB|2024-01-01T00:00:00.000Z|180.0|0.0|695|CCD|Gaia2|unmatched \" remark\n";
+
+        let contexts: serde_json::Value =
+            serde_json::from_str(&ades_parse_obs_contexts(ades).unwrap()).unwrap();
+        assert_eq!(
+            contexts[0][1]["observatory"]["name"],
+            "unmatched \" | observatory"
+        );
+        assert_eq!(
+            contexts[0][1]["submitter"]["name"],
+            "\"quoted | submitter\""
+        );
+        let (observations, _) = ades_string_to_observations(ades).unwrap();
+        assert_eq!(observations.len(), 1);
+        assert_eq!(
+            observations.remarks,
+            vec![Some("unmatched \" remark".to_string())]
+        );
     }
 }

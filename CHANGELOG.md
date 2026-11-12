@@ -4,6 +4,22 @@ This file contains notable changes in adam-core
 
 ## [Unreleased]
 
+### Fixed
+
+- ADES PSV parsing handles a UTF-8 BOM on the first physical line, recognizes
+  keyword-record candidates structurally, preserves warnings for unknown
+  columns, and reports missing `obsTime`, non-first identity columns, and
+  unsupported `artSat` identities as explicit header errors. Data before any
+  keyword record fails explicitly; short or long rows fail at their physical
+  boundary with exact line/count context instead of being silently dropped or
+  synthesized.
+- ADES PSV reading and writing use literal `|` separators with no quoting or
+  multiline-record semantics. Quote characters round-trip verbatim; the writer
+  rejects fields containing an unrepresentable delimiter or physical newline
+  with field/row context, rejects first identity fields whose leading-trimmed
+  value starts with reserved context marker `#` or `!`, and rejects physical
+  newlines in context values.
+
 ## [0.8.0] - 2026-11-10
 
 ### Added
